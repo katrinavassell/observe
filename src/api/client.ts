@@ -516,15 +516,51 @@ export async function disconnectIntegration(provider: string): Promise<{ success
   return request(`/integrations/${provider}`, { method: 'DELETE' })
 }
 
-export async function requestIntegration(params: {
+// Integration request types
+export interface IntegrationRequestParams {
   email: string
-  provider_name: string
-  notes?: string
-}): Promise<{ success: boolean; message: string; request_id: number }> {
+  integration_type: string
+  category?: string
+  use_cases?: string[]
+  other_description?: string
+  freeform_notes?: string
+}
+
+export interface ComingSoonIntegration {
+  provider: string
+  name: string
+  description: string
+  category: string
+  data_types: string[]
+  available: boolean
+  coming_soon: boolean
+  use_cases: string[]
+}
+
+export interface RequestableIntegrations {
+  ai_llm: Array<{ provider: string; name: string }>
+  analytics: Array<{ provider: string; name: string }>
+  finance_ops: Array<{ provider: string; name: string }>
+}
+
+export async function getComingSoonIntegrations(): Promise<{ integrations: ComingSoonIntegration[] }> {
+  return request('/integrations/coming-soon')
+}
+
+export async function getRequestableIntegrations(): Promise<{ integrations: RequestableIntegrations }> {
+  return request('/integrations/requestable')
+}
+
+export async function requestIntegration(
+  params: IntegrationRequestParams
+): Promise<{ success: boolean; message: string; request_id: number }> {
   const searchParams = new URLSearchParams()
   searchParams.set('email', params.email)
-  searchParams.set('provider_name', params.provider_name)
-  if (params.notes) searchParams.set('notes', params.notes)
+  searchParams.set('integration_type', params.integration_type)
+  if (params.category) searchParams.set('category', params.category)
+  if (params.use_cases?.length) searchParams.set('use_cases', JSON.stringify(params.use_cases))
+  if (params.other_description) searchParams.set('other_description', params.other_description)
+  if (params.freeform_notes) searchParams.set('freeform_notes', params.freeform_notes)
 
   return request(`/integrations/request?${searchParams.toString()}`, {
     method: 'POST',
