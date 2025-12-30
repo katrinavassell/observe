@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import {
   TrendingUp,
   AlertTriangle,
@@ -41,7 +42,14 @@ import {
   type CostRecord,
   type AnalysisResult,
 } from '@/lib/pricing-analyzer'
-import { generateSampleData, getSampleDataSummary } from '@/lib/sample-data'
+import { loadCuratedSampleData, getSampleDataSummary } from '@/lib/sample-data'
+
+// =============================================================================
+// ROUTING
+// =============================================================================
+
+const route = useRoute()
+const router = useRouter()
 
 // =============================================================================
 // STATE
@@ -164,7 +172,8 @@ async function loadSampleData() {
   try {
     await new Promise(resolve => setTimeout(resolve, 500)) // Simulate processing
 
-    const sampleData = generateSampleData()
+    // Use curated sample data with specific stories
+    const sampleData = loadCuratedSampleData()
     analysisResult.value = analyzeData(sampleData)
 
     clearInterval(progressInterval)
@@ -179,6 +188,20 @@ async function loadSampleData() {
     isAnalyzing.value = false
   }
 }
+
+// =============================================================================
+// LIFECYCLE
+// =============================================================================
+
+// Auto-load sample data if redirected from Data Sources page
+onMounted(async () => {
+  if (route.query.loadSample === 'true') {
+    // Remove query param from URL
+    router.replace({ query: {} })
+    // Load sample data automatically
+    await loadSampleData()
+  }
+})
 
 function resetAnalysis() {
   analysisComplete.value = false

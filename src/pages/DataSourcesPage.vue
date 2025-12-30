@@ -13,6 +13,7 @@ import {
   Plus,
   ArrowRight,
   Bell,
+  TrendingUp,
 } from 'lucide-vue-next'
 import { Card, CardContent, Button, Badge } from '@/components/ui'
 import Skeleton from '@/components/ui/skeleton.vue'
@@ -139,6 +140,15 @@ function goToUpload() {
   router.push('/onboarding/upload')
 }
 
+// Sample data handling
+const isLoadingSample = ref(false)
+
+function handleTrySampleData() {
+  isLoadingSample.value = true
+  // Navigate to pricing page with loadSample flag
+  router.push('/pricing?loadSample=true')
+}
+
 // Interest Capture Modal (for "Notify me" flows)
 const showInterestModal = ref(false)
 const selectedComingSoonIntegration = ref<ComingSoonIntegration | null>(null)
@@ -172,6 +182,32 @@ const providerIcons: Record<string, string> = {
         Import revenue and cost data to see your unit economics
       </p>
     </div>
+
+    <!-- Sample Data Hero -->
+    <Card class="border-primary/20 bg-gradient-to-r from-primary/5 to-transparent">
+      <CardContent class="p-6">
+        <div class="flex items-start justify-between gap-6">
+          <div class="space-y-3">
+            <div class="flex items-center gap-2">
+              <TrendingUp class="h-5 w-5 text-primary" />
+              <h2 class="font-semibold">See it in action first</h2>
+            </div>
+            <p class="text-sm text-muted-foreground max-w-md">
+              Load 6 months of realistic SaaS data to explore the Pricing Analyzer:
+            </p>
+            <ul class="text-sm text-muted-foreground space-y-1">
+              <li>30 customers across 4 pricing tiers</li>
+              <li>Revenue, costs, and usage data</li>
+              <li>Real margin compression and churn risk scenarios</li>
+            </ul>
+          </div>
+          <Button @click="handleTrySampleData" :disabled="isLoadingSample">
+            <TrendingUp class="h-4 w-4 mr-2" />
+            {{ isLoadingSample ? 'Loading...' : 'Try Sample Data' }}
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
 
     <!-- Loading State -->
     <div v-if="isLoading" class="space-y-6">

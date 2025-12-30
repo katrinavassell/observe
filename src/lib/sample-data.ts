@@ -13,6 +13,59 @@ import type {
   AnalyzerData,
 } from './pricing-analyzer'
 
+// Import curated sample data
+import sampleDataJson from '../../files/sample-data.json'
+
+// Type for the curated sample data JSON structure
+interface SampleDataCustomer {
+  customer_id: string
+  customer_name: string
+  email: string
+  plan: string
+  mrr: number
+  status: string
+  started_at: string
+}
+
+interface SampleDataUsage {
+  month: string
+  customer_id: string
+  metric: string
+  value: number
+  limit: number
+}
+
+interface SampleDataPlan {
+  name: string
+  price: number
+  api_calls_limit: number
+  tokens_limit: number
+}
+
+interface SampleDataJson {
+  metadata: {
+    source: string
+    generated_at: string
+    description: string
+    customers_count: number
+    plans_count: number
+    months: string[]
+  }
+  customers: SampleDataCustomer[]
+  costs: Array<{ month: string; provider: string; cost: number }>
+  usage: SampleDataUsage[]
+  plans: Record<string, SampleDataPlan>
+  computed: {
+    total_mrr: number
+    total_arr: number
+    customer_count: number
+    plan_count: number
+    december_costs: number
+    december_margin_percent: number
+    july_margin_percent: number
+  }
+}
+
 // =============================================================================
 // SAMPLE PLANS
 // =============================================================================
@@ -260,10 +313,102 @@ export function generateSampleData(): AnalyzerData {
  */
 export function getSampleDataSummary() {
   return {
-    customerCount: 20,
+    customerCount: 30,
     planCount: 4,
-    plans: ['Free', 'Starter ($29)', 'Pro ($99)', 'Enterprise ($499)'],
+    plans: ['Starter ($49)', 'Pro ($199)', 'Business ($499)', 'Enterprise ($1,999)'],
     segments: SEGMENTS,
-    description: 'Realistic SaaS data with 20 customers across 4 pricing tiers',
+    description: '6 months of realistic SaaS data with 30 customers across 4 pricing tiers',
   }
+}
+
+// =============================================================================
+// CURATED SAMPLE DATA LOADER
+// =============================================================================
+
+/**
+ * Derive segment from plan name for curated data
+ */
+function deriveSegmentFromPlan(plan: string): string {
+  switch (plan) {
+    case 'enterprise':
+    case 'business':
+      return 'Enterprise'
+    case 'pro':
+      return 'Mid-Market'
+    case 'starter':
+      return 'SMB'
+    default:
+      return 'SMB'
+  }
+}
+
+/**
+ * Load curated sample data from static JSON file
+ * This data is designed to tell specific stories:
+ * - Margin compression (66% → 44%)
+ * - 3 negative margin customers
+ * - 4 churn risk customers (declining usage)
+ * - 3 upsell opportunities (high usage)
+ * - 1 usage anomaly (Cyberdyne spike)
+ */
+export function loadCuratedSampleData(): AnalyzerData {
+  const data = sampleDataJson as SampleDataJson
+
+  // 1. Transform plans (object → array)
+  const plans: Plan[] = Object.entries(data.plans).map(([planId, p]) => ({
+    plan_id: `plan_${planId}`,
+    name: p.name,
+    price_amount: p.price,
+    interval_months: 1,
+    billing_model: 'recurring' as const,
+  }))
+
+  // 2. Transform customers
+  const customers: Customer[] = data.customers.map(c => ({
+    customer_id: c.customer_id,
+    email: c.email,
+    name: c.customer_name,
+    segment: deriveSegmentFromPlan(c.plan),
+    created_at: c.started_at,
+  }))
+
+  // 3. Create subscriptions (one per customer)
+  const subscriptions: Subscription[] = data.customers.map(c => ({
+    subscription_id: `sub_${c.customer_id}`,
+    customer_id: c.customer_id,
+    plan_id: `plan_${c.plan}`,
+    is_active: c.status === 'active',
+    current_period_start: '2024-12-01T00:00:00Z',
+    current_period_end: '2024-12-31T23:59:59Z',
+    previous_mrr: c.mrr,
+  }))
+
+  // 4. Transform usage (December only for analysis)
+  const decemberUsage = data.usage.filter(u => u.month === '2024-12')
+  const usage: UsageRecord[] = decemberUsage.map(u => ({
+    customer_id: u.customer_id,
+    metric_key: u.metric === 'api_calls' ? 'api_calls_percent' : 'tokens_percent',
+    metric_value: Math.round((u.value / u.limit) * 100),
+    period_start: '2024-12-01T00:00:00Z',
+    period_end: '2024-12-31T23:59:59Z',
+  }))
+
+  // 5. Allocate costs (hardcoded for demo storytelling)
+  // Per README: Acme $2,400, DataFlow $340, TinyStartup $85
+  // These create the negative margin customers that tell the story
+  const NEGATIVE_MARGIN_COSTS: Record<string, number> = {
+    'cust_001': 2400, // Acme - token overages (12M vs 10M limit)
+    'cust_014': 340,  // DataFlow - heavy usage (105% of limit)
+    'cust_019': 85,   // TinyStartup - high relative usage
+  }
+
+  const costs: CostRecord[] = data.customers.map(c => ({
+    customer_id: c.customer_id,
+    cost_type: 'infrastructure',
+    amount: NEGATIVE_MARGIN_COSTS[c.customer_id] ?? 125, // ~$125 for other customers
+    period_start: '2024-12-01T00:00:00Z',
+    period_end: '2024-12-31T23:59:59Z',
+  }))
+
+  return { customers, plans, subscriptions, usage, costs }
 }

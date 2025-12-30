@@ -1,0 +1,31 @@
+customer_id,customer_name,email,plan,mrr,status,started_at
+cust_001,Acme Corp,billing@acme.com,enterprise,1999,active,2024-03-15
+cust_002,MegaCorp,accounts@megacorp.io,enterprise,1999,active,2024-02-01
+cust_003,BigBank,procurement@bigbank.com,enterprise,1999,active,2024-04-10
+cust_004,Wayne Enterprises,bruce@wayne.co,business,499,active,2024-05-20
+cust_005,Stark Industries,tony@stark.io,business,499,active,2024-04-01
+cust_006,Cyberdyne,orders@cyberdyne.net,business,499,active,2024-06-15
+cust_007,Oscorp,norman@oscorp.com,business,499,active,2024-03-01
+cust_008,Umbrella Co,finance@umbrella.co,business,499,active,2024-07-01
+cust_009,Globex Ltd,ap@globex.com,pro,199,active,2024-05-01
+cust_010,Initech,billing@initech.com,pro,199,active,2024-06-01
+cust_011,Hooli,gavin@hooli.xyz,pro,199,active,2024-04-15
+cust_012,Pied Piper,richard@piedpiper.com,pro,199,active,2024-03-20
+cust_013,Aviato,erlich@aviato.com,pro,199,active,2024-05-10
+cust_014,DataFlow Inc,cfo@dataflow.io,pro,199,active,2024-07-01
+cust_015,Aperture Science,glados@aperture.net,pro,199,active,2024-06-20
+cust_016,Black Mesa,freeman@blackmesa.gov,pro,199,active,2024-04-01
+cust_017,Soylent Corp,green@soylent.com,pro,199,active,2024-08-01
+cust_018,Tyrell Corp,roy@tyrell.io,pro,199,active,2024-07-15
+cust_019,TinyStartup,founder@tinystartup.co,starter,49,active,2024-08-01
+cust_020,Bootstrapped Inc,solo@bootstrapped.io,starter,49,active,2024-07-20
+cust_021,SideProject LLC,nights@sideproject.dev,starter,49,active,2024-09-01
+cust_022,Wonka Industries,willy@wonka.candy,starter,49,active,2024-06-01
+cust_023,Dunder Mifflin,michael@dundermifflin.com,starter,49,active,2024-08-15
+cust_024,Paddy's Pub,charlie@paddyspub.com,starter,49,active,2024-09-10
+cust_025,Bluth Company,michael@bluthco.com,starter,49,active,2024-07-01
+cust_026,Sterling Cooper,don@sterlingcooper.com,starter,49,active,2024-10-01
+cust_027,Los Pollos,gus@lospollos.com,starter,49,active,2024-08-20
+cust_028,Prestige Worldwide,brennan@prestige.biz,starter,49,active,2024-09-15
+cust_029,Vandelay Industries,art@vandelay.com,starter,49,active,2024-10-10
+cust_030,Rekall Inc,quaid@rekall.mars,starter,49,active,2024-11-01
