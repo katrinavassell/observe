@@ -9,3 +9,9 @@ export { default as Input } from './input.vue'
 export { default as Progress } from './progress.vue'
 export { default as Separator } from './separator.vue'
 export { default as Skeleton } from './skeleton.vue'
+
+// Tabs
+export { Tabs, TabsList, TabsTrigger, TabsContent } from './tabs'
+
+// Tooltip
+export { Tooltip, TooltipTrigger, TooltipContent } from './tooltip'

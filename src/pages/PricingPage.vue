@@ -1,410 +1,850 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import { useRouter } from 'vue-router'
-import { useQuery } from '@tanstack/vue-query'
+import { ref, computed } from 'vue'
 import {
   TrendingUp,
-  TrendingDown,
   AlertTriangle,
-  DollarSign,
-  BarChart3,
-  Target,
-  ChevronRight,
+  Users,
+  Package,
+  RefreshCw,
   Info,
+  BarChart3,
+  Layers,
 } from 'lucide-vue-next'
-import { Card, CardContent, CardHeader, CardTitle, Badge, Button } from '@/components/ui'
-import Skeleton from '@/components/ui/skeleton.vue'
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+  Badge,
+  Button,
+  Tabs,
+  TabsList,
+  TabsTrigger,
+  TabsContent,
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+} from '@/components/ui'
 import Progress from '@/components/ui/progress.vue'
-import { getPricingIntelligence } from '@/api/client'
-import { formatCurrency, formatPercent } from '@/lib/utils'
+import Alert from '@/components/ui/alert.vue'
+import FileDropzone from '@/components/ui/file-dropzone.vue'
+import {
+  parseCSV,
+  analyzeData,
+  type Customer,
+  type Plan,
+  type Subscription,
+  type Invoice,
+  type UsageRecord,
+  type CostRecord,
+  type AnalysisResult,
+} from '@/lib/pricing-analyzer'
+import { generateSampleData, getSampleDataSummary } from '@/lib/sample-data'
 
-const router = useRouter()
+// =============================================================================
+// STATE
+// =============================================================================
 
-const { data, isLoading, error } = useQuery({
-  queryKey: ['pricing-intelligence'],
-  queryFn: getPricingIntelligence,
+const isAnalyzing = ref(false)
+const analysisComplete = ref(false)
+const uploadProgress = ref(0)
+const error = ref<string | null>(null)
+const analysisResult = ref<AnalysisResult | null>(null)
+const dataSource = ref<'csv' | 'sample'>('csv')
+
+// File states
+const customersFile = ref<File | null>(null)
+const plansFile = ref<File | null>(null)
+const subscriptionsFile = ref<File | null>(null)
+const invoicesFile = ref<File | null>(null)
+const usageFile = ref<File | null>(null)
+const costsFile = ref<File | null>(null)
+
+// =============================================================================
+// COMPUTED
+// =============================================================================
+
+const canAnalyze = computed(() => {
+  return customersFile.value && plansFile.value && subscriptionsFile.value
 })
 
-const concentration = computed(() => data.value?.revenue_concentration)
-const anomalies = computed(() => data.value?.pricing_anomalies ?? [])
-const discounts = computed(() => data.value?.discount_analysis)
-const benchmarks = computed(() => data.value?.segment_benchmarks ?? [])
-const usageRevenue = computed(() => data.value?.usage_revenue)
-const confidence = computed(() => data.value?.confidence_score ?? 0)
+const sampleSummary = getSampleDataSummary()
 
-function getRiskBadgeVariant(risk: string) {
-  switch (risk) {
-    case 'high': return 'destructive'
-    case 'medium': return 'warning'
-    case 'low': return 'success'
-    default: return 'secondary'
+// =============================================================================
+// METHODS
+// =============================================================================
+
+async function readFileAsText(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(reader.result as string)
+    reader.onerror = () => reject(new Error('Failed to read file'))
+    reader.readAsText(file)
+  })
+}
+
+async function runAnalysis() {
+  isAnalyzing.value = true
+  uploadProgress.value = 0
+  error.value = null
+
+  const progressInterval = setInterval(() => {
+    uploadProgress.value = Math.min(uploadProgress.value + 15, 90)
+  }, 100)
+
+  try {
+    let customers: Customer[]
+    let plans: Plan[]
+    let subscriptions: Subscription[]
+    let invoices: Invoice[] | undefined
+    let usage: UsageRecord[] | undefined
+    let costs: CostRecord[] | undefined
+
+    // Parse required files
+    const customersText = await readFileAsText(customersFile.value!)
+    const plansText = await readFileAsText(plansFile.value!)
+    const subscriptionsText = await readFileAsText(subscriptionsFile.value!)
+
+    customers = parseCSV<Customer>(customersText)
+    plans = parseCSV<Plan>(plansText)
+    subscriptions = parseCSV<Subscription>(subscriptionsText)
+
+    if (customers.length === 0) throw new Error('No customers found in CSV')
+    if (plans.length === 0) throw new Error('No plans found in CSV')
+    if (subscriptions.length === 0) throw new Error('No subscriptions found in CSV')
+
+    // Parse optional files
+    if (invoicesFile.value) {
+      const invoicesText = await readFileAsText(invoicesFile.value)
+      invoices = parseCSV<Invoice>(invoicesText)
+    }
+    if (usageFile.value) {
+      const usageText = await readFileAsText(usageFile.value)
+      usage = parseCSV<UsageRecord>(usageText)
+    }
+    if (costsFile.value) {
+      const costsText = await readFileAsText(costsFile.value)
+      costs = parseCSV<CostRecord>(costsText)
+    }
+
+    clearInterval(progressInterval)
+    uploadProgress.value = 100
+
+    // Run analysis
+    analysisResult.value = analyzeData({
+      customers,
+      plans,
+      subscriptions,
+      invoices,
+      usage,
+      costs,
+    })
+
+    dataSource.value = 'csv'
+    analysisComplete.value = true
+  } catch (err: unknown) {
+    clearInterval(progressInterval)
+    error.value = err instanceof Error ? err.message : 'Analysis failed'
+  } finally {
+    isAnalyzing.value = false
   }
 }
 
-function navigateToAccount(accountId: number) {
-  router.push(`/accounts?id=${accountId}`)
+async function loadSampleData() {
+  isAnalyzing.value = true
+  uploadProgress.value = 0
+  error.value = null
+
+  const progressInterval = setInterval(() => {
+    uploadProgress.value = Math.min(uploadProgress.value + 20, 90)
+  }, 80)
+
+  try {
+    await new Promise(resolve => setTimeout(resolve, 500)) // Simulate processing
+
+    const sampleData = generateSampleData()
+    analysisResult.value = analyzeData(sampleData)
+
+    clearInterval(progressInterval)
+    uploadProgress.value = 100
+
+    dataSource.value = 'sample'
+    analysisComplete.value = true
+  } catch (err: unknown) {
+    clearInterval(progressInterval)
+    error.value = err instanceof Error ? err.message : 'Failed to load sample data'
+  } finally {
+    isAnalyzing.value = false
+  }
+}
+
+function resetAnalysis() {
+  analysisComplete.value = false
+  analysisResult.value = null
+  error.value = null
+  uploadProgress.value = 0
+  customersFile.value = null
+  plansFile.value = null
+  subscriptionsFile.value = null
+  invoicesFile.value = null
+  usageFile.value = null
+  costsFile.value = null
 }
 </script>
 
 <template>
-  <div class="space-y-8">
+  <div class="space-y-6">
     <!-- Header -->
     <div>
-      <h1 class="text-3xl font-bold tracking-tight">Pricing Intelligence</h1>
-      <p class="text-muted-foreground">
-        Signals and insights from your actual customer data
+      <h1 class="text-2xl font-semibold">Pricing Model Analyzer</h1>
+      <p class="text-sm text-muted-foreground">
+        Analyze your pricing data from CSV exports to discover optimization opportunities
       </p>
     </div>
 
-    <!-- Loading State -->
-    <div v-if="isLoading" class="space-y-6">
-      <div class="grid gap-4 md:grid-cols-3">
-        <Skeleton v-for="i in 3" :key="i" class="h-32" />
-      </div>
-      <div class="grid gap-4 md:grid-cols-2">
-        <Skeleton class="h-64" />
-        <Skeleton class="h-64" />
-      </div>
-    </div>
+    <!-- ==================== UPLOAD STATE ==================== -->
+    <template v-if="!analysisComplete">
+      <!-- Error Alert -->
+      <Alert v-if="error" variant="destructive">
+        <AlertTriangle class="h-4 w-4" />
+        <span class="font-medium">Error:</span> {{ error }}
+      </Alert>
 
-    <!-- Error State -->
-    <div v-else-if="error" class="flex flex-col items-center justify-center rounded-lg border border-dashed py-16">
-      <AlertTriangle class="h-10 w-10 text-destructive" />
-      <h3 class="mt-4 text-sm font-medium">Failed to load pricing intelligence</h3>
-      <p class="mt-1 text-sm text-muted-foreground">{{ (error as Error).message }}</p>
-    </div>
-
-    <!-- Empty State -->
-    <div v-else-if="!concentration || concentration.total_arr === 0" class="flex flex-col items-center justify-center rounded-lg border border-dashed py-16">
-      <BarChart3 class="h-10 w-10 text-muted-foreground/40" />
-      <h3 class="mt-4 text-sm font-medium">No pricing data available</h3>
-      <p class="mt-1 text-sm text-muted-foreground">Upload account data with ARR to see pricing insights.</p>
-      <Button class="mt-4" @click="router.push('/onboarding/upload')">
-        Upload Data
-      </Button>
-    </div>
-
-    <template v-else>
-      <!-- Confidence Indicator -->
-      <div class="flex items-center gap-3 rounded-md border bg-muted/30 p-3">
-        <Info class="h-4 w-4 text-muted-foreground" />
-        <div class="flex-1">
-          <span class="text-sm text-muted-foreground">
-            Analysis confidence: <span class="font-medium text-foreground">{{ formatPercent(confidence) }}</span>
-          </span>
-        </div>
-        <Progress :value="confidence * 100" class="h-1.5 w-24" />
-      </div>
-
-      <!-- Key Metrics Row -->
-      <div class="grid gap-4 md:grid-cols-3">
-        <!-- Revenue Concentration Card -->
-        <Card :class="concentration.concentration_risk === 'high' ? 'border-destructive' : ''">
-          <CardHeader class="flex flex-row items-center justify-between pb-2">
-            <CardTitle class="text-sm font-medium text-muted-foreground">Revenue Concentration</CardTitle>
-            <Target class="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div class="flex items-baseline gap-2">
-              <span class="text-2xl font-bold">{{ concentration.top_3_percentage.toFixed(0) }}%</span>
-              <Badge :variant="getRiskBadgeVariant(concentration.concentration_risk)" class="text-[10px] uppercase">
-                {{ concentration.concentration_risk }} risk
-              </Badge>
-            </div>
-            <p class="text-xs text-muted-foreground mt-1">of ARR from top 3 accounts</p>
-          </CardContent>
-        </Card>
-
-        <!-- Pricing Anomalies Card -->
-        <Card :class="anomalies.length > 3 ? 'border-warning' : ''">
-          <CardHeader class="flex flex-row items-center justify-between pb-2">
-            <CardTitle class="text-sm font-medium text-muted-foreground">Pricing Anomalies</CardTitle>
-            <AlertTriangle class="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div class="flex items-baseline gap-2">
-              <span class="text-2xl font-bold">{{ anomalies.length }}</span>
-              <span class="text-sm text-muted-foreground">accounts</span>
-            </div>
-            <p class="text-xs text-muted-foreground mt-1">priced differently than peers</p>
-          </CardContent>
-        </Card>
-
-        <!-- Discount Analysis Card -->
-        <Card>
-          <CardHeader class="flex flex-row items-center justify-between pb-2">
-            <CardTitle class="text-sm font-medium text-muted-foreground">Discount Rate</CardTitle>
-            <DollarSign class="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div class="flex items-baseline gap-2">
-              <span class="text-2xl font-bold">{{ discounts?.discount_rate.toFixed(0) ?? 0 }}%</span>
-              <span class="text-sm text-muted-foreground">of subscriptions</span>
-            </div>
-            <p class="text-xs text-muted-foreground mt-1">
-              {{ discounts?.subscriptions_with_discount ?? 0 }} of {{ discounts?.total_subscriptions ?? 0 }} have discounts
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-
-      <!-- Main Content Grid -->
-      <div class="grid gap-6 lg:grid-cols-2">
-        <!-- Revenue Concentration Detail -->
-        <Card>
-          <CardHeader>
-            <CardTitle class="text-base flex items-center gap-2">
-              <Target class="h-4 w-4" />
-              Revenue Concentration
-            </CardTitle>
-          </CardHeader>
-          <CardContent class="space-y-4">
-            <!-- Insight -->
-            <div class="rounded-md bg-muted/50 p-3">
-              <p class="text-sm">{{ concentration.insight_text }}</p>
-            </div>
-
-            <!-- Top Accounts Table -->
-            <div class="space-y-2">
-              <div
-                v-for="account in concentration.top_accounts.slice(0, 5)"
-                :key="account.id"
-                class="flex items-center justify-between gap-2 p-2 rounded-md hover:bg-muted cursor-pointer transition-colors"
-                @click="navigateToAccount(account.id)"
-              >
-                <div class="flex items-center gap-3 min-w-0">
-                  <span class="text-xs text-muted-foreground font-mono w-4">{{ account.rank }}</span>
-                  <div class="min-w-0">
-                    <div class="font-medium text-sm truncate">{{ account.name }}</div>
-                    <div class="text-xs text-muted-foreground">{{ account.segment }}</div>
-                  </div>
-                </div>
-                <div class="text-right shrink-0">
-                  <div class="font-medium text-sm font-mono">{{ formatCurrency(account.arr) }}</div>
-                  <div class="text-xs text-muted-foreground">{{ account.percentage.toFixed(1) }}%</div>
-                </div>
-              </div>
-            </div>
-
-            <!-- Concentration Bar -->
-            <div class="pt-4 border-t space-y-2">
-              <div class="flex items-center justify-between text-xs text-muted-foreground">
-                <span>Top 3: {{ concentration.top_3_percentage.toFixed(0) }}%</span>
-                <span>Top 10: {{ concentration.top_10_percentage.toFixed(0) }}%</span>
-              </div>
-              <div class="h-2 rounded-full bg-muted overflow-hidden flex">
-                <div
-                  class="bg-destructive transition-all"
-                  :style="{ width: `${Math.min(concentration.top_3_percentage, 100)}%` }"
-                />
-                <div
-                  class="bg-warning transition-all"
-                  :style="{ width: `${Math.min(concentration.top_10_percentage - concentration.top_3_percentage, 100 - concentration.top_3_percentage)}%` }"
-                />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <!-- Pricing Anomalies -->
-        <Card>
-          <CardHeader>
-            <CardTitle class="text-base flex items-center gap-2">
-              <AlertTriangle class="h-4 w-4" />
-              Pricing Anomalies
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div v-if="anomalies.length === 0" class="py-8 text-center text-muted-foreground">
-              <p class="text-sm">No significant pricing anomalies detected.</p>
-              <p class="text-xs mt-1">Pricing is consistent across similar accounts.</p>
-            </div>
-
-            <div v-else class="space-y-3">
-              <div
-                v-for="anomaly in anomalies.slice(0, 5)"
-                :key="anomaly.account_id"
-                class="rounded-md border p-3 space-y-2 hover:border-muted-foreground/50 cursor-pointer transition-colors"
-                @click="navigateToAccount(anomaly.account_id)"
-              >
-                <div class="flex items-center justify-between">
-                  <div class="flex items-center gap-2">
-                    <Badge
-                      :variant="anomaly.direction === 'underpriced' ? 'warning' : 'success'"
-                      class="text-[10px] uppercase"
-                    >
-                      {{ anomaly.direction }}
-                    </Badge>
-                    <span class="font-medium text-sm">{{ anomaly.account_name }}</span>
-                  </div>
-                  <ChevronRight class="h-4 w-4 text-muted-foreground/40" />
-                </div>
-
-                <div class="flex items-center gap-4 text-xs">
-                  <div>
-                    <span class="text-muted-foreground">Pays: </span>
-                    <span class="font-mono font-medium">{{ formatCurrency(anomaly.arr) }}</span>
-                  </div>
-                  <div>
-                    <span class="text-muted-foreground">Avg: </span>
-                    <span class="font-mono">{{ formatCurrency(anomaly.segment_avg_arr) }}</span>
-                  </div>
-                  <div :class="anomaly.direction === 'underpriced' ? 'text-warning' : 'text-success'">
-                    {{ anomaly.deviation_percent > 0 ? '+' : '' }}{{ anomaly.deviation_percent.toFixed(0) }}%
-                  </div>
-                </div>
-
-                <p class="text-xs text-muted-foreground">{{ anomaly.insight_text }}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      <!-- Segment Benchmarks -->
+      <!-- Upload Cards -->
       <Card>
         <CardHeader>
-          <CardTitle class="text-base flex items-center gap-2">
-            <BarChart3 class="h-4 w-4" />
-            Pricing by Segment
-          </CardTitle>
+          <CardTitle class="text-lg">Upload Pricing Data</CardTitle>
+          <CardDescription>
+            Upload CSV exports from your billing system. Required files: Customers, Plans, Subscriptions.
+          </CardDescription>
         </CardHeader>
-        <CardContent>
-          <div v-if="benchmarks.length === 0" class="py-8 text-center text-muted-foreground">
-            No segment data available. Add segment information to accounts for benchmarks.
+        <CardContent class="space-y-6">
+          <!-- Required Files Grid -->
+          <div>
+            <h4 class="text-sm font-medium mb-3 flex items-center gap-2">
+              <Badge variant="destructive" class="text-[10px]">Required</Badge>
+              Core Data
+            </h4>
+            <div class="grid md:grid-cols-3 gap-4">
+              <!-- Customers -->
+              <div class="space-y-2">
+                <div class="flex items-center justify-between">
+                  <span class="text-sm font-medium">Customers</span>
+                  <Tooltip>
+                    <TooltipTrigger>
+                      <Info class="h-3.5 w-3.5 text-muted-foreground" />
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      Required: customer_id, email<br />
+                      Optional: name, segment, created_at
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+                <FileDropzone
+                  v-model="customersFile"
+                  accept=".csv"
+                  :disabled="isAnalyzing"
+                />
+              </div>
+
+              <!-- Plans -->
+              <div class="space-y-2">
+                <div class="flex items-center justify-between">
+                  <span class="text-sm font-medium">Plans</span>
+                  <Tooltip>
+                    <TooltipTrigger>
+                      <Info class="h-3.5 w-3.5 text-muted-foreground" />
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      Required: plan_id, name, price_amount<br />
+                      Optional: interval_months, billing_model
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+                <FileDropzone
+                  v-model="plansFile"
+                  accept=".csv"
+                  :disabled="isAnalyzing"
+                />
+              </div>
+
+              <!-- Subscriptions -->
+              <div class="space-y-2">
+                <div class="flex items-center justify-between">
+                  <span class="text-sm font-medium">Subscriptions</span>
+                  <Tooltip>
+                    <TooltipTrigger>
+                      <Info class="h-3.5 w-3.5 text-muted-foreground" />
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      Required: subscription_id, customer_id, plan_id, is_active<br />
+                      Optional: current_period_start, cancelled_at
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+                <FileDropzone
+                  v-model="subscriptionsFile"
+                  accept=".csv"
+                  :disabled="isAnalyzing"
+                />
+              </div>
+            </div>
           </div>
 
-          <div v-else class="overflow-x-auto">
-            <table class="w-full text-sm">
+          <!-- Optional Files Grid -->
+          <div>
+            <h4 class="text-sm font-medium mb-3 flex items-center gap-2">
+              <Badge variant="secondary" class="text-[10px]">Optional</Badge>
+              Enhanced Insights
+            </h4>
+            <div class="grid md:grid-cols-3 gap-4">
+              <!-- Invoices -->
+              <div class="space-y-2">
+                <div class="flex items-center justify-between">
+                  <span class="text-sm font-medium text-muted-foreground">Invoices</span>
+                  <Badge variant="outline" class="text-[9px]">Discounts</Badge>
+                </div>
+                <FileDropzone
+                  v-model="invoicesFile"
+                  accept=".csv"
+                  :disabled="isAnalyzing"
+                />
+              </div>
+
+              <!-- Usage -->
+              <div class="space-y-2">
+                <div class="flex items-center justify-between">
+                  <span class="text-sm font-medium text-muted-foreground">Usage</span>
+                  <Badge variant="outline" class="text-[9px]">Anomalies</Badge>
+                </div>
+                <FileDropzone
+                  v-model="usageFile"
+                  accept=".csv"
+                  :disabled="isAnalyzing"
+                />
+              </div>
+
+              <!-- Costs -->
+              <div class="space-y-2">
+                <div class="flex items-center justify-between">
+                  <span class="text-sm font-medium text-muted-foreground">Costs</span>
+                  <Badge variant="outline" class="text-[9px]">Margins</Badge>
+                </div>
+                <FileDropzone
+                  v-model="costsFile"
+                  accept=".csv"
+                  :disabled="isAnalyzing"
+                />
+              </div>
+            </div>
+          </div>
+
+          <!-- Progress -->
+          <div v-if="isAnalyzing" class="space-y-2">
+            <div class="flex items-center justify-between text-sm">
+              <span>Analyzing pricing data...</span>
+              <span class="text-muted-foreground">{{ uploadProgress }}%</span>
+            </div>
+            <Progress :value="uploadProgress" />
+          </div>
+
+          <!-- Actions -->
+          <div class="flex flex-col gap-4">
+            <Button
+              :disabled="!canAnalyze || isAnalyzing"
+              :loading="isAnalyzing && dataSource === 'csv'"
+              class="w-full"
+              @click="runAnalysis"
+            >
+              <BarChart3 class="h-4 w-4 mr-2" />
+              Analyze Pricing
+            </Button>
+
+            <!-- Divider -->
+            <div class="relative flex items-center justify-center">
+              <div class="absolute inset-0 flex items-center">
+                <div class="w-full border-t border-border" />
+              </div>
+              <span class="relative bg-card px-3 text-xs text-muted-foreground">or</span>
+            </div>
+
+            <!-- Sample Data -->
+            <Button
+              variant="secondary"
+              :disabled="isAnalyzing"
+              :loading="isAnalyzing && dataSource === 'sample'"
+              class="w-full"
+              @click="loadSampleData"
+            >
+              <TrendingUp class="h-4 w-4 mr-2" />
+              Try with Sample Data
+            </Button>
+            <p class="text-xs text-muted-foreground text-center">
+              {{ sampleSummary.description }}
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+    </template>
+
+    <!-- ==================== RESULTS STATE ==================== -->
+    <template v-else-if="analysisResult">
+      <!-- Results Header -->
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <Badge variant="secondary">
+            {{ analysisResult.meta.customerCount }} customers
+          </Badge>
+          <Badge variant="secondary">
+            {{ analysisResult.meta.planCount }} plans
+          </Badge>
+          <Badge variant="outline">
+            Source: {{ dataSource === 'sample' ? 'Sample Data' : 'CSV Upload' }}
+          </Badge>
+        </div>
+        <Button variant="outline" @click="resetAnalysis">
+          <RefreshCw class="h-4 w-4 mr-2" />
+          New Analysis
+        </Button>
+      </div>
+
+      <!-- Tabbed Results -->
+      <Tabs default-value="saas" class="space-y-6">
+        <TabsList class="flex-wrap h-auto gap-1 p-1">
+          <TabsTrigger value="saas">SaaS Metrics</TabsTrigger>
+          <TabsTrigger value="health">Plan Health</TabsTrigger>
+          <TabsTrigger value="experiments">Price Experiments</TabsTrigger>
+          <TabsTrigger value="bundling">Bundling</TabsTrigger>
+          <TabsTrigger v-if="analysisResult.meta.hasUsageData" value="usage">
+            Usage Anomalies
+          </TabsTrigger>
+          <TabsTrigger v-if="analysisResult.meta.hasCostData" value="margin">
+            Negative Margin
+          </TabsTrigger>
+          <TabsTrigger value="cohorts">Cohorts</TabsTrigger>
+        </TabsList>
+
+        <!-- ========== SaaS Metrics Tab ========== -->
+        <TabsContent value="saas" class="space-y-6">
+          <!-- Hero Metrics -->
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <Card class="bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20">
+              <CardContent class="p-6">
+                <div class="flex items-center gap-1.5 mb-2">
+                  <p class="text-sm font-medium text-muted-foreground">Annual Recurring Revenue</p>
+                  <Tooltip>
+                    <TooltipTrigger>
+                      <Info class="h-3.5 w-3.5 text-muted-foreground/60" />
+                    </TooltipTrigger>
+                    <TooltipContent>MRR x 12</TooltipContent>
+                  </Tooltip>
+                </div>
+                <p class="text-4xl font-bold tracking-tight">
+                  {{ analysisResult.saasMetrics.formatted.arr }}
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent class="p-6">
+                <div class="flex items-center justify-between mb-2">
+                  <div class="flex items-center gap-1.5">
+                    <p class="text-sm font-medium text-muted-foreground">Monthly Recurring Revenue</p>
+                    <Tooltip>
+                      <TooltipTrigger>
+                        <Info class="h-3.5 w-3.5 text-muted-foreground/60" />
+                      </TooltipTrigger>
+                      <TooltipContent>Sum of all active subscriptions</TooltipContent>
+                    </Tooltip>
+                  </div>
+                  <Badge
+                    v-if="analysisResult.saasMetrics.mrrGrowth !== 0"
+                    :variant="analysisResult.saasMetrics.mrrGrowth > 0 ? 'success' : 'destructive'"
+                  >
+                    {{ analysisResult.saasMetrics.mrrGrowth > 0 ? '+' : '' }}{{ analysisResult.saasMetrics.mrrGrowth }}% MoM
+                  </Badge>
+                </div>
+                <p class="text-4xl font-bold tracking-tight">
+                  {{ analysisResult.saasMetrics.formatted.mrr }}
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+
+          <!-- Secondary Metrics -->
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <Card>
+              <CardContent class="p-5">
+                <div class="flex items-center gap-1.5 mb-1">
+                  <p class="text-xs font-medium text-muted-foreground uppercase tracking-wide">Customers</p>
+                </div>
+                <p class="text-2xl font-semibold">{{ analysisResult.saasMetrics.customerCount }}</p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent class="p-5">
+                <div class="flex items-center gap-1.5 mb-1">
+                  <p class="text-xs font-medium text-muted-foreground uppercase tracking-wide">ARPU</p>
+                  <Tooltip>
+                    <TooltipTrigger>
+                      <Info class="h-3 w-3 text-muted-foreground/60" />
+                    </TooltipTrigger>
+                    <TooltipContent>Average Revenue Per User (MRR / Customers)</TooltipContent>
+                  </Tooltip>
+                </div>
+                <p class="text-2xl font-semibold">{{ analysisResult.saasMetrics.formatted.arpu }}</p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent class="p-5">
+                <div class="flex items-center gap-1.5 mb-1">
+                  <p class="text-xs font-medium text-muted-foreground uppercase tracking-wide">NRR</p>
+                  <Tooltip>
+                    <TooltipTrigger>
+                      <Info class="h-3 w-3 text-muted-foreground/60" />
+                    </TooltipTrigger>
+                    <TooltipContent>Net Revenue Retention. 100%+ means growing from existing customers.</TooltipContent>
+                  </Tooltip>
+                </div>
+                <div class="flex items-center gap-2">
+                  <p class="text-2xl font-semibold">{{ analysisResult.saasMetrics.nrr }}%</p>
+                  <TrendingUp v-if="analysisResult.saasMetrics.nrr >= 100" class="h-4 w-4 text-green-600" />
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent class="p-5">
+                <div class="flex items-center gap-1.5 mb-1">
+                  <p class="text-xs font-medium text-muted-foreground uppercase tracking-wide">Avg LTV</p>
+                  <Tooltip>
+                    <TooltipTrigger>
+                      <Info class="h-3 w-3 text-muted-foreground/60" />
+                    </TooltipTrigger>
+                    <TooltipContent>Estimated Lifetime Value (90% retention assumption)</TooltipContent>
+                  </Tooltip>
+                </div>
+                <p class="text-2xl font-semibold">{{ analysisResult.saasMetrics.formatted.avgLTV }}</p>
+              </CardContent>
+            </Card>
+          </div>
+
+          <!-- MRR Movement -->
+          <Card>
+            <CardHeader class="pb-2">
+              <div class="flex items-center gap-2">
+                <CardTitle class="text-base font-semibold">MRR Movement</CardTitle>
+                <Tooltip>
+                  <TooltipTrigger>
+                    <Info class="h-3.5 w-3.5 text-muted-foreground/60" />
+                  </TooltipTrigger>
+                  <TooltipContent>Based on subscription changes. New customers in last 30 days counted as "New".</TooltipContent>
+                </Tooltip>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div class="grid grid-cols-5 gap-3">
+                <div class="text-center p-3 bg-green-500/10 rounded-lg border border-green-500/20">
+                  <p class="text-xs text-muted-foreground mb-0.5">New</p>
+                  <p class="text-lg font-semibold text-green-600 dark:text-green-400">
+                    +{{ analysisResult.saasMetrics.formatted.newMRR }}
+                  </p>
+                </div>
+                <div class="text-center p-3 bg-blue-500/10 rounded-lg border border-blue-500/20">
+                  <p class="text-xs text-muted-foreground mb-0.5">Expansion</p>
+                  <p class="text-lg font-semibold text-blue-600 dark:text-blue-400">
+                    +{{ analysisResult.saasMetrics.formatted.expansionMRR }}
+                  </p>
+                </div>
+                <div class="text-center p-3 bg-orange-500/10 rounded-lg border border-orange-500/20">
+                  <p class="text-xs text-muted-foreground mb-0.5">Contraction</p>
+                  <p class="text-lg font-semibold text-orange-600 dark:text-orange-400">
+                    -{{ analysisResult.saasMetrics.formatted.contractionMRR }}
+                  </p>
+                </div>
+                <div class="text-center p-3 bg-red-500/10 rounded-lg border border-red-500/20">
+                  <p class="text-xs text-muted-foreground mb-0.5">Churned</p>
+                  <p class="text-lg font-semibold text-red-600 dark:text-red-400">
+                    -{{ analysisResult.saasMetrics.formatted.churnedMRR }}
+                  </p>
+                </div>
+                <div
+                  class="text-center p-3 rounded-lg border"
+                  :class="analysisResult.saasMetrics.mrrMovement.netNew >= 0
+                    ? 'bg-primary/10 border-primary/20'
+                    : 'bg-destructive/10 border-destructive/20'"
+                >
+                  <p class="text-xs text-muted-foreground mb-0.5">Net New</p>
+                  <p
+                    class="text-lg font-semibold"
+                    :class="analysisResult.saasMetrics.mrrMovement.netNew >= 0 ? 'text-primary' : 'text-destructive'"
+                  >
+                    ={{ analysisResult.saasMetrics.formatted.netNewMRR }}
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <!-- ========== Plan Health Tab ========== -->
+        <TabsContent value="health" class="space-y-4">
+          <div v-if="analysisResult.planHealth.length > 0" class="overflow-x-auto">
+            <table class="w-full">
               <thead>
-                <tr class="border-b">
-                  <th class="text-left py-2 font-medium text-muted-foreground">Segment</th>
-                  <th class="text-right py-2 font-medium text-muted-foreground">Accounts</th>
-                  <th class="text-right py-2 font-medium text-muted-foreground">Total ARR</th>
-                  <th class="text-right py-2 font-medium text-muted-foreground">Avg ARR</th>
-                  <th class="text-right py-2 font-medium text-muted-foreground">Range</th>
+                <tr class="border-b border-border">
+                  <th class="text-left p-3 font-medium text-sm">Plan</th>
+                  <th class="text-left p-3 font-medium text-sm">Health</th>
+                  <th class="text-left p-3 font-medium text-sm">Customers</th>
+                  <th class="text-left p-3 font-medium text-sm">Total MRR</th>
+                  <th class="text-left p-3 font-medium text-sm">Avg MRR</th>
+                  <th class="text-left p-3 font-medium text-sm">Churn Risk</th>
+                  <th class="text-left p-3 font-medium text-sm">Upsell Ready</th>
                 </tr>
               </thead>
               <tbody>
                 <tr
-                  v-for="benchmark in benchmarks"
-                  :key="benchmark.segment"
-                  class="border-b last:border-0 hover:bg-muted/50"
+                  v-for="plan in analysisResult.planHealth"
+                  :key="plan.planId"
+                  class="border-b border-border hover:bg-muted/50"
                 >
-                  <td class="py-3">
-                    <Badge variant="outline" class="font-normal">{{ benchmark.segment }}</Badge>
+                  <td class="p-3 font-medium">{{ plan.planName }}</td>
+                  <td class="p-3">
+                    <div class="flex items-center gap-2">
+                      <Progress :value="plan.healthScore" class="w-16 h-2" />
+                      <span
+                        class="text-sm font-semibold"
+                        :class="plan.healthScore >= 80 ? 'text-green-600' : plan.healthScore >= 60 ? 'text-yellow-600' : 'text-red-600'"
+                      >
+                        {{ plan.healthScore }}
+                      </span>
+                    </div>
                   </td>
-                  <td class="py-3 text-right font-mono">{{ benchmark.account_count }}</td>
-                  <td class="py-3 text-right font-mono font-medium">{{ formatCurrency(benchmark.total_arr) }}</td>
-                  <td class="py-3 text-right font-mono">{{ formatCurrency(benchmark.avg_arr) }}</td>
-                  <td class="py-3 text-right text-muted-foreground text-xs">{{ benchmark.range }}</td>
+                  <td class="p-3">{{ plan.customerCount }}</td>
+                  <td class="p-3 font-mono">${{ plan.totalMRR.toFixed(0) }}</td>
+                  <td class="p-3 font-mono">${{ plan.avgMRR.toFixed(0) }}</td>
+                  <td class="p-3">
+                    <Badge v-if="plan.churnRiskCount > 0" variant="destructive">
+                      {{ plan.churnRiskCount }}
+                    </Badge>
+                    <span v-else class="text-muted-foreground">0</span>
+                  </td>
+                  <td class="p-3">
+                    <Badge v-if="plan.upsellReadyCount > 0" variant="success">
+                      {{ plan.upsellReadyCount }}
+                    </Badge>
+                    <span v-else class="text-muted-foreground">0</span>
+                  </td>
                 </tr>
               </tbody>
             </table>
           </div>
-        </CardContent>
-      </Card>
+          <Card v-else>
+            <CardContent class="p-6 text-center text-muted-foreground">
+              No plan health data available.
+            </CardContent>
+          </Card>
+        </TabsContent>
 
-      <!-- Usage vs Revenue (if available) -->
-      <Card v-if="usageRevenue">
-        <CardHeader>
-          <CardTitle class="text-base flex items-center gap-2">
-            <TrendingUp class="h-4 w-4" />
-            Usage vs Revenue
-          </CardTitle>
-        </CardHeader>
-        <CardContent class="space-y-4">
-          <!-- Insight -->
-          <div class="rounded-md bg-muted/50 p-3">
-            <p class="text-sm">{{ usageRevenue.insight_text }}</p>
+        <!-- ========== Price Experiments Tab ========== -->
+        <TabsContent value="experiments" class="space-y-4">
+          <div v-if="analysisResult.priceExperiments.length > 0" class="grid gap-4">
+            <Card v-for="(exp, idx) in analysisResult.priceExperiments" :key="idx">
+              <CardHeader>
+                <div class="flex items-start justify-between gap-4">
+                  <div class="space-y-1">
+                    <CardTitle class="text-base">{{ exp.title }}</CardTitle>
+                    <CardDescription>{{ exp.description }}</CardDescription>
+                  </div>
+                  <Badge variant="success" class="shrink-0">{{ exp.impact }}</Badge>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div class="flex items-center gap-2 text-sm">
+                  <TrendingUp class="h-4 w-4 text-primary" />
+                  <span class="font-medium">Recommendation:</span>
+                  <span class="text-muted-foreground">{{ exp.suggestion }}</span>
+                </div>
+              </CardContent>
+            </Card>
           </div>
+          <Card v-else>
+            <CardContent class="p-6 text-center text-muted-foreground">
+              No pricing experiments identified. Add more customer data for better insights.
+            </CardContent>
+          </Card>
+        </TabsContent>
 
-          <div class="grid gap-4 md:grid-cols-2">
-            <!-- High Usage, Low Revenue -->
-            <div class="space-y-2">
-              <h4 class="text-sm font-medium flex items-center gap-2">
-                <TrendingUp class="h-4 w-4 text-warning" />
-                Upsell Opportunities
-              </h4>
-              <p class="text-xs text-muted-foreground">High usage relative to revenue</p>
+        <!-- ========== Bundling Tab ========== -->
+        <TabsContent value="bundling" class="space-y-4">
+          <div v-if="analysisResult.bundlingOpportunities.length > 0" class="grid gap-4">
+            <Card v-for="(opp, idx) in analysisResult.bundlingOpportunities" :key="idx">
+              <CardHeader>
+                <div class="flex items-start justify-between gap-4">
+                  <div class="space-y-1">
+                    <CardTitle class="text-base flex items-center gap-2">
+                      <Package class="h-4 w-4" />
+                      {{ opp.title }}
+                    </CardTitle>
+                    <CardDescription>{{ opp.description }}</CardDescription>
+                  </div>
+                  <Badge :variant="opp.type === 'positive' ? 'success' : 'warning'" class="shrink-0">
+                    {{ opp.impact }}
+                  </Badge>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div class="flex items-center gap-2 text-sm">
+                  <Layers class="h-4 w-4 text-primary" />
+                  <span class="font-medium">Action:</span>
+                  <span class="text-muted-foreground">{{ opp.suggestion }}</span>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+          <Card v-else>
+            <CardContent class="p-6 text-center text-muted-foreground">
+              No bundling opportunities identified.
+            </CardContent>
+          </Card>
+        </TabsContent>
 
-              <div v-if="usageRevenue.high_usage_low_revenue.length === 0" class="text-sm text-muted-foreground py-4">
-                No accounts identified
-              </div>
-              <div v-else class="space-y-2">
-                <div
-                  v-for="item in usageRevenue.high_usage_low_revenue"
-                  :key="item.account_id"
-                  class="flex items-center justify-between p-2 rounded-md border hover:bg-muted cursor-pointer"
-                  @click="navigateToAccount(item.account_id)"
+        <!-- ========== Usage Anomalies Tab ========== -->
+        <TabsContent v-if="analysisResult.meta.hasUsageData" value="usage" class="space-y-4">
+          <div v-if="analysisResult.usageAnomalies.length > 0" class="overflow-x-auto">
+            <table class="w-full">
+              <thead>
+                <tr class="border-b border-border">
+                  <th class="text-left p-3 font-medium text-sm">Customer</th>
+                  <th class="text-left p-3 font-medium text-sm">Plan</th>
+                  <th class="text-left p-3 font-medium text-sm">Usage</th>
+                  <th class="text-left p-3 font-medium text-sm">Description</th>
+                  <th class="text-left p-3 font-medium text-sm">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr
+                  v-for="anomaly in analysisResult.usageAnomalies"
+                  :key="anomaly.customerId"
+                  class="border-b border-border hover:bg-muted/50"
                 >
-                  <span class="text-sm font-medium truncate">{{ item.account_name }}</span>
-                  <span class="text-xs font-mono text-warning">{{ formatCurrency(item.arr) }}</span>
-                </div>
-              </div>
-            </div>
+                  <td class="p-3 font-medium">{{ anomaly.customer }}</td>
+                  <td class="p-3"><Badge variant="secondary">{{ anomaly.plan }}</Badge></td>
+                  <td class="p-3">
+                    <span :class="anomaly.type === 'warning' ? 'text-yellow-600 font-semibold' : ''">
+                      {{ anomaly.usage }}
+                    </span>
+                  </td>
+                  <td class="p-3 text-sm text-muted-foreground">{{ anomaly.description }}</td>
+                  <td class="p-3">
+                    <Badge :variant="anomaly.type === 'warning' ? 'destructive' : 'secondary'">
+                      {{ anomaly.type === 'warning' ? 'Over Limit' : 'Under-utilized' }}
+                    </Badge>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <Card v-else>
+            <CardContent class="p-6 text-center text-muted-foreground">
+              No usage anomalies detected.
+            </CardContent>
+          </Card>
+        </TabsContent>
 
-            <!-- Low Usage, High Revenue -->
-            <div class="space-y-2">
-              <h4 class="text-sm font-medium flex items-center gap-2">
-                <TrendingDown class="h-4 w-4 text-destructive" />
-                Churn Risks
-              </h4>
-              <p class="text-xs text-muted-foreground">Low usage relative to revenue</p>
+        <!-- ========== Negative Margin Tab ========== -->
+        <TabsContent v-if="analysisResult.meta.hasCostData" value="margin" class="space-y-4">
+          <Alert v-if="analysisResult.negativeMarginCustomers.length > 0" variant="destructive">
+            <AlertTriangle class="h-4 w-4" />
+            <span class="font-medium">{{ analysisResult.negativeMarginCustomers.length }} customers with negative margins detected</span>
+            <p class="text-sm mt-1">These accounts are costing more to serve than revenue generated</p>
+          </Alert>
 
-              <div v-if="usageRevenue.low_usage_high_revenue.length === 0" class="text-sm text-muted-foreground py-4">
-                No accounts identified
-              </div>
-              <div v-else class="space-y-2">
-                <div
-                  v-for="item in usageRevenue.low_usage_high_revenue"
-                  :key="item.account_id"
-                  class="flex items-center justify-between p-2 rounded-md border hover:bg-muted cursor-pointer"
-                  @click="navigateToAccount(item.account_id)"
+          <div v-if="analysisResult.negativeMarginCustomers.length > 0" class="overflow-x-auto">
+            <table class="w-full">
+              <thead>
+                <tr class="border-b border-border">
+                  <th class="text-left p-3 font-medium text-sm">Customer</th>
+                  <th class="text-left p-3 font-medium text-sm">Plan</th>
+                  <th class="text-left p-3 font-medium text-sm">MRR</th>
+                  <th class="text-left p-3 font-medium text-sm">Costs</th>
+                  <th class="text-left p-3 font-medium text-sm">Margin</th>
+                  <th class="text-left p-3 font-medium text-sm">Reason</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr
+                  v-for="customer in analysisResult.negativeMarginCustomers"
+                  :key="customer.customerId"
+                  class="border-b border-border hover:bg-muted/50"
                 >
-                  <span class="text-sm font-medium truncate">{{ item.account_name }}</span>
-                  <span class="text-xs font-mono text-destructive">{{ formatCurrency(item.arr) }}</span>
-                </div>
-              </div>
-            </div>
+                  <td class="p-3 font-medium">{{ customer.customer }}</td>
+                  <td class="p-3"><Badge variant="secondary">{{ customer.plan }}</Badge></td>
+                  <td class="p-3 font-mono">{{ customer.mrr }}</td>
+                  <td class="p-3 font-mono text-destructive font-semibold">{{ customer.costs }}</td>
+                  <td class="p-3"><Badge variant="destructive">{{ customer.margin }}</Badge></td>
+                  <td class="p-3 text-sm text-muted-foreground">{{ customer.reason }}</td>
+                </tr>
+              </tbody>
+            </table>
           </div>
-        </CardContent>
-      </Card>
+          <Card v-else>
+            <CardContent class="p-6 text-center text-muted-foreground">
+              No negative margin customers detected.
+            </CardContent>
+          </Card>
+        </TabsContent>
 
-      <!-- Discount Analysis -->
-      <Card v-if="discounts && discounts.high_discount_accounts.length > 0">
-        <CardHeader>
-          <CardTitle class="text-base flex items-center gap-2">
-            <DollarSign class="h-4 w-4" />
-            High Discount Accounts
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div class="rounded-md bg-muted/50 p-3 mb-4">
-            <p class="text-sm">{{ discounts.insight_text }}</p>
-          </div>
-
-          <div class="space-y-2">
-            <div
-              v-for="account in discounts.high_discount_accounts"
-              :key="account.account_id"
-              class="flex items-center justify-between p-3 rounded-md border hover:bg-muted cursor-pointer"
-              @click="navigateToAccount(account.account_id)"
-            >
-              <div>
-                <div class="font-medium text-sm">{{ account.account_name }}</div>
-                <div class="text-xs text-muted-foreground">{{ account.plan }}</div>
-              </div>
-              <div class="text-right">
-                <Badge variant="warning" class="text-xs">{{ account.discount_percent }}% off</Badge>
-                <div class="text-xs text-muted-foreground mt-1">
-                  -{{ formatCurrency(account.monthly_discount) }}/mo
+        <!-- ========== Cohorts Tab ========== -->
+        <TabsContent value="cohorts" class="space-y-4">
+          <div v-if="analysisResult.cohorts.length > 0" class="grid gap-4">
+            <Card v-for="cohort in analysisResult.cohorts" :key="cohort.cohort">
+              <CardHeader>
+                <CardTitle class="text-base flex items-center gap-2">
+                  <Users class="h-4 w-4" />
+                  {{ cohort.cohort }}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div class="grid grid-cols-5 gap-4">
+                  <div>
+                    <p class="text-xs text-muted-foreground mb-1">Customers</p>
+                    <p class="text-lg font-semibold">{{ cohort.customerCount }}</p>
+                  </div>
+                  <div>
+                    <p class="text-xs text-muted-foreground mb-1">Avg MRR</p>
+                    <p class="text-lg font-semibold">{{ cohort.avgMRR }}</p>
+                  </div>
+                  <div>
+                    <p class="text-xs text-muted-foreground mb-1">Total MRR</p>
+                    <p class="text-lg font-semibold">{{ cohort.totalMRR }}</p>
+                  </div>
+                  <div>
+                    <p class="text-xs text-muted-foreground mb-1">Avg Tenure</p>
+                    <p class="text-lg font-semibold">
+                      {{ cohort.avgTenureMonths !== undefined ? `${cohort.avgTenureMonths}mo` : 'N/A' }}
+                    </p>
+                  </div>
+                  <div>
+                    <p class="text-xs text-muted-foreground mb-1">Est. LTV</p>
+                    <p class="text-lg font-semibold text-primary">
+                      {{ cohort.estimatedLTV || 'N/A' }}
+                    </p>
+                  </div>
                 </div>
-              </div>
-            </div>
+              </CardContent>
+            </Card>
           </div>
-        </CardContent>
-      </Card>
+          <Card v-else>
+            <CardContent class="p-6 text-center text-muted-foreground">
+              No cohort data available. Include signup dates in your CSV for cohort analysis.
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </template>
   </div>
 </template>
