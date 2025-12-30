@@ -20,17 +20,18 @@ const navItems = computed(() => [
     icon: Users,
     description: 'All your customers in one place'
   },
-  {
-    path: '/matches',
-    label: 'Matches',
-    icon: Link2,
-    description: 'Review duplicate account suggestions'
-  },
+  // Hidden for P0 scope - account matching is P1
+  // {
+  //   path: '/matches',
+  //   label: 'Matches',
+  //   icon: Link2,
+  //   description: 'Review duplicate account suggestions'
+  // },
   {
     path: '/pricing',
     label: 'Pricing',
     icon: DollarSign,
-    description: 'Understand your pricing patterns'
+    description: 'Analyze your pricing model'
   },
   { path: '/projects', label: 'Projects', icon: FolderOpen, description: 'Manage data uploads' },
   { path: '/data-sources', label: 'Data Sources', icon: Plug, description: 'Connect integrations or upload files' },

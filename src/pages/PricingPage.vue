@@ -9,6 +9,7 @@ import {
   Info,
   BarChart3,
   Layers,
+  Plug,
 } from 'lucide-vue-next'
 import {
   Card,
@@ -28,7 +29,7 @@ import {
 } from '@/components/ui'
 import Progress from '@/components/ui/progress.vue'
 import Alert from '@/components/ui/alert.vue'
-import FileDropzone from '@/components/ui/file-dropzone.vue'
+// FileDropzone removed - uploads now handled via Data Sources page
 import {
   parseCSV,
   analyzeData,
@@ -203,7 +204,7 @@ function resetAnalysis() {
       </p>
     </div>
 
-    <!-- ==================== UPLOAD STATE ==================== -->
+    <!-- ==================== EMPTY STATE ==================== -->
     <template v-if="!analysisComplete">
       <!-- Error Alert -->
       <Alert v-if="error" variant="destructive">
@@ -211,179 +212,72 @@ function resetAnalysis() {
         <span class="font-medium">Error:</span> {{ error }}
       </Alert>
 
-      <!-- Upload Cards -->
-      <Card>
-        <CardHeader>
-          <CardTitle class="text-lg">Upload Pricing Data</CardTitle>
-          <CardDescription>
-            Upload CSV exports from your billing system. Required files: Customers, Plans, Subscriptions.
-          </CardDescription>
-        </CardHeader>
-        <CardContent class="space-y-6">
-          <!-- Required Files Grid -->
-          <div>
-            <h4 class="text-sm font-medium mb-3 flex items-center gap-2">
-              <Badge variant="destructive" class="text-[10px]">Required</Badge>
-              Core Data
-            </h4>
-            <div class="grid md:grid-cols-3 gap-4">
-              <!-- Customers -->
-              <div class="space-y-2">
-                <div class="flex items-center justify-between">
-                  <span class="text-sm font-medium">Customers</span>
-                  <Tooltip>
-                    <TooltipTrigger>
-                      <Info class="h-3.5 w-3.5 text-muted-foreground" />
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      Required: customer_id, email<br />
-                      Optional: name, segment, created_at
-                    </TooltipContent>
-                  </Tooltip>
-                </div>
-                <FileDropzone
-                  v-model="customersFile"
-                  accept=".csv"
-                  :disabled="isAnalyzing"
-                />
-              </div>
+      <!-- Progress (for sample data loading) -->
+      <div v-if="isAnalyzing" class="space-y-2">
+        <div class="flex items-center justify-between text-sm">
+          <span>Loading data...</span>
+          <span class="text-muted-foreground">{{ uploadProgress }}%</span>
+        </div>
+        <Progress :value="uploadProgress" />
+      </div>
 
-              <!-- Plans -->
-              <div class="space-y-2">
-                <div class="flex items-center justify-between">
-                  <span class="text-sm font-medium">Plans</span>
-                  <Tooltip>
-                    <TooltipTrigger>
-                      <Info class="h-3.5 w-3.5 text-muted-foreground" />
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      Required: plan_id, name, price_amount<br />
-                      Optional: interval_months, billing_model
-                    </TooltipContent>
-                  </Tooltip>
-                </div>
-                <FileDropzone
-                  v-model="plansFile"
-                  accept=".csv"
-                  :disabled="isAnalyzing"
-                />
-              </div>
-
-              <!-- Subscriptions -->
-              <div class="space-y-2">
-                <div class="flex items-center justify-between">
-                  <span class="text-sm font-medium">Subscriptions</span>
-                  <Tooltip>
-                    <TooltipTrigger>
-                      <Info class="h-3.5 w-3.5 text-muted-foreground" />
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      Required: subscription_id, customer_id, plan_id, is_active<br />
-                      Optional: current_period_start, cancelled_at
-                    </TooltipContent>
-                  </Tooltip>
-                </div>
-                <FileDropzone
-                  v-model="subscriptionsFile"
-                  accept=".csv"
-                  :disabled="isAnalyzing"
-                />
-              </div>
-            </div>
+      <!-- Empty State Card -->
+      <Card v-else class="max-w-2xl mx-auto">
+        <CardContent class="p-12 text-center space-y-6">
+          <div class="mx-auto w-16 h-16 rounded-full bg-muted flex items-center justify-center">
+            <BarChart3 class="h-8 w-8 text-muted-foreground" />
           </div>
 
-          <!-- Optional Files Grid -->
-          <div>
-            <h4 class="text-sm font-medium mb-3 flex items-center gap-2">
-              <Badge variant="secondary" class="text-[10px]">Optional</Badge>
-              Enhanced Insights
-            </h4>
-            <div class="grid md:grid-cols-3 gap-4">
-              <!-- Invoices -->
-              <div class="space-y-2">
-                <div class="flex items-center justify-between">
-                  <span class="text-sm font-medium text-muted-foreground">Invoices</span>
-                  <Badge variant="outline" class="text-[9px]">Discounts</Badge>
-                </div>
-                <FileDropzone
-                  v-model="invoicesFile"
-                  accept=".csv"
-                  :disabled="isAnalyzing"
-                />
-              </div>
-
-              <!-- Usage -->
-              <div class="space-y-2">
-                <div class="flex items-center justify-between">
-                  <span class="text-sm font-medium text-muted-foreground">Usage</span>
-                  <Badge variant="outline" class="text-[9px]">Anomalies</Badge>
-                </div>
-                <FileDropzone
-                  v-model="usageFile"
-                  accept=".csv"
-                  :disabled="isAnalyzing"
-                />
-              </div>
-
-              <!-- Costs -->
-              <div class="space-y-2">
-                <div class="flex items-center justify-between">
-                  <span class="text-sm font-medium text-muted-foreground">Costs</span>
-                  <Badge variant="outline" class="text-[9px]">Margins</Badge>
-                </div>
-                <FileDropzone
-                  v-model="costsFile"
-                  accept=".csv"
-                  :disabled="isAnalyzing"
-                />
-              </div>
-            </div>
+          <div class="space-y-2">
+            <h2 class="text-xl font-semibold">No data connected yet</h2>
+            <p class="text-muted-foreground max-w-md mx-auto">
+              Connect your revenue and cost data to see margin analysis, plan health, usage anomalies, and more.
+            </p>
           </div>
 
-          <!-- Progress -->
-          <div v-if="isAnalyzing" class="space-y-2">
-            <div class="flex items-center justify-between text-sm">
-              <span>Analyzing pricing data...</span>
-              <span class="text-muted-foreground">{{ uploadProgress }}%</span>
-            </div>
-            <Progress :value="uploadProgress" />
+          <div class="space-y-3 pt-2">
+            <ul class="text-sm text-muted-foreground space-y-1.5">
+              <li class="flex items-center gap-2 justify-center">
+                <TrendingUp class="h-4 w-4 text-primary" />
+                Margin analysis
+              </li>
+              <li class="flex items-center gap-2 justify-center">
+                <Users class="h-4 w-4 text-primary" />
+                Plan health scores
+              </li>
+              <li class="flex items-center gap-2 justify-center">
+                <AlertTriangle class="h-4 w-4 text-primary" />
+                Usage anomalies & churn risk
+              </li>
+              <li class="flex items-center gap-2 justify-center">
+                <Package class="h-4 w-4 text-primary" />
+                Negative margin customers
+              </li>
+            </ul>
           </div>
 
-          <!-- Actions -->
-          <div class="flex flex-col gap-4">
+          <div class="flex flex-col sm:flex-row gap-3 justify-center pt-4">
+            <router-link to="/data-sources">
+              <Button size="lg">
+                <Plug class="h-4 w-4 mr-2" />
+                Connect Data
+              </Button>
+            </router-link>
             <Button
-              :disabled="!canAnalyze || isAnalyzing"
-              :loading="isAnalyzing && dataSource === 'csv'"
-              class="w-full"
-              @click="runAnalysis"
-            >
-              <BarChart3 class="h-4 w-4 mr-2" />
-              Analyze Pricing
-            </Button>
-
-            <!-- Divider -->
-            <div class="relative flex items-center justify-center">
-              <div class="absolute inset-0 flex items-center">
-                <div class="w-full border-t border-border" />
-              </div>
-              <span class="relative bg-card px-3 text-xs text-muted-foreground">or</span>
-            </div>
-
-            <!-- Sample Data -->
-            <Button
-              variant="secondary"
+              variant="outline"
+              size="lg"
               :disabled="isAnalyzing"
-              :loading="isAnalyzing && dataSource === 'sample'"
-              class="w-full"
+              :loading="isAnalyzing"
               @click="loadSampleData"
             >
               <TrendingUp class="h-4 w-4 mr-2" />
-              Try with Sample Data
+              Try Sample Data
             </Button>
-            <p class="text-xs text-muted-foreground text-center">
-              {{ sampleSummary.description }}
-            </p>
           </div>
+
+          <p class="text-xs text-muted-foreground">
+            {{ sampleSummary.description }}
+          </p>
         </CardContent>
       </Card>
     </template>
@@ -414,15 +308,16 @@ function resetAnalysis() {
         <TabsList class="flex-wrap h-auto gap-1 p-1">
           <TabsTrigger value="saas">SaaS Metrics</TabsTrigger>
           <TabsTrigger value="health">Plan Health</TabsTrigger>
-          <TabsTrigger value="experiments">Price Experiments</TabsTrigger>
-          <TabsTrigger value="bundling">Bundling</TabsTrigger>
+          <!-- Hidden for P0 scope -->
+          <!-- <TabsTrigger value="experiments">Price Experiments</TabsTrigger> -->
+          <!-- <TabsTrigger value="bundling">Bundling</TabsTrigger> -->
           <TabsTrigger v-if="analysisResult.meta.hasUsageData" value="usage">
             Usage Anomalies
           </TabsTrigger>
           <TabsTrigger v-if="analysisResult.meta.hasCostData" value="margin">
             Negative Margin
           </TabsTrigger>
-          <TabsTrigger value="cohorts">Cohorts</TabsTrigger>
+          <!-- <TabsTrigger value="cohorts">Cohorts</TabsTrigger> -->
         </TabsList>
 
         <!-- ========== SaaS Metrics Tab ========== -->
@@ -649,68 +544,19 @@ function resetAnalysis() {
           </Card>
         </TabsContent>
 
-        <!-- ========== Price Experiments Tab ========== -->
+        <!-- Hidden for P0 scope: Price Experiments Tab -->
+        <!--
         <TabsContent value="experiments" class="space-y-4">
-          <div v-if="analysisResult.priceExperiments.length > 0" class="grid gap-4">
-            <Card v-for="(exp, idx) in analysisResult.priceExperiments" :key="idx">
-              <CardHeader>
-                <div class="flex items-start justify-between gap-4">
-                  <div class="space-y-1">
-                    <CardTitle class="text-base">{{ exp.title }}</CardTitle>
-                    <CardDescription>{{ exp.description }}</CardDescription>
-                  </div>
-                  <Badge variant="success" class="shrink-0">{{ exp.impact }}</Badge>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div class="flex items-center gap-2 text-sm">
-                  <TrendingUp class="h-4 w-4 text-primary" />
-                  <span class="font-medium">Recommendation:</span>
-                  <span class="text-muted-foreground">{{ exp.suggestion }}</span>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-          <Card v-else>
-            <CardContent class="p-6 text-center text-muted-foreground">
-              No pricing experiments identified. Add more customer data for better insights.
-            </CardContent>
-          </Card>
+          ... content hidden ...
         </TabsContent>
+        -->
 
-        <!-- ========== Bundling Tab ========== -->
+        <!-- Hidden for P0 scope: Bundling Tab -->
+        <!--
         <TabsContent value="bundling" class="space-y-4">
-          <div v-if="analysisResult.bundlingOpportunities.length > 0" class="grid gap-4">
-            <Card v-for="(opp, idx) in analysisResult.bundlingOpportunities" :key="idx">
-              <CardHeader>
-                <div class="flex items-start justify-between gap-4">
-                  <div class="space-y-1">
-                    <CardTitle class="text-base flex items-center gap-2">
-                      <Package class="h-4 w-4" />
-                      {{ opp.title }}
-                    </CardTitle>
-                    <CardDescription>{{ opp.description }}</CardDescription>
-                  </div>
-                  <Badge :variant="opp.type === 'positive' ? 'success' : 'warning'" class="shrink-0">
-                    {{ opp.impact }}
-                  </Badge>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div class="flex items-center gap-2 text-sm">
-                  <Layers class="h-4 w-4 text-primary" />
-                  <span class="font-medium">Action:</span>
-                  <span class="text-muted-foreground">{{ opp.suggestion }}</span>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-          <Card v-else>
-            <CardContent class="p-6 text-center text-muted-foreground">
-              No bundling opportunities identified.
-            </CardContent>
-          </Card>
+          ... content hidden ...
         </TabsContent>
+        -->
 
         <!-- ========== Usage Anomalies Tab ========== -->
         <TabsContent v-if="analysisResult.meta.hasUsageData" value="usage" class="space-y-4">
@@ -798,52 +644,12 @@ function resetAnalysis() {
           </Card>
         </TabsContent>
 
-        <!-- ========== Cohorts Tab ========== -->
+        <!-- Hidden for P0 scope: Cohorts Tab -->
+        <!--
         <TabsContent value="cohorts" class="space-y-4">
-          <div v-if="analysisResult.cohorts.length > 0" class="grid gap-4">
-            <Card v-for="cohort in analysisResult.cohorts" :key="cohort.cohort">
-              <CardHeader>
-                <CardTitle class="text-base flex items-center gap-2">
-                  <Users class="h-4 w-4" />
-                  {{ cohort.cohort }}
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div class="grid grid-cols-5 gap-4">
-                  <div>
-                    <p class="text-xs text-muted-foreground mb-1">Customers</p>
-                    <p class="text-lg font-semibold">{{ cohort.customerCount }}</p>
-                  </div>
-                  <div>
-                    <p class="text-xs text-muted-foreground mb-1">Avg MRR</p>
-                    <p class="text-lg font-semibold">{{ cohort.avgMRR }}</p>
-                  </div>
-                  <div>
-                    <p class="text-xs text-muted-foreground mb-1">Total MRR</p>
-                    <p class="text-lg font-semibold">{{ cohort.totalMRR }}</p>
-                  </div>
-                  <div>
-                    <p class="text-xs text-muted-foreground mb-1">Avg Tenure</p>
-                    <p class="text-lg font-semibold">
-                      {{ cohort.avgTenureMonths !== undefined ? `${cohort.avgTenureMonths}mo` : 'N/A' }}
-                    </p>
-                  </div>
-                  <div>
-                    <p class="text-xs text-muted-foreground mb-1">Est. LTV</p>
-                    <p class="text-lg font-semibold text-primary">
-                      {{ cohort.estimatedLTV || 'N/A' }}
-                    </p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-          <Card v-else>
-            <CardContent class="p-6 text-center text-muted-foreground">
-              No cohort data available. Include signup dates in your CSV for cohort analysis.
-            </CardContent>
-          </Card>
+          ... content hidden ...
         </TabsContent>
+        -->
       </Tabs>
     </template>
   </div>

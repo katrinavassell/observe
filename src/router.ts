@@ -53,11 +53,12 @@ const router = createRouter({
       name: 'accounts',
       component: () => import('@/pages/AccountsPage.vue'),
     },
-    {
-      path: '/matches',
-      name: 'matches',
-      component: () => import('@/pages/MatchesPage.vue'),
-    },
+    // Hidden for P0 scope - account matching is P1
+    // {
+    //   path: '/matches',
+    //   name: 'matches',
+    //   component: () => import('@/pages/MatchesPage.vue'),
+    // },
     {
       path: '/pricing',
       name: 'pricing',

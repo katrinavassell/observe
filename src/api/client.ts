@@ -497,6 +497,21 @@ export async function getStripeAuthUrl(): Promise<{ url: string; state: string }
   return request('/integrations/stripe/auth-url')
 }
 
+export interface ConnectStripeResult {
+  success: boolean
+  message: string
+  account_name: string
+  account_id: string
+}
+
+export async function connectStripeWithApiKey(apiKey: string): Promise<ConnectStripeResult> {
+  const params = new URLSearchParams()
+  params.set('api_key', apiKey)
+  return request(`/integrations/stripe/connect?${params.toString()}`, {
+    method: 'POST',
+  })
+}
+
 export interface SyncResult {
   success: boolean
   message: string
