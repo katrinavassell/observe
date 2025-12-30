@@ -2,7 +2,7 @@
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/vue-query'
-import { TrendingUp, TrendingDown, Users, AlertTriangle, CheckCircle, Download, Minus, ChevronRight, Upload, CreditCard, Sparkles, Bot } from 'lucide-vue-next'
+import { TrendingUp, TrendingDown, Users, AlertTriangle, CheckCircle, Download, Minus, ChevronRight, Upload, CreditCard, Sparkles } from 'lucide-vue-next'
 import { Card, CardContent, CardHeader, CardTitle, Badge, Button } from '@/components/ui'
 import Skeleton from '@/components/ui/skeleton.vue'
 import Progress from '@/components/ui/progress.vue'
@@ -14,7 +14,7 @@ import { useAppMode } from '@/composables/useAppMode'
 const router = useRouter()
 const queryClient = useQueryClient()
 const showGettingStarted = ref(true)
-const { labels, isAgentMode } = useAppMode()
+const { labels } = useAppMode()
 
 const { data: revenue, isLoading: revenueLoading } = useQuery({
   queryKey: ['revenue-analytics'],
@@ -100,7 +100,7 @@ function navigateToDiscrepancy(disc: Discrepancy) {
       <div>
         <h1 class="text-3xl font-bold tracking-tight">Dashboard</h1>
         <p class="text-muted-foreground">
-          {{ isAgentMode ? 'Agent commerce metrics overview' : 'Board-ready SaaS metrics overview' }}
+          Board-ready SaaS metrics overview
         </p>
       </div>
       <Button variant="outline">
@@ -200,7 +200,7 @@ function navigateToDiscrepancy(disc: Discrepancy) {
             <div class="text-3xl font-bold">{{ formatCurrency(arr) }}</div>
             <div class="flex items-center gap-2">
               <p class="text-xs text-primary-foreground/60">
-                {{ isAgentMode ? 'Annual Transaction Volume' : 'Annual Recurring Revenue' }}
+                Annual Recurring Revenue
               </p>
               <span
                 v-if="arrTrend"
@@ -223,7 +223,7 @@ function navigateToDiscrepancy(disc: Discrepancy) {
             <div class="text-3xl font-bold">{{ formatCurrency(mrr) }}</div>
             <div class="flex items-center gap-2">
               <p class="text-xs text-muted-foreground">
-                {{ isAgentMode ? 'Monthly Transaction Volume' : 'Monthly Recurring Revenue' }}
+                Monthly Recurring Revenue
               </p>
               <span
                 v-if="mrrTrend"
@@ -239,17 +239,17 @@ function navigateToDiscrepancy(disc: Discrepancy) {
           </CardContent>
         </Card>
 
-        <!-- Accounts / Agents Card -->
+        <!-- Accounts Card -->
         <Card>
           <CardHeader class="flex flex-row items-center justify-between pb-2">
             <CardTitle class="text-sm font-medium text-muted-foreground">{{ labels.accounts }}</CardTitle>
-            <component :is="isAgentMode ? Bot : Users" class="h-4 w-4 text-muted-foreground" />
+            <Users class="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div class="text-3xl font-bold">{{ accountCount }}</div>
             <div class="flex items-center gap-2">
               <p class="text-xs text-muted-foreground">
-                {{ isAgentMode ? 'Total agents' : 'Total customers' }}
+                Total customers
               </p>
               <span
                 v-if="accountTrend && accountTrend.change_amount > 0"
@@ -282,11 +282,11 @@ function navigateToDiscrepancy(disc: Discrepancy) {
 
       <!-- Charts Row -->
       <div class="grid gap-4 md:grid-cols-2">
-        <!-- Revenue by Segment / Volume by Provider -->
+        <!-- Revenue by Segment -->
         <Card>
           <CardHeader>
             <CardTitle class="text-base">
-              {{ isAgentMode ? 'Volume by Provider' : 'Revenue by Segment' }}
+              Revenue by Segment
             </CardTitle>
           </CardHeader>
           <CardContent class="space-y-4">
@@ -311,11 +311,11 @@ function navigateToDiscrepancy(disc: Discrepancy) {
           </CardContent>
         </Card>
 
-        <!-- ARR by Plan / Volume by Model -->
+        <!-- ARR by Plan -->
         <Card>
           <CardHeader>
             <CardTitle class="text-base">
-              {{ isAgentMode ? 'Volume by Model' : 'ARR by Plan Tier' }}
+              ARR by Plan Tier
             </CardTitle>
           </CardHeader>
           <CardContent class="space-y-4">

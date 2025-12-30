@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { LayoutDashboard, Users, Link2, DollarSign, FolderOpen, Upload, Database, Plug, Bot } from 'lucide-vue-next'
+import { LayoutDashboard, Users, Link2, DollarSign, FolderOpen, Upload, Database, Plug } from 'lucide-vue-next'
 import { useDataMode } from '@/composables/useDataMode'
 import { useAppMode } from '@/composables/useAppMode'
 import DataSourceBadge from '@/components/ui/data-source-badge.vue'
@@ -10,27 +10,27 @@ import Alert from '@/components/ui/alert.vue'
 const route = useRoute()
 const router = useRouter()
 const { dataMode, isSampleMode, clearSample, isClearingSample } = useDataMode()
-const { labels, isAgentMode } = useAppMode()
+const { labels } = useAppMode()
 
 const navItems = computed(() => [
   { path: '/', label: 'Dashboard', icon: LayoutDashboard, description: 'Overview of your key metrics' },
   {
     path: '/accounts',
     label: labels.value.accounts,
-    icon: isAgentMode.value ? Bot : Users,
-    description: isAgentMode.value ? 'All your agents in one place' : 'All your customers in one place'
+    icon: Users,
+    description: 'All your customers in one place'
   },
   {
     path: '/matches',
     label: 'Matches',
     icon: Link2,
-    description: isAgentMode.value ? 'Review duplicate agent suggestions' : 'Review duplicate account suggestions'
+    description: 'Review duplicate account suggestions'
   },
   {
     path: '/pricing',
-    label: isAgentMode.value ? 'Costs' : 'Pricing',
+    label: 'Pricing',
     icon: DollarSign,
-    description: isAgentMode.value ? 'API costs and margin analysis' : 'Understand your pricing patterns'
+    description: 'Understand your pricing patterns'
   },
   { path: '/projects', label: 'Projects', icon: FolderOpen, description: 'Manage data uploads' },
   { path: '/data-sources', label: 'Data Sources', icon: Plug, description: 'Connect integrations or upload files' },

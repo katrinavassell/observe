@@ -25,11 +25,8 @@ import {
   uploadFile,
   type ColumnValidation,
 } from '@/api/client'
-import { useAppMode } from '@/composables/useAppMode'
-
 const router = useRouter()
 const queryClient = useQueryClient()
-const { mode } = useAppMode()
 
 // Wizard state
 const currentStep = ref(1)
@@ -46,8 +43,8 @@ const showQuickStart = ref(true)
 // Column mapping modal state
 const mappingTypeId = ref<string | null>(null)
 
-// SaaS-specific data types
-const saasDataTypes = [
+// Data types
+const dataTypes = [
   {
     id: 'accounts',
     name: 'Accounts',
@@ -103,56 +100,6 @@ const saasDataTypes = [
     ],
   },
 ]
-
-// Agent Commerce-specific data types
-const agentDataTypes = [
-  {
-    id: 'accounts',
-    name: 'Agents',
-    desc: 'AI agents with identifiers and metadata',
-    required: true,
-    columns: ['agent_id', 'agent_name', 'provider', 'wallet_address', 'status'],
-    sources: [
-      { name: 'Agent Registry', path: 'Export agent list' },
-      { name: 'Wallet', path: 'Export addresses with metadata' },
-    ],
-  },
-  {
-    id: 'subscriptions',
-    name: 'API Calls',
-    desc: 'API usage logs from LLM providers',
-    required: false,
-    columns: ['call_id', 'agent_id', 'provider', 'model', 'tokens', 'cost'],
-    sources: [
-      { name: 'OpenAI', path: 'Usage → Export' },
-      { name: 'Anthropic', path: 'Usage → Download' },
-    ],
-  },
-  {
-    id: 'invoices',
-    name: 'Settlements',
-    desc: 'Payment transactions between agents',
-    required: false,
-    columns: ['settlement_id', 'from_agent', 'to_agent', 'amount', 'timestamp'],
-    sources: [
-      { name: 'Payment Rails', path: 'Transactions → Export' },
-      { name: 'Blockchain', path: 'Transaction history' },
-    ],
-  },
-  {
-    id: 'usage',
-    name: 'Costs',
-    desc: 'Token usage and cost breakdown',
-    required: false,
-    columns: ['agent_id', 'period', 'tokens_used', 'cost_usd'],
-    sources: [
-      { name: 'Provider dashboards', path: 'Usage → Cost reports' },
-    ],
-  },
-]
-
-// Mode-specific data types
-const dataTypes = computed(() => mode.value === 'agent' ? agentDataTypes : saasDataTypes)
 
 const canProceedStep1 = computed(() => selectedTypes.value.includes('accounts'))
 const canProceedStep2 = computed(() => {
