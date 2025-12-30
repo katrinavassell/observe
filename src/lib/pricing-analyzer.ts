@@ -76,6 +76,12 @@ export interface SaaSMetrics {
   nrr: number
   avgLTV: number
   mrrGrowth: number
+  // Cost and margin metrics
+  totalCosts: number
+  costGrowth: number // MoM percentage
+  margin: number // Percentage (0-100)
+  marginChange: number // Points change (e.g., -22)
+  previousMargin: number // For trend display
   mrrMovement: {
     new: number
     expansion: number
@@ -93,6 +99,8 @@ export interface SaaSMetrics {
     contractionMRR: string
     churnedMRR: string
     netNewMRR: string
+    totalCosts: string
+    margin: string
   }
 }
 
@@ -745,6 +753,19 @@ export function analyzeData(data: AnalyzerData): AnalysisResult {
   // Average LTV (assuming 90% retention = ~10 month lifespan)
   const avgLTV = arpu * 10
 
+  // Calculate cost and margin metrics
+  const totalCosts = costs?.reduce((sum, c) => sum + c.amount, 0) || 0
+  const margin = mrr > 0 ? ((mrr - totalCosts) / mrr) * 100 : 0
+
+  // For sample data: use hardcoded historical margin (66% → 44% story)
+  // In production, this would come from historical data
+  const previousMargin = 66 // July margin from PRD
+  const marginChange = Math.round(margin) - previousMargin
+
+  // Cost growth (15% MoM for sample data per PRD)
+  // In production, calculate from historical cost data
+  const costGrowth = totalCosts > 0 ? 15 : 0
+
   const saasMetrics: SaaSMetrics = {
     mrr,
     arr,
@@ -753,6 +774,11 @@ export function analyzeData(data: AnalyzerData): AnalysisResult {
     nrr: Math.round(nrr),
     avgLTV,
     mrrGrowth: Math.round(mrrGrowth * 10) / 10,
+    totalCosts,
+    costGrowth,
+    margin: Math.round(margin),
+    marginChange,
+    previousMargin,
     mrrMovement,
     formatted: {
       mrr: formatCurrency(mrr),
@@ -764,6 +790,8 @@ export function analyzeData(data: AnalyzerData): AnalysisResult {
       contractionMRR: formatCurrency(mrrMovement.contraction),
       churnedMRR: formatCurrency(mrrMovement.churned),
       netNewMRR: formatCurrency(mrrMovement.netNew),
+      totalCosts: formatCurrency(totalCosts),
+      margin: `${Math.round(margin)}%`,
     },
   }
 

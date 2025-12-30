@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { LayoutDashboard, Users, Link2, DollarSign, FolderOpen, Upload, Database, Plug } from 'lucide-vue-next'
+import { LayoutDashboard, Users, DollarSign, FolderOpen, Database, Plug } from 'lucide-vue-next'
 import { useDataMode } from '@/composables/useDataMode'
 import { useAppMode } from '@/composables/useAppMode'
 import DataSourceBadge from '@/components/ui/data-source-badge.vue'

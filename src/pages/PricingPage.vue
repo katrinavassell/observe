@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   TrendingUp,
@@ -9,7 +9,6 @@ import {
   RefreshCw,
   Info,
   BarChart3,
-  Layers,
   Plug,
 } from 'lucide-vue-next'
 import {
@@ -17,7 +16,6 @@ import {
   CardContent,
   CardHeader,
   CardTitle,
-  CardDescription,
   Badge,
   Button,
   Tabs,
@@ -30,18 +28,7 @@ import {
 } from '@/components/ui'
 import Progress from '@/components/ui/progress.vue'
 import Alert from '@/components/ui/alert.vue'
-// FileDropzone removed - uploads now handled via Data Sources page
-import {
-  parseCSV,
-  analyzeData,
-  type Customer,
-  type Plan,
-  type Subscription,
-  type Invoice,
-  type UsageRecord,
-  type CostRecord,
-  type AnalysisResult,
-} from '@/lib/pricing-analyzer'
+import { analyzeData, type AnalysisResult } from '@/lib/pricing-analyzer'
 import { loadCuratedSampleData, getSampleDataSummary } from '@/lib/sample-data'
 
 // =============================================================================
@@ -62,103 +49,15 @@ const error = ref<string | null>(null)
 const analysisResult = ref<AnalysisResult | null>(null)
 const dataSource = ref<'csv' | 'sample'>('csv')
 
-// File states
-const customersFile = ref<File | null>(null)
-const plansFile = ref<File | null>(null)
-const subscriptionsFile = ref<File | null>(null)
-const invoicesFile = ref<File | null>(null)
-const usageFile = ref<File | null>(null)
-const costsFile = ref<File | null>(null)
-
 // =============================================================================
 // COMPUTED
 // =============================================================================
-
-const canAnalyze = computed(() => {
-  return customersFile.value && plansFile.value && subscriptionsFile.value
-})
 
 const sampleSummary = getSampleDataSummary()
 
 // =============================================================================
 // METHODS
 // =============================================================================
-
-async function readFileAsText(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(reader.result as string)
-    reader.onerror = () => reject(new Error('Failed to read file'))
-    reader.readAsText(file)
-  })
-}
-
-async function runAnalysis() {
-  isAnalyzing.value = true
-  uploadProgress.value = 0
-  error.value = null
-
-  const progressInterval = setInterval(() => {
-    uploadProgress.value = Math.min(uploadProgress.value + 15, 90)
-  }, 100)
-
-  try {
-    let customers: Customer[]
-    let plans: Plan[]
-    let subscriptions: Subscription[]
-    let invoices: Invoice[] | undefined
-    let usage: UsageRecord[] | undefined
-    let costs: CostRecord[] | undefined
-
-    // Parse required files
-    const customersText = await readFileAsText(customersFile.value!)
-    const plansText = await readFileAsText(plansFile.value!)
-    const subscriptionsText = await readFileAsText(subscriptionsFile.value!)
-
-    customers = parseCSV<Customer>(customersText)
-    plans = parseCSV<Plan>(plansText)
-    subscriptions = parseCSV<Subscription>(subscriptionsText)
-
-    if (customers.length === 0) throw new Error('No customers found in CSV')
-    if (plans.length === 0) throw new Error('No plans found in CSV')
-    if (subscriptions.length === 0) throw new Error('No subscriptions found in CSV')
-
-    // Parse optional files
-    if (invoicesFile.value) {
-      const invoicesText = await readFileAsText(invoicesFile.value)
-      invoices = parseCSV<Invoice>(invoicesText)
-    }
-    if (usageFile.value) {
-      const usageText = await readFileAsText(usageFile.value)
-      usage = parseCSV<UsageRecord>(usageText)
-    }
-    if (costsFile.value) {
-      const costsText = await readFileAsText(costsFile.value)
-      costs = parseCSV<CostRecord>(costsText)
-    }
-
-    clearInterval(progressInterval)
-    uploadProgress.value = 100
-
-    // Run analysis
-    analysisResult.value = analyzeData({
-      customers,
-      plans,
-      subscriptions,
-      invoices,
-      usage,
-      costs,
-    })
-
-    dataSource.value = 'csv'
-    analysisComplete.value = true
-  } catch (err: unknown) {
-    clearInterval(progressInterval)
-    error.value = err instanceof Error ? err.message : 'Analysis failed'
-  } finally {
-    isAnalyzing.value = false
-  }
-}
 
 async function loadSampleData() {
   isAnalyzing.value = true
@@ -208,12 +107,6 @@ function resetAnalysis() {
   analysisResult.value = null
   error.value = null
   uploadProgress.value = 0
-  customersFile.value = null
-  plansFile.value = null
-  subscriptionsFile.value = null
-  invoicesFile.value = null
-  usageFile.value = null
-  costsFile.value = null
 }
 </script>
 

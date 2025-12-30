@@ -4,18 +4,16 @@ import { useRouter, useRoute } from 'vue-router'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/vue-query'
 import { toast } from 'vue-sonner'
 import {
-  Upload,
   DollarSign,
   Cpu,
   Clock,
   Building2,
   Wallet,
-  Plus,
   ArrowRight,
   Bell,
   TrendingUp,
 } from 'lucide-vue-next'
-import { Card, CardContent, Button, Badge } from '@/components/ui'
+import { Card, CardContent, Button } from '@/components/ui'
 import Skeleton from '@/components/ui/skeleton.vue'
 import IntegrationCard from '@/components/integrations/IntegrationCard.vue'
 import InterestCaptureModal from '@/components/integrations/InterestCaptureModal.vue'
