@@ -3,6 +3,7 @@ import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   TrendingUp,
+  TrendingDown,
   AlertTriangle,
   Users,
   Package,
@@ -10,6 +11,8 @@ import {
   Info,
   BarChart3,
   Plug,
+  Search,
+  ExternalLink,
 } from 'lucide-vue-next'
 import {
   Card,
@@ -29,7 +32,13 @@ import {
 import Progress from '@/components/ui/progress.vue'
 import Alert from '@/components/ui/alert.vue'
 import { analyzeData, type AnalysisResult } from '@/lib/pricing-analyzer'
-import { loadCuratedSampleData, getSampleDataSummary } from '@/lib/sample-data'
+import { getSampleDataSummary } from '@/lib/sample-data'
+import { useDataMode } from '@/composables/useDataMode'
+import {
+  loadSampleData as loadSampleDataToSupabase,
+  fetchAnalyzerData,
+  clearUserData,
+} from '@/lib/supabase-data'
 
 // =============================================================================
 // ROUTING
@@ -47,7 +56,9 @@ const analysisComplete = ref(false)
 const uploadProgress = ref(0)
 const error = ref<string | null>(null)
 const analysisResult = ref<AnalysisResult | null>(null)
-const dataSource = ref<'csv' | 'sample'>('csv')
+const dataSource = ref<'none' | 'sample' | 'user'>('none')
+
+const { dataMode, hasData, refetch: refetchDataMode } = useDataMode()
 
 // =============================================================================
 // COMPUTED
@@ -69,20 +80,44 @@ async function loadSampleData() {
   }, 80)
 
   try {
-    await new Promise(resolve => setTimeout(resolve, 500)) // Simulate processing
+    // Load sample data to Supabase
+    await loadSampleDataToSupabase()
 
-    // Use curated sample data with specific stories
-    const sampleData = loadCuratedSampleData()
-    analysisResult.value = analyzeData(sampleData)
+    // Fetch and analyze the data
+    const data = await fetchAnalyzerData()
+    if (data) {
+      analysisResult.value = analyzeData(data)
+    }
 
     clearInterval(progressInterval)
     uploadProgress.value = 100
 
     dataSource.value = 'sample'
     analysisComplete.value = true
+
+    // Refresh data mode status
+    await refetchDataMode()
   } catch (err: unknown) {
     clearInterval(progressInterval)
     error.value = err instanceof Error ? err.message : 'Failed to load sample data'
+  } finally {
+    isAnalyzing.value = false
+  }
+}
+
+async function loadExistingData() {
+  isAnalyzing.value = true
+  error.value = null
+
+  try {
+    const data = await fetchAnalyzerData()
+    if (data) {
+      analysisResult.value = analyzeData(data)
+      dataSource.value = dataMode.value as 'sample' | 'user'
+      analysisComplete.value = true
+    }
+  } catch (err: unknown) {
+    error.value = err instanceof Error ? err.message : 'Failed to load data'
   } finally {
     isAnalyzing.value = false
   }
@@ -92,21 +127,35 @@ async function loadSampleData() {
 // LIFECYCLE
 // =============================================================================
 
-// Auto-load sample data if redirected from Data Sources page
 onMounted(async () => {
+  // If redirected with loadSample flag, load sample data
   if (route.query.loadSample === 'true') {
-    // Remove query param from URL
     router.replace({ query: {} })
-    // Load sample data automatically
     await loadSampleData()
+    return
+  }
+
+  // If user already has data, load and analyze it
+  if (hasData.value) {
+    await loadExistingData()
   }
 })
 
-function resetAnalysis() {
-  analysisComplete.value = false
-  analysisResult.value = null
-  error.value = null
-  uploadProgress.value = 0
+async function resetAnalysis() {
+  isAnalyzing.value = true
+  try {
+    await clearUserData()
+    await refetchDataMode()
+    analysisComplete.value = false
+    analysisResult.value = null
+    error.value = null
+    uploadProgress.value = 0
+    dataSource.value = 'none'
+  } catch (err: unknown) {
+    error.value = err instanceof Error ? err.message : 'Failed to clear data'
+  } finally {
+    isAnalyzing.value = false
+  }
 }
 </script>
 
@@ -210,7 +259,7 @@ function resetAnalysis() {
             {{ analysisResult.meta.planCount }} plans
           </Badge>
           <Badge variant="outline">
-            Source: {{ dataSource === 'sample' ? 'Sample Data' : 'CSV Upload' }}
+            Source: {{ dataSource === 'sample' ? 'Sample Data' : 'Your Data' }}
           </Badge>
         </div>
         <Button variant="outline" @click="resetAnalysis">
@@ -238,50 +287,131 @@ function resetAnalysis() {
 
         <!-- ========== SaaS Metrics Tab ========== -->
         <TabsContent value="saas" class="space-y-6">
-          <!-- Hero Metrics -->
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <!-- Hero Metrics - 4 column grid per PRD -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <!-- ARR Card -->
             <Card class="bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20">
-              <CardContent class="p-6">
+              <CardContent class="p-5">
                 <div class="flex items-center gap-1.5 mb-2">
-                  <p class="text-sm font-medium text-muted-foreground">Annual Recurring Revenue</p>
+                  <p class="text-sm font-medium text-muted-foreground">ARR</p>
                   <Tooltip>
                     <TooltipTrigger>
                       <Info class="h-3.5 w-3.5 text-muted-foreground/60" />
                     </TooltipTrigger>
-                    <TooltipContent>MRR x 12</TooltipContent>
+                    <TooltipContent>Annual Recurring Revenue (MRR x 12)</TooltipContent>
                   </Tooltip>
                 </div>
-                <p class="text-4xl font-bold tracking-tight">
+                <p class="text-3xl font-bold tracking-tight">
                   {{ analysisResult.saasMetrics.formatted.arr }}
                 </p>
               </CardContent>
             </Card>
 
+            <!-- MRR Card -->
             <Card>
-              <CardContent class="p-6">
+              <CardContent class="p-5">
                 <div class="flex items-center justify-between mb-2">
                   <div class="flex items-center gap-1.5">
-                    <p class="text-sm font-medium text-muted-foreground">Monthly Recurring Revenue</p>
+                    <p class="text-sm font-medium text-muted-foreground">MRR</p>
                     <Tooltip>
                       <TooltipTrigger>
                         <Info class="h-3.5 w-3.5 text-muted-foreground/60" />
                       </TooltipTrigger>
-                      <TooltipContent>Sum of all active subscriptions</TooltipContent>
+                      <TooltipContent>Monthly Recurring Revenue</TooltipContent>
                     </Tooltip>
                   </div>
                   <Badge
                     v-if="analysisResult.saasMetrics.mrrGrowth !== 0"
                     :variant="analysisResult.saasMetrics.mrrGrowth > 0 ? 'success' : 'destructive'"
+                    class="text-[10px]"
                   >
-                    {{ analysisResult.saasMetrics.mrrGrowth > 0 ? '+' : '' }}{{ analysisResult.saasMetrics.mrrGrowth }}% MoM
+                    {{ analysisResult.saasMetrics.mrrGrowth > 0 ? '▲' : '▼' }}{{ Math.abs(analysisResult.saasMetrics.mrrGrowth) }}%
                   </Badge>
                 </div>
-                <p class="text-4xl font-bold tracking-tight">
+                <p class="text-3xl font-bold tracking-tight">
                   {{ analysisResult.saasMetrics.formatted.mrr }}
                 </p>
               </CardContent>
             </Card>
+
+            <!-- AI Costs Card -->
+            <Card v-if="analysisResult.meta.hasCostData">
+              <CardContent class="p-5">
+                <div class="flex items-center justify-between mb-2">
+                  <div class="flex items-center gap-1.5">
+                    <p class="text-sm font-medium text-muted-foreground">AI Costs</p>
+                    <Tooltip>
+                      <TooltipTrigger>
+                        <Info class="h-3.5 w-3.5 text-muted-foreground/60" />
+                      </TooltipTrigger>
+                      <TooltipContent>Total AI infrastructure costs (OpenAI, Anthropic, etc.)</TooltipContent>
+                    </Tooltip>
+                  </div>
+                  <Badge
+                    v-if="analysisResult.saasMetrics.costGrowth > 0"
+                    variant="destructive"
+                    class="text-[10px]"
+                  >
+                    ▲{{ analysisResult.saasMetrics.costGrowth }}%
+                  </Badge>
+                </div>
+                <div class="flex items-center gap-2">
+                  <p class="text-3xl font-bold tracking-tight">
+                    {{ analysisResult.saasMetrics.formatted.totalCosts }}
+                  </p>
+                  <AlertTriangle v-if="analysisResult.saasMetrics.costGrowth > 10" class="h-5 w-5 text-amber-500" />
+                </div>
+              </CardContent>
+            </Card>
+
+            <!-- Margin Card -->
+            <Card v-if="analysisResult.meta.hasCostData">
+              <CardContent class="p-5">
+                <div class="flex items-center justify-between mb-2">
+                  <div class="flex items-center gap-1.5">
+                    <p class="text-sm font-medium text-muted-foreground">Margin</p>
+                    <Tooltip>
+                      <TooltipTrigger>
+                        <Info class="h-3.5 w-3.5 text-muted-foreground/60" />
+                      </TooltipTrigger>
+                      <TooltipContent>Gross margin: (Revenue - Costs) / Revenue</TooltipContent>
+                    </Tooltip>
+                  </div>
+                  <Badge
+                    v-if="analysisResult.saasMetrics.marginChange !== 0"
+                    :variant="analysisResult.saasMetrics.marginChange > 0 ? 'success' : 'destructive'"
+                    class="text-[10px]"
+                  >
+                    {{ analysisResult.saasMetrics.marginChange > 0 ? '+' : '' }}{{ analysisResult.saasMetrics.marginChange }}pts
+                  </Badge>
+                </div>
+                <div class="flex items-center gap-2">
+                  <p class="text-3xl font-bold tracking-tight">
+                    {{ analysisResult.saasMetrics.formatted.margin }}
+                  </p>
+                  <TrendingDown v-if="analysisResult.saasMetrics.marginChange < 0" class="h-5 w-5 text-red-500" />
+                  <TrendingUp v-else-if="analysisResult.saasMetrics.marginChange > 0" class="h-5 w-5 text-green-500" />
+                </div>
+              </CardContent>
+            </Card>
           </div>
+
+          <!-- Margin Alert Banner -->
+          <Alert
+            v-if="analysisResult.meta.hasCostData && analysisResult.saasMetrics.marginChange < -10"
+            variant="destructive"
+            class="border-amber-500/50 bg-amber-50 dark:bg-amber-950/20"
+          >
+            <AlertTriangle class="h-4 w-4 text-amber-600" />
+            <div class="ml-2">
+              <p class="font-semibold text-amber-800 dark:text-amber-200">Margin Alert</p>
+              <p class="text-sm text-amber-700 dark:text-amber-300">
+                Costs growing faster than revenue. Margins dropped {{ Math.abs(analysisResult.saasMetrics.marginChange) }} points
+                ({{ analysisResult.saasMetrics.previousMargin }}% → {{ analysisResult.saasMetrics.margin }}%).
+                At this rate, profitability is at risk.
+              </p>
+            </div>
+          </Alert>
 
           <!-- Secondary Metrics -->
           <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -556,6 +686,42 @@ function resetAnalysis() {
           <Card v-else>
             <CardContent class="p-6 text-center text-muted-foreground">
               No negative margin customers detected.
+            </CardContent>
+          </Card>
+
+          <!-- Gap Callout - Design Partner CTA -->
+          <Card class="border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/20">
+            <CardContent class="p-6">
+              <div class="flex items-start gap-3">
+                <div class="p-2 bg-blue-100 dark:bg-blue-900/50 rounded-lg">
+                  <Search class="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                </div>
+                <div class="flex-1">
+                  <h3 class="font-semibold text-blue-900 dark:text-blue-100 mb-2">
+                    These margins are estimates
+                  </h3>
+                  <p class="text-sm text-blue-800 dark:text-blue-200 mb-3">
+                    Costs are allocated proportionally by revenue. You don't actually know:
+                  </p>
+                  <ul class="text-sm text-blue-700 dark:text-blue-300 space-y-1 mb-4 list-disc list-inside">
+                    <li>True cost-to-serve for each customer</li>
+                    <li>Which features are driving the cost</li>
+                    <li>Whether to raise prices, add limits, or cut features</li>
+                  </ul>
+                  <p class="text-sm text-blue-800 dark:text-blue-200 mb-4">
+                    This requires tracking usage at the feature level. <strong>That's what Tanso does.</strong>
+                  </p>
+                  <div class="flex flex-wrap gap-3">
+                    <Button size="sm">
+                      Become a Design Partner
+                    </Button>
+                    <Button variant="outline" size="sm">
+                      <ExternalLink class="h-3.5 w-3.5 mr-1.5" />
+                      Learn More
+                    </Button>
+                  </div>
+                </div>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>

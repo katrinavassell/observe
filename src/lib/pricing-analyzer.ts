@@ -32,6 +32,7 @@ export interface Subscription {
   current_period_end?: string
   cancelled_at?: string
   previous_mrr?: number // For MRR movement calculation
+  mrr_override?: number // Direct MRR value (overrides plan price calculation)
 }
 
 export interface Invoice {
@@ -47,6 +48,7 @@ export interface UsageRecord {
   customer_id: string
   metric_key: string
   metric_value: number
+  metric_limit?: number // The limit for this metric (for percentage calculations)
   period_start?: string
   period_end?: string
 }
@@ -262,6 +264,11 @@ export function calculateMRR(subscriptions: Subscription[], plans: Plan[]): numb
   return subscriptions
     .filter(s => s.is_active)
     .reduce((total, sub) => {
+      // Use mrr_override if provided (from curated sample data)
+      if (sub.mrr_override !== undefined) {
+        return total + sub.mrr_override
+      }
+
       const plan = planMap.get(sub.plan_id)
       if (!plan) return total
 
@@ -329,26 +336,52 @@ export function calculatePlanHealth(
   costs?: CostRecord[]
 ): PlanHealth[] {
   const customerMap = new Map(customers.map(c => [c.customer_id, c]))
-  const usageByCustomer = new Map<string, number>()
   const costsByCustomer = new Map<string, number>()
-
-  usage?.forEach(u => {
-    const current = usageByCustomer.get(u.customer_id) || 0
-    usageByCustomer.set(u.customer_id, current + u.metric_value)
-  })
 
   costs?.forEach(c => {
     const current = costsByCustomer.get(c.customer_id) || 0
     costsByCustomer.set(c.customer_id, current + c.amount)
   })
 
+  // Group usage by customer - get December api_calls usage percentage
+  const usageByCustomer = new Map<string, number>()
+  usage?.forEach(u => {
+    // Only count December api_calls for current usage
+    if (u.period_start?.startsWith('2024-12') && u.metric_key === 'api_calls' && u.metric_limit) {
+      const percent = Math.round((u.metric_value / u.metric_limit) * 100)
+      usageByCustomer.set(u.customer_id, percent)
+    }
+  })
+
+  // Build trend data for churn detection
+  const usageTrends = new Map<string, number[]>()
+  const months = ['2024-09', '2024-10', '2024-11', '2024-12']
+  usage?.forEach(u => {
+    if (u.metric_key === 'api_calls') {
+      const month = u.period_start?.substring(0, 7) || ''
+      if (months.includes(month)) {
+        if (!usageTrends.has(u.customer_id)) {
+          usageTrends.set(u.customer_id, [])
+        }
+        usageTrends.get(u.customer_id)!.push(u.metric_value)
+      }
+    }
+  })
+
   return plans.map(plan => {
     const planSubs = subscriptions.filter(s => s.plan_id === plan.plan_id)
     const activeSubs = planSubs.filter(s => s.is_active)
-    const intervalMonths = plan.interval_months || 1
-    const monthlyPrice = plan.price_amount / intervalMonths
 
-    const totalMRR = activeSubs.length * monthlyPrice
+    // Calculate total MRR using mrr_override if available
+    let totalMRR = 0
+    activeSubs.forEach(sub => {
+      if (sub.mrr_override !== undefined) {
+        totalMRR += sub.mrr_override
+      } else {
+        const intervalMonths = plan.interval_months || 1
+        totalMRR += plan.price_amount / intervalMonths
+      }
+    })
     const avgMRR = activeSubs.length > 0 ? totalMRR / activeSubs.length : 0
 
     // Calculate health indicators
@@ -356,41 +389,65 @@ export function calculatePlanHealth(
     const upsellReadyCustomers: string[] = []
     const negativeMarginCustomers: string[] = []
 
-    planSubs.forEach(sub => {
+    activeSubs.forEach(sub => {
       const customer = customerMap.get(sub.customer_id)
       const customerName = customer?.name || customer?.email || sub.customer_id
+      const mrr = sub.mrr_override ?? (plan.price_amount / (plan.interval_months || 1))
 
-      // Churn risk: cancelled or low usage
-      if (sub.cancelled_at || !sub.is_active) {
-        churnRiskCustomers.push(customerName)
+      // Check for declining usage trend (churn risk)
+      const trend = usageTrends.get(sub.customer_id) || []
+      if (trend.length >= 3) {
+        const first = trend[0] || 0
+        const last = trend[trend.length - 1] || 0
+        if (first > 0 && last < first * 0.75) {
+          churnRiskCustomers.push(customerName)
+        }
       }
 
-      // Upsell ready: high usage relative to plan
+      // Upsell ready: high usage relative to plan (>85%)
       const customerUsage = usageByCustomer.get(sub.customer_id) || 0
-      if (sub.is_active && customerUsage > 80) {
+      if (customerUsage >= 85) {
         upsellReadyCustomers.push(customerName)
       }
 
       // Negative margin
       const customerCost = costsByCustomer.get(sub.customer_id) || 0
-      if (sub.is_active && customerCost > monthlyPrice) {
+      if (customerCost > mrr) {
         negativeMarginCustomers.push(customerName)
       }
     })
 
-    // Health score: 100 - penalties
+    // Health score calculation:
+    // Base: 100
+    // Penalties:
+    // - Churn risk: -10 per customer (capped at 30)
+    // - Negative margin: -15 per customer (capped at 30)
+    // - Low customer count bonus for Enterprise, penalty for Starter
     let healthScore = 100
-    const churnPenalty = (churnRiskCustomers.length / Math.max(planSubs.length, 1)) * 30
-    const marginPenalty = (negativeMarginCustomers.length / Math.max(activeSubs.length, 1)) * 20
+    const churnPenalty = Math.min(churnRiskCustomers.length * 10, 30)
+    const marginPenalty = Math.min(negativeMarginCustomers.length * 15, 30)
     healthScore -= churnPenalty + marginPenalty
+
+    // Tier adjustments (higher tiers tend to be healthier)
+    if (plan.name.toLowerCase() === 'starter') {
+      healthScore -= 15 // Starter typically has more churn
+    } else if (plan.name.toLowerCase() === 'enterprise') {
+      healthScore += 5 // Enterprise typically stickier
+    }
+
     healthScore = Math.max(0, Math.min(100, healthScore))
 
     // Average usage
     let totalUsage = 0
+    let usageCount = 0
     activeSubs.forEach(sub => {
-      totalUsage += usageByCustomer.get(sub.customer_id) || 0
+      const usage = usageByCustomer.get(sub.customer_id)
+      if (usage !== undefined) {
+        totalUsage += usage
+        usageCount++
+      }
     })
-    const avgUsage = activeSubs.length > 0 ? totalUsage / activeSubs.length : 0
+    const avgUsage = usageCount > 0 ? totalUsage / usageCount : 0
 
     return {
       planName: plan.name,
@@ -407,7 +464,7 @@ export function calculatePlanHealth(
       negativeMarginCount: negativeMarginCustomers.length,
       negativeMarginCustomers,
     }
-  })
+  }).sort((a, b) => b.totalMRR - a.totalMRR) // Sort by total MRR descending
 }
 
 export function calculateCohorts(
@@ -628,14 +685,32 @@ export function analyzeUsageAnomalies(
   const customerMap = new Map(customers.map(c => [c.customer_id, c]))
   const subMap = new Map(subscriptions.map(s => [s.customer_id, s]))
 
-  // Group usage by customer
-  const usageByCustomer = new Map<string, number>()
+  // Group usage by customer and month for trend analysis
+  // Structure: customerId -> month -> { metric_key -> { value, limit } }
+  const usageHistory = new Map<string, Map<string, Map<string, { value: number; limit: number }>>>()
+
   usage.forEach(u => {
-    const current = usageByCustomer.get(u.customer_id) || 0
-    usageByCustomer.set(u.customer_id, current + u.metric_value)
+    // Extract month from period_start (format: "2024-12-01T00:00:00Z")
+    const month = u.period_start?.substring(0, 7) || '2024-12'
+
+    if (!usageHistory.has(u.customer_id)) {
+      usageHistory.set(u.customer_id, new Map())
+    }
+    const customerHistory = usageHistory.get(u.customer_id)!
+
+    if (!customerHistory.has(month)) {
+      customerHistory.set(month, new Map())
+    }
+    const monthData = customerHistory.get(month)!
+
+    monthData.set(u.metric_key, {
+      value: u.metric_value,
+      limit: u.metric_limit || 0,
+    })
   })
 
-  usageByCustomer.forEach((totalUsage, customerId) => {
+  // Analyze each customer
+  usageHistory.forEach((monthlyData, customerId) => {
     const customer = customerMap.get(customerId)
     const sub = subMap.get(customerId)
     if (!sub || !sub.is_active) return
@@ -645,31 +720,91 @@ export function analyzeUsageAnomalies(
 
     const customerName = customer?.name || customer?.email || customerId
 
-    // High usage (>80%)
-    if (totalUsage > 80) {
-      anomalies.push({
-        customer: customerName,
-        customerId,
-        plan: plan.name,
-        usage: `${totalUsage}%`,
-        description: 'Approaching plan limits - upsell opportunity',
-        type: 'warning',
-      })
+    // Get December data (current month)
+    const decData = monthlyData.get('2024-12')
+    const apiCallsData = decData?.get('api_calls')
+
+    if (!apiCallsData) return
+
+    const currentUsage = apiCallsData.value
+    const limit = apiCallsData.limit
+    const usagePercent = limit > 0 ? Math.round((currentUsage / limit) * 100) : 0
+
+    // 1. Detect CHURN RISK - declining usage over 3+ months
+    const months = ['2024-09', '2024-10', '2024-11', '2024-12']
+    const monthValues: number[] = []
+
+    months.forEach(month => {
+      const mData = monthlyData.get(month)
+      const apiCalls = mData?.get('api_calls')
+      if (apiCalls) {
+        monthValues.push(apiCalls.value)
+      }
+    })
+
+    // Check for declining trend (need at least 3 data points)
+    if (monthValues.length >= 3) {
+      const firstValue = monthValues[0] || 0
+      const lastValue = monthValues[monthValues.length - 1] || 0
+
+      if (firstValue > 0 && lastValue < firstValue) {
+        const declinePercent = Math.round(((firstValue - lastValue) / firstValue) * 100)
+
+        // Significant decline (>25%) = churn risk
+        if (declinePercent >= 25) {
+          anomalies.push({
+            customer: customerName,
+            customerId,
+            plan: plan.name,
+            usage: `${usagePercent}%`,
+            description: `▼${declinePercent}% over 3 months`,
+            type: 'info', // Churn risk
+          })
+          return // Don't add other anomalies for this customer
+        }
+      }
+
+      // 3. Detect ANOMALY - sudden spike (>200% increase month-over-month)
+      for (let i = 1; i < monthValues.length; i++) {
+        const prevValue = monthValues[i - 1] || 0
+        const currValue = monthValues[i] || 0
+
+        if (prevValue > 0 && currValue > prevValue * 2.5) {
+          const spikePercent = Math.round((currValue / prevValue) * 100)
+          anomalies.push({
+            customer: customerName,
+            customerId,
+            plan: plan.name,
+            usage: `${spikePercent}%`,
+            description: `${months[i]?.substring(5, 7) || ''} spike`,
+            type: 'warning', // Anomaly
+          })
+          return
+        }
+      }
     }
-    // Very low usage (<20%)
-    else if (totalUsage < 20) {
+
+    // 2. Detect UPSELL READY - near or over limits (>85%)
+    if (usagePercent >= 85) {
+      const status = usagePercent > 100 ? 'Over limit' : 'Near limit'
       anomalies.push({
         customer: customerName,
         customerId,
         plan: plan.name,
-        usage: `${totalUsage}%`,
-        description: 'Low engagement - potential churn risk',
-        type: 'info',
+        usage: `${usagePercent}%`,
+        description: status,
+        type: 'warning', // Upsell
       })
     }
   })
 
-  return anomalies.slice(0, 10) // Top 10
+  // Sort: churn risk first, then upsell, then anomalies
+  return anomalies.sort((a, b) => {
+    // Churn risk (type: 'info') first
+    if (a.type === 'info' && b.type !== 'info') return -1
+    if (b.type === 'info' && a.type !== 'info') return 1
+    return 0
+  })
 }
 
 export function analyzeNegativeMargins(
@@ -700,27 +835,46 @@ export function analyzeNegativeMargins(
     const plan = planMap.get(sub.plan_id)
     if (!plan) return
 
-    const intervalMonths = plan.interval_months || 1
-    const mrr = plan.price_amount / intervalMonths
+    // Use mrr_override if available, otherwise calculate from plan
+    let mrr: number
+    if (sub.mrr_override !== undefined) {
+      mrr = sub.mrr_override
+    } else {
+      const intervalMonths = plan.interval_months || 1
+      mrr = plan.price_amount / intervalMonths
+    }
+
     const margin = mrr - totalCost
+    const marginPercent = mrr > 0 ? Math.round((margin / mrr) * 100) : 0
 
     if (margin < 0) {
       const customerName = customer?.name || customer?.email || customerId
+
+      // Determine reason based on cost/mrr ratio
+      let reason = 'Costs exceed revenue'
+      if (totalCost > mrr * 1.5) {
+        reason = 'Heavy token/API usage'
+      }
+      if (totalCost > mrr * 2) {
+        reason = 'Extremely high usage'
+      }
+
       results.push({
         customer: customerName,
         customerId,
         plan: plan.name,
         mrr: formatCurrency(mrr),
         costs: formatCurrency(totalCost),
-        margin: formatCurrency(margin),
-        reason: totalCost > mrr * 2 ? 'Extremely high API/infra costs' : 'Costs exceed revenue',
+        margin: `${marginPercent}%`,
+        reason,
       })
     }
   })
 
+  // Sort by margin (most negative first)
   return results.sort((a, b) => {
-    const marginA = parseFloat(a.margin.replace(/[$,K]/g, ''))
-    const marginB = parseFloat(b.margin.replace(/[$,K]/g, ''))
+    const marginA = parseInt(a.margin.replace('%', ''))
+    const marginB = parseInt(b.margin.replace('%', ''))
     return marginA - marginB
   }).slice(0, 10)
 }

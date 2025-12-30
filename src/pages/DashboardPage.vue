@@ -2,7 +2,7 @@
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/vue-query'
-import { TrendingUp, TrendingDown, Users, AlertTriangle, CheckCircle, Download, Minus, ChevronRight, Upload, CreditCard, Sparkles } from 'lucide-vue-next'
+import { TrendingUp, TrendingDown, Users, AlertTriangle, CheckCircle, Download, Minus, ChevronRight, CreditCard, Sparkles } from 'lucide-vue-next'
 import { Card, CardContent, CardHeader, CardTitle, Badge, Button } from '@/components/ui'
 import Skeleton from '@/components/ui/skeleton.vue'
 import Progress from '@/components/ui/progress.vue'
@@ -133,49 +133,28 @@ function navigateToDiscrepancy(disc: Discrepancy) {
             or upload a CSV to get started.
           </p>
 
-          <div class="grid gap-4 mt-8 w-full max-w-lg md:grid-cols-2">
-            <Card
-              class="cursor-pointer transition-all hover:border-primary/50 hover:shadow-md"
+          <div class="flex flex-col sm:flex-row gap-4 mt-8">
+            <Button
+              size="lg"
               @click="router.push('/data-sources')"
             >
-              <CardContent class="p-5 flex flex-col items-center text-center">
-                <div class="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
-                  <CreditCard class="h-6 w-6 text-primary" />
-                </div>
-                <h3 class="mt-3 font-medium">Connect Stripe</h3>
-                <p class="mt-1 text-xs text-muted-foreground">
-                  Sync customers, subscriptions, and invoices in one click
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card
-              class="cursor-pointer transition-all hover:border-primary/50 hover:shadow-md"
-              @click="router.push('/onboarding/upload')"
-            >
-              <CardContent class="p-5 flex flex-col items-center text-center">
-                <div class="flex h-12 w-12 items-center justify-center rounded-lg bg-muted">
-                  <Upload class="h-6 w-6 text-muted-foreground" />
-                </div>
-                <h3 class="mt-3 font-medium">Upload CSV</h3>
-                <p class="mt-1 text-xs text-muted-foreground">
-                  Import from any source using our templates
-                </p>
-              </CardContent>
-            </Card>
-          </div>
-
-          <div class="mt-8 flex flex-col items-center">
-            <span class="text-xs text-muted-foreground mb-2">Just exploring?</span>
+              <CreditCard class="mr-2 h-5 w-5" />
+              Connect Your Data
+            </Button>
             <Button
-              variant="ghost"
-              size="sm"
+              variant="outline"
+              size="lg"
               :disabled="loadSampleMutation.isPending.value"
               @click="loadSampleMutation.mutate()"
             >
-              {{ loadSampleMutation.isPending.value ? 'Loading...' : 'Load sample data' }}
+              <Sparkles class="mr-2 h-5 w-5" />
+              {{ loadSampleMutation.isPending.value ? 'Loading...' : 'Try Sample Data' }}
             </Button>
           </div>
+
+          <p class="mt-6 text-xs text-muted-foreground text-center max-w-sm">
+            Sample data includes 30 customers across 4 plans with 6 months of history
+          </p>
         </CardContent>
       </Card>
     </div>

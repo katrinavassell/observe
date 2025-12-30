@@ -3,6 +3,7 @@ import { VueQueryPlugin, QueryClient } from '@tanstack/vue-query'
 import router from './router'
 import App from './App.vue'
 import './assets/index.css'
+import 'vue-sonner/style.css'
 
 const queryClient = new QueryClient({
   defaultOptions: {

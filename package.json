@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.89.0",
     "@tanstack/vue-query": "^5.92.3",
     "@vee-validate/zod": "^4.15.1",
     "class-variance-authority": "^0.7.1",

@@ -1,48 +1,23 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
-import { LayoutDashboard, Users, DollarSign, FolderOpen, Database, Plug } from 'lucide-vue-next'
-import { useDataMode } from '@/composables/useDataMode'
-import { useAppMode } from '@/composables/useAppMode'
-import DataSourceBadge from '@/components/ui/data-source-badge.vue'
-import Alert from '@/components/ui/alert.vue'
+import { useRoute } from 'vue-router'
+import { LayoutDashboard, DollarSign, Plug, LogOut } from 'lucide-vue-next'
+import { useAuth } from '@/composables/useAuth'
 
 const route = useRoute()
-const router = useRouter()
-const { dataMode, isSampleMode, clearSample, isClearingSample } = useDataMode()
-const { labels } = useAppMode()
+const { signOut, user } = useAuth()
 
 const navItems = computed(() => [
-  { path: '/', label: 'Dashboard', icon: LayoutDashboard, description: 'Overview of your key metrics' },
   {
-    path: '/accounts',
-    label: labels.value.accounts,
-    icon: Users,
-    description: 'All your customers in one place'
-  },
-  // Hidden for P0 scope - account matching is P1
-  // {
-  //   path: '/matches',
-  //   label: 'Matches',
-  //   icon: Link2,
-  //   description: 'Review duplicate account suggestions'
-  // },
-  {
-    path: '/pricing',
+    path: '/',
     label: 'Pricing',
     icon: DollarSign,
-    description: 'Analyze your pricing model'
+    description: 'Margin analysis & plan health'
   },
-  { path: '/projects', label: 'Projects', icon: FolderOpen, description: 'Manage data uploads' },
   { path: '/data-sources', label: 'Data Sources', icon: Plug, description: 'Connect integrations or upload files' },
 ])
 
 const isActive = (path: string) => route.path === path
-
-async function handleClearAndUpload() {
-  await clearSample()
-  router.push('/onboarding/upload')
-}
 </script>
 
 <template>
@@ -56,11 +31,6 @@ async function handleClearAndUpload() {
             <LayoutDashboard class="h-4 w-4" />
           </div>
           <span class="text-lg font-semibold tracking-tight">Tanso</span>
-        </div>
-
-        <!-- Data Source Badge -->
-        <div class="px-4 py-3 border-b">
-          <DataSourceBadge :mode="dataMode" :show-chevron="false" />
         </div>
 
         <!-- Navigation -->
@@ -86,34 +56,23 @@ async function handleClearAndUpload() {
         </nav>
 
         <!-- Footer -->
-        <div class="border-t p-4">
-          <p class="text-xs text-muted-foreground">v1.0.0</p>
+        <div class="border-t p-4 space-y-3">
+          <div v-if="user" class="text-xs text-muted-foreground truncate">
+            {{ user.email }}
+          </div>
+          <button
+            class="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors w-full"
+            @click="signOut"
+          >
+            <LogOut class="h-3.5 w-3.5" />
+            Sign out
+          </button>
         </div>
       </div>
     </aside>
 
     <!-- Main Content -->
     <main class="ml-64 flex-1">
-      <!-- Sample Data Banner -->
-      <Alert
-        v-if="isSampleMode"
-        variant="info"
-        class="mx-6 mt-4 flex items-center justify-between"
-      >
-        <div class="flex items-center gap-3">
-          <Database class="h-4 w-4 shrink-0" />
-          <span>You're viewing <strong>sample data</strong>. This is demo data for exploration.</span>
-        </div>
-        <button
-          class="flex items-center gap-1 text-sm font-medium underline underline-offset-2 hover:no-underline shrink-0"
-          :disabled="isClearingSample"
-          @click="handleClearAndUpload"
-        >
-          <Upload class="h-3 w-3" />
-          Upload your data
-        </button>
-      </Alert>
-
       <div class="container py-8">
         <slot />
       </div>

@@ -331,8 +331,9 @@ export function getSampleDataSummary() {
 function deriveSegmentFromPlan(plan: string): string {
   switch (plan) {
     case 'enterprise':
-    case 'business':
       return 'Enterprise'
+    case 'business':
+      return 'Mid-Market'
     case 'pro':
       return 'Mid-Market'
     case 'starter':
@@ -346,19 +347,25 @@ function deriveSegmentFromPlan(plan: string): string {
  * Load curated sample data from static JSON file
  * This data is designed to tell specific stories:
  * - Margin compression (66% → 44%)
- * - 3 negative margin customers
- * - 4 churn risk customers (declining usage)
- * - 3 upsell opportunities (high usage)
+ * - 3 negative margin customers (Acme, DataFlow, TinyStartup)
+ * - 4 churn risk customers (Globex, Initech, Umbrella, Wonka - declining usage)
+ * - 3 upsell opportunities (Stark, Wayne, Aperture - high usage)
  * - 1 usage anomaly (Cyberdyne spike)
+ *
+ * PRD Numbers:
+ * - Total MRR: $11,070
+ * - Total ARR: $132,840
+ * - Total Costs (Dec): $6,200
+ * - Margin: 44% (down from 66% in July)
  */
 export function loadCuratedSampleData(): AnalyzerData {
   const data = sampleDataJson as SampleDataJson
 
-  // 1. Transform plans (object → array)
+  // 1. Transform plans from JSON (correct prices: $1999/$499/$199/$49)
   const plans: Plan[] = Object.entries(data.plans).map(([planId, p]) => ({
     plan_id: `plan_${planId}`,
     name: p.name,
-    price_amount: p.price,
+    price_amount: p.price, // Uses JSON prices: 1999, 499, 199, 49
     interval_months: 1,
     billing_model: 'recurring' as const,
   }))
@@ -372,7 +379,7 @@ export function loadCuratedSampleData(): AnalyzerData {
     created_at: c.started_at,
   }))
 
-  // 3. Create subscriptions (one per customer)
+  // 3. Create subscriptions using MRR from JSON (not plan prices, since JSON has actual MRR)
   const subscriptions: Subscription[] = data.customers.map(c => ({
     subscription_id: `sub_${c.customer_id}`,
     customer_id: c.customer_id,
@@ -381,31 +388,44 @@ export function loadCuratedSampleData(): AnalyzerData {
     current_period_start: '2024-12-01T00:00:00Z',
     current_period_end: '2024-12-31T23:59:59Z',
     previous_mrr: c.mrr,
+    // Store the actual MRR from the JSON for calculations
+    mrr_override: c.mrr,
   }))
 
-  // 4. Transform usage (December only for analysis)
-  const decemberUsage = data.usage.filter(u => u.month === '2024-12')
-  const usage: UsageRecord[] = decemberUsage.map(u => ({
+  // 4. Transform ALL usage data (including historical for trend analysis)
+  // Group by customer and month for trend detection
+  const usage: UsageRecord[] = data.usage.map(u => ({
     customer_id: u.customer_id,
-    metric_key: u.metric === 'api_calls' ? 'api_calls_percent' : 'tokens_percent',
-    metric_value: Math.round((u.value / u.limit) * 100),
-    period_start: '2024-12-01T00:00:00Z',
-    period_end: '2024-12-31T23:59:59Z',
+    metric_key: u.metric === 'api_calls' ? 'api_calls' : 'tokens',
+    metric_value: u.value,
+    metric_limit: u.limit,
+    period_start: `${u.month}-01T00:00:00Z`,
+    period_end: `${u.month}-28T23:59:59Z`,
   }))
 
-  // 5. Allocate costs (hardcoded for demo storytelling)
-  // Per README: Acme $2,400, DataFlow $340, TinyStartup $85
-  // These create the negative margin customers that tell the story
-  const NEGATIVE_MARGIN_COSTS: Record<string, number> = {
-    'cust_001': 2400, // Acme - token overages (12M vs 10M limit)
-    'cust_014': 340,  // DataFlow - heavy usage (105% of limit)
-    'cust_019': 85,   // TinyStartup - high relative usage
+  // 5. Allocate costs to match PRD total of $6,200
+  // PRD specifies: Acme $2,400, DataFlow $340, TinyStartup $85
+  // Remaining: $6,200 - $2,400 - $340 - $85 = $3,375 for 27 other customers
+  // Average for others: ~$125 each
+  const CUSTOMER_COSTS: Record<string, number> = {
+    // Negative margin customers (per PRD)
+    'cust_001': 2400, // Acme Corp - token overages (12M vs 10M limit) → -20% margin
+    'cust_014': 340,  // DataFlow Inc - heavy token usage (2.1M vs 2M limit) → -71% margin
+    'cust_019': 85,   // TinyStartup - heavy API usage relative to tier → -73% margin
+    // Other customers get proportional allocation of remaining $3,375
+    // $3,375 / 27 = ~$125 average
   }
+
+  // Calculate total for non-negative-margin customers
+  const negativeMarginTotal = 2400 + 340 + 85 // = $2,825
+  const remainingCosts = 6200 - negativeMarginTotal // = $3,375
+  const otherCustomerCount = data.customers.length - 3 // = 27
+  const avgOtherCost = remainingCosts / otherCustomerCount // = $125
 
   const costs: CostRecord[] = data.customers.map(c => ({
     customer_id: c.customer_id,
     cost_type: 'infrastructure',
-    amount: NEGATIVE_MARGIN_COSTS[c.customer_id] ?? 125, // ~$125 for other customers
+    amount: CUSTOMER_COSTS[c.customer_id] ?? avgOtherCost,
     period_start: '2024-12-01T00:00:00Z',
     period_end: '2024-12-31T23:59:59Z',
   }))

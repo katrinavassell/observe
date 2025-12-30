@@ -1,63 +1,76 @@
-import { computed } from 'vue'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/vue-query'
+import { ref, computed, onMounted } from 'vue'
+import { supabase } from '@/lib/supabase'
 import {
   getDataStatus,
-  loadSampleData,
-  clearSampleData,
+  loadSampleData as loadSampleDataApi,
+  clearUserData,
   type DataMode,
   type DataStatus,
-} from '@/api/client'
+} from '@/lib/supabase-data'
+
+const dataStatus = ref<DataStatus | null>(null)
+const isLoading = ref(true)
+const isLoadingSample = ref(false)
+const isClearingSample = ref(false)
 
 export function useDataMode() {
-  const queryClient = useQueryClient()
-
-  const { data: status, isLoading, refetch } = useQuery({
-    queryKey: ['data-status'],
-    queryFn: getDataStatus,
-    staleTime: 1000 * 60, // 1 minute
-  })
-
-  const dataMode = computed<DataMode>(() => status.value?.data_mode ?? 'none')
-  const hasData = computed(() => status.value?.has_data ?? false)
-  const accountCount = computed(() => status.value?.account_count ?? 0)
+  const dataMode = computed<DataMode>(() => dataStatus.value?.data_mode ?? 'none')
+  const hasData = computed(() => dataStatus.value?.has_data ?? false)
+  const customerCount = computed(() => dataStatus.value?.customer_count ?? 0)
   const isSampleMode = computed(() => dataMode.value === 'sample')
 
-  const loadSampleMutation = useMutation({
-    mutationFn: loadSampleData,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['data-status'] })
-      queryClient.invalidateQueries({ queryKey: ['revenue-analytics'] })
-      queryClient.invalidateQueries({ queryKey: ['accounts'] })
-      queryClient.invalidateQueries({ queryKey: ['matches'] })
-    },
-  })
-
-  const clearSampleMutation = useMutation({
-    mutationFn: clearSampleData,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['data-status'] })
-      queryClient.invalidateQueries({ queryKey: ['revenue-analytics'] })
-      queryClient.invalidateQueries({ queryKey: ['accounts'] })
-      queryClient.invalidateQueries({ queryKey: ['matches'] })
-    },
-  })
+  async function refetch() {
+    isLoading.value = true
+    try {
+      dataStatus.value = await getDataStatus()
+    } catch (error) {
+      console.error('Failed to fetch data status:', error)
+      dataStatus.value = { data_mode: 'none', has_data: false, customer_count: 0 }
+    } finally {
+      isLoading.value = false
+    }
+  }
 
   async function switchToSampleData() {
-    await loadSampleMutation.mutateAsync()
+    isLoadingSample.value = true
+    try {
+      await loadSampleDataApi()
+      await refetch()
+    } finally {
+      isLoadingSample.value = false
+    }
   }
 
   async function clearSample() {
-    await clearSampleMutation.mutateAsync()
+    isClearingSample.value = true
+    try {
+      await clearUserData()
+      await refetch()
+    } finally {
+      isClearingSample.value = false
+    }
   }
+
+  // Initialize on first use
+  onMounted(() => {
+    if (dataStatus.value === null) {
+      refetch()
+    }
+  })
+
+  // Listen for auth changes
+  supabase.auth.onAuthStateChange(() => {
+    refetch()
+  })
 
   return {
     // State
     dataMode,
     hasData,
-    accountCount,
+    customerCount,
     isSampleMode,
     isLoading,
-    status,
+    status: dataStatus,
 
     // Actions
     switchToSampleData,
@@ -65,8 +78,8 @@ export function useDataMode() {
     refetch,
 
     // Loading states
-    isLoadingSample: loadSampleMutation.isPending,
-    isClearingSample: clearSampleMutation.isPending,
+    isLoadingSample: computed(() => isLoadingSample.value),
+    isClearingSample: computed(() => isClearingSample.value),
   }
 }
 

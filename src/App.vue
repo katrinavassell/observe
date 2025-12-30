@@ -6,21 +6,15 @@ import AppLayout from '@/layouts/AppLayout.vue'
 
 const route = useRoute()
 
-// Skip layout for onboarding routes
-const skipLayout = computed(() => route.meta.skipDataCheck === true)
+// Skip layout for auth pages (login, etc.)
+const skipLayout = computed(() => route.meta.requiresAuth === false)
 </script>
 
 <template>
   <!-- Toast notifications (global) -->
   <Toaster
-    position="top-right"
-    :toastOptions="{
-      style: {
-        background: 'hsl(var(--card))',
-        border: '1px solid hsl(var(--border))',
-        color: 'hsl(var(--card-foreground))',
-      },
-    }"
+    position="top-center"
+    richColors
   />
 
   <!-- Conditional layout -->
