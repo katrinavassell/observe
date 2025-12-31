@@ -297,8 +297,11 @@ export function calculateMRRMovement(
     const plan = planMap.get(sub.plan_id)
     if (!plan) return
 
+    // Use mrr_override if available, otherwise calculate from plan price
     const intervalMonths = plan.interval_months || 1
-    const currentMRR = plan.price_amount / intervalMonths
+    const currentMRR = sub.mrr_override !== undefined
+      ? sub.mrr_override
+      : plan.price_amount / intervalMonths
     const previousMRR = sub.previous_mrr ?? 0
 
     // New subscription (created in last 30 days)
@@ -344,23 +347,32 @@ export function calculatePlanHealth(
     costsByCustomer.set(c.customer_id, current + c.amount)
   })
 
-  // Group usage by customer - get December api_calls usage percentage
+  // Dynamically detect available months from usage data
+  const allMonths = new Set<string>()
+  usage?.forEach(u => {
+    const month = u.period_start?.substring(0, 7)
+    if (month) allMonths.add(month)
+  })
+  const sortedMonths = Array.from(allMonths).sort()
+  const latestMonth = sortedMonths[sortedMonths.length - 1] || ''
+  const trendMonths = sortedMonths.slice(-4) // Last 4 months for trend
+
+  // Group usage by customer - get latest month's api_calls usage percentage
   const usageByCustomer = new Map<string, number>()
   usage?.forEach(u => {
-    // Only count December api_calls for current usage
-    if (u.period_start?.startsWith('2024-12') && u.metric_key === 'api_calls' && u.metric_limit) {
+    // Only count latest month api_calls for current usage
+    if (u.period_start?.startsWith(latestMonth) && u.metric_key === 'api_calls' && u.metric_limit) {
       const percent = Math.round((u.metric_value / u.metric_limit) * 100)
       usageByCustomer.set(u.customer_id, percent)
     }
   })
 
-  // Build trend data for churn detection
+  // Build trend data for churn detection using dynamic months
   const usageTrends = new Map<string, number[]>()
-  const months = ['2024-09', '2024-10', '2024-11', '2024-12']
   usage?.forEach(u => {
     if (u.metric_key === 'api_calls') {
       const month = u.period_start?.substring(0, 7) || ''
-      if (months.includes(month)) {
+      if (trendMonths.includes(month)) {
         if (!usageTrends.has(u.customer_id)) {
           usageTrends.set(u.customer_id, [])
         }
@@ -512,10 +524,15 @@ export function calculateCohorts(
     let totalMRR = 0
 
     activeSubs.forEach(sub => {
-      const plan = planMap.get(sub.plan_id)
-      if (plan) {
-        const intervalMonths = plan.interval_months || 1
-        totalMRR += plan.price_amount / intervalMonths
+      // Use mrr_override if available, otherwise calculate from plan price
+      if (sub.mrr_override !== undefined) {
+        totalMRR += sub.mrr_override
+      } else {
+        const plan = planMap.get(sub.plan_id)
+        if (plan) {
+          const intervalMonths = plan.interval_months || 1
+          totalMRR += plan.price_amount / intervalMonths
+        }
       }
     })
 
@@ -689,13 +706,24 @@ export function analyzeUsageAnomalies(
   const customerMap = new Map(customers.map(c => [c.customer_id, c]))
   const subMap = new Map(subscriptions.map(s => [s.customer_id, s]))
 
+  // Dynamically detect available months from usage data
+  const allMonths = new Set<string>()
+  usage.forEach(u => {
+    const month = u.period_start?.substring(0, 7)
+    if (month) allMonths.add(month)
+  })
+  const sortedMonths = Array.from(allMonths).sort()
+  const latestMonth = sortedMonths[sortedMonths.length - 1] || ''
+  // Get last 4 months for trend analysis
+  const trendMonths = sortedMonths.slice(-4)
+
   // Group usage by customer and month for trend analysis
   // Structure: customerId -> month -> { metric_key -> { value, limit } }
   const usageHistory = new Map<string, Map<string, Map<string, { value: number; limit: number }>>>()
 
   usage.forEach(u => {
     // Extract month from period_start (format: "2024-12-01T00:00:00Z")
-    const month = u.period_start?.substring(0, 7) || '2024-12'
+    const month = u.period_start?.substring(0, 7) || latestMonth
 
     if (!usageHistory.has(u.customer_id)) {
       usageHistory.set(u.customer_id, new Map())
@@ -724,9 +752,9 @@ export function analyzeUsageAnomalies(
 
     const customerName = customer?.name || customer?.email || customerId
 
-    // Get December data (current month)
-    const decData = monthlyData.get('2024-12')
-    const apiCallsData = decData?.get('api_calls')
+    // Get latest month's data (dynamically detected)
+    const latestData = monthlyData.get(latestMonth)
+    const apiCallsData = latestData?.get('api_calls')
 
     if (!apiCallsData) return
 
@@ -734,11 +762,10 @@ export function analyzeUsageAnomalies(
     const limit = apiCallsData.limit
     const usagePercent = limit > 0 ? Math.round((currentUsage / limit) * 100) : 0
 
-    // 1. Detect CHURN RISK - declining usage over 3+ months
-    const months = ['2024-09', '2024-10', '2024-11', '2024-12']
+    // 1. Detect CHURN RISK - declining usage over available months
     const monthValues: number[] = []
 
-    months.forEach(month => {
+    trendMonths.forEach(month => {
       const mData = monthlyData.get(month)
       const apiCalls = mData?.get('api_calls')
       if (apiCalls) {
@@ -775,12 +802,13 @@ export function analyzeUsageAnomalies(
 
         if (prevValue > 0 && currValue > prevValue * 2.5) {
           const spikePercent = Math.round((currValue / prevValue) * 100)
+          const spikeMonth = trendMonths[i]?.substring(5, 7) || ''
           anomalies.push({
             customer: customerName,
             customerId,
             plan: plan.name,
             usage: `${spikePercent}%`,
-            description: `${months[i]?.substring(5, 7) || ''} spike`,
+            description: `${spikeMonth} spike`,
             type: 'warning', // Anomaly
           })
           return
@@ -911,18 +939,39 @@ export function analyzeData(data: AnalyzerData): AnalysisResult {
   // Average LTV (assuming 90% retention = ~10 month lifespan)
   const avgLTV = arpu * 10
 
-  // Calculate cost and margin metrics
-  const totalCosts = costs?.reduce((sum, c) => sum + c.amount, 0) || 0
+  // Calculate cost and margin metrics from historical data
+  // Group costs by month to calculate growth and historical margin
+  const costsByMonth = new Map<string, number>()
+  costs?.forEach(c => {
+    const month = c.period_start?.substring(0, 7) || ''
+    if (month) {
+      costsByMonth.set(month, (costsByMonth.get(month) || 0) + c.amount)
+    }
+  })
+
+  // Get sorted months and calculate current vs previous month costs
+  const sortedCostMonths = Array.from(costsByMonth.keys()).sort()
+  const latestCostMonth = sortedCostMonths[sortedCostMonths.length - 1] || ''
+  const previousCostMonth = sortedCostMonths[sortedCostMonths.length - 2] || ''
+
+  const currentMonthCosts = costsByMonth.get(latestCostMonth) || 0
+  const previousMonthCosts = costsByMonth.get(previousCostMonth) || 0
+
+  // Total costs for the current (latest) month
+  const totalCosts = currentMonthCosts
   const margin = mrr > 0 ? ((mrr - totalCosts) / mrr) * 100 : 0
 
-  // For sample data: use hardcoded historical margin (66% → 44% story)
-  // In production, this would come from historical data
-  const previousMargin = 66 // July margin from PRD
+  // Calculate previous margin from previous month's costs
+  // For simplicity, we assume MRR was similar (or use the same MRR)
+  const previousMargin = previousMonthCosts > 0 && mrr > 0
+    ? Math.round(((mrr - previousMonthCosts) / mrr) * 100)
+    : Math.round(margin) // Default to current if no historical data
   const marginChange = Math.round(margin) - previousMargin
 
-  // Cost growth (15% MoM for sample data per PRD)
-  // In production, calculate from historical cost data
-  const costGrowth = totalCosts > 0 ? 15 : 0
+  // Calculate cost growth (MoM percentage)
+  const costGrowth = previousMonthCosts > 0
+    ? Math.round(((currentMonthCosts - previousMonthCosts) / previousMonthCosts) * 100)
+    : 0
 
   const saasMetrics: SaaSMetrics = {
     mrr,
