@@ -2,6 +2,7 @@ import { createApp } from 'vue'
 import { VueQueryPlugin, QueryClient } from '@tanstack/vue-query'
 import router from './router'
 import App from './App.vue'
+import { logger } from './lib/logger'
 import './assets/index.css'
 import 'vue-sonner/style.css'
 
@@ -15,6 +16,23 @@ const queryClient = new QueryClient({
 })
 
 const app = createApp(App)
+
+// Global error handler for uncaught Vue errors
+app.config.errorHandler = (err, instance, info) => {
+  logger.error('Uncaught Vue error', err, {
+    component: instance?.$options?.name || 'Unknown',
+    info,
+  })
+}
+
+// Global warning handler (development only)
+app.config.warnHandler = (msg, instance, trace) => {
+  logger.warn('Vue warning', {
+    message: msg,
+    component: instance?.$options?.name || 'Unknown',
+    trace,
+  })
+}
 
 app.use(router)
 app.use(VueQueryPlugin, { queryClient })

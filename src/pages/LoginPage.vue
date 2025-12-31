@@ -9,9 +9,23 @@ const email = ref('')
 const isLoading = ref(false)
 const emailSent = ref(false)
 
+// Email validation regex
+const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+function isValidEmail(email: string): boolean {
+  return emailRegex.test(email.trim())
+}
+
 async function handleMagicLink() {
-  if (!email.value) {
+  const trimmedEmail = email.value.trim()
+
+  if (!trimmedEmail) {
     toast.error('Please enter your email')
+    return
+  }
+
+  if (!isValidEmail(trimmedEmail)) {
+    toast.error('Please enter a valid email address')
     return
   }
 
@@ -19,7 +33,7 @@ async function handleMagicLink() {
 
   try {
     const { error } = await supabase.auth.signInWithOtp({
-      email: email.value,
+      email: trimmedEmail,
       options: {
         emailRedirectTo: `${window.location.origin}/`,
       },

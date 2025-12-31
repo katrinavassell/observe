@@ -1,6 +1,7 @@
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { supabase } from '@/lib/supabase'
+import { logger } from '@/lib/logger'
 import type { User, Session, Subscription } from '@supabase/supabase-js'
 
 const user = ref<User | null>(null)
@@ -11,6 +12,54 @@ const isInitialized = ref(false)
 // Store subscription globally to prevent multiple listeners
 let authSubscription: Subscription | null = null
 
+// Cross-tab session sync using BroadcastChannel
+const AUTH_CHANNEL_NAME = 'tanso-auth-sync'
+let authChannel: BroadcastChannel | null = null
+
+type AuthMessage = {
+  type: 'SIGN_IN' | 'SIGN_OUT' | 'SESSION_UPDATE'
+  session: Session | null
+}
+
+function initAuthChannel() {
+  if (typeof BroadcastChannel === 'undefined') return
+
+  try {
+    authChannel = new BroadcastChannel(AUTH_CHANNEL_NAME)
+    authChannel.onmessage = (event: MessageEvent<AuthMessage>) => {
+      const { type, session: newSession } = event.data
+      logger.info('Received auth sync message', { type })
+
+      if (type === 'SIGN_OUT') {
+        session.value = null
+        user.value = null
+      } else if (type === 'SIGN_IN' || type === 'SESSION_UPDATE') {
+        session.value = newSession
+        user.value = newSession?.user ?? null
+      }
+    }
+  } catch (error) {
+    logger.warn('Failed to initialize BroadcastChannel', { error })
+  }
+}
+
+function broadcastAuthChange(type: AuthMessage['type'], newSession: Session | null) {
+  if (!authChannel) return
+
+  try {
+    authChannel.postMessage({ type, session: newSession })
+  } catch (error) {
+    logger.warn('Failed to broadcast auth change', { error })
+  }
+}
+
+function cleanupAuthChannel() {
+  if (authChannel) {
+    authChannel.close()
+    authChannel = null
+  }
+}
+
 export function useAuth() {
   const router = useRouter()
 
@@ -19,12 +68,15 @@ export function useAuth() {
   async function initialize() {
     if (isInitialized.value) return
 
+    // Initialize cross-tab sync channel
+    initAuthChannel()
+
     try {
       const { data: { session: currentSession } } = await supabase.auth.getSession()
       session.value = currentSession
       user.value = currentSession?.user ?? null
     } catch (error) {
-      console.error('Failed to get session:', error)
+      logger.error('Failed to get session', error)
     } finally {
       isLoading.value = false
       isInitialized.value = true
@@ -32,9 +84,18 @@ export function useAuth() {
 
     // Only set up listener once globally
     if (!authSubscription) {
-      const { data } = supabase.auth.onAuthStateChange((_event, newSession) => {
+      const { data } = supabase.auth.onAuthStateChange((event, newSession) => {
         session.value = newSession
         user.value = newSession?.user ?? null
+
+        // Broadcast auth changes to other tabs
+        if (event === 'SIGNED_IN') {
+          broadcastAuthChange('SIGN_IN', newSession)
+        } else if (event === 'SIGNED_OUT') {
+          broadcastAuthChange('SIGN_OUT', null)
+        } else if (event === 'TOKEN_REFRESHED') {
+          broadcastAuthChange('SESSION_UPDATE', newSession)
+        }
       })
       authSubscription = data.subscription
     }
@@ -45,6 +106,7 @@ export function useAuth() {
       authSubscription.unsubscribe()
       authSubscription = null
     }
+    cleanupAuthChannel()
   }
 
   async function signIn(email: string, password: string) {
@@ -66,9 +128,21 @@ export function useAuth() {
   }
 
   async function signOut() {
-    const { error } = await supabase.auth.signOut()
-    if (error) throw error
-    router.push('/login')
+    try {
+      const { error } = await supabase.auth.signOut()
+      if (error) {
+        logger.error('Sign out error', error)
+        // Still navigate to login even on error - user intended to log out
+      }
+    } catch (err) {
+      logger.error('Sign out failed', err)
+      // Still navigate to login even on error - user intended to log out
+    } finally {
+      // Always clear local state and redirect
+      user.value = null
+      session.value = null
+      router.push('/login')
+    }
   }
 
   async function signInWithGoogle() {
@@ -86,8 +160,9 @@ export function useAuth() {
     initialize()
   })
 
-  // Note: cleanup is exposed for manual cleanup if needed (e.g., app unmount)
-  // The subscription is global, so it persists across component instances
+  onUnmounted(() => {
+    cleanupAuthChannel()
+  })
 
   return {
     // State
