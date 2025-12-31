@@ -627,19 +627,6 @@ watch(
   { immediate: true }
 )
 
-// Integration handlers
-function handleStripeConnect() {
-  toast.info('Stripe integration coming soon')
-}
-
-function handleOpenAIConnect() {
-  toast.info('OpenAI integration coming soon')
-}
-
-function handleAnthropicConnect() {
-  toast.info('Anthropic integration coming soon')
-}
-
 // Track which integrations user has requested
 const requestedIntegrations = ref<Set<string>>(new Set())
 
@@ -860,8 +847,8 @@ async function handleContinue() {
                 <p class="text-xs text-muted-foreground">Pull customers, subscriptions, and invoices</p>
               </div>
             </div>
-            <Button variant="outline" size="sm" @click="handleStripeConnect">
-              Connect
+            <Button variant="outline" size="sm" disabled class="opacity-60">
+              Coming Soon
             </Button>
           </div>
 
@@ -1070,7 +1057,8 @@ async function handleContinue() {
           <div class="flex items-center justify-center gap-4">
             <button
               type="button"
-              class="text-xs text-muted-foreground hover:text-foreground"
+              class="text-xs text-muted-foreground hover:text-foreground transition-opacity"
+              :class="{ 'opacity-50 cursor-not-allowed': isLoadingRevenue }"
               :disabled="isLoadingRevenue"
               @click="handleUseSampleRevenue"
             >
@@ -1149,8 +1137,8 @@ async function handleContinue() {
                 <p class="text-xs text-muted-foreground">Pull monthly usage and token costs</p>
               </div>
             </div>
-            <Button variant="outline" size="sm" @click="handleOpenAIConnect">
-              Connect
+            <Button variant="outline" size="sm" disabled class="opacity-60">
+              Coming Soon
             </Button>
           </div>
 
@@ -1165,8 +1153,8 @@ async function handleContinue() {
                 <p class="text-xs text-muted-foreground">Pull monthly usage and token costs</p>
               </div>
             </div>
-            <Button variant="outline" size="sm" @click="handleAnthropicConnect">
-              Connect
+            <Button variant="outline" size="sm" disabled class="opacity-60">
+              Coming Soon
             </Button>
           </div>
 
@@ -1242,7 +1230,8 @@ async function handleContinue() {
             <span class="text-muted-foreground/30">|</span>
             <button
               type="button"
-              class="text-xs text-muted-foreground hover:text-foreground"
+              class="text-xs text-muted-foreground hover:text-foreground transition-opacity"
+              :class="{ 'opacity-50 cursor-not-allowed': isLoadingCosts }"
               :disabled="isLoadingCosts"
               @click="handleUseSampleData('costs')"
             >
@@ -1324,7 +1313,8 @@ async function handleContinue() {
             <span class="text-muted-foreground/30">|</span>
             <button
               type="button"
-              class="text-xs text-muted-foreground hover:text-foreground"
+              class="text-xs text-muted-foreground hover:text-foreground transition-opacity"
+              :class="{ 'opacity-50 cursor-not-allowed': isLoadingUsage }"
               :disabled="isLoadingUsage"
               @click="handleUseSampleData('usage')"
             >
@@ -1478,7 +1468,7 @@ async function handleContinue() {
   <!-- Sticky Progress Bar -->
   <div
     v-if="hasAnyData"
-    class="fixed bottom-0 left-64 right-0 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 z-50"
+    class="fixed bottom-0 ml-64 left-0 right-0 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 z-50"
   >
     <div class="container max-w-3xl py-4">
       <div class="flex items-center justify-between">

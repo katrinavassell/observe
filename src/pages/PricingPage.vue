@@ -37,6 +37,7 @@ import {
   loadSampleData as loadSampleDataToSupabase,
   fetchAnalyzerData,
 } from '@/lib/supabase-data'
+import { toast } from 'vue-sonner'
 
 // =============================================================================
 // ROUTING
@@ -121,6 +122,12 @@ async function loadExistingData() {
   }
 }
 
+function handleDesignPartnerClick() {
+  toast.info('Design Partner Program', {
+    description: 'We\'ll be in touch! Email us at kat@tansohq.com to get started.',
+  })
+}
+
 // =============================================================================
 // LIFECYCLE
 // =============================================================================
@@ -203,12 +210,10 @@ onMounted(async () => {
           </div>
 
           <div class="flex flex-col sm:flex-row gap-3 justify-center pt-4">
-            <router-link to="/data-sources">
-              <Button size="lg">
-                <Plug class="h-4 w-4 mr-2" />
-                Connect Data
-              </Button>
-            </router-link>
+            <Button size="lg" @click="router.push('/data-sources')">
+              <Plug class="h-4 w-4 mr-2" />
+              Connect Data
+            </Button>
             <Button
               variant="outline"
               size="lg"
@@ -456,7 +461,7 @@ onMounted(async () => {
               </div>
             </CardHeader>
             <CardContent>
-              <div class="grid grid-cols-5 gap-3">
+              <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
                 <div class="text-center p-3 bg-green-500/10 rounded-lg border border-green-500/20">
                   <p class="text-xs text-muted-foreground mb-0.5">New</p>
                   <p class="text-lg font-semibold text-green-600 dark:text-green-400">
@@ -708,13 +713,18 @@ onMounted(async () => {
                     This requires tracking usage at the feature level. <strong>That's what Tanso does.</strong>
                   </p>
                   <div class="flex flex-wrap gap-3">
-                    <Button size="sm">
+                    <Button size="sm" @click="handleDesignPartnerClick">
                       Become a Design Partner
                     </Button>
-                    <Button variant="outline" size="sm">
+                    <a
+                      href="https://tansohq.com"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      class="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-9 rounded-md px-3"
+                    >
                       <ExternalLink class="h-3.5 w-3.5 mr-1.5" />
                       Learn More
-                    </Button>
+                    </a>
                   </div>
                 </div>
               </div>
