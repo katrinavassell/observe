@@ -34,6 +34,7 @@ import Alert from '@/components/ui/alert.vue'
 import { analyzeData, type AnalysisResult } from '@/lib/pricing-analyzer'
 import { getSampleDataSummary } from '@/lib/sample-data'
 import { useDataMode } from '@/composables/useDataMode'
+import { logger, sanitizeErrorForUser } from '@/lib/logger'
 import {
   loadSampleData as loadSampleDataToSupabase,
   fetchAnalyzerData,
@@ -98,7 +99,8 @@ async function loadSampleData() {
     await refetchDataMode()
   } catch (err: unknown) {
     clearInterval(progressInterval)
-    error.value = err instanceof Error ? err.message : 'Failed to load sample data'
+    logger.error('Failed to load sample data', err)
+    error.value = sanitizeErrorForUser(err)
   } finally {
     isAnalyzing.value = false
   }
@@ -121,12 +123,14 @@ async function loadExistingData(retryCount = 0) {
   } catch (err: unknown) {
     // Retry logic: up to 2 retries with exponential backoff
     if (retryCount < 2) {
+      logger.warn('Data fetch failed, retrying...', { retryCount, error: err })
       const delay = Math.pow(2, retryCount) * 1000 // 1s, 2s
       await new Promise(resolve => setTimeout(resolve, delay))
       isAnalyzing.value = false
       return loadExistingData(retryCount + 1)
     }
-    error.value = err instanceof Error ? err.message : 'Failed to load data'
+    logger.error('Failed to load data after retries', err)
+    error.value = sanitizeErrorForUser(err)
   } finally {
     isAnalyzing.value = false
   }

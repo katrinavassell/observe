@@ -39,6 +39,7 @@ import {
 import Papa from 'papaparse'
 import { supabase } from '@/lib/supabase'
 import { useDataMode } from '@/composables/useDataMode'
+import { logger, sanitizeErrorForUser } from '@/lib/logger'
 import {
   parseCSVFile,
   detectStripeFileType,
@@ -161,8 +162,9 @@ async function loadSampleDataConfirmed() {
       description: 'Go to Pricing to see the analysis.',
     })
   } catch (error) {
+    logger.error('Failed to load sample data', error)
     toast.error('Failed to load sample data', {
-      description: error instanceof Error ? error.message : 'Please try again.',
+      description: sanitizeErrorForUser(error),
     })
   } finally {
     isLoadingSample.value = false
@@ -245,8 +247,9 @@ async function processStripeFile(file: File) {
       })
     }
   } catch (error) {
+    logger.error('Failed to parse CSV', error)
     toast.error('Failed to parse CSV', {
-      description: error instanceof Error ? error.message : 'Unknown error',
+      description: sanitizeErrorForUser(error),
     })
   }
 }
@@ -299,8 +302,9 @@ async function handleReconcile() {
     unifiedData.value = result.unified
     showReconciliation.value = true
   } catch (error) {
+    logger.error('Failed to reconcile data', error)
     toast.error('Failed to reconcile data', {
-      description: error instanceof Error ? error.message : 'Unknown error',
+      description: sanitizeErrorForUser(error),
     })
   } finally {
     isReconciling.value = false
@@ -347,7 +351,8 @@ async function handleUploadAndContinue() {
     // Navigate to pricing page
     router.push('/')
   } catch (error) {
-    uploadError.value = error instanceof Error ? error.message : 'Upload failed'
+    logger.error('Failed to upload data', error)
+    uploadError.value = sanitizeErrorForUser(error)
     toast.error('Failed to upload data', {
       description: uploadError.value,
     })

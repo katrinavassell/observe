@@ -1,5 +1,6 @@
 import { ref, computed, onMounted } from 'vue'
 import { supabase } from '@/lib/supabase'
+import { logger } from '@/lib/logger'
 import {
   getDataStatus,
   loadSampleData as loadSampleDataApi,
@@ -32,7 +33,7 @@ export function useDataMode() {
     try {
       dataStatus.value = await getDataStatus()
     } catch (error) {
-      console.error('Failed to fetch data status:', error)
+      logger.error('Failed to fetch data status', error)
       dataStatus.value = {
         data_mode: 'none',
         has_data: false,
