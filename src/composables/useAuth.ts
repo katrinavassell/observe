@@ -1,12 +1,15 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { supabase } from '@/lib/supabase'
-import type { User, Session } from '@supabase/supabase-js'
+import type { User, Session, Subscription } from '@supabase/supabase-js'
 
 const user = ref<User | null>(null)
 const session = ref<Session | null>(null)
 const isLoading = ref(true)
 const isInitialized = ref(false)
+
+// Store subscription globally to prevent multiple listeners
+let authSubscription: Subscription | null = null
 
 export function useAuth() {
   const router = useRouter()
@@ -27,11 +30,21 @@ export function useAuth() {
       isInitialized.value = true
     }
 
-    // Listen for auth changes
-    supabase.auth.onAuthStateChange((_event, newSession) => {
-      session.value = newSession
-      user.value = newSession?.user ?? null
-    })
+    // Only set up listener once globally
+    if (!authSubscription) {
+      const { data } = supabase.auth.onAuthStateChange((_event, newSession) => {
+        session.value = newSession
+        user.value = newSession?.user ?? null
+      })
+      authSubscription = data.subscription
+    }
+  }
+
+  function cleanup() {
+    if (authSubscription) {
+      authSubscription.unsubscribe()
+      authSubscription = null
+    }
   }
 
   async function signIn(email: string, password: string) {
@@ -73,6 +86,9 @@ export function useAuth() {
     initialize()
   })
 
+  // Note: cleanup is exposed for manual cleanup if needed (e.g., app unmount)
+  // The subscription is global, so it persists across component instances
+
   return {
     // State
     user,
@@ -86,5 +102,6 @@ export function useAuth() {
     signOut,
     signInWithGoogle,
     initialize,
+    cleanup,
   }
 }

@@ -50,27 +50,39 @@ const router = createRouter({
 
 // Auth guard
 router.beforeEach(async (to, _from, next) => {
-  const requiresAuth = to.meta.requiresAuth !== false
+  try {
+    const requiresAuth = to.meta.requiresAuth !== false
 
-  if (requiresAuth) {
-    const { data: { session } } = await supabase.auth.getSession()
+    if (requiresAuth) {
+      const { data: { session }, error } = await supabase.auth.getSession()
 
-    if (!session) {
-      next('/login')
-      return
+      if (error) {
+        console.error('Auth guard error:', error.message)
+        next('/login')
+        return
+      }
+
+      if (!session) {
+        next('/login')
+        return
+      }
     }
-  }
 
-  // If authenticated and going to login, redirect to home
-  if (to.path === '/login') {
-    const { data: { session } } = await supabase.auth.getSession()
-    if (session) {
-      next('/')
-      return
+    // If authenticated and going to login, redirect to home
+    if (to.path === '/login') {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (session) {
+        next('/')
+        return
+      }
     }
-  }
 
-  next()
+    next()
+  } catch (error) {
+    console.error('Router guard exception:', error)
+    // On unexpected errors, redirect to login as a safe fallback
+    next('/login')
+  }
 })
 
 export default router

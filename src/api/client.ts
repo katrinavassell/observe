@@ -581,10 +581,9 @@ export interface ConnectStripeResult {
  * @returns Connection result with account details
  */
 export async function connectStripeWithApiKey(apiKey: string): Promise<ConnectStripeResult> {
-  const params = new URLSearchParams()
-  params.set('api_key', apiKey)
-  return request(`/integrations/stripe/connect?${params.toString()}`, {
+  return request('/integrations/stripe/connect', {
     method: 'POST',
+    body: JSON.stringify({ api_key: apiKey }),
   })
 }
 
