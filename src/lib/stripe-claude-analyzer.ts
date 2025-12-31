@@ -632,10 +632,9 @@ export function performLocalAnalysis(data: EnhancedSyncResult): ClaudeAnalysisRe
 
   for (const customer of customers) {
     const segment = customer.segment
-    if (!segmentGroups.has(segment)) {
-      segmentGroups.set(segment, [])
-    }
-    segmentGroups.get(segment)!.push(customer)
+    const existing = segmentGroups.get(segment) ?? []
+    existing.push(customer)
+    segmentGroups.set(segment, existing)
   }
 
   for (const [segment, segmentCustomers] of segmentGroups) {
@@ -654,11 +653,9 @@ export function performLocalAnalysis(data: EnhancedSyncResult): ClaudeAnalysisRe
     const metadataFreq = new Map<string, Map<string, number>>()
     for (const customer of segmentCustomers) {
       for (const [key, value] of Object.entries(customer.metadata)) {
-        if (!metadataFreq.has(key)) {
-          metadataFreq.set(key, new Map())
-        }
-        const valueMap = metadataFreq.get(key)!
+        const valueMap = metadataFreq.get(key) ?? new Map<string, number>()
         valueMap.set(value, (valueMap.get(value) || 0) + 1)
+        metadataFreq.set(key, valueMap)
       }
     }
 
@@ -691,10 +688,9 @@ export function performLocalAnalysis(data: EnhancedSyncResult): ClaudeAnalysisRe
   const usageByMetric = new Map<string, typeof usage>()
 
   for (const record of usage) {
-    if (!usageByMetric.has(record.metric)) {
-      usageByMetric.set(record.metric, [])
-    }
-    usageByMetric.get(record.metric)!.push(record)
+    const existing = usageByMetric.get(record.metric) ?? []
+    existing.push(record)
+    usageByMetric.set(record.metric, existing)
   }
 
   for (const [metric, records] of usageByMetric) {
