@@ -39,6 +39,34 @@ export interface StripeFile {
   file?: File
 }
 
+// =============================================================================
+// MODULE-LEVEL STATE (persists across navigation)
+// =============================================================================
+
+// File references
+const stripeCustomersFile = ref<StripeFile | null>(null)
+const stripeSubscriptionsFile = ref<StripeFile | null>(null)
+const stripeInvoicesFile = ref<StripeFile | null>(null)
+const stripeSampleLoaded = ref(false)
+
+// Parsed data from CSV files
+const parsedCustomers = ref<StripeCustomer[]>([])
+const parsedSubscriptions = ref<StripeSubscription[]>([])
+const parsedInvoices = ref<StripeInvoice[]>([])
+
+// Reconciliation state
+const reconciliationReport = ref<ReconciliationReport | null>(null)
+const unifiedData = ref<UnifiedSubscriptionData[]>([])
+const isReconciling = ref(false)
+const showReconciliation = ref(false)
+
+// Upload state
+const isUploading = ref(false)
+const uploadError = ref<string | null>(null)
+
+// Drag state for dropzone
+const isDragging = ref(false)
+
 /**
  * Composable for managing Stripe CSV uploads and data reconciliation.
  *
@@ -59,30 +87,6 @@ export function useStripeUpload(options: {
   onDataSaved?: () => Promise<void>
 } = {}) {
   const router = useRouter()
-
-  // File references
-  const stripeCustomersFile = ref<StripeFile | null>(null)
-  const stripeSubscriptionsFile = ref<StripeFile | null>(null)
-  const stripeInvoicesFile = ref<StripeFile | null>(null)
-  const stripeSampleLoaded = ref(false)
-
-  // Parsed data from CSV files
-  const parsedCustomers = ref<StripeCustomer[]>([])
-  const parsedSubscriptions = ref<StripeSubscription[]>([])
-  const parsedInvoices = ref<StripeInvoice[]>([])
-
-  // Reconciliation state
-  const reconciliationReport = ref<ReconciliationReport | null>(null)
-  const unifiedData = ref<UnifiedSubscriptionData[]>([])
-  const isReconciling = ref(false)
-  const showReconciliation = ref(false)
-
-  // Upload state
-  const isUploading = ref(false)
-  const uploadError = ref<string | null>(null)
-
-  // Drag state for dropzone
-  const isDragging = ref(false)
 
   /**
    * Count of Stripe files currently uploaded (0-3).
