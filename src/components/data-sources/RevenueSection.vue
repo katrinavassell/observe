@@ -58,8 +58,14 @@ const {
   clearStripeFile,
   handleReconcile,
   handleUploadAndContinue,
+  setSampleDataLoaded,
   formatCurrency,
 } = useStripeUpload()
+
+// Expose setSampleDataLoaded for parent to call when sample data is loaded
+defineExpose({
+  setSampleDataLoaded,
+})
 
 // File input ref
 const stripeFileInput = ref<HTMLInputElement | null>(null)

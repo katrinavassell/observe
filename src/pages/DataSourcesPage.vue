@@ -70,6 +70,9 @@ const hasUnsavedChanges = ref(false)
 const showDiscardDialog = ref(false)
 const pendingNavigationPath = ref<string | null>(null)
 
+/** Component refs */
+const revenueSectionRef = ref<InstanceType<typeof RevenueSection> | null>(null)
+
 // =============================================================================
 // COMPUTED PROPERTIES
 // =============================================================================
@@ -113,6 +116,9 @@ async function handleTrySampleData(): Promise<void> {
     costsFile.value = { name: 'sample-costs.csv', isSample: true }
     usageFile.value = { name: 'sample-usage.csv', isSample: true }
 
+    // Update the RevenueSection component to show sample files
+    revenueSectionRef.value?.setSampleDataLoaded()
+
     toast.success('Sample data loaded!', {
       description: 'Go to Pricing to see the analysis.',
     })
@@ -136,6 +142,10 @@ async function handleUseSampleRevenue(): Promise<void> {
     revenueFiles.value = { customers: true, subscriptions: true, invoices: true }
     pendingRevenueDeletion.value = false
     hasUnsavedChanges.value = false
+
+    // Update the RevenueSection component to show sample files
+    revenueSectionRef.value?.setSampleDataLoaded()
+
     toast.success('Sample revenue data loaded!')
   } catch (error) {
     toast.error('Failed to load sample revenue data', {
@@ -378,6 +388,7 @@ watch(
 
     <!-- Revenue Section -->
     <RevenueSection
+      ref="revenueSectionRef"
       :is-loading-sample="isLoadingRevenue"
       @use-sample="handleUseSampleRevenue"
       @connect-stripe="handleStripeConnect"
