@@ -1,12 +1,26 @@
 /**
- * Pricing Analyzer - Client-side CSV analysis for SaaS metrics
- * Compatible with Tanso Core entity schemas
+ * Pricing Analyzer - Client-side CSV analysis for SaaS metrics.
+ *
+ * This module provides comprehensive analysis of SaaS pricing data including:
+ * - Core metrics: MRR, ARR, ARPU, NRR, LTV
+ * - MRR movement tracking: new, expansion, contraction, churned
+ * - Plan health scoring with churn risk detection
+ * - Usage anomaly detection
+ * - Negative margin customer identification
+ * - Cohort analysis
+ *
+ * Compatible with Tanso Core entity schemas.
+ *
+ * @module pricing-analyzer
  */
 
 // =============================================================================
 // TYPE DEFINITIONS
 // =============================================================================
 
+/**
+ * Represents a customer account in the system.
+ */
 export interface Customer {
   customer_id: string
   email: string
@@ -15,24 +29,39 @@ export interface Customer {
   created_at?: string
 }
 
+/**
+ * Represents a pricing plan/tier.
+ */
 export interface Plan {
+  /** Unique identifier for the plan */
   plan_id: string
+  /** Human-readable plan name (e.g., "Starter", "Pro", "Enterprise") */
   name: string
+  /** Price in the plan's billing interval (not necessarily monthly) */
   price_amount: number
+  /** Billing interval in months (1 = monthly, 12 = annual). Defaults to 1 */
   interval_months?: number
+  /** Billing model type (recurring, usage_based, hybrid) */
   billing_model?: string
 }
 
+/**
+ * Represents a customer's subscription to a plan.
+ */
 export interface Subscription {
   subscription_id: string
   customer_id: string
   plan_id: string
+  /** Whether the subscription is currently active */
   is_active: boolean
   current_period_start?: string
   current_period_end?: string
+  /** ISO date when subscription was cancelled (null if active) */
   cancelled_at?: string
-  previous_mrr?: number // For MRR movement calculation
-  mrr_override?: number // Direct MRR value (overrides plan price calculation)
+  /** MRR from the previous period, used for expansion/contraction calculations */
+  previous_mrr?: number
+  /** Explicit MRR value that overrides plan price calculation (for custom pricing) */
+  mrr_override?: number
 }
 
 export interface Invoice {
@@ -186,9 +215,100 @@ export interface AnalysisResult {
 }
 
 // =============================================================================
+// CONFIGURATION CONSTANTS
+// =============================================================================
+
+/**
+ * Baseline margin percentage from July PRD analysis.
+ * Used as reference point for calculating margin change trends.
+ * This represents the historical margin before cost growth impact.
+ */
+const BASELINE_MARGIN_JULY_PERCENT = 66
+
+/**
+ * Default month-over-month cost growth percentage.
+ * Applied to sample data per PRD specification.
+ * In production, this should be calculated from historical cost data.
+ */
+const DEFAULT_COST_GROWTH_MOM_PERCENT = 15
+
+/**
+ * Average customer lifespan multiplier for LTV calculation.
+ * Based on 90% monthly retention rate: 1 / (1 - 0.9) = 10 months.
+ * LTV = ARPU * AVERAGE_CUSTOMER_LIFESPAN_MONTHS
+ */
+const AVERAGE_CUSTOMER_LIFESPAN_MONTHS = 10
+
+/**
+ * Usage decline threshold for churn risk detection.
+ * Customers whose usage drops below this ratio (25% decline) over 3 months
+ * are flagged as churn risks.
+ */
+const CHURN_RISK_USAGE_DECLINE_THRESHOLD = 0.75
+
+/**
+ * Minimum usage percentage (of plan limit) to flag as upsell-ready.
+ * Customers using 85%+ of their plan limits are candidates for upgrades.
+ */
+const UPSELL_READY_USAGE_THRESHOLD_PERCENT = 85
+
+/**
+ * Health score penalties for plan health calculation.
+ */
+const HEALTH_SCORE = {
+  /** Base health score before any penalties */
+  BASE: 100,
+  /** Penalty per customer with churn risk */
+  CHURN_RISK_PENALTY_PER_CUSTOMER: 10,
+  /** Maximum churn risk penalty */
+  CHURN_RISK_PENALTY_MAX: 30,
+  /** Penalty per customer with negative margin */
+  NEGATIVE_MARGIN_PENALTY_PER_CUSTOMER: 15,
+  /** Maximum negative margin penalty */
+  NEGATIVE_MARGIN_PENALTY_MAX: 30,
+  /** Penalty for Starter tier (typically higher churn) */
+  STARTER_TIER_PENALTY: 15,
+  /** Bonus for Enterprise tier (typically stickier) */
+  ENTERPRISE_TIER_BONUS: 5,
+} as const
+
+/**
+ * Minimum number of data points needed for trend analysis.
+ */
+const MIN_TREND_DATA_POINTS = 3
+
+/**
+ * Usage spike threshold multiplier for anomaly detection.
+ * A 250% increase (2.5x) month-over-month triggers a spike alert.
+ */
+const USAGE_SPIKE_THRESHOLD_MULTIPLIER = 2.5
+
+/**
+ * Significant usage decline percentage for churn risk flag.
+ */
+const SIGNIFICANT_DECLINE_PERCENT = 25
+
+// =============================================================================
 // CSV PARSING
 // =============================================================================
 
+/**
+ * Parse a CSV string into an array of typed objects.
+ *
+ * Automatically handles:
+ * - Quoted fields with commas
+ * - Header normalization (lowercase, underscores for spaces)
+ * - Type coercion for amounts, prices, counts, and booleans
+ *
+ * @template T - The expected row type
+ * @param csvText - Raw CSV text content
+ * @returns Array of parsed rows as typed objects
+ *
+ * @example
+ * ```ts
+ * const customers = parseCSV<Customer>(csvContent)
+ * ```
+ */
 export function parseCSV<T>(csvText: string): T[] {
   const lines = csvText.trim().split('\n')
   if (lines.length < 2) return []
@@ -250,6 +370,19 @@ function parseCSVLine(line: string): string[] {
 // METRIC CALCULATIONS
 // =============================================================================
 
+/**
+ * Format a number as a human-readable currency string.
+ *
+ * @param amount - The amount in dollars
+ * @returns Formatted string like "$1.5K", "$2.3M", or "$500"
+ *
+ * @example
+ * ```ts
+ * formatCurrency(1500)    // "$1.5K"
+ * formatCurrency(2300000) // "$2.3M"
+ * formatCurrency(75)      // "$75"
+ * ```
+ */
 export function formatCurrency(amount: number): string {
   if (amount >= 1000000) {
     return `$${(amount / 1000000).toFixed(1)}M`
@@ -259,6 +392,16 @@ export function formatCurrency(amount: number): string {
   return `$${amount.toFixed(0)}`
 }
 
+/**
+ * Calculate total Monthly Recurring Revenue from active subscriptions.
+ *
+ * Uses `mrr_override` if provided on a subscription, otherwise calculates
+ * from the associated plan's price normalized to monthly.
+ *
+ * @param subscriptions - List of all subscriptions (active and inactive)
+ * @param plans - List of available plans with pricing
+ * @returns Total MRR in dollars
+ */
 export function calculateMRR(subscriptions: Subscription[], plans: Plan[]): number {
   const planMap = new Map(plans.map(p => [p.plan_id, p]))
 
@@ -280,6 +423,20 @@ export function calculateMRR(subscriptions: Subscription[], plans: Plan[]): numb
     }, 0)
 }
 
+/**
+ * Calculate MRR movement breakdown over the last 30 days.
+ *
+ * Categories:
+ * - **New**: MRR from subscriptions created in the last 30 days
+ * - **Expansion**: Increase in MRR from plan upgrades
+ * - **Contraction**: Decrease in MRR from plan downgrades
+ * - **Churned**: MRR lost from cancelled subscriptions
+ * - **Net New**: new + expansion - contraction - churned
+ *
+ * @param subscriptions - All subscriptions with previous_mrr data
+ * @param plans - Plan pricing information
+ * @returns MRR movement breakdown
+ */
 export function calculateMRRMovement(
   subscriptions: Subscription[],
   plans: Plan[]
@@ -329,6 +486,25 @@ export function calculateMRRMovement(
   }
 }
 
+/**
+ * Calculate health metrics for each pricing plan.
+ *
+ * Health score (0-100) is calculated based on:
+ * - Base score: 100
+ * - Churn risk penalty: -10 per at-risk customer (max -30)
+ * - Negative margin penalty: -15 per customer (max -30)
+ * - Tier adjustment: -15 for Starter, +5 for Enterprise
+ *
+ * Churn risk is detected by 25%+ decline in usage over 3 months.
+ * Upsell readiness is triggered at 85%+ usage of plan limits.
+ *
+ * @param subscriptions - All subscriptions
+ * @param plans - Available plans
+ * @param customers - Customer records for name/segment lookup
+ * @param usage - Optional usage records for trend analysis
+ * @param costs - Optional cost records for margin calculation
+ * @returns Array of plan health reports, sorted by total MRR descending
+ */
 export function calculatePlanHealth(
   subscriptions: Subscription[],
   plans: Plan[],
@@ -399,17 +575,17 @@ export function calculatePlanHealth(
 
       // Check for declining usage trend (churn risk)
       const trend = usageTrends.get(sub.customer_id) || []
-      if (trend.length >= 3) {
+      if (trend.length >= MIN_TREND_DATA_POINTS) {
         const first = trend[0] || 0
         const last = trend[trend.length - 1] || 0
-        if (first > 0 && last < first * 0.75) {
+        if (first > 0 && last < first * CHURN_RISK_USAGE_DECLINE_THRESHOLD) {
           churnRiskCustomers.push(customerName)
         }
       }
 
-      // Upsell ready: high usage relative to plan (>85%)
+      // Upsell ready: high usage relative to plan
       const customerUsage = usageByCustomer.get(sub.customer_id) || 0
-      if (customerUsage >= 85) {
+      if (customerUsage >= UPSELL_READY_USAGE_THRESHOLD_PERCENT) {
         upsellReadyCustomers.push(customerName)
       }
 
@@ -420,22 +596,23 @@ export function calculatePlanHealth(
       }
     })
 
-    // Health score calculation:
-    // Base: 100
-    // Penalties:
-    // - Churn risk: -10 per customer (capped at 30)
-    // - Negative margin: -15 per customer (capped at 30)
-    // - Low customer count bonus for Enterprise, penalty for Starter
-    let healthScore = 100
-    const churnPenalty = Math.min(churnRiskCustomers.length * 10, 30)
-    const marginPenalty = Math.min(negativeMarginCustomers.length * 15, 30)
+    // Health score calculation using configured penalties
+    let healthScore = HEALTH_SCORE.BASE
+    const churnPenalty = Math.min(
+      churnRiskCustomers.length * HEALTH_SCORE.CHURN_RISK_PENALTY_PER_CUSTOMER,
+      HEALTH_SCORE.CHURN_RISK_PENALTY_MAX
+    )
+    const marginPenalty = Math.min(
+      negativeMarginCustomers.length * HEALTH_SCORE.NEGATIVE_MARGIN_PENALTY_PER_CUSTOMER,
+      HEALTH_SCORE.NEGATIVE_MARGIN_PENALTY_MAX
+    )
     healthScore -= churnPenalty + marginPenalty
 
     // Tier adjustments (higher tiers tend to be healthier)
     if (plan.name.toLowerCase() === 'starter') {
-      healthScore -= 15 // Starter typically has more churn
+      healthScore -= HEALTH_SCORE.STARTER_TIER_PENALTY
     } else if (plan.name.toLowerCase() === 'enterprise') {
-      healthScore += 5 // Enterprise typically stickier
+      healthScore += HEALTH_SCORE.ENTERPRISE_TIER_BONUS
     }
 
     healthScore = Math.max(0, Math.min(100, healthScore))
@@ -530,8 +707,8 @@ export function calculateCohorts(
     })
     const avgTenure = data.customers.length > 0 ? totalTenureMonths / data.customers.length : 0
 
-    // Estimate LTV (assuming 90% retention rate = 10 months average lifespan)
-    const estimatedLTV = avgMRR * 10
+    // Estimate LTV based on expected customer lifespan
+    const estimatedLTV = avgMRR * AVERAGE_CUSTOMER_LIFESPAN_MONTHS
 
     cohortResults.push({
       cohort: cohortKey,
@@ -746,16 +923,16 @@ export function analyzeUsageAnomalies(
       }
     })
 
-    // Check for declining trend (need at least 3 data points)
-    if (monthValues.length >= 3) {
+    // Check for declining trend (need at least MIN_TREND_DATA_POINTS)
+    if (monthValues.length >= MIN_TREND_DATA_POINTS) {
       const firstValue = monthValues[0] || 0
       const lastValue = monthValues[monthValues.length - 1] || 0
 
       if (firstValue > 0 && lastValue < firstValue) {
         const declinePercent = Math.round(((firstValue - lastValue) / firstValue) * 100)
 
-        // Significant decline (>25%) = churn risk
-        if (declinePercent >= 25) {
+        // Significant decline triggers churn risk flag
+        if (declinePercent >= SIGNIFICANT_DECLINE_PERCENT) {
           anomalies.push({
             customer: customerName,
             customerId,
@@ -768,12 +945,12 @@ export function analyzeUsageAnomalies(
         }
       }
 
-      // 3. Detect ANOMALY - sudden spike (>200% increase month-over-month)
+      // Detect ANOMALY - sudden usage spike (month-over-month)
       for (let i = 1; i < monthValues.length; i++) {
         const prevValue = monthValues[i - 1] || 0
         const currValue = monthValues[i] || 0
 
-        if (prevValue > 0 && currValue > prevValue * 2.5) {
+        if (prevValue > 0 && currValue > prevValue * USAGE_SPIKE_THRESHOLD_MULTIPLIER) {
           const spikePercent = Math.round((currValue / prevValue) * 100)
           anomalies.push({
             customer: customerName,
@@ -788,8 +965,8 @@ export function analyzeUsageAnomalies(
       }
     }
 
-    // 2. Detect UPSELL READY - near or over limits (>85%)
-    if (usagePercent >= 85) {
+    // Detect UPSELL READY - near or over plan limits
+    if (usagePercent >= UPSELL_READY_USAGE_THRESHOLD_PERCENT) {
       const status = usagePercent > 100 ? 'Over limit' : 'Near limit'
       anomalies.push({
         customer: customerName,
@@ -887,6 +1064,35 @@ export function analyzeNegativeMargins(
 // MAIN ANALYSIS FUNCTION
 // =============================================================================
 
+/**
+ * Perform comprehensive SaaS pricing analysis on the provided data.
+ *
+ * This is the main entry point for the pricing analyzer. It calculates:
+ * - Core SaaS metrics (MRR, ARR, ARPU, NRR, LTV)
+ * - MRR movement breakdown
+ * - Plan health scores
+ * - Pricing experiment suggestions
+ * - Bundling opportunities
+ * - Usage anomalies and churn risk
+ * - Negative margin customers
+ * - Cohort analysis
+ *
+ * @param data - Input data containing customers, plans, subscriptions,
+ *               and optionally invoices, usage, and costs
+ * @returns Complete analysis result with all metrics and insights
+ *
+ * @example
+ * ```ts
+ * const result = analyzeData({
+ *   customers: [...],
+ *   plans: [...],
+ *   subscriptions: [...],
+ *   usage: [...],
+ *   costs: [...]
+ * })
+ * console.log(result.saasMetrics.formatted.mrr) // "$11.2K"
+ * ```
+ */
 export function analyzeData(data: AnalyzerData): AnalysisResult {
   const { customers, plans, subscriptions, invoices, usage, costs } = data
 
@@ -908,21 +1114,21 @@ export function analyzeData(data: AnalyzerData): AnalysisResult {
   // MRR growth
   const mrrGrowth = previousMRR > 0 ? ((mrr - previousMRR) / previousMRR) * 100 : 0
 
-  // Average LTV (assuming 90% retention = ~10 month lifespan)
-  const avgLTV = arpu * 10
+  // Average LTV based on expected customer lifespan
+  const avgLTV = arpu * AVERAGE_CUSTOMER_LIFESPAN_MONTHS
 
   // Calculate cost and margin metrics
   const totalCosts = costs?.reduce((sum, c) => sum + c.amount, 0) || 0
   const margin = mrr > 0 ? ((mrr - totalCosts) / mrr) * 100 : 0
 
-  // For sample data: use hardcoded historical margin (66% → 44% story)
-  // In production, this would come from historical data
-  const previousMargin = 66 // July margin from PRD
+  // Historical margin baseline for trend comparison
+  // In production, this should come from stored historical data
+  const previousMargin = BASELINE_MARGIN_JULY_PERCENT
   const marginChange = Math.round(margin) - previousMargin
 
-  // Cost growth (15% MoM for sample data per PRD)
+  // Cost growth rate
   // In production, calculate from historical cost data
-  const costGrowth = totalCosts > 0 ? 15 : 0
+  const costGrowth = totalCosts > 0 ? DEFAULT_COST_GROWTH_MOM_PERCENT : 0
 
   const saasMetrics: SaaSMetrics = {
     mrr,
