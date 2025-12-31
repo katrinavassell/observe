@@ -182,9 +182,20 @@ function handleStripeDrop(event: DragEvent) {
   }
 }
 
+// Maximum file size: 10MB
+const MAX_FILE_SIZE_MB = 10
+const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024
+
 async function processStripeFile(file: File) {
   if (!file.name.endsWith('.csv')) {
     toast.error('Please upload CSV files')
+    return
+  }
+
+  if (file.size > MAX_FILE_SIZE_BYTES) {
+    toast.error('File too large', {
+      description: `Maximum file size is ${MAX_FILE_SIZE_MB}MB. Your file is ${(file.size / 1024 / 1024).toFixed(1)}MB.`,
+    })
     return
   }
 
@@ -361,6 +372,13 @@ async function processFile(file: File, type: 'costs' | 'usage') {
     return
   }
 
+  if (file.size > MAX_FILE_SIZE_BYTES) {
+    toast.error('File too large', {
+      description: `Maximum file size is ${MAX_FILE_SIZE_MB}MB. Your file is ${(file.size / 1024 / 1024).toFixed(1)}MB.`,
+    })
+    return
+  }
+
   const loadingRefs = { costs: isUploadingCosts, usage: isUploadingUsage }
   const fileRefs = { costs: costsFile, usage: usageFile }
 
@@ -381,18 +399,27 @@ async function processFile(file: File, type: 'costs' | 'usage') {
 
     if (type === 'costs') {
       // Parse costs: month, provider, cost
+      let invalidRowCount = 0
       const records: CostRecord[] = rows
-        .filter(r => r.month && r.cost)
+        .filter(r => {
+          if (!r.month || !r.cost) return false
+          const costValue = parseFloat(String(r.cost))
+          if (isNaN(costValue) || costValue < 0) {
+            invalidRowCount++
+            return false
+          }
+          return true
+        })
         .map(r => ({
           month: String(r.month),
           provider: r.provider ? String(r.provider) : undefined,
           customer_id: r.customer_id ? String(r.customer_id) : undefined,
-          cost: parseFloat(String(r.cost)) || 0,
+          cost: parseFloat(String(r.cost)),
         }))
 
       if (records.length === 0) {
         toast.error('No valid cost records found', {
-          description: 'CSV must have columns: month, cost (and optionally provider)',
+          description: 'CSV must have columns: month, cost (with valid numeric values)',
         })
         return
       }
@@ -401,24 +428,48 @@ async function processFile(file: File, type: 'costs' | 'usage') {
       await refetchDataMode()
       fileRefs[type].value = { name: file.name, isSample: false }
       pendingCostsDeletion.value = false  // Clear pending deletion since we have new data
-      toast.success('Costs uploaded!', {
-        description: `${result.count} cost records saved`,
-      })
+
+      if (invalidRowCount > 0) {
+        toast.success('Costs uploaded with warnings', {
+          description: `${result.count} records saved. ${invalidRowCount} rows skipped (invalid cost values).`,
+        })
+      } else {
+        toast.success('Costs uploaded!', {
+          description: `${result.count} cost records saved`,
+        })
+      }
     } else if (type === 'usage') {
       // Parse usage: month, customer_id, metric, value, limit
+      let invalidRowCount = 0
       const records: UsageRecord[] = rows
-        .filter(r => r.month && r.customer_id && r.metric && r.value)
+        .filter(r => {
+          if (!r.month || !r.customer_id || !r.metric || !r.value) return false
+          const valueNum = parseFloat(String(r.value))
+          if (isNaN(valueNum) || valueNum < 0) {
+            invalidRowCount++
+            return false
+          }
+          // Validate limit if present
+          if (r.limit) {
+            const limitNum = parseFloat(String(r.limit))
+            if (isNaN(limitNum) || limitNum < 0) {
+              invalidRowCount++
+              return false
+            }
+          }
+          return true
+        })
         .map(r => ({
           month: String(r.month),
           customer_id: String(r.customer_id),
           metric: String(r.metric),
-          value: parseFloat(String(r.value)) || 0,
+          value: parseFloat(String(r.value)),
           limit: r.limit ? parseFloat(String(r.limit)) : undefined,
         }))
 
       if (records.length === 0) {
         toast.error('No valid usage records found', {
-          description: 'CSV must have columns: month, customer_id, metric, value',
+          description: 'CSV must have columns: month, customer_id, metric, value (with valid numeric values)',
         })
         return
       }
@@ -427,9 +478,16 @@ async function processFile(file: File, type: 'costs' | 'usage') {
       await refetchDataMode()
       fileRefs[type].value = { name: file.name, isSample: false }
       pendingUsageDeletion.value = false  // Clear pending deletion since we have new data
-      toast.success('Usage uploaded!', {
-        description: `${result.count} usage records saved`,
-      })
+
+      if (invalidRowCount > 0) {
+        toast.success('Usage uploaded with warnings', {
+          description: `${result.count} records saved. ${invalidRowCount} rows skipped (invalid numeric values).`,
+        })
+      } else {
+        toast.success('Usage uploaded!', {
+          description: `${result.count} usage records saved`,
+        })
+      }
     }
   } catch (error) {
     toast.error(`Failed to upload ${type} data`, {

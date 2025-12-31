@@ -56,11 +56,12 @@ export async function getDataStatus(): Promise<DataStatus> {
   }
 
   // Get counts from each table in parallel
+  // Note: .single() may return null for new users with no data_status row yet
   const [
-    { data: status },
-    { count: customerCount },
-    { count: costsCount },
-    { count: usageCount },
+    statusResult,
+    customersResult,
+    costsResult,
+    usageResult,
   ] = await Promise.all([
     supabase
       .from('user_data_status')
@@ -80,6 +81,12 @@ export async function getDataStatus(): Promise<DataStatus> {
       .select('*', { count: 'exact', head: true })
       .eq('user_id', user.id),
   ])
+
+  // Handle potential errors - .single() returns PGRST116 when no row found (expected for new users)
+  const status = statusResult.error?.code === 'PGRST116' ? null : statusResult.data
+  const customerCount = customersResult.error ? 0 : (customersResult.count ?? 0)
+  const costsCount = costsResult.error ? 0 : (costsResult.count ?? 0)
+  const usageCount = usageResult.error ? 0 : (usageResult.count ?? 0)
 
   const dataMode = (status?.data_mode as DataMode) || 'none'
   const hasRevenue = status?.has_revenue ?? (customerCount ?? 0) > 0
