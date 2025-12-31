@@ -1,8 +1,21 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { useMutation, useQueryClient } from '@tanstack/vue-query'
 import { toast } from 'vue-sonner'
-import { X, Key, Loader2, ExternalLink, Eye, EyeOff } from 'lucide-vue-next'
+import {
+  X,
+  Key,
+  Loader2,
+  ExternalLink,
+  Eye,
+  EyeOff,
+  Users,
+  CreditCard,
+  FileText,
+  BarChart3,
+  Database,
+  Sparkles,
+} from 'lucide-vue-next'
 import { Button, Input } from '@/components/ui'
 import { connectStripeWithApiKey } from '@/api/client'
 
@@ -18,6 +31,21 @@ const emit = defineEmits<{
 const queryClient = useQueryClient()
 const apiKey = ref('')
 const showKey = ref(false)
+
+// Data types that will be synced
+const dataTypes = [
+  { icon: Users, label: 'Customers', description: 'with metadata & segments' },
+  { icon: CreditCard, label: 'Subscriptions', description: 'with discounts & items' },
+  { icon: FileText, label: 'Invoices', description: 'with line items' },
+  { icon: BarChart3, label: 'Usage Records', description: 'for metered billing' },
+  { icon: Database, label: 'Products & Prices', description: 'full catalog' },
+  { icon: Sparkles, label: 'AI Analysis', description: 'powered by Claude' },
+]
+
+const isKeyValid = computed(() => {
+  const key = apiKey.value.trim()
+  return key.startsWith('sk_') || key.startsWith('rk_')
+})
 
 function resetForm() {
   apiKey.value = ''
@@ -70,7 +98,7 @@ function handleClose() {
       class="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm"
       @click.self="handleClose"
     >
-      <div class="w-full max-w-md rounded-lg border bg-card p-6 shadow-lg">
+      <div class="w-full max-w-lg rounded-lg border bg-card p-6 shadow-lg">
         <!-- Header -->
         <div class="flex items-center justify-between mb-4">
           <div class="flex items-center gap-2">
@@ -85,7 +113,7 @@ function handleClose() {
         <div class="space-y-5">
           <!-- Instructions -->
           <div class="text-sm text-muted-foreground space-y-2">
-            <p>Enter your Stripe Secret API key to import customers, subscriptions, and invoices.</p>
+            <p>Enter your Stripe Secret API key to import your complete billing data for analysis.</p>
             <a
               href="https://dashboard.stripe.com/apikeys"
               target="_blank"
@@ -97,6 +125,24 @@ function handleClose() {
             </a>
           </div>
 
+          <!-- Data Types Grid -->
+          <div class="grid grid-cols-2 gap-2">
+            <div
+              v-for="dataType in dataTypes"
+              :key="dataType.label"
+              class="flex items-start gap-2 rounded-md border bg-muted/30 p-2.5"
+            >
+              <component
+                :is="dataType.icon"
+                class="h-4 w-4 text-primary mt-0.5 shrink-0"
+              />
+              <div class="min-w-0">
+                <p class="text-sm font-medium leading-tight">{{ dataType.label }}</p>
+                <p class="text-xs text-muted-foreground leading-tight">{{ dataType.description }}</p>
+              </div>
+            </div>
+          </div>
+
           <!-- API Key Input -->
           <div class="space-y-2">
             <label class="text-sm font-medium">Secret API Key</label>
@@ -104,8 +150,8 @@ function handleClose() {
               <Input
                 v-model="apiKey"
                 :type="showKey ? 'text' : 'password'"
-                placeholder="sk_live_... or sk_test_..."
-                class="pr-10 font-mono text-sm"
+                placeholder="sk_live_... or rk_live_..."
+                :class="`pr-10 font-mono text-sm ${apiKey.trim() && isKeyValid ? 'border-green-500/50' : ''}`"
               />
               <button
                 type="button"
@@ -117,14 +163,14 @@ function handleClose() {
               </button>
             </div>
             <p class="text-xs text-muted-foreground">
-              We only need read access. Your key is stored securely.
+              Read-only access required. Your key is encrypted and stored securely.
             </p>
           </div>
 
           <!-- Security Note -->
           <div class="rounded-lg bg-muted/50 p-3 text-xs text-muted-foreground space-y-2">
             <p>
-              <strong>Tip:</strong> For production, create a
+              <strong>Recommended:</strong> Create a
               <a
                 href="https://stripe.com/docs/keys#limit-access"
                 target="_blank"
@@ -133,12 +179,12 @@ function handleClose() {
               >
                 restricted key
               </a>
-              with these read permissions:
+              with read permissions for:
             </p>
             <ul class="list-disc list-inside space-y-0.5 ml-1">
               <li>Customers, Subscriptions, Invoices</li>
-              <li>Prices, Products</li>
-              <li>Usage Records <span class="text-muted-foreground/70">(for metered billing)</span></li>
+              <li>Prices, Products, Coupons</li>
+              <li>Usage Records, Subscription Schedules</li>
             </ul>
           </div>
 
@@ -146,10 +192,11 @@ function handleClose() {
           <div class="flex gap-2 pt-2">
             <Button
               class="flex-1"
-              :disabled="!apiKey.trim() || connectMutation.isPending.value"
+              :disabled="!apiKey.trim() || !isKeyValid || connectMutation.isPending.value"
               @click="handleSubmit"
             >
               <Loader2 v-if="connectMutation.isPending.value" class="h-4 w-4 mr-2 animate-spin" />
+              <Key v-else class="h-4 w-4 mr-2" />
               Connect Stripe
             </Button>
             <Button variant="outline" @click="handleClose">
