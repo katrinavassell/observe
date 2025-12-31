@@ -666,7 +666,7 @@ async function handleNotifyMe(integration: string) {
     toast.success('Got it!', {
       description: `We'll let you know when ${integration} is ready.`,
     })
-  } catch (error) {
+  } catch {
     toast.error('Failed to save request')
   }
 }
@@ -701,7 +701,7 @@ async function submitRequestForm() {
     toast.success('Request submitted!', {
       description: 'We\'ll reach out to discuss your needs.',
     })
-  } catch (error) {
+  } catch {
     toast.error('Failed to save request')
   } finally {
     isSubmittingRequest.value = false

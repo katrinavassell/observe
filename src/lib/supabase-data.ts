@@ -9,6 +9,18 @@ import sampleDataJson from '../../files/sample-data.json'
 
 export type DataMode = 'none' | 'sample' | 'user'
 
+/**
+ * Get the last day of a month in ISO format
+ * @param month - Month string in YYYY-MM format
+ * @returns ISO timestamp for the last day of the month at 23:59:59
+ */
+function getLastDayOfMonth(month: string): string {
+  const [year, monthNum] = month.split('-').map(Number)
+  // Create date for first day of next month, then subtract one day
+  const lastDay = new Date(year, monthNum, 0)
+  return `${month}-${String(lastDay.getDate()).padStart(2, '0')}T23:59:59Z`
+}
+
 export interface DataStatus {
   data_mode: DataMode
   has_data: boolean
@@ -182,7 +194,7 @@ export async function loadSampleData(): Promise<void> {
     metric_value: u.value,
     metric_limit: u.limit,
     period_start: `${u.month}-01T00:00:00Z`,
-    period_end: `${u.month}-28T23:59:59Z`,
+    period_end: getLastDayOfMonth(u.month),
   }))
 
   const { error: usageError } = await supabase.from('usage_records').insert(usageRecords)
@@ -263,7 +275,8 @@ export async function loadSampleRevenue(): Promise<void> {
     tokens_limit: p.tokens_limit,
   }))
 
-  await supabase.from('plans').upsert(plans, { onConflict: 'user_id,plan_id' })
+  const { error: plansError } = await supabase.from('plans').upsert(plans, { onConflict: 'user_id,plan_id' })
+  if (plansError) throw new Error(`Failed to upsert plans: ${plansError.message}`)
 
   // Insert customers
   const customers = data.customers.map(c => ({
@@ -275,7 +288,8 @@ export async function loadSampleRevenue(): Promise<void> {
     created_at: c.started_at,
   }))
 
-  await supabase.from('customers').upsert(customers, { onConflict: 'user_id,customer_id' })
+  const { error: customersError } = await supabase.from('customers').upsert(customers, { onConflict: 'user_id,customer_id' })
+  if (customersError) throw new Error(`Failed to upsert customers: ${customersError.message}`)
 
   // Insert subscriptions
   const subscriptions = data.customers.map(c => ({
@@ -290,10 +304,11 @@ export async function loadSampleRevenue(): Promise<void> {
     mrr_override: c.mrr,
   }))
 
-  await supabase.from('subscriptions').upsert(subscriptions, { onConflict: 'user_id,subscription_id' })
+  const { error: subsError } = await supabase.from('subscriptions').upsert(subscriptions, { onConflict: 'user_id,subscription_id' })
+  if (subsError) throw new Error(`Failed to upsert subscriptions: ${subsError.message}`)
 
   // Update data status - only update revenue-related fields
-  await supabase
+  const { error: statusError } = await supabase
     .from('user_data_status')
     .upsert({
       user_id: user.id,
@@ -301,6 +316,7 @@ export async function loadSampleRevenue(): Promise<void> {
       has_revenue: true,
       revenue_customer_count: data.customers.length,
     }, { onConflict: 'user_id' })
+  if (statusError) throw new Error(`Failed to update data status: ${statusError.message}`)
 }
 
 /**
@@ -333,11 +349,14 @@ export async function loadSampleCosts(): Promise<void> {
   }))
 
   // Delete existing costs first, then insert
-  await supabase.from('cost_records').delete().eq('user_id', user.id)
-  await supabase.from('cost_records').insert(costRecords)
+  const { error: deleteError } = await supabase.from('cost_records').delete().eq('user_id', user.id)
+  if (deleteError) throw new Error(`Failed to clear existing costs: ${deleteError.message}`)
+
+  const { error: insertError } = await supabase.from('cost_records').insert(costRecords)
+  if (insertError) throw new Error(`Failed to insert cost records: ${insertError.message}`)
 
   // Update data status - only update costs-related fields
-  await supabase
+  const { error: statusError } = await supabase
     .from('user_data_status')
     .upsert({
       user_id: user.id,
@@ -345,6 +364,7 @@ export async function loadSampleCosts(): Promise<void> {
       has_costs: true,
       costs_record_count: costRecords.length,
     }, { onConflict: 'user_id' })
+  if (statusError) throw new Error(`Failed to update data status: ${statusError.message}`)
 }
 
 /**
@@ -363,15 +383,18 @@ export async function loadSampleUsage(): Promise<void> {
     metric_value: u.value,
     metric_limit: u.limit,
     period_start: `${u.month}-01T00:00:00Z`,
-    period_end: `${u.month}-28T23:59:59Z`,
+    period_end: getLastDayOfMonth(u.month),
   }))
 
   // Delete existing usage first, then insert
-  await supabase.from('usage_records').delete().eq('user_id', user.id)
-  await supabase.from('usage_records').insert(usageRecords)
+  const { error: deleteError } = await supabase.from('usage_records').delete().eq('user_id', user.id)
+  if (deleteError) throw new Error(`Failed to clear existing usage: ${deleteError.message}`)
+
+  const { error: insertError } = await supabase.from('usage_records').insert(usageRecords)
+  if (insertError) throw new Error(`Failed to insert usage records: ${insertError.message}`)
 
   // Update data status - only update usage-related fields
-  await supabase
+  const { error: statusError } = await supabase
     .from('user_data_status')
     .upsert({
       user_id: user.id,
@@ -379,6 +402,7 @@ export async function loadSampleUsage(): Promise<void> {
       has_usage: true,
       usage_record_count: usageRecords.length,
     }, { onConflict: 'user_id' })
+  if (statusError) throw new Error(`Failed to update data status: ${statusError.message}`)
 }
 
 // =============================================================================
@@ -409,7 +433,8 @@ export async function uploadCostData(records: CostRecord[]): Promise<{ count: nu
   if (!user) throw new Error('Not authenticated')
 
   // Only clear cost_records, preserve other data
-  await supabase.from('cost_records').delete().eq('user_id', user.id)
+  const { error: deleteError } = await supabase.from('cost_records').delete().eq('user_id', user.id)
+  if (deleteError) throw new Error(`Failed to clear existing cost records: ${deleteError.message}`)
 
   // Transform and insert
   const costRecords = records.map(r => ({
@@ -418,14 +443,14 @@ export async function uploadCostData(records: CostRecord[]): Promise<{ count: nu
     cost_type: r.provider || 'infrastructure',
     amount: r.cost,
     period_start: `${r.month}-01T00:00:00Z`,
-    period_end: `${r.month}-28T23:59:59Z`,
+    period_end: getLastDayOfMonth(r.month),
   }))
 
   const { error } = await supabase.from('cost_records').insert(costRecords)
   if (error) throw new Error(`Failed to insert cost records: ${error.message}`)
 
   // Update data status - only update costs-related fields
-  await supabase
+  const { error: statusError } = await supabase
     .from('user_data_status')
     .upsert({
       user_id: user.id,
@@ -433,6 +458,7 @@ export async function uploadCostData(records: CostRecord[]): Promise<{ count: nu
       has_costs: true,
       costs_record_count: records.length,
     }, { onConflict: 'user_id' })
+  if (statusError) throw new Error(`Failed to update data status: ${statusError.message}`)
 
   return { count: records.length }
 }
@@ -446,7 +472,8 @@ export async function uploadUsageData(records: UsageRecord[]): Promise<{ count: 
   if (!user) throw new Error('Not authenticated')
 
   // Only clear usage_records, preserve other data
-  await supabase.from('usage_records').delete().eq('user_id', user.id)
+  const { error: deleteError } = await supabase.from('usage_records').delete().eq('user_id', user.id)
+  if (deleteError) throw new Error(`Failed to clear existing usage records: ${deleteError.message}`)
 
   // Transform and insert
   const usageRecords = records.map(r => ({
@@ -456,14 +483,14 @@ export async function uploadUsageData(records: UsageRecord[]): Promise<{ count: 
     metric_value: r.value,
     metric_limit: r.limit || null,
     period_start: `${r.month}-01T00:00:00Z`,
-    period_end: `${r.month}-28T23:59:59Z`,
+    period_end: getLastDayOfMonth(r.month),
   }))
 
   const { error } = await supabase.from('usage_records').insert(usageRecords)
   if (error) throw new Error(`Failed to insert usage records: ${error.message}`)
 
   // Update data status - only update usage-related fields
-  await supabase
+  const { error: statusError } = await supabase
     .from('user_data_status')
     .upsert({
       user_id: user.id,
@@ -471,6 +498,7 @@ export async function uploadUsageData(records: UsageRecord[]): Promise<{ count: 
       has_usage: true,
       usage_record_count: records.length,
     }, { onConflict: 'user_id' })
+  if (statusError) throw new Error(`Failed to update data status: ${statusError.message}`)
 
   return { count: records.length }
 }
@@ -487,16 +515,18 @@ export async function clearCostData(): Promise<void> {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('Not authenticated')
 
-  await supabase.from('cost_records').delete().eq('user_id', user.id)
+  const { error: deleteError } = await supabase.from('cost_records').delete().eq('user_id', user.id)
+  if (deleteError) throw new Error(`Failed to clear cost records: ${deleteError.message}`)
 
   // Update data status
-  await supabase
+  const { error: statusError } = await supabase
     .from('user_data_status')
     .upsert({
       user_id: user.id,
       has_costs: false,
       costs_record_count: 0,
     }, { onConflict: 'user_id' })
+  if (statusError) throw new Error(`Failed to update data status: ${statusError.message}`)
 }
 
 /**
@@ -507,16 +537,18 @@ export async function clearUsageData(): Promise<void> {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('Not authenticated')
 
-  await supabase.from('usage_records').delete().eq('user_id', user.id)
+  const { error: deleteError } = await supabase.from('usage_records').delete().eq('user_id', user.id)
+  if (deleteError) throw new Error(`Failed to clear usage records: ${deleteError.message}`)
 
   // Update data status
-  await supabase
+  const { error: statusError } = await supabase
     .from('user_data_status')
     .upsert({
       user_id: user.id,
       has_usage: false,
       usage_record_count: 0,
     }, { onConflict: 'user_id' })
+  if (statusError) throw new Error(`Failed to update data status: ${statusError.message}`)
 }
 
 /**
@@ -528,18 +560,24 @@ export async function clearRevenueData(): Promise<void> {
   if (!user) throw new Error('Not authenticated')
 
   // Delete in order to respect foreign key constraints
-  await supabase.from('subscriptions').delete().eq('user_id', user.id)
-  await supabase.from('customers').delete().eq('user_id', user.id)
-  await supabase.from('plans').delete().eq('user_id', user.id)
+  const { error: subsError } = await supabase.from('subscriptions').delete().eq('user_id', user.id)
+  if (subsError) throw new Error(`Failed to clear subscriptions: ${subsError.message}`)
+
+  const { error: customersError } = await supabase.from('customers').delete().eq('user_id', user.id)
+  if (customersError) throw new Error(`Failed to clear customers: ${customersError.message}`)
+
+  const { error: plansError } = await supabase.from('plans').delete().eq('user_id', user.id)
+  if (plansError) throw new Error(`Failed to clear plans: ${plansError.message}`)
 
   // Update data status
-  await supabase
+  const { error: statusError } = await supabase
     .from('user_data_status')
     .upsert({
       user_id: user.id,
       has_revenue: false,
       revenue_customer_count: 0,
     }, { onConflict: 'user_id' })
+  if (statusError) throw new Error(`Failed to update data status: ${statusError.message}`)
 }
 
 // =============================================================================
