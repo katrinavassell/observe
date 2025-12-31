@@ -602,8 +602,291 @@ export async function syncStripeData(): Promise<SyncResult> {
   return request('/integrations/stripe/sync', { method: 'POST' })
 }
 
-export async function disconnectIntegration(provider: string): Promise<{ success: boolean; message: string }> {
-  return request(`/integrations/${provider}`, { method: 'DELETE' })
+// Enhanced Stripe Sync with metadata and usage
+export interface StripeCustomerMetadata {
+  [key: string]: string
+}
+
+export interface EnhancedStripeCustomer {
+  id: string
+  email: string | null
+  name: string | null
+  description: string | null
+  created: string
+  metadata: StripeCustomerMetadata
+  total_spend: number
+  subscription_count: number
+  segment: 'SMB' | 'Mid-Market' | 'Enterprise'
+  country: string | null
+  city: string | null
+  tax_exempt: boolean
+  balance: number
+  delinquent: boolean
+}
+
+export interface EnhancedStripeSubscriptionItem {
+  id: string
+  price_id: string
+  product_id: string
+  product_name: string
+  quantity: number
+  unit_amount: number
+  usage_type: 'metered' | 'licensed'
+  metadata: StripeCustomerMetadata
+}
+
+export interface EnhancedStripeSubscription {
+  id: string
+  customer_id: string
+  status: string
+  created: string
+  current_period_start: string
+  current_period_end: string
+  canceled_at: string | null
+  ended_at: string | null
+  trial_end: string | null
+  metadata: StripeCustomerMetadata
+  mrr: number
+  currency: string
+  billing_interval: 'day' | 'week' | 'month' | 'year'
+  interval_count: number
+  items: EnhancedStripeSubscriptionItem[]
+  discount_percent: number | null
+  discount_amount: number | null
+  cancel_at_period_end: boolean
+  cancellation_reason: string | null
+}
+
+export interface EnhancedStripeInvoiceLineItem {
+  id: string
+  description: string | null
+  amount: number
+  quantity: number
+  price_id: string | null
+  product_id: string | null
+  period_start: string
+  period_end: string
+  proration: boolean
+}
+
+export interface EnhancedStripeInvoice {
+  id: string
+  customer_id: string
+  subscription_id: string | null
+  number: string | null
+  status: string
+  created: string
+  due_date: string | null
+  paid_at: string | null
+  metadata: StripeCustomerMetadata
+  amount_due: number
+  amount_paid: number
+  amount_remaining: number
+  subtotal: number
+  tax: number | null
+  total: number
+  currency: string
+  billing_reason: string | null
+  attempt_count: number
+  line_items: EnhancedStripeInvoiceLineItem[]
+}
+
+export interface EnhancedStripeUsage {
+  subscription_item_id: string
+  customer_id: string
+  subscription_id: string
+  price_id: string
+  product_name: string
+  period_start: string
+  period_end: string
+  total_usage: number
+  metric: string
+}
+
+export interface EnhancedStripeProduct {
+  id: string
+  name: string
+  description: string | null
+  active: boolean
+  metadata: StripeCustomerMetadata
+  unit_label: string | null
+  type: 'good' | 'service'
+}
+
+export interface EnhancedStripePrice {
+  id: string
+  product_id: string
+  active: boolean
+  currency: string
+  unit_amount: number | null
+  billing_scheme: 'per_unit' | 'tiered'
+  recurring_interval: 'day' | 'week' | 'month' | 'year' | null
+  recurring_interval_count: number | null
+  usage_type: 'metered' | 'licensed' | null
+  nickname: string | null
+  metadata: StripeCustomerMetadata
+}
+
+export interface EnhancedSyncSummary {
+  total_customers: number
+  active_subscriptions: number
+  total_mrr: number
+  total_arr: number
+  average_revenue_per_customer: number
+  churned_subscriptions: number
+  trialing_subscriptions: number
+  total_invoices_paid: number
+  total_revenue: number
+}
+
+export interface EnhancedSyncResult {
+  success: boolean
+  message: string
+  exported_at: string
+  account_id: string
+  account_name: string
+  customers: EnhancedStripeCustomer[]
+  subscriptions: EnhancedStripeSubscription[]
+  invoices: EnhancedStripeInvoice[]
+  usage: EnhancedStripeUsage[]
+  products: EnhancedStripeProduct[]
+  prices: EnhancedStripePrice[]
+  summary: EnhancedSyncSummary
+  errors: Array<{
+    type: string
+    message: string
+    object_id?: string
+  }>
+  timing: {
+    started_at: string
+    completed_at: string
+    duration_ms: number
+  }
+}
+
+/**
+ * Perform enhanced Stripe sync with full data including metadata and usage.
+ *
+ * Fetches:
+ * - Customers with metadata, address, balance, tax info
+ * - Subscriptions with items, discounts, metadata
+ * - Invoices with line items
+ * - Usage records for metered billing
+ * - Products and Prices
+ *
+ * @returns Complete Stripe data export for analysis
+ */
+export async function syncStripeDataEnhanced(): Promise<EnhancedSyncResult> {
+  return request('/integrations/stripe/sync-enhanced', { method: 'POST' })
+}
+
+/**
+ * Get a quick summary of available Stripe data.
+ *
+ * @returns Counts and feature availability
+ */
+export async function getStripeDataSummary(): Promise<{
+  customers: number
+  subscriptions: number
+  invoices: number
+  products: number
+  has_metered_billing: boolean
+}> {
+  return request('/integrations/stripe/summary')
+}
+
+// Claude Analysis Types
+export interface ClaudeAnalysisRequest {
+  data: EnhancedSyncResult
+  focus_areas?: string[]
+  include_recommendations?: boolean
+}
+
+export interface PricingInsight {
+  type: 'opportunity' | 'risk' | 'observation'
+  category: string
+  title: string
+  description: string
+  impact: 'high' | 'medium' | 'low'
+  affected_customers?: number
+  potential_revenue_impact?: number
+  recommended_action?: string
+}
+
+export interface CustomerSegmentAnalysis {
+  segment: string
+  customer_count: number
+  total_mrr: number
+  avg_mrr: number
+  churn_rate: number
+  growth_rate: number
+  top_products: string[]
+  common_metadata: Record<string, string[]>
+  insights: string[]
+}
+
+export interface UsagePatternAnalysis {
+  metric: string
+  total_usage: number
+  avg_usage_per_customer: number
+  high_usage_customers: string[]
+  low_usage_customers: string[]
+  usage_trend: 'increasing' | 'decreasing' | 'stable'
+  correlation_with_revenue: number
+  insights: string[]
+}
+
+export interface ClaudeAnalysisResult {
+  success: boolean
+  generated_at: string
+  summary: {
+    health_score: number
+    key_metrics: {
+      mrr: number
+      arr: number
+      customer_count: number
+      avg_revenue_per_customer: number
+      churn_rate: number
+      growth_rate: number
+    }
+    top_insights: string[]
+  }
+  pricing_insights: PricingInsight[]
+  segment_analysis: CustomerSegmentAnalysis[]
+  usage_analysis: UsagePatternAnalysis[]
+  metadata_insights: {
+    common_keys: string[]
+    valuable_patterns: string[]
+    segmentation_opportunities: string[]
+  }
+  recommendations: {
+    immediate_actions: string[]
+    short_term_improvements: string[]
+    strategic_initiatives: string[]
+  }
+  raw_analysis?: string
+}
+
+/**
+ * Analyze Stripe data using Claude AI.
+ *
+ * Provides:
+ * - Pricing insights and optimization opportunities
+ * - Customer segment analysis
+ * - Usage pattern analysis
+ * - Metadata-based insights
+ * - Strategic recommendations
+ *
+ * @param analysisRequest - The analysis request with Stripe data
+ * @returns Comprehensive AI-powered analysis
+ */
+export async function analyzeStripeDataWithClaude(
+  analysisRequest: ClaudeAnalysisRequest
+): Promise<ClaudeAnalysisResult> {
+  return request('/analytics/stripe/analyze', {
+    method: 'POST',
+    body: JSON.stringify(analysisRequest),
+  })
 }
 
 // Integration request types
