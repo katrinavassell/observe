@@ -15,7 +15,9 @@ export type DataMode = 'none' | 'sample' | 'user'
  * @returns ISO timestamp for the last day of the month at 23:59:59
  */
 function getLastDayOfMonth(month: string): string {
-  const [year, monthNum] = month.split('-').map(Number)
+  const [yearStr, monthStr] = month.split('-') as [string, string]
+  const year = parseInt(yearStr, 10)
+  const monthNum = parseInt(monthStr, 10)
   // Create date for first day of next month, then subtract one day
   const lastDay = new Date(year, monthNum, 0)
   return `${month}-${String(lastDay.getDate()).padStart(2, '0')}T23:59:59Z`
