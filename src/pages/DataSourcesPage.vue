@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, computed, watch } from 'vue'
+import { useRouter, onBeforeRouteLeave } from 'vue-router'
 import { toast } from 'vue-sonner'
 import {
   DollarSign,
@@ -17,20 +17,50 @@ import {
   X,
   ChevronDown,
   Check,
+  AlertTriangle,
+  Loader2,
 } from 'lucide-vue-next'
 import { Card, CardContent, Button } from '@/components/ui'
 import Alert from '@/components/ui/alert.vue'
+import ConfirmDialog from '@/components/ui/confirm-dialog.vue'
 import {
   loadSampleData as loadSampleDataToSupabase,
   loadSampleRevenue,
   loadSampleCosts,
   loadSampleUsage,
+  uploadCostData,
+  uploadUsageData,
+  type CostRecord,
+  type UsageRecord,
 } from '@/lib/supabase-data'
+import Papa from 'papaparse'
 import { supabase } from '@/lib/supabase'
 import { useDataMode } from '@/composables/useDataMode'
+import {
+  parseCSVFile,
+  detectStripeFileType,
+  parseStripeCustomers,
+  parseStripeSubscriptions,
+  parseStripeInvoices,
+  reconcileStripeData,
+  convertToDatabaseFormat,
+  uploadStripeData,
+  formatCurrency,
+  type StripeCustomer,
+  type StripeSubscription,
+  type StripeInvoice,
+  type ReconciliationReport,
+  type UnifiedSubscriptionData,
+} from '@/lib/stripe-import'
 
 const router = useRouter()
-const { refetch: refetchDataMode } = useDataMode()
+const {
+  dataMode,
+  refetch: refetchDataMode,
+  hasRevenue,
+  hasCosts,
+  hasUsage,
+} = useDataMode()
 
 // File input refs
 const stripeFileInput = ref<HTMLInputElement | null>(null)
@@ -46,6 +76,21 @@ const stripeCustomersFile = ref<StripeFile | null>(null)
 const stripeSubscriptionsFile = ref<StripeFile | null>(null)
 const stripeInvoicesFile = ref<StripeFile | null>(null)
 const stripeSampleLoaded = ref(false)
+
+// Parsed Stripe data
+const parsedCustomers = ref<StripeCustomer[]>([])
+const parsedSubscriptions = ref<StripeSubscription[]>([])
+const parsedInvoices = ref<StripeInvoice[]>([])
+
+// Reconciliation state
+const reconciliationReport = ref<ReconciliationReport | null>(null)
+const unifiedData = ref<UnifiedSubscriptionData[]>([])
+const isReconciling = ref(false)
+const showReconciliation = ref(false)
+
+// Upload state
+const isUploading = ref(false)
+const uploadError = ref<string | null>(null)
 
 // Track loaded files/sample data per section (for costs and usage)
 const costsFile = ref<{ name: string; isSample: boolean } | null>(null)
@@ -67,7 +112,14 @@ async function handleTrySampleData() {
   try {
     await loadSampleDataToSupabase()
     await refetchDataMode()
-    // Mark all sections as having sample data
+    // Clear any locally parsed data (sample data replaces everything)
+    parsedCustomers.value = []
+    parsedSubscriptions.value = []
+    parsedInvoices.value = []
+    reconciliationReport.value = null
+    showReconciliation.value = false
+    hasUnsavedChanges.value = false
+    // Mark all sections as having sample data (no File objects = saved data)
     stripeSampleLoaded.value = true
     stripeCustomersFile.value = { name: 'customers.csv' }
     stripeSubscriptionsFile.value = { name: 'subscriptions.csv' }
@@ -118,36 +170,148 @@ function handleStripeDrop(event: DragEvent) {
   }
 }
 
-function processStripeFile(file: File) {
+async function processStripeFile(file: File) {
   if (!file.name.endsWith('.csv')) {
     toast.error('Please upload CSV files')
     return
   }
 
-  const fileName = file.name.toLowerCase()
+  try {
+    // Parse CSV to detect file type by headers
+    const { data, headers } = await parseCSVFile<Record<string, unknown>>(file)
+    const fileType = detectStripeFileType(headers)
 
-  // Auto-detect file type from filename
-  if (fileName.includes('customer')) {
-    stripeCustomersFile.value = { name: file.name, file }
-    toast.success('Customers file added')
-  } else if (fileName.includes('subscription')) {
-    stripeSubscriptionsFile.value = { name: file.name, file }
-    toast.success('Subscriptions file added')
-  } else if (fileName.includes('invoice')) {
-    stripeInvoicesFile.value = { name: file.name, file }
-    toast.success('Invoices file added')
-  } else {
-    toast.info('File type not recognized', {
-      description: 'Rename to include "customers", "subscriptions", or "invoices"',
+    // Reset reconciliation when new files are added
+    reconciliationReport.value = null
+    showReconciliation.value = false
+    uploadError.value = null
+
+    if (fileType === 'customers') {
+      stripeCustomersFile.value = { name: file.name, file }
+      parsedCustomers.value = parseStripeCustomers(data)
+      hasUnsavedChanges.value = true
+      toast.success('Customers file detected', {
+        description: `${parsedCustomers.value.length} customers found`,
+      })
+    } else if (fileType === 'subscriptions') {
+      stripeSubscriptionsFile.value = { name: file.name, file }
+      parsedSubscriptions.value = parseStripeSubscriptions(data)
+      hasUnsavedChanges.value = true
+      toast.success('Subscriptions file detected', {
+        description: `${parsedSubscriptions.value.length} subscriptions found`,
+      })
+    } else if (fileType === 'invoices') {
+      stripeInvoicesFile.value = { name: file.name, file }
+      parsedInvoices.value = parseStripeInvoices(data)
+      hasUnsavedChanges.value = true
+      toast.success('Invoices file detected', {
+        description: `${parsedInvoices.value.length} invoices found`,
+      })
+    } else {
+      toast.error('File type not recognized', {
+        description: 'Please upload a Stripe export (customers, subscriptions, or invoices)',
+      })
+    }
+  } catch (error) {
+    toast.error('Failed to parse CSV', {
+      description: error instanceof Error ? error.message : 'Unknown error',
     })
   }
 }
 
 function clearStripeFile(type: 'customers' | 'subscriptions' | 'invoices') {
-  if (type === 'customers') stripeCustomersFile.value = null
-  else if (type === 'subscriptions') stripeSubscriptionsFile.value = null
-  else if (type === 'invoices') stripeInvoicesFile.value = null
+  if (type === 'customers') {
+    stripeCustomersFile.value = null
+    parsedCustomers.value = []
+  } else if (type === 'subscriptions') {
+    stripeSubscriptionsFile.value = null
+    parsedSubscriptions.value = []
+  } else if (type === 'invoices') {
+    stripeInvoicesFile.value = null
+    parsedInvoices.value = []
+  }
   stripeSampleLoaded.value = false
+  // Reset reconciliation when files are removed
+  reconciliationReport.value = null
+  showReconciliation.value = false
+  uploadError.value = null
+
+  // Removing any file is a change - trigger unsaved warning
+  hasUnsavedChanges.value = true
+}
+
+// Check if we can reconcile (need at least subscriptions)
+const canReconcile = computed(() => parsedSubscriptions.value.length > 0)
+
+// Reconcile Stripe data
+async function handleReconcile() {
+  if (!canReconcile.value) return
+
+  isReconciling.value = true
+  uploadError.value = null
+
+  try {
+    const result = reconcileStripeData(
+      parsedCustomers.value,
+      parsedSubscriptions.value,
+      parsedInvoices.value
+    )
+    reconciliationReport.value = result.report
+    unifiedData.value = result.unified
+    showReconciliation.value = true
+  } catch (error) {
+    toast.error('Failed to reconcile data', {
+      description: error instanceof Error ? error.message : 'Unknown error',
+    })
+  } finally {
+    isReconciling.value = false
+  }
+}
+
+// Upload reconciled data to Supabase
+async function handleUploadAndContinue() {
+  if (!reconciliationReport.value || unifiedData.value.length === 0) {
+    toast.error('Please reconcile data first')
+    return
+  }
+
+  isUploading.value = true
+  uploadError.value = null
+
+  try {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) {
+      throw new Error('Not authenticated')
+    }
+
+    const dbData = convertToDatabaseFormat(unifiedData.value, user.id)
+    await uploadStripeData(dbData)
+    await refetchDataMode()
+
+    // Clear local parsed data so navigation guard doesn't trigger
+    parsedCustomers.value = []
+    parsedSubscriptions.value = []
+    parsedInvoices.value = []
+    // Keep file refs but remove the File objects (data is saved)
+    if (stripeCustomersFile.value) stripeCustomersFile.value = { name: stripeCustomersFile.value.name }
+    if (stripeSubscriptionsFile.value) stripeSubscriptionsFile.value = { name: stripeSubscriptionsFile.value.name }
+    if (stripeInvoicesFile.value) stripeInvoicesFile.value = { name: stripeInvoicesFile.value.name }
+
+    hasUnsavedChanges.value = false
+    toast.success('Data uploaded successfully!', {
+      description: 'Redirecting to pricing analysis...',
+    })
+
+    // Navigate to pricing page
+    router.push('/')
+  } catch (error) {
+    uploadError.value = error instanceof Error ? error.message : 'Upload failed'
+    toast.error('Failed to upload data', {
+      description: uploadError.value,
+    })
+  } finally {
+    isUploading.value = false
+  }
 }
 
 function handleFileSelect(event: Event, type: 'costs' | 'usage') {
@@ -168,31 +332,99 @@ function handleDrop(event: DragEvent, type: 'costs' | 'usage') {
   }
 }
 
-function processFile(file: File, type: 'costs' | 'usage') {
+// Upload state for costs/usage
+const isUploadingCosts = ref(false)
+const isUploadingUsage = ref(false)
+
+async function processFile(file: File, type: 'costs' | 'usage') {
   if (!file.name.endsWith('.csv')) {
     toast.error('Please upload a CSV file')
     return
   }
 
+  const loadingRefs = { costs: isUploadingCosts, usage: isUploadingUsage }
   const fileRefs = { costs: costsFile, usage: usageFile }
-  const hadExisting = !!fileRefs[type].value
-  fileRefs[type].value = { name: file.name, isSample: false }
 
-  // TODO: Parse and upload CSV to Supabase
-  if (hadExisting) {
-    toast.success('File replaced', {
-      description: `Now using ${file.name}`,
+  loadingRefs[type].value = true
+
+  try {
+    // Parse CSV
+    const parseResult = await new Promise<Papa.ParseResult<Record<string, unknown>>>((resolve, reject) => {
+      Papa.parse(file, {
+        header: true,
+        skipEmptyLines: true,
+        complete: resolve,
+        error: reject,
+      })
     })
-  } else {
-    toast.success('File added', {
-      description: `${file.name} selected`,
+
+    const rows = parseResult.data
+
+    if (type === 'costs') {
+      // Parse costs: month, provider, cost
+      const records: CostRecord[] = rows
+        .filter(r => r.month && r.cost)
+        .map(r => ({
+          month: String(r.month),
+          provider: r.provider ? String(r.provider) : undefined,
+          customer_id: r.customer_id ? String(r.customer_id) : undefined,
+          cost: parseFloat(String(r.cost)) || 0,
+        }))
+
+      if (records.length === 0) {
+        toast.error('No valid cost records found', {
+          description: 'CSV must have columns: month, cost (and optionally provider)',
+        })
+        return
+      }
+
+      const result = await uploadCostData(records)
+      await refetchDataMode()
+      fileRefs[type].value = { name: file.name, isSample: false }
+      toast.success('Costs uploaded!', {
+        description: `${result.count} cost records saved`,
+      })
+    } else if (type === 'usage') {
+      // Parse usage: month, customer_id, metric, value, limit
+      const records: UsageRecord[] = rows
+        .filter(r => r.month && r.customer_id && r.metric && r.value)
+        .map(r => ({
+          month: String(r.month),
+          customer_id: String(r.customer_id),
+          metric: String(r.metric),
+          value: parseFloat(String(r.value)) || 0,
+          limit: r.limit ? parseFloat(String(r.limit)) : undefined,
+        }))
+
+      if (records.length === 0) {
+        toast.error('No valid usage records found', {
+          description: 'CSV must have columns: month, customer_id, metric, value',
+        })
+        return
+      }
+
+      const result = await uploadUsageData(records)
+      await refetchDataMode()
+      fileRefs[type].value = { name: file.name, isSample: false }
+      toast.success('Usage uploaded!', {
+        description: `${result.count} usage records saved`,
+      })
+    }
+  } catch (error) {
+    toast.error(`Failed to upload ${type} data`, {
+      description: error instanceof Error ? error.message : 'Unknown error',
     })
+  } finally {
+    loadingRefs[type].value = false
   }
 }
 
 function clearFile(type: 'costs' | 'usage') {
   const fileRefs = { costs: costsFile, usage: usageFile }
   fileRefs[type].value = null
+
+  // Removing any file is a change - trigger unsaved warning
+  hasUnsavedChanges.value = true
 }
 
 // Use sample data for a specific section
@@ -205,7 +437,14 @@ async function handleUseSampleRevenue() {
   try {
     await loadSampleRevenue()
     await refetchDataMode()
-    // Mark Stripe files as loaded with sample data
+    // Clear any locally parsed data (sample data replaces revenue)
+    parsedCustomers.value = []
+    parsedSubscriptions.value = []
+    parsedInvoices.value = []
+    reconciliationReport.value = null
+    showReconciliation.value = false
+    hasUnsavedChanges.value = false
+    // Mark Stripe files as loaded with sample data (no File objects = saved data)
     stripeSampleLoaded.value = true
     stripeCustomersFile.value = { name: 'customers.csv' }
     stripeSubscriptionsFile.value = { name: 'subscriptions.csv' }
@@ -300,8 +539,9 @@ cust_003,Small Biz LLC,billing@smallbiz.com,starter,49,active,2024-03-10`,
   })
 }
 
-// Computed: has any data uploaded
+// Computed: has any data uploaded (check both local state and DB)
 const hasAnyData = computed(() =>
+  hasRevenue.value || hasCosts.value || hasUsage.value ||
   stripeCustomersFile.value || stripeSubscriptionsFile.value || stripeInvoicesFile.value ||
   costsFile.value || usageFile.value
 )
@@ -314,13 +554,49 @@ const stripeFileCount = computed(() =>
 )
 
 const uploadProgress = computed(() => {
+  // Check actual database status for each section
   const items = [
-    { label: 'Revenue', done: !!(stripeCustomersFile.value || stripeSubscriptionsFile.value || stripeInvoicesFile.value) },
-    { label: 'AI Costs', done: !!costsFile.value },
-    { label: 'Usage', done: !!usageFile.value },
+    { label: 'Revenue', done: hasRevenue.value },
+    { label: 'AI Costs', done: hasCosts.value },
+    { label: 'Usage', done: hasUsage.value },
   ]
   return items
 })
+
+// Restore file display state when returning to page with existing data
+watch(
+  [hasRevenue, hasCosts, hasUsage, () => dataMode.value],
+  ([hasRev, hasCst, hasUsg, mode]) => {
+    if (mode === 'sample') {
+      // Restore sample data file indicators
+      if (hasRev) {
+        stripeCustomersFile.value = { name: 'customers.csv' }
+        stripeSubscriptionsFile.value = { name: 'subscriptions.csv' }
+        stripeInvoicesFile.value = { name: 'invoices.csv' }
+        stripeSampleLoaded.value = true
+      }
+      if (hasCst) {
+        costsFile.value = { name: 'sample-costs.csv', isSample: true }
+      }
+      if (hasUsg) {
+        usageFile.value = { name: 'sample-usage.csv', isSample: true }
+      }
+    } else if (mode === 'user') {
+      // Restore user data file indicators
+      if (hasRev) {
+        stripeSubscriptionsFile.value = { name: 'Stripe data' }
+        stripeSampleLoaded.value = false
+      }
+      if (hasCst && !costsFile.value) {
+        costsFile.value = { name: 'costs.csv', isSample: false }
+      }
+      if (hasUsg && !usageFile.value) {
+        usageFile.value = { name: 'usage.csv', isSample: false }
+      }
+    }
+  },
+  { immediate: true }
+)
 
 // Integration handlers
 function handleStripeConnect() {
@@ -403,9 +679,63 @@ async function submitRequestForm() {
   }
 }
 
+// =============================================================================
+// UNSAVED CHANGES TRACKING
+// =============================================================================
+
+// Simple dirty flag - set true when files dropped, false when saved
+const hasUnsavedChanges = ref(false)
+
+// Dialog state for navigation confirmation
+const showDiscardDialog = ref(false)
+const pendingNavigationPath = ref<string | null>(null)
+
+// Navigation guard - intercept route changes when there are unsaved changes
+onBeforeRouteLeave((to, _from, next) => {
+  console.log('[NavGuard] hasUnsavedChanges:', hasUnsavedChanges.value, 'pendingPath:', pendingNavigationPath.value)
+  if (hasUnsavedChanges.value && !pendingNavigationPath.value) {
+    console.log('[NavGuard] Showing dialog')
+    pendingNavigationPath.value = to.fullPath
+    showDiscardDialog.value = true
+    next(false)
+  } else {
+    console.log('[NavGuard] Allowing navigation')
+    next()
+  }
+})
+
+function handleDiscardCancel() {
+  showDiscardDialog.value = false
+  pendingNavigationPath.value = null
+}
+
+function handleDiscardConfirm() {
+  showDiscardDialog.value = false
+  // Clear the unsaved state
+  parsedCustomers.value = []
+  parsedSubscriptions.value = []
+  parsedInvoices.value = []
+  stripeCustomersFile.value = null
+  stripeSubscriptionsFile.value = null
+  stripeInvoicesFile.value = null
+  reconciliationReport.value = null
+  showReconciliation.value = false
+  hasUnsavedChanges.value = false
+  // Navigate to the pending destination
+  if (pendingNavigationPath.value) {
+    const path = pendingNavigationPath.value
+    pendingNavigationPath.value = null
+    router.push(path)
+  }
+}
+
 function handleContinue() {
+  // User clicked "Save and Analyze" - this is an intentional action to proceed
+  // Clear the flag so the navigation guard doesn't trigger
+  hasUnsavedChanges.value = false
   router.push('/')
 }
+
 </script>
 
 <template>
@@ -583,17 +913,103 @@ function handleContinue() {
             </div>
           </div>
 
+          <!-- Reconcile button - only show when subscriptions are uploaded -->
+          <div v-if="canReconcile && !showReconciliation" class="flex justify-center">
+            <Button
+              @click="handleReconcile"
+              :disabled="isReconciling"
+              class="w-full sm:w-auto"
+            >
+              <Loader2 v-if="isReconciling" class="h-4 w-4 mr-2 animate-spin" />
+              {{ isReconciling ? 'Processing...' : 'Reconcile Data' }}
+            </Button>
+          </div>
+
+          <!-- Reconciliation Report -->
+          <div v-if="showReconciliation && reconciliationReport" class="border rounded-lg p-4 space-y-3 bg-muted/30">
+            <div class="flex items-center gap-2">
+              <CheckCircle class="h-5 w-5 text-green-500" />
+              <h3 class="font-medium">Data Reconciliation</h3>
+            </div>
+
+            <div class="space-y-2 text-sm">
+              <!-- Customers -->
+              <div v-if="reconciliationReport.customersTotal > 0" class="flex items-center gap-2">
+                <Check class="h-4 w-4 text-green-500" />
+                <span>{{ reconciliationReport.customersTotal }} customers found</span>
+              </div>
+
+              <!-- Subscriptions matched -->
+              <div class="flex items-center gap-2">
+                <Check class="h-4 w-4 text-green-500" />
+                <span>
+                  {{ reconciliationReport.subscriptionsMatched }} subscriptions matched
+                  <span v-if="reconciliationReport.customersTotal > 0" class="text-muted-foreground">
+                    ({{ Math.round((reconciliationReport.subscriptionsMatched / reconciliationReport.subscriptionsTotal) * 100) }}%)
+                  </span>
+                </span>
+              </div>
+
+              <!-- Orphaned subscriptions warning -->
+              <div v-if="reconciliationReport.subscriptionsOrphaned > 0" class="flex items-center gap-2 text-amber-600">
+                <AlertTriangle class="h-4 w-4" />
+                <span>{{ reconciliationReport.subscriptionsOrphaned }} subscriptions with no matching customer</span>
+              </div>
+
+              <!-- Active subscriptions -->
+              <div class="flex items-center gap-2">
+                <Check class="h-4 w-4 text-green-500" />
+                <span>{{ reconciliationReport.activeSubscriptions }} active subscriptions</span>
+              </div>
+
+              <!-- Canceled subscriptions (churn data) -->
+              <div v-if="reconciliationReport.canceledSubscriptions > 0" class="flex items-center gap-2">
+                <Check class="h-4 w-4 text-green-500" />
+                <span>{{ reconciliationReport.canceledSubscriptions }} canceled (churn data available)</span>
+              </div>
+
+              <!-- Total MRR -->
+              <div class="pt-2 border-t mt-2">
+                <div class="flex items-center justify-between">
+                  <span class="font-medium">Calculated MRR:</span>
+                  <span class="text-lg font-semibold text-green-600">
+                    {{ formatCurrency(reconciliationReport.totalMrr) }}
+                  </span>
+                </div>
+              </div>
+
+              <!-- Warnings -->
+              <div v-if="reconciliationReport.warnings.length > 0" class="pt-2 space-y-1">
+                <div
+                  v-for="warning in reconciliationReport.warnings"
+                  :key="warning"
+                  class="text-xs text-amber-600 flex items-center gap-1"
+                >
+                  <AlertTriangle class="h-3 w-3" />
+                  {{ warning }}
+                </div>
+              </div>
+            </div>
+
+            <!-- Upload button -->
+            <div class="pt-3 border-t">
+              <Button
+                @click="handleUploadAndContinue"
+                :disabled="isUploading"
+                class="w-full"
+              >
+                <Loader2 v-if="isUploading" class="h-4 w-4 mr-2 animate-spin" />
+                {{ isUploading ? 'Uploading...' : 'Continue to Analysis' }}
+                <ArrowRight v-if="!isUploading" class="h-4 w-4 ml-2" />
+              </Button>
+              <p v-if="uploadError" class="text-xs text-red-500 mt-2 text-center">
+                {{ uploadError }}
+              </p>
+            </div>
+          </div>
+
           <!-- Action links -->
           <div class="flex items-center justify-center gap-4">
-            <button
-              type="button"
-              class="text-xs text-primary hover:underline flex items-center gap-1"
-              @click="downloadTemplate('revenue')"
-            >
-              <Download class="h-3 w-3" />
-              Download templates
-            </button>
-            <span class="text-muted-foreground/30">|</span>
             <button
               type="button"
               class="text-xs text-muted-foreground hover:text-foreground"
@@ -646,7 +1062,7 @@ function handleContinue() {
               </div>
             </div>
             <p class="text-xs text-muted-foreground">
-              We auto-detect file types from the filename. Just drop them all in!
+              We auto-detect file types from the CSV headers. Just drop them all in!
             </p>
           </div>
         </CardContent>
@@ -1030,10 +1446,22 @@ function handleContinue() {
           </div>
         </div>
         <Button @click="handleContinue">
-          Continue to Pricing
+          Save and Analyze
           <ArrowRight class="h-4 w-4 ml-2" />
         </Button>
       </div>
     </div>
   </div>
+
+  <!-- Discard Changes Confirmation Dialog -->
+  <ConfirmDialog
+    :open="showDiscardDialog"
+    title="Discard changes to data sources?"
+    description="Your uploaded files and connections will be lost."
+    cancel-text="Cancel"
+    confirm-text="Discard"
+    :destructive="true"
+    @cancel="handleDiscardCancel"
+    @confirm="handleDiscardConfirm"
+  />
 </template>

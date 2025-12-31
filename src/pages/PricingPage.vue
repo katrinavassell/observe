@@ -7,7 +7,6 @@ import {
   AlertTriangle,
   Users,
   Package,
-  RefreshCw,
   Info,
   BarChart3,
   Plug,
@@ -37,7 +36,6 @@ import { useDataMode } from '@/composables/useDataMode'
 import {
   loadSampleData as loadSampleDataToSupabase,
   fetchAnalyzerData,
-  clearUserData,
 } from '@/lib/supabase-data'
 
 // =============================================================================
@@ -140,23 +138,6 @@ onMounted(async () => {
     await loadExistingData()
   }
 })
-
-async function resetAnalysis() {
-  isAnalyzing.value = true
-  try {
-    await clearUserData()
-    await refetchDataMode()
-    analysisComplete.value = false
-    analysisResult.value = null
-    error.value = null
-    uploadProgress.value = 0
-    dataSource.value = 'none'
-  } catch (err: unknown) {
-    error.value = err instanceof Error ? err.message : 'Failed to clear data'
-  } finally {
-    isAnalyzing.value = false
-  }
-}
 </script>
 
 <template>
@@ -262,10 +243,6 @@ async function resetAnalysis() {
             Source: {{ dataSource === 'sample' ? 'Sample Data' : 'Your Data' }}
           </Badge>
         </div>
-        <Button variant="outline" @click="resetAnalysis">
-          <RefreshCw class="h-4 w-4 mr-2" />
-          New Analysis
-        </Button>
       </div>
 
       <!-- Tabbed Results -->

@@ -13,6 +13,12 @@ export interface DataStatus {
   data_mode: DataMode
   has_data: boolean
   customer_count: number
+  has_revenue: boolean
+  has_costs: boolean
+  has_usage: boolean
+  revenue_customer_count: number
+  costs_record_count: number
+  usage_record_count: number
 }
 
 // =============================================================================
@@ -22,28 +28,60 @@ export interface DataStatus {
 export async function getDataStatus(): Promise<DataStatus> {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) {
-    return { data_mode: 'none', has_data: false, customer_count: 0 }
+    return {
+      data_mode: 'none',
+      has_data: false,
+      customer_count: 0,
+      has_revenue: false,
+      has_costs: false,
+      has_usage: false,
+      revenue_customer_count: 0,
+      costs_record_count: 0,
+      usage_record_count: 0,
+    }
   }
 
-  // Check user_data_status table
-  const { data: status } = await supabase
-    .from('user_data_status')
-    .select('data_mode')
-    .eq('user_id', user.id)
-    .single()
+  // Get counts from each table in parallel
+  const [
+    { data: status },
+    { count: customerCount },
+    { count: costsCount },
+    { count: usageCount },
+  ] = await Promise.all([
+    supabase
+      .from('user_data_status')
+      .select('data_mode, has_revenue, has_costs, has_usage, revenue_customer_count, costs_record_count, usage_record_count')
+      .eq('user_id', user.id)
+      .single(),
+    supabase
+      .from('customers')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', user.id),
+    supabase
+      .from('cost_records')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', user.id),
+    supabase
+      .from('usage_records')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', user.id),
+  ])
 
   const dataMode = (status?.data_mode as DataMode) || 'none'
-
-  // Get customer count
-  const { count } = await supabase
-    .from('customers')
-    .select('*', { count: 'exact', head: true })
-    .eq('user_id', user.id)
+  const hasRevenue = status?.has_revenue ?? (customerCount ?? 0) > 0
+  const hasCosts = status?.has_costs ?? (costsCount ?? 0) > 0
+  const hasUsage = status?.has_usage ?? (usageCount ?? 0) > 0
 
   return {
     data_mode: dataMode,
-    has_data: dataMode !== 'none',
-    customer_count: count || 0,
+    has_data: hasRevenue || hasCosts || hasUsage,
+    customer_count: customerCount || 0,
+    has_revenue: hasRevenue,
+    has_costs: hasCosts,
+    has_usage: hasUsage,
+    revenue_customer_count: status?.revenue_customer_count ?? customerCount ?? 0,
+    costs_record_count: status?.costs_record_count ?? costsCount ?? 0,
+    usage_record_count: status?.usage_record_count ?? usageCount ?? 0,
   }
 }
 
@@ -173,12 +211,18 @@ export async function loadSampleData(): Promise<void> {
   const { error: costsError } = await supabase.from('cost_records').insert(costRecords)
   if (costsError) throw costsError
 
-  // 6. Update data status
+  // 6. Update data status with all section flags
   const { error: statusError } = await supabase
     .from('user_data_status')
     .upsert({
       user_id: user.id,
       data_mode: 'sample',
+      has_revenue: true,
+      has_costs: true,
+      has_usage: true,
+      revenue_customer_count: data.customers.length,
+      costs_record_count: costRecords.length,
+      usage_record_count: usageRecords.length,
     }, { onConflict: 'user_id' })
 
   if (statusError) throw statusError
@@ -248,10 +292,15 @@ export async function loadSampleRevenue(): Promise<void> {
 
   await supabase.from('subscriptions').upsert(subscriptions, { onConflict: 'user_id,subscription_id' })
 
-  // Update data status
+  // Update data status - only update revenue-related fields
   await supabase
     .from('user_data_status')
-    .upsert({ user_id: user.id, data_mode: 'sample' }, { onConflict: 'user_id' })
+    .upsert({
+      user_id: user.id,
+      data_mode: 'sample',
+      has_revenue: true,
+      revenue_customer_count: data.customers.length,
+    }, { onConflict: 'user_id' })
 }
 
 /**
@@ -287,10 +336,15 @@ export async function loadSampleCosts(): Promise<void> {
   await supabase.from('cost_records').delete().eq('user_id', user.id)
   await supabase.from('cost_records').insert(costRecords)
 
-  // Update data status
+  // Update data status - only update costs-related fields
   await supabase
     .from('user_data_status')
-    .upsert({ user_id: user.id, data_mode: 'sample' }, { onConflict: 'user_id' })
+    .upsert({
+      user_id: user.id,
+      data_mode: 'sample',
+      has_costs: true,
+      costs_record_count: costRecords.length,
+    }, { onConflict: 'user_id' })
 }
 
 /**
@@ -316,10 +370,109 @@ export async function loadSampleUsage(): Promise<void> {
   await supabase.from('usage_records').delete().eq('user_id', user.id)
   await supabase.from('usage_records').insert(usageRecords)
 
-  // Update data status
+  // Update data status - only update usage-related fields
   await supabase
     .from('user_data_status')
-    .upsert({ user_id: user.id, data_mode: 'sample' }, { onConflict: 'user_id' })
+    .upsert({
+      user_id: user.id,
+      data_mode: 'sample',
+      has_usage: true,
+      usage_record_count: usageRecords.length,
+    }, { onConflict: 'user_id' })
+}
+
+// =============================================================================
+// UPLOAD USER DATA (CSV)
+// =============================================================================
+
+export interface CostRecord {
+  month: string
+  provider?: string
+  customer_id?: string
+  cost: number
+}
+
+export interface UsageRecord {
+  month: string
+  customer_id: string
+  metric: string
+  value: number
+  limit?: number
+}
+
+/**
+ * Upload cost data from CSV
+ * Only clears existing cost_records, preserves revenue and usage data
+ */
+export async function uploadCostData(records: CostRecord[]): Promise<{ count: number }> {
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('Not authenticated')
+
+  // Only clear cost_records, preserve other data
+  await supabase.from('cost_records').delete().eq('user_id', user.id)
+
+  // Transform and insert
+  const costRecords = records.map(r => ({
+    user_id: user.id,
+    customer_id: r.customer_id || null,
+    cost_type: r.provider || 'infrastructure',
+    amount: r.cost,
+    period_start: `${r.month}-01T00:00:00Z`,
+    period_end: `${r.month}-28T23:59:59Z`,
+  }))
+
+  const { error } = await supabase.from('cost_records').insert(costRecords)
+  if (error) throw new Error(`Failed to insert cost records: ${error.message}`)
+
+  // Update data status - only update costs-related fields
+  await supabase
+    .from('user_data_status')
+    .upsert({
+      user_id: user.id,
+      data_mode: 'user',
+      has_costs: true,
+      costs_record_count: records.length,
+    }, { onConflict: 'user_id' })
+
+  return { count: records.length }
+}
+
+/**
+ * Upload usage data from CSV
+ * Only clears existing usage_records, preserves revenue and cost data
+ */
+export async function uploadUsageData(records: UsageRecord[]): Promise<{ count: number }> {
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('Not authenticated')
+
+  // Only clear usage_records, preserve other data
+  await supabase.from('usage_records').delete().eq('user_id', user.id)
+
+  // Transform and insert
+  const usageRecords = records.map(r => ({
+    user_id: user.id,
+    customer_id: r.customer_id,
+    metric_key: r.metric === 'api_calls' ? 'api_calls' : r.metric,
+    metric_value: r.value,
+    metric_limit: r.limit || null,
+    period_start: `${r.month}-01T00:00:00Z`,
+    period_end: `${r.month}-28T23:59:59Z`,
+  }))
+
+  const { error } = await supabase.from('usage_records').insert(usageRecords)
+  if (error) throw new Error(`Failed to insert usage records: ${error.message}`)
+
+  // Update data status - only update usage-related fields
+  await supabase
+    .from('user_data_status')
+    .upsert({
+      user_id: user.id,
+      data_mode: 'user',
+      has_usage: true,
+      usage_record_count: records.length,
+    }, { onConflict: 'user_id' })
+
+  return { count: records.length }
 }
 
 // =============================================================================
@@ -337,12 +490,18 @@ export async function clearUserData(): Promise<void> {
   await supabase.from('customers').delete().eq('user_id', user.id)
   await supabase.from('plans').delete().eq('user_id', user.id)
 
-  // Update status
+  // Update status - reset all section flags
   await supabase
     .from('user_data_status')
     .upsert({
       user_id: user.id,
       data_mode: 'none',
+      has_revenue: false,
+      has_costs: false,
+      has_usage: false,
+      revenue_customer_count: 0,
+      costs_record_count: 0,
+      usage_record_count: 0,
     }, { onConflict: 'user_id' })
 }
 

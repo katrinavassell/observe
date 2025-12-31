@@ -201,6 +201,12 @@ export interface Database {
           id: string
           user_id: string
           data_mode: string
+          has_revenue: boolean
+          has_costs: boolean
+          has_usage: boolean
+          revenue_customer_count: number
+          costs_record_count: number
+          usage_record_count: number
           created_at: string
           updated_at: string
         }
@@ -208,6 +214,12 @@ export interface Database {
           id?: string
           user_id: string
           data_mode?: string
+          has_revenue?: boolean
+          has_costs?: boolean
+          has_usage?: boolean
+          revenue_customer_count?: number
+          costs_record_count?: number
+          usage_record_count?: number
           created_at?: string
           updated_at?: string
         }
@@ -215,6 +227,12 @@ export interface Database {
           id?: string
           user_id?: string
           data_mode?: string
+          has_revenue?: boolean
+          has_costs?: boolean
+          has_usage?: boolean
+          revenue_customer_count?: number
+          costs_record_count?: number
+          usage_record_count?: number
           created_at?: string
           updated_at?: string
         }
