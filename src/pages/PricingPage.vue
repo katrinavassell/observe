@@ -628,8 +628,10 @@ onMounted(async () => {
                   </td>
                   <td class="p-3 text-sm text-muted-foreground">{{ anomaly.description }}</td>
                   <td class="p-3 text-sm">
-                    <Badge :variant="anomaly.type === 'warning' ? 'destructive' : 'secondary'">
-                      {{ anomaly.type === 'warning' ? 'Over Limit' : 'Under-utilized' }}
+                    <Badge
+                      :variant="anomaly.status === 'churn_risk' ? 'destructive' : anomaly.status === 'upsell' ? 'success' : 'secondary'"
+                    >
+                      {{ anomaly.status === 'churn_risk' ? 'Churn Risk' : anomaly.status === 'upsell' ? 'Upsell Ready' : 'Anomaly' }}
                     </Badge>
                   </td>
                 </tr>
