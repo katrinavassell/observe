@@ -21,6 +21,11 @@ import {
 } from 'lucide-vue-next'
 import { Card, CardContent, Button } from '@/components/ui'
 import { uploadCostData, type CostRecord } from '@/lib/supabase-data'
+import {
+  validateFileSize,
+  validateCsvExtension,
+  validateCostRecords,
+} from '@/lib/validation'
 
 const props = defineProps<{
   /** Current file info if any */
@@ -69,8 +74,17 @@ function handleDrop(event: DragEvent): void {
  * Expected columns: month, provider (optional), customer_id (optional), cost
  */
 async function processFile(file: File): Promise<void> {
-  if (!file.name.endsWith('.csv')) {
-    toast.error('Please upload a CSV file')
+  // Validate file extension
+  const extValidation = validateCsvExtension(file)
+  if (!extValidation.valid) {
+    toast.error(extValidation.error!)
+    return
+  }
+
+  // Validate file size
+  const sizeValidation = validateFileSize(file)
+  if (!sizeValidation.valid) {
+    toast.error(sizeValidation.error!)
     return
   }
 
@@ -87,6 +101,20 @@ async function processFile(file: File): Promise<void> {
     })
 
     const rows = parseResult.data
+
+    // Validate records
+    const validation = validateCostRecords(rows as { customer_id?: string; month?: string; cost?: number | string }[])
+
+    if (!validation.valid) {
+      toast.error('No valid cost records found', {
+        description: validation.errors.length > 0
+          ? validation.errors.slice(0, 3).join('; ')
+          : 'CSV must have columns: month, cost (and optionally provider)',
+      })
+      return
+    }
+
+    // Filter to valid records only
     const records: CostRecord[] = rows
       .filter(r => r.month && r.cost)
       .map(r => ({
@@ -96,18 +124,15 @@ async function processFile(file: File): Promise<void> {
         cost: parseFloat(String(r.cost)) || 0,
       }))
 
-    if (records.length === 0) {
-      toast.error('No valid cost records found', {
-        description: 'CSV must have columns: month, cost (and optionally provider)',
-      })
-      return
-    }
-
     const result = await uploadCostData(records)
     emit('fileUploaded', { name: file.name, isSample: false })
-    toast.success('Costs uploaded!', {
-      description: `${result.count} cost records saved`,
-    })
+
+    // Show success with validation summary
+    const description = validation.invalidRecords > 0
+      ? `${result.count} records saved, ${validation.invalidRecords} invalid rows skipped`
+      : `${result.count} cost records saved`
+
+    toast.success('Costs uploaded!', { description })
   } catch (error) {
     toast.error('Failed to upload cost data', {
       description: error instanceof Error ? error.message : 'Unknown error',

@@ -23,6 +23,11 @@ import {
 import { Card, CardContent } from '@/components/ui'
 import Alert from '@/components/ui/alert.vue'
 import { uploadUsageData, type UsageRecord } from '@/lib/supabase-data'
+import {
+  validateFileSize,
+  validateCsvExtension,
+  validateUsageRecords,
+} from '@/lib/validation'
 
 const props = defineProps<{
   /** Current file info if any */
@@ -71,8 +76,17 @@ function handleDrop(event: DragEvent): void {
  * Expected columns: month, customer_id, metric, value, limit (optional)
  */
 async function processFile(file: File): Promise<void> {
-  if (!file.name.endsWith('.csv')) {
-    toast.error('Please upload a CSV file')
+  // Validate file extension
+  const extValidation = validateCsvExtension(file)
+  if (!extValidation.valid) {
+    toast.error(extValidation.error!)
+    return
+  }
+
+  // Validate file size
+  const sizeValidation = validateFileSize(file)
+  if (!sizeValidation.valid) {
+    toast.error(sizeValidation.error!)
     return
   }
 
@@ -89,6 +103,26 @@ async function processFile(file: File): Promise<void> {
     })
 
     const rows = parseResult.data
+
+    // Validate records (supports both metric/value and metric_key/metric_value naming)
+    const validation = validateUsageRecords(rows as {
+      customer_id?: string
+      month?: string
+      metric?: string
+      value?: number | string
+      limit?: number | string
+    }[])
+
+    if (!validation.valid) {
+      toast.error('No valid usage records found', {
+        description: validation.errors.length > 0
+          ? validation.errors.slice(0, 3).join('; ')
+          : 'CSV must have columns: month, customer_id, metric, value',
+      })
+      return
+    }
+
+    // Filter to valid records only
     const records: UsageRecord[] = rows
       .filter(r => r.month && r.customer_id && r.metric && r.value)
       .map(r => ({
@@ -99,18 +133,15 @@ async function processFile(file: File): Promise<void> {
         limit: r.limit ? parseFloat(String(r.limit)) : undefined,
       }))
 
-    if (records.length === 0) {
-      toast.error('No valid usage records found', {
-        description: 'CSV must have columns: month, customer_id, metric, value',
-      })
-      return
-    }
-
     const result = await uploadUsageData(records)
     emit('fileUploaded', { name: file.name, isSample: false })
-    toast.success('Usage uploaded!', {
-      description: `${result.count} usage records saved`,
-    })
+
+    // Show success with validation summary
+    const description = validation.invalidRecords > 0
+      ? `${result.count} records saved, ${validation.invalidRecords} invalid rows skipped`
+      : `${result.count} usage records saved`
+
+    toast.success('Usage uploaded!', { description })
   } catch (error) {
     toast.error('Failed to upload usage data', {
       description: error instanceof Error ? error.message : 'Unknown error',

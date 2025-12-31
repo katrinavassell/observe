@@ -28,6 +28,7 @@ import {
   type ReconciliationReport,
   type UnifiedSubscriptionData,
 } from '@/lib/stripe-import'
+import { validateFileSize, validateCsvExtension } from '@/lib/validation'
 
 /**
  * Represents a Stripe export file reference.
@@ -152,8 +153,17 @@ export function useStripeUpload(options: {
    * @param file - The CSV file to process
    */
   async function processStripeFile(file: File): Promise<void> {
-    if (!file.name.endsWith('.csv')) {
-      toast.error('Please upload CSV files')
+    // Validate file extension
+    const extValidation = validateCsvExtension(file)
+    if (!extValidation.valid) {
+      toast.error(extValidation.error!)
+      return
+    }
+
+    // Validate file size
+    const sizeValidation = validateFileSize(file)
+    if (!sizeValidation.valid) {
+      toast.error(sizeValidation.error!)
       return
     }
 
