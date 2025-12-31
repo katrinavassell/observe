@@ -12,6 +12,7 @@ import {
   Plug,
   Search,
   ExternalLink,
+  RefreshCw,
 } from 'lucide-vue-next'
 import {
   Card,
@@ -103,7 +104,10 @@ async function loadSampleData() {
   }
 }
 
-async function loadExistingData() {
+async function loadExistingData(retryCount = 0) {
+  // Prevent duplicate requests
+  if (isAnalyzing.value) return
+
   isAnalyzing.value = true
   error.value = null
 
@@ -115,10 +119,22 @@ async function loadExistingData() {
       analysisComplete.value = true
     }
   } catch (err: unknown) {
+    // Retry logic: up to 2 retries with exponential backoff
+    if (retryCount < 2) {
+      const delay = Math.pow(2, retryCount) * 1000 // 1s, 2s
+      await new Promise(resolve => setTimeout(resolve, delay))
+      isAnalyzing.value = false
+      return loadExistingData(retryCount + 1)
+    }
     error.value = err instanceof Error ? err.message : 'Failed to load data'
   } finally {
     isAnalyzing.value = false
   }
+}
+
+function handleRetry() {
+  error.value = null
+  loadExistingData()
 }
 
 // =============================================================================
@@ -152,10 +168,16 @@ onMounted(async () => {
 
     <!-- ==================== EMPTY STATE ==================== -->
     <template v-if="!analysisComplete">
-      <!-- Error Alert -->
-      <Alert v-if="error" variant="destructive">
-        <AlertTriangle class="h-4 w-4" />
-        <span class="font-medium">Error:</span> {{ error }}
+      <!-- Error Alert with Retry -->
+      <Alert v-if="error" variant="destructive" class="flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <AlertTriangle class="h-4 w-4" />
+          <span><span class="font-medium">Error:</span> {{ error }}</span>
+        </div>
+        <Button variant="outline" size="sm" @click="handleRetry" :disabled="isAnalyzing">
+          <RefreshCw class="h-4 w-4 mr-1" :class="{ 'animate-spin': isAnalyzing }" />
+          Retry
+        </Button>
       </Alert>
 
       <!-- Progress (for sample data loading) -->

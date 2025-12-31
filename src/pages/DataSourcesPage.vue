@@ -114,8 +114,27 @@ const showStripeInstructions = ref(false)
 
 // Sample data loading
 const isLoadingSample = ref(false)
+const showSampleDataConfirm = ref(false)
 
-async function handleTrySampleData() {
+function handleTrySampleData() {
+  // Show confirmation if user already has data
+  if (hasRevenue.value || hasCosts.value || hasUsage.value) {
+    showSampleDataConfirm.value = true
+    return
+  }
+  // No existing data, proceed directly
+  loadSampleDataConfirmed()
+}
+
+function handleSampleDataCancel() {
+  showSampleDataConfirm.value = false
+}
+
+async function loadSampleDataConfirmed() {
+  // Prevent duplicate submissions
+  if (isLoadingSample.value) return
+
+  showSampleDataConfirm.value = false
   isLoadingSample.value = true
   try {
     await loadSampleDataToSupabase()
@@ -264,7 +283,8 @@ const canReconcile = computed(() => parsedSubscriptions.value.length > 0)
 
 // Reconcile Stripe data
 async function handleReconcile() {
-  if (!canReconcile.value) return
+  // Prevent duplicate submissions
+  if (!canReconcile.value || isReconciling.value) return
 
   isReconciling.value = true
   uploadError.value = null
@@ -289,6 +309,9 @@ async function handleReconcile() {
 
 // Upload reconciled data to Supabase
 async function handleUploadAndContinue() {
+  // Prevent duplicate submissions
+  if (isUploading.value) return
+
   if (!reconciliationReport.value || unifiedData.value.length === 0) {
     toast.error('Please reconcile data first')
     return
@@ -363,6 +386,9 @@ async function processFile(file: File, type: 'costs' | 'usage') {
 
   const loadingRefs = { costs: isUploadingCosts, usage: isUploadingUsage }
   const fileRefs = { costs: costsFile, usage: usageFile }
+
+  // Prevent duplicate submissions
+  if (loadingRefs[type].value) return
 
   loadingRefs[type].value = true
 
@@ -1521,5 +1547,17 @@ async function handleContinue() {
     :destructive="true"
     @cancel="handleDiscardCancel"
     @confirm="handleDiscardConfirm"
+  />
+
+  <!-- Sample Data Confirmation Dialog -->
+  <ConfirmDialog
+    :open="showSampleDataConfirm"
+    title="Replace existing data?"
+    description="Loading sample data will replace your current revenue, costs, and usage data. This action cannot be undone."
+    cancel-text="Cancel"
+    confirm-text="Replace with Sample Data"
+    :destructive="true"
+    @cancel="handleSampleDataCancel"
+    @confirm="loadSampleDataConfirmed"
   />
 </template>

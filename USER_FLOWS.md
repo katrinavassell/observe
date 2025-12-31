@@ -340,23 +340,26 @@ Tanso is a SaaS revenue analytics and pricing intelligence dashboard built with 
 
 ---
 
-## Recommended Improvements
+## Improvements Implemented
 
-### High Priority
+The following improvements have been implemented based on the audit findings:
 
-1. **Add loading states for all async operations** - Buttons should be disabled during API calls
-2. **Implement retry logic** - Network failures should offer retry option
-3. **Add confirmation for destructive actions** - Sample data load clears existing data
+### High Priority (Completed)
 
-### Medium Priority
+1. **Sign-out error handling** (`useAuth.ts:55-71`) - Sign-out now gracefully handles errors and always clears local state
+2. **Retry logic for data fetch** (`PricingPage.vue:106-137`) - Automatic retry with exponential backoff (up to 2 retries)
+3. **Confirmation for sample data** (`DataSourcesPage.vue:119-131, 1542-1552`) - Confirmation dialog when replacing existing data
 
-4. **Add email format validation** - Beyond HTML5 native validation
-5. **Implement debouncing** - Prevent rapid duplicate submissions
-6. **Add error boundaries** - Vue error handling at component level
-7. **Handle sign-out errors** - Catch and handle sign-out failures
+### Medium Priority (Completed)
 
-### Low Priority
+4. **Email format validation** (`LoginPage.vue:12-17`) - Regex validation beyond HTML5 native
+5. **Debouncing/duplicate prevention** (`DataSourcesPage.vue:134, 287, 313, 391`) - Guards on all async handlers
+6. **Router optimization** (`router.ts:51-71`) - Single session check instead of double call
+7. **Error state clearing** - Error states cleared at start of operations
 
-8. **Add upload progress** - For large CSV files
-9. **Implement data refresh** - Manual or auto-refresh for stale data
-10. **Cross-tab session sync** - Handle auth state across browser tabs
+### Still Recommended
+
+8. **Add upload progress** - For large CSV files (low priority)
+9. **Implement data refresh** - Manual or auto-refresh for stale data (low priority)
+10. **Cross-tab session sync** - Handle auth state across browser tabs (low priority)
+11. **Error boundaries** - Vue error handling at component level (low priority)

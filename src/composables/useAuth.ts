@@ -53,9 +53,21 @@ export function useAuth() {
   }
 
   async function signOut() {
-    const { error } = await supabase.auth.signOut()
-    if (error) throw error
-    router.push('/login')
+    try {
+      const { error } = await supabase.auth.signOut()
+      if (error) {
+        console.error('Sign out error:', error)
+        // Still navigate to login even on error - user intended to log out
+      }
+    } catch (err) {
+      console.error('Sign out failed:', err)
+      // Still navigate to login even on error - user intended to log out
+    } finally {
+      // Always clear local state and redirect
+      user.value = null
+      session.value = null
+      router.push('/login')
+    }
   }
 
   async function signInWithGoogle() {

@@ -48,26 +48,23 @@ const router = createRouter({
   ],
 })
 
-// Auth guard
+// Auth guard - single session check for efficiency
 router.beforeEach(async (to, _from, next) => {
+  const { data: { session } } = await supabase.auth.getSession()
+  const isAuthenticated = !!session
   const requiresAuth = to.meta.requiresAuth !== false
+  const isLoginPage = to.path === '/login'
 
-  if (requiresAuth) {
-    const { data: { session } } = await supabase.auth.getSession()
-
-    if (!session) {
-      next('/login')
-      return
-    }
+  // Redirect unauthenticated users to login (except for login page)
+  if (requiresAuth && !isAuthenticated) {
+    next('/login')
+    return
   }
 
-  // If authenticated and going to login, redirect to home
-  if (to.path === '/login') {
-    const { data: { session } } = await supabase.auth.getSession()
-    if (session) {
-      next('/')
-      return
-    }
+  // Redirect authenticated users away from login page
+  if (isLoginPage && isAuthenticated) {
+    next('/')
+    return
   }
 
   next()
