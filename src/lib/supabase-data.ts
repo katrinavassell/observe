@@ -5,6 +5,7 @@
 
 import { supabase } from './supabase'
 import type { AnalyzerData } from './pricing-analyzer'
+import { withRetry, isOnline } from './utils'
 import sampleDataJson from '../../files/sample-data.json'
 
 export type DataMode = 'none' | 'sample' | 'user'
@@ -624,6 +625,11 @@ export async function clearUserData(): Promise<void> {
 // =============================================================================
 
 export async function fetchAnalyzerData(): Promise<AnalyzerData | null> {
+  // Check if online before attempting fetch
+  if (!isOnline()) {
+    throw new Error('You appear to be offline. Please check your connection and try again.')
+  }
+
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return null
 
@@ -631,20 +637,23 @@ export async function fetchAnalyzerData(): Promise<AnalyzerData | null> {
   const status = await getDataStatus()
   if (!status.has_data) return null
 
-  // Fetch all data in parallel
+  // Fetch all data in parallel with retry logic for network failures
   const [
     { data: plans },
     { data: customers },
     { data: subscriptions },
     { data: usageRecords },
     { data: costRecords },
-  ] = await Promise.all([
-    supabase.from('plans').select('*').eq('user_id', user.id),
-    supabase.from('customers').select('*').eq('user_id', user.id),
-    supabase.from('subscriptions').select('*').eq('user_id', user.id),
-    supabase.from('usage_records').select('*').eq('user_id', user.id),
-    supabase.from('cost_records').select('*').eq('user_id', user.id),
-  ])
+  ] = await withRetry(
+    () => Promise.all([
+      supabase.from('plans').select('*').eq('user_id', user.id),
+      supabase.from('customers').select('*').eq('user_id', user.id),
+      supabase.from('subscriptions').select('*').eq('user_id', user.id),
+      supabase.from('usage_records').select('*').eq('user_id', user.id),
+      supabase.from('cost_records').select('*').eq('user_id', user.id),
+    ]),
+    { maxRetries: 3, baseDelayMs: 1000 }
+  )
 
   if (!plans || !customers || !subscriptions) return null
 
