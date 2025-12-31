@@ -14,6 +14,9 @@ const isLoading = ref(true)
 const isLoadingSample = ref(false)
 const isClearingSample = ref(false)
 
+// Track if auth listener is already set up (prevents multiple registrations)
+let authListenerInitialized = false
+
 export function useDataMode() {
   const dataMode = computed<DataMode>(() => dataStatus.value?.data_mode ?? 'none')
   const hasData = computed(() => dataStatus.value?.has_data ?? false)
@@ -77,10 +80,13 @@ export function useDataMode() {
     }
   })
 
-  // Listen for auth changes
-  supabase.auth.onAuthStateChange(() => {
-    refetch()
-  })
+  // Listen for auth changes (only register once to prevent memory leak)
+  if (!authListenerInitialized) {
+    authListenerInitialized = true
+    supabase.auth.onAuthStateChange(() => {
+      refetch()
+    })
+  }
 
   return {
     // State

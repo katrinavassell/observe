@@ -524,7 +524,8 @@ export function calculatePlanHealth(
   const usageByCustomer = new Map<string, number>()
   usage?.forEach(u => {
     // Only count latest month api_calls for current usage
-    if (u.period_start?.startsWith(latestMonth) && u.metric_key === 'api_calls' && u.metric_limit) {
+    // Guard against division by zero with metric_limit > 0
+    if (u.period_start?.startsWith(latestMonth) && u.metric_key === 'api_calls' && u.metric_limit && u.metric_limit > 0) {
       const percent = Math.round((u.metric_value / u.metric_limit) * 100)
       usageByCustomer.set(u.customer_id, percent)
     }

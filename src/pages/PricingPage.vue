@@ -90,6 +90,8 @@ async function loadSampleData() {
       } catch (analyzeErr) {
         throw new Error('Failed to analyze data. The data format may be invalid.')
       }
+    } else {
+      throw new Error('Failed to fetch sample data. Please try again.')
     }
 
     clearInterval(progressInterval)
@@ -122,6 +124,9 @@ async function loadExistingData() {
       }
       dataSource.value = dataMode.value as 'sample' | 'user'
       analysisComplete.value = true
+    } else {
+      // No data available - this is expected for new users, not an error
+      analysisComplete.value = false
     }
   } catch (err: unknown) {
     error.value = err instanceof Error ? err.message : 'Failed to load data'
