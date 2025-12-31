@@ -93,6 +93,8 @@ Missing: "Save and Leave" option.
 
 **Recommendation:** Add third button: "Save and Continue"
 
+**Status: ✅ FIXED** - Dialog now has "Stay", "Save & Leave", and "Discard" options
+
 ---
 
 ### 6. Confusing Duplicate Sample Data CTAs
@@ -145,6 +147,8 @@ User doesn't know which does what.
 
 **Recommendation:** Show tabs as disabled with tooltip: "Add usage data to unlock"
 
+**Status: ✅ FIXED** - Tabs now show as disabled with explanatory tooltips
+
 ---
 
 ### 9. Login Page Has No "View Demo" Path
@@ -189,6 +193,8 @@ User doesn't know which does what.
 
 **Fix:** Add info icons with tooltips to table headers (like the metric cards already have).
 
+**Status: ✅ FIXED** - Added tooltips to Health, Churn Risk, and Upsell Ready columns
+
 ---
 
 ### 13. Progress Bar Shows Incomplete Even After Save
@@ -212,6 +218,8 @@ The computed property logic is complex and can show incomplete status incorrectl
 - "Try again" button
 - "Contact support" if persistent
 - Clear error context
+
+**Status: ✅ FIXED** - Error alert now shows "Try Again" and "Dismiss" buttons
 
 ---
 

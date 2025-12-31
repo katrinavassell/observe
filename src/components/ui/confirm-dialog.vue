@@ -17,11 +17,14 @@ defineProps<{
   cancelText?: string
   confirmText?: string
   destructive?: boolean
+  secondaryText?: string
+  showSecondary?: boolean
 }>()
 
 const emit = defineEmits<{
   cancel: []
   confirm: []
+  secondary: []
 }>()
 </script>
 
@@ -47,6 +50,13 @@ const emit = defineEmits<{
           >
             {{ cancelText || 'Cancel' }}
           </AlertDialogCancel>
+          <AlertDialogAction
+            v-if="showSecondary"
+            class="inline-flex h-10 items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium ring-offset-background transition-colors hover:bg-accent hover:text-accent-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 mt-2 sm:mt-0"
+            @click="emit('secondary')"
+          >
+            {{ secondaryText }}
+          </AlertDialogAction>
           <AlertDialogAction
             :class="[
               'inline-flex h-10 items-center justify-center rounded-md px-4 py-2 text-sm font-medium ring-offset-background transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none disabled:opacity-50',

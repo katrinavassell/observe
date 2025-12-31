@@ -746,6 +746,38 @@ function handleDiscardConfirm() {
   }
 }
 
+async function handleSaveAndLeave() {
+  showDiscardDialog.value = false
+  try {
+    // Process any pending deletions
+    const deletionPromises: Promise<void>[] = []
+    if (pendingCostsDeletion.value) deletionPromises.push(clearCostData())
+    if (pendingUsageDeletion.value) deletionPromises.push(clearUsageData())
+    if (pendingRevenueDeletion.value) deletionPromises.push(clearRevenueData())
+    if (deletionPromises.length > 0) {
+      await Promise.all(deletionPromises)
+      await refetchDataMode()
+    }
+
+    // Reset state
+    pendingCostsDeletion.value = false
+    pendingUsageDeletion.value = false
+    pendingRevenueDeletion.value = false
+    hasUnsavedChanges.value = false
+
+    // Navigate to pending destination
+    if (pendingNavigationPath.value) {
+      const path = pendingNavigationPath.value
+      pendingNavigationPath.value = null
+      router.push(path)
+    }
+  } catch (error) {
+    toast.error('Failed to save changes', {
+      description: error instanceof Error ? error.message : 'Please try again.',
+    })
+  }
+}
+
 async function handleContinue() {
   // User clicked "Save and Analyze" - process any pending deletions
   try {
@@ -1504,12 +1536,15 @@ async function handleContinue() {
   <!-- Discard Changes Confirmation Dialog -->
   <ConfirmDialog
     :open="showDiscardDialog"
-    title="Discard changes to data sources?"
-    description="Your uploaded files and connections will be lost."
-    cancel-text="Cancel"
+    title="You have unsaved changes"
+    description="Would you like to save your changes before leaving?"
+    cancel-text="Stay"
     confirm-text="Discard"
     :destructive="true"
+    :show-secondary="true"
+    secondary-text="Save & Leave"
     @cancel="handleDiscardCancel"
     @confirm="handleDiscardConfirm"
+    @secondary="handleSaveAndLeave"
   />
 </template>
