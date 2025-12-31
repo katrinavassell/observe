@@ -381,14 +381,14 @@ async function processFile(file: File, type: 'costs' | 'usage') {
 
     if (type === 'costs') {
       // Parse costs: month, provider, cost
-      const records: CostRecord[] = rows
-        .filter(r => r.month && r.cost)
-        .map(r => ({
-          month: String(r.month),
-          provider: r.provider ? String(r.provider) : undefined,
-          customer_id: r.customer_id ? String(r.customer_id) : undefined,
-          cost: parseFloat(String(r.cost)) || 0,
-        }))
+      const validRows = rows.filter(r => r.month && r.cost)
+      const skippedCount = rows.length - validRows.length
+      const records: CostRecord[] = validRows.map(r => ({
+        month: String(r.month),
+        provider: r.provider ? String(r.provider) : undefined,
+        customer_id: r.customer_id ? String(r.customer_id) : undefined,
+        cost: parseFloat(String(r.cost)) || 0,
+      }))
 
       if (records.length === 0) {
         toast.error('No valid cost records found', {
@@ -401,20 +401,26 @@ async function processFile(file: File, type: 'costs' | 'usage') {
       await refetchDataMode()
       fileRefs[type].value = { name: file.name, isSample: false }
       pendingCostsDeletion.value = false  // Clear pending deletion since we have new data
+
+      if (skippedCount > 0) {
+        toast.warning(`${skippedCount} rows skipped`, {
+          description: 'Some rows were missing required fields (month, cost)',
+        })
+      }
       toast.success('Costs uploaded!', {
         description: `${result.count} cost records saved`,
       })
     } else if (type === 'usage') {
       // Parse usage: month, customer_id, metric, value, limit
-      const records: UsageRecord[] = rows
-        .filter(r => r.month && r.customer_id && r.metric && r.value)
-        .map(r => ({
-          month: String(r.month),
-          customer_id: String(r.customer_id),
-          metric: String(r.metric),
-          value: parseFloat(String(r.value)) || 0,
-          limit: r.limit ? parseFloat(String(r.limit)) : undefined,
-        }))
+      const validRows = rows.filter(r => r.month && r.customer_id && r.metric && r.value)
+      const skippedCount = rows.length - validRows.length
+      const records: UsageRecord[] = validRows.map(r => ({
+        month: String(r.month),
+        customer_id: String(r.customer_id),
+        metric: String(r.metric),
+        value: parseFloat(String(r.value)) || 0,
+        limit: r.limit ? parseFloat(String(r.limit)) : undefined,
+      }))
 
       if (records.length === 0) {
         toast.error('No valid usage records found', {
@@ -427,6 +433,12 @@ async function processFile(file: File, type: 'costs' | 'usage') {
       await refetchDataMode()
       fileRefs[type].value = { name: file.name, isSample: false }
       pendingUsageDeletion.value = false  // Clear pending deletion since we have new data
+
+      if (skippedCount > 0) {
+        toast.warning(`${skippedCount} rows skipped`, {
+          description: 'Some rows were missing required fields (month, customer_id, metric, value)',
+        })
+      }
       toast.success('Usage uploaded!', {
         description: `${result.count} usage records saved`,
       })

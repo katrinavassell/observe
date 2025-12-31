@@ -85,7 +85,11 @@ async function loadSampleData() {
     // Fetch and analyze the data
     const data = await fetchAnalyzerData()
     if (data) {
-      analysisResult.value = analyzeData(data)
+      try {
+        analysisResult.value = analyzeData(data)
+      } catch (analyzeErr) {
+        throw new Error('Failed to analyze data. The data format may be invalid.')
+      }
     }
 
     clearInterval(progressInterval)
@@ -111,7 +115,11 @@ async function loadExistingData() {
   try {
     const data = await fetchAnalyzerData()
     if (data) {
-      analysisResult.value = analyzeData(data)
+      try {
+        analysisResult.value = analyzeData(data)
+      } catch (analyzeErr) {
+        throw new Error('Failed to analyze data. The data format may be invalid.')
+      }
       dataSource.value = dataMode.value as 'sample' | 'user'
       analysisComplete.value = true
     }

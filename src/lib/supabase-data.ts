@@ -263,7 +263,8 @@ export async function loadSampleRevenue(): Promise<void> {
     tokens_limit: p.tokens_limit,
   }))
 
-  await supabase.from('plans').upsert(plans, { onConflict: 'user_id,plan_id' })
+  const { error: plansError } = await supabase.from('plans').upsert(plans, { onConflict: 'user_id,plan_id' })
+  if (plansError) throw new Error(`Failed to load sample plans: ${plansError.message}`)
 
   // Insert customers
   const customers = data.customers.map(c => ({
@@ -275,7 +276,8 @@ export async function loadSampleRevenue(): Promise<void> {
     created_at: c.started_at,
   }))
 
-  await supabase.from('customers').upsert(customers, { onConflict: 'user_id,customer_id' })
+  const { error: customersError } = await supabase.from('customers').upsert(customers, { onConflict: 'user_id,customer_id' })
+  if (customersError) throw new Error(`Failed to load sample customers: ${customersError.message}`)
 
   // Insert subscriptions
   const subscriptions = data.customers.map(c => ({
@@ -290,10 +292,11 @@ export async function loadSampleRevenue(): Promise<void> {
     mrr_override: c.mrr,
   }))
 
-  await supabase.from('subscriptions').upsert(subscriptions, { onConflict: 'user_id,subscription_id' })
+  const { error: subsError } = await supabase.from('subscriptions').upsert(subscriptions, { onConflict: 'user_id,subscription_id' })
+  if (subsError) throw new Error(`Failed to load sample subscriptions: ${subsError.message}`)
 
   // Update data status - only update revenue-related fields
-  await supabase
+  const { error: statusError } = await supabase
     .from('user_data_status')
     .upsert({
       user_id: user.id,
@@ -301,6 +304,7 @@ export async function loadSampleRevenue(): Promise<void> {
       has_revenue: true,
       revenue_customer_count: data.customers.length,
     }, { onConflict: 'user_id' })
+  if (statusError) throw new Error(`Failed to update data status: ${statusError.message}`)
 }
 
 /**
@@ -333,11 +337,14 @@ export async function loadSampleCosts(): Promise<void> {
   }))
 
   // Delete existing costs first, then insert
-  await supabase.from('cost_records').delete().eq('user_id', user.id)
-  await supabase.from('cost_records').insert(costRecords)
+  const { error: deleteError } = await supabase.from('cost_records').delete().eq('user_id', user.id)
+  if (deleteError) throw new Error(`Failed to clear existing costs: ${deleteError.message}`)
+
+  const { error: insertError } = await supabase.from('cost_records').insert(costRecords)
+  if (insertError) throw new Error(`Failed to load sample costs: ${insertError.message}`)
 
   // Update data status - only update costs-related fields
-  await supabase
+  const { error: statusError } = await supabase
     .from('user_data_status')
     .upsert({
       user_id: user.id,
@@ -345,6 +352,7 @@ export async function loadSampleCosts(): Promise<void> {
       has_costs: true,
       costs_record_count: costRecords.length,
     }, { onConflict: 'user_id' })
+  if (statusError) throw new Error(`Failed to update data status: ${statusError.message}`)
 }
 
 /**
@@ -367,11 +375,14 @@ export async function loadSampleUsage(): Promise<void> {
   }))
 
   // Delete existing usage first, then insert
-  await supabase.from('usage_records').delete().eq('user_id', user.id)
-  await supabase.from('usage_records').insert(usageRecords)
+  const { error: deleteError } = await supabase.from('usage_records').delete().eq('user_id', user.id)
+  if (deleteError) throw new Error(`Failed to clear existing usage: ${deleteError.message}`)
+
+  const { error: insertError } = await supabase.from('usage_records').insert(usageRecords)
+  if (insertError) throw new Error(`Failed to load sample usage: ${insertError.message}`)
 
   // Update data status - only update usage-related fields
-  await supabase
+  const { error: statusError } = await supabase
     .from('user_data_status')
     .upsert({
       user_id: user.id,
@@ -379,6 +390,7 @@ export async function loadSampleUsage(): Promise<void> {
       has_usage: true,
       usage_record_count: usageRecords.length,
     }, { onConflict: 'user_id' })
+  if (statusError) throw new Error(`Failed to update data status: ${statusError.message}`)
 }
 
 // =============================================================================
@@ -487,16 +499,18 @@ export async function clearCostData(): Promise<void> {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('Not authenticated')
 
-  await supabase.from('cost_records').delete().eq('user_id', user.id)
+  const { error: deleteError } = await supabase.from('cost_records').delete().eq('user_id', user.id)
+  if (deleteError) throw new Error(`Failed to clear cost data: ${deleteError.message}`)
 
   // Update data status
-  await supabase
+  const { error: statusError } = await supabase
     .from('user_data_status')
     .upsert({
       user_id: user.id,
       has_costs: false,
       costs_record_count: 0,
     }, { onConflict: 'user_id' })
+  if (statusError) throw new Error(`Failed to update data status: ${statusError.message}`)
 }
 
 /**
@@ -507,16 +521,18 @@ export async function clearUsageData(): Promise<void> {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('Not authenticated')
 
-  await supabase.from('usage_records').delete().eq('user_id', user.id)
+  const { error: deleteError } = await supabase.from('usage_records').delete().eq('user_id', user.id)
+  if (deleteError) throw new Error(`Failed to clear usage data: ${deleteError.message}`)
 
   // Update data status
-  await supabase
+  const { error: statusError } = await supabase
     .from('user_data_status')
     .upsert({
       user_id: user.id,
       has_usage: false,
       usage_record_count: 0,
     }, { onConflict: 'user_id' })
+  if (statusError) throw new Error(`Failed to update data status: ${statusError.message}`)
 }
 
 /**
@@ -528,18 +544,24 @@ export async function clearRevenueData(): Promise<void> {
   if (!user) throw new Error('Not authenticated')
 
   // Delete in order to respect foreign key constraints
-  await supabase.from('subscriptions').delete().eq('user_id', user.id)
-  await supabase.from('customers').delete().eq('user_id', user.id)
-  await supabase.from('plans').delete().eq('user_id', user.id)
+  const { error: subsError } = await supabase.from('subscriptions').delete().eq('user_id', user.id)
+  if (subsError) throw new Error(`Failed to clear subscriptions: ${subsError.message}`)
+
+  const { error: custError } = await supabase.from('customers').delete().eq('user_id', user.id)
+  if (custError) throw new Error(`Failed to clear customers: ${custError.message}`)
+
+  const { error: plansError } = await supabase.from('plans').delete().eq('user_id', user.id)
+  if (plansError) throw new Error(`Failed to clear plans: ${plansError.message}`)
 
   // Update data status
-  await supabase
+  const { error: statusError } = await supabase
     .from('user_data_status')
     .upsert({
       user_id: user.id,
       has_revenue: false,
       revenue_customer_count: 0,
     }, { onConflict: 'user_id' })
+  if (statusError) throw new Error(`Failed to update data status: ${statusError.message}`)
 }
 
 // =============================================================================
@@ -551,14 +573,23 @@ export async function clearUserData(): Promise<void> {
   if (!user) throw new Error('Not authenticated')
 
   // Delete in order to respect foreign key constraints (if any)
-  await supabase.from('usage_records').delete().eq('user_id', user.id)
-  await supabase.from('cost_records').delete().eq('user_id', user.id)
-  await supabase.from('subscriptions').delete().eq('user_id', user.id)
-  await supabase.from('customers').delete().eq('user_id', user.id)
-  await supabase.from('plans').delete().eq('user_id', user.id)
+  const { error: usageError } = await supabase.from('usage_records').delete().eq('user_id', user.id)
+  if (usageError) throw new Error(`Failed to clear usage records: ${usageError.message}`)
+
+  const { error: costsError } = await supabase.from('cost_records').delete().eq('user_id', user.id)
+  if (costsError) throw new Error(`Failed to clear cost records: ${costsError.message}`)
+
+  const { error: subsError } = await supabase.from('subscriptions').delete().eq('user_id', user.id)
+  if (subsError) throw new Error(`Failed to clear subscriptions: ${subsError.message}`)
+
+  const { error: custError } = await supabase.from('customers').delete().eq('user_id', user.id)
+  if (custError) throw new Error(`Failed to clear customers: ${custError.message}`)
+
+  const { error: plansError } = await supabase.from('plans').delete().eq('user_id', user.id)
+  if (plansError) throw new Error(`Failed to clear plans: ${plansError.message}`)
 
   // Update status - reset all section flags
-  await supabase
+  const { error: statusError } = await supabase
     .from('user_data_status')
     .upsert({
       user_id: user.id,
@@ -570,6 +601,7 @@ export async function clearUserData(): Promise<void> {
       costs_record_count: 0,
       usage_record_count: 0,
     }, { onConflict: 'user_id' })
+  if (statusError) throw new Error(`Failed to update data status: ${statusError.message}`)
 }
 
 // =============================================================================
