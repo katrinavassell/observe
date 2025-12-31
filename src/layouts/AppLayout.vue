@@ -57,7 +57,7 @@ const isActive = (path: string) => route.path === path
 
         <!-- Footer -->
         <div class="border-t p-4 space-y-3">
-          <div v-if="user" class="text-xs text-muted-foreground truncate">
+          <div v-if="user" class="text-xs text-muted-foreground truncate" :title="user.email">
             {{ user.email }}
           </div>
           <button

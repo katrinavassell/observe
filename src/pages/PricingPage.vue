@@ -37,6 +37,7 @@ import {
   loadSampleData as loadSampleDataToSupabase,
   fetchAnalyzerData,
 } from '@/lib/supabase-data'
+import { toast } from 'vue-sonner'
 
 // =============================================================================
 // ROUTING
@@ -84,7 +85,11 @@ async function loadSampleData() {
     // Fetch and analyze the data
     const data = await fetchAnalyzerData()
     if (data) {
-      analysisResult.value = analyzeData(data)
+      try {
+        analysisResult.value = analyzeData(data)
+      } catch (analyzeErr) {
+        throw new Error('Failed to analyze data. The data format may be invalid.')
+      }
     }
 
     clearInterval(progressInterval)
@@ -110,7 +115,11 @@ async function loadExistingData() {
   try {
     const data = await fetchAnalyzerData()
     if (data) {
-      analysisResult.value = analyzeData(data)
+      try {
+        analysisResult.value = analyzeData(data)
+      } catch (analyzeErr) {
+        throw new Error('Failed to analyze data. The data format may be invalid.')
+      }
       dataSource.value = dataMode.value as 'sample' | 'user'
       analysisComplete.value = true
     }
@@ -119,6 +128,12 @@ async function loadExistingData() {
   } finally {
     isAnalyzing.value = false
   }
+}
+
+function handleDesignPartnerClick() {
+  toast.info('Design Partner Program', {
+    description: 'We\'ll be in touch! Email us at kat@tansohq.com to get started.',
+  })
 }
 
 // =============================================================================
@@ -153,9 +168,20 @@ onMounted(async () => {
     <!-- ==================== EMPTY STATE ==================== -->
     <template v-if="!analysisComplete">
       <!-- Error Alert -->
-      <Alert v-if="error" variant="destructive">
-        <AlertTriangle class="h-4 w-4" />
-        <span class="font-medium">Error:</span> {{ error }}
+      <Alert v-if="error" variant="destructive" class="max-w-2xl mx-auto">
+        <AlertTriangle class="h-4 w-4 shrink-0" />
+        <div class="flex-1">
+          <p class="font-medium">Something went wrong</p>
+          <p class="text-sm mt-1 opacity-90">{{ error }}</p>
+          <div class="flex gap-2 mt-3">
+            <Button size="sm" variant="outline" @click="error = null; loadSampleData()">
+              Try Again
+            </Button>
+            <Button size="sm" variant="ghost" @click="error = null">
+              Dismiss
+            </Button>
+          </div>
+        </div>
       </Alert>
 
       <!-- Progress (for sample data loading) -->
@@ -203,12 +229,10 @@ onMounted(async () => {
           </div>
 
           <div class="flex flex-col sm:flex-row gap-3 justify-center pt-4">
-            <router-link to="/data-sources">
-              <Button size="lg">
-                <Plug class="h-4 w-4 mr-2" />
-                Connect Data
-              </Button>
-            </router-link>
+            <Button size="lg" @click="router.push('/data-sources')">
+              <Plug class="h-4 w-4 mr-2" />
+              Connect Data
+            </Button>
             <Button
               variant="outline"
               size="lg"
@@ -250,8 +274,24 @@ onMounted(async () => {
         <TabsList class="flex-wrap h-auto gap-1 p-1">
           <TabsTrigger value="saas">SaaS Metrics</TabsTrigger>
           <TabsTrigger value="health">Plan Health</TabsTrigger>
-          <TabsTrigger v-if="analysisResult.meta.hasUsageData" value="usage">Usage Anomalies</TabsTrigger>
-          <TabsTrigger v-if="analysisResult.meta.hasCostData" value="margin">Negative Margin</TabsTrigger>
+          <Tooltip v-if="!analysisResult.meta.hasUsageData">
+            <TooltipTrigger as-child>
+              <span class="inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 py-1.5 text-sm font-medium opacity-50 cursor-not-allowed">
+                Usage Anomalies
+              </span>
+            </TooltipTrigger>
+            <TooltipContent>Upload usage data to unlock this tab</TooltipContent>
+          </Tooltip>
+          <TabsTrigger v-else value="usage">Usage Anomalies</TabsTrigger>
+          <Tooltip v-if="!analysisResult.meta.hasCostData">
+            <TooltipTrigger as-child>
+              <span class="inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 py-1.5 text-sm font-medium opacity-50 cursor-not-allowed">
+                Negative Margin
+              </span>
+            </TooltipTrigger>
+            <TooltipContent>Upload AI costs data to unlock this tab</TooltipContent>
+          </Tooltip>
+          <TabsTrigger v-else value="margin">Negative Margin</TabsTrigger>
         </TabsList>
 
         <!-- ========== SaaS Metrics Tab ========== -->
@@ -456,7 +496,7 @@ onMounted(async () => {
               </div>
             </CardHeader>
             <CardContent>
-              <div class="grid grid-cols-5 gap-3">
+              <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
                 <div class="text-center p-3 bg-green-500/10 rounded-lg border border-green-500/20">
                   <p class="text-xs text-muted-foreground mb-0.5">New</p>
                   <p class="text-lg font-semibold text-green-600 dark:text-green-400">
@@ -507,12 +547,42 @@ onMounted(async () => {
               <thead>
                 <tr class="border-b border-border">
                   <th class="text-left p-3 font-medium text-sm">Plan</th>
-                  <th class="text-left p-3 font-medium text-sm">Health</th>
+                  <th class="text-left p-3 font-medium text-sm">
+                    <div class="flex items-center gap-1">
+                      Health
+                      <Tooltip>
+                        <TooltipTrigger>
+                          <Info class="h-3 w-3 text-muted-foreground/60" />
+                        </TooltipTrigger>
+                        <TooltipContent>Composite score (0-100) based on growth, retention, and usage patterns</TooltipContent>
+                      </Tooltip>
+                    </div>
+                  </th>
                   <th class="text-left p-3 font-medium text-sm">Customers</th>
                   <th class="text-left p-3 font-medium text-sm">Total MRR</th>
                   <th class="text-left p-3 font-medium text-sm">Avg MRR</th>
-                  <th class="text-left p-3 font-medium text-sm">Churn Risk</th>
-                  <th class="text-left p-3 font-medium text-sm">Upsell Ready</th>
+                  <th class="text-left p-3 font-medium text-sm">
+                    <div class="flex items-center gap-1">
+                      Churn Risk
+                      <Tooltip>
+                        <TooltipTrigger>
+                          <Info class="h-3 w-3 text-muted-foreground/60" />
+                        </TooltipTrigger>
+                        <TooltipContent>Customers with declining usage or payment issues</TooltipContent>
+                      </Tooltip>
+                    </div>
+                  </th>
+                  <th class="text-left p-3 font-medium text-sm">
+                    <div class="flex items-center gap-1">
+                      Upsell Ready
+                      <Tooltip>
+                        <TooltipTrigger>
+                          <Info class="h-3 w-3 text-muted-foreground/60" />
+                        </TooltipTrigger>
+                        <TooltipContent>Customers using 80%+ of plan limits</TooltipContent>
+                      </Tooltip>
+                    </div>
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -710,13 +780,18 @@ onMounted(async () => {
                     This requires tracking usage at the feature level. <strong>That's what Tanso does.</strong>
                   </p>
                   <div class="flex flex-wrap gap-3">
-                    <Button size="sm">
+                    <Button size="sm" @click="handleDesignPartnerClick">
                       Become a Design Partner
                     </Button>
-                    <Button variant="outline" size="sm">
+                    <a
+                      href="https://tansohq.com"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      class="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-9 rounded-md px-3"
+                    >
                       <ExternalLink class="h-3.5 w-3.5 mr-1.5" />
                       Learn More
-                    </Button>
+                    </a>
                   </div>
                 </div>
               </div>
