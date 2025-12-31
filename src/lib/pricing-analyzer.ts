@@ -175,6 +175,7 @@ export interface UsageAnomaly {
   usage: string
   description: string
   type: 'warning' | 'info'
+  status: 'churn_risk' | 'upsell' | 'anomaly'
 }
 
 export interface NegativeMarginCustomer {
@@ -939,7 +940,8 @@ export function analyzeUsageAnomalies(
             plan: plan.name,
             usage: `${usagePercent}%`,
             description: `▼${declinePercent}% over 3 months`,
-            type: 'info', // Churn risk
+            type: 'info',
+            status: 'churn_risk',
           })
           return // Don't add other anomalies for this customer
         }
@@ -958,7 +960,8 @@ export function analyzeUsageAnomalies(
             plan: plan.name,
             usage: `${spikePercent}%`,
             description: `${months[i]?.substring(5, 7) || ''} spike`,
-            type: 'warning', // Anomaly
+            type: 'warning',
+            status: 'anomaly',
           })
           return
         }
@@ -974,7 +977,8 @@ export function analyzeUsageAnomalies(
         plan: plan.name,
         usage: `${usagePercent}%`,
         description: status,
-        type: 'warning', // Upsell
+        type: 'warning',
+        status: 'upsell',
       })
     }
   })
