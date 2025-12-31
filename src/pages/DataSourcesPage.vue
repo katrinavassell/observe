@@ -321,6 +321,8 @@ watch(
     if (mode === 'sample') {
       if (hasRev) {
         revenueFiles.value = { customers: true, subscriptions: true, invoices: true }
+        // Update RevenueSection UI to show sample files
+        revenueSectionRef.value?.setSampleDataLoaded()
       }
       if (hasCst && !costsFile.value) {
         costsFile.value = { name: 'sample-costs.csv', isSample: true }
@@ -331,6 +333,8 @@ watch(
     } else if (mode === 'user') {
       if (hasRev) {
         revenueFiles.value = { customers: false, subscriptions: true, invoices: false }
+        // Update RevenueSection UI to show user files
+        revenueSectionRef.value?.setSampleDataLoaded()
       }
       if (hasCst && !costsFile.value) {
         costsFile.value = { name: 'costs.csv', isSample: false }
