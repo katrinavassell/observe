@@ -563,7 +563,7 @@ onMounted(async () => {
                       </Tooltip>
                     </div>
                   </th>
-                  <th class="text-left p-3 font-medium text-sm">Customers</th>
+                  <th class="text-center p-3 font-medium text-sm">Customers</th>
                   <th class="text-left p-3 font-medium text-sm">Total MRR</th>
                   <th class="text-left p-3 font-medium text-sm">Avg MRR</th>
                   <th class="text-center p-3 font-medium text-sm">
@@ -577,8 +577,8 @@ onMounted(async () => {
                       </Tooltip>
                     </div>
                   </th>
-                  <th class="text-left p-3 font-medium text-sm">
-                    <div class="flex items-center gap-1">
+                  <th class="text-center p-3 font-medium text-sm">
+                    <div class="flex items-center justify-center gap-1">
                       Upsell Ready
                       <Tooltip>
                         <TooltipTrigger>
@@ -636,7 +636,7 @@ onMounted(async () => {
                     </Tooltip>
                     <span v-else class="text-muted-foreground">0</span>
                   </td>
-                  <td class="p-3 text-sm">
+                  <td class="p-3 text-sm text-center">
                     <Tooltip v-if="plan.upsellReadyCount > 0">
                       <TooltipTrigger>
                         <Badge variant="success" class="cursor-default">
