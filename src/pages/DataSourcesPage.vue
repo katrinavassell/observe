@@ -842,7 +842,7 @@ async function handleContinue() {
         </ul>
         <Button @click="handleTrySampleData" :disabled="isLoadingSample">
           <TrendingUp class="h-4 w-4 mr-2" />
-          {{ isLoadingSample ? 'Loading...' : 'Try Sample Data' }}
+          {{ isLoadingSample ? 'Loading...' : 'Load Complete Demo Dataset' }}
         </Button>
       </CardContent>
     </Card>
@@ -1094,7 +1094,7 @@ async function handleContinue() {
               :disabled="isLoadingRevenue"
               @click="handleUseSampleRevenue"
             >
-              {{ isLoadingRevenue ? 'Loading...' : 'Use sample data' }}
+              {{ isLoadingRevenue ? 'Loading...' : 'Use sample revenue' }}
             </button>
             <span class="text-muted-foreground/30">|</span>
             <button
@@ -1267,7 +1267,7 @@ async function handleContinue() {
               :disabled="isLoadingCosts"
               @click="handleUseSampleData('costs')"
             >
-              {{ isLoadingCosts ? 'Loading...' : 'Use sample data' }}
+              {{ isLoadingCosts ? 'Loading...' : 'Use sample costs' }}
             </button>
           </div>
         </CardContent>
@@ -1350,7 +1350,7 @@ async function handleContinue() {
               :disabled="isLoadingUsage"
               @click="handleUseSampleData('usage')"
             >
-              {{ isLoadingUsage ? 'Loading...' : 'Use sample data' }}
+              {{ isLoadingUsage ? 'Loading...' : 'Use sample usage' }}
             </button>
           </div>
 
@@ -1468,17 +1468,27 @@ async function handleContinue() {
 
           <!-- Request Form (inline) -->
           <div v-if="showRequestForm" class="pt-3 border-t space-y-3">
-            <p class="text-sm font-medium">What integration do you need?</p>
+            <div class="flex items-center justify-between">
+              <p class="text-sm font-medium">What integration do you need?</p>
+              <span class="text-xs text-muted-foreground">
+                {{ requestFormData.integration.length }}/100
+              </span>
+            </div>
             <input
               v-model="requestFormData.integration"
               type="text"
+              maxlength="100"
               placeholder="e.g., Xero, Chargebee, Recurly..."
               class="w-full px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary/50"
+              :class="{ 'border-destructive': requestFormData.integration.length > 0 && requestFormData.integration.trim().length < 2 }"
             />
+            <p v-if="requestFormData.integration.length > 0 && requestFormData.integration.trim().length < 2" class="text-xs text-destructive">
+              Please enter at least 2 characters
+            </p>
             <div class="flex gap-2">
               <Button
                 size="sm"
-                :disabled="isSubmittingRequest"
+                :disabled="isSubmittingRequest || requestFormData.integration.trim().length < 2"
                 @click="submitRequestForm"
               >
                 {{ isSubmittingRequest ? 'Submitting...' : 'Submit Request' }}
@@ -1486,7 +1496,7 @@ async function handleContinue() {
               <Button
                 variant="ghost"
                 size="sm"
-                @click="showRequestForm = false"
+                @click="showRequestForm = false; requestFormData.integration = ''"
               >
                 Cancel
               </Button>

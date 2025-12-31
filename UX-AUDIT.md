@@ -110,6 +110,8 @@ User doesn't know which does what.
 - Make hero CTA clearly say "Load Complete Demo Dataset"
 - Section links: "Use sample [costs/usage]"
 
+**Status: ✅ FIXED** - Hero says "Load Complete Demo Dataset", sections say "Use sample revenue/costs/usage"
+
 ---
 
 ### 7. No Feedback When Clicking "Use sample data" Links
@@ -171,6 +173,8 @@ User doesn't know which does what.
 - Required field indicator
 
 **Fix:** Add placeholder text, max length, and validation feedback.
+
+**Status: ✅ FIXED** - Added character counter, max length (100), and min length validation (2 chars)
 
 ---
 
