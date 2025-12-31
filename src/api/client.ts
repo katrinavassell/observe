@@ -1,5 +1,31 @@
+/**
+ * API Client - Centralized HTTP client for backend communication.
+ *
+ * This module provides typed API functions for all backend endpoints:
+ * - Revenue Analytics: MRR, ARR, trends, discrepancies
+ * - Accounts: CRUD operations and detail views
+ * - Matches: Account matching and reconciliation
+ * - Pricing Intelligence: Analysis and recommendations
+ * - Integrations: Stripe, coming-soon integrations
+ * - Data Management: Sample data, templates, uploads
+ *
+ * All requests go through the `/api` proxy defined in vite.config.ts.
+ *
+ * @module api/client
+ */
+
+/** Base URL for all API requests (proxied to backend in dev) */
 const API_BASE = '/api'
 
+/**
+ * Generic HTTP request helper with JSON handling and error management.
+ *
+ * @template T - Expected response type
+ * @param endpoint - API endpoint path (without base URL)
+ * @param options - Standard fetch options
+ * @returns Parsed JSON response
+ * @throws Error if response is not OK
+ */
 async function request<T>(
   endpoint: string,
   options: RequestInit = {}
@@ -60,6 +86,11 @@ export interface RevenueAnalytics {
   discrepancies: Discrepancy[]
 }
 
+/**
+ * Fetch aggregated revenue analytics including MRR, ARR, trends, and discrepancies.
+ *
+ * @returns Revenue metrics with confidence score and any detected discrepancies
+ */
 export async function getRevenueAnalytics(): Promise<RevenueAnalytics> {
   return request('/analytics/revenue')
 }
@@ -84,6 +115,17 @@ export interface AccountsResponse {
   has_more: boolean
 }
 
+/**
+ * Fetch a paginated list of accounts with optional filters.
+ *
+ * @param params - Filter and pagination options
+ * @param params.source_system - Filter by source system (e.g., "stripe")
+ * @param params.segment - Filter by customer segment
+ * @param params.search - Search by account name or domain
+ * @param params.limit - Max results to return (default: 50)
+ * @param params.offset - Pagination offset
+ * @returns Paginated account list with total count
+ */
 export async function getAccounts(params?: {
   source_system?: string
   segment?: string
@@ -319,6 +361,18 @@ export interface PricingIntelligence {
   generated_at: string
 }
 
+/**
+ * Fetch comprehensive pricing intelligence analysis.
+ *
+ * Includes:
+ * - Revenue concentration risk (top customers)
+ * - Pricing anomalies (under/overpriced accounts)
+ * - Discount analysis
+ * - Segment benchmarks
+ * - Usage-to-revenue correlation
+ *
+ * @returns Pricing intelligence report with confidence score
+ */
 export async function getPricingIntelligence(): Promise<PricingIntelligence> {
   return request('/analytics/pricing-intelligence')
 }
@@ -427,6 +481,16 @@ export interface SampleDataResult {
   invoice_count?: number
 }
 
+/**
+ * Load sample demonstration data into the database.
+ *
+ * Creates realistic SaaS data including:
+ * - 30 sample accounts across segments
+ * - Subscription and invoice history
+ * - Usage metrics
+ *
+ * @returns Success status with record counts
+ */
 export async function loadSampleData(): Promise<SampleDataResult> {
   return request('/sample-data/load', { method: 'POST' })
 }
@@ -504,6 +568,18 @@ export interface ConnectStripeResult {
   account_id: string
 }
 
+/**
+ * Connect a Stripe account using a restricted API key.
+ *
+ * The API key should have read permissions for:
+ * - Customers
+ * - Subscriptions
+ * - Invoices
+ * - Products/Prices
+ *
+ * @param apiKey - Stripe restricted API key (rk_live_... or rk_test_...)
+ * @returns Connection result with account details
+ */
 export async function connectStripeWithApiKey(apiKey: string): Promise<ConnectStripeResult> {
   const params = new URLSearchParams()
   params.set('api_key', apiKey)
