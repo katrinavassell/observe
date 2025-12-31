@@ -608,7 +608,7 @@ onMounted(async () => {
                       </span>
                     </div>
                   </td>
-                  <td class="p-3 text-sm">
+                  <td class="p-3 text-sm text-center">
                     <Tooltip v-if="plan.customerNames.length > 0">
                       <TooltipTrigger class="cursor-default underline decoration-dotted underline-offset-2">
                         {{ plan.customerCount }}
