@@ -420,13 +420,11 @@ async function processFile(file: File, type: 'costs' | 'usage') {
 }
 
 function clearFile(type: 'costs' | 'usage') {
-  console.log('[clearFile] Clearing', type, 'file')
   const fileRefs = { costs: costsFile, usage: usageFile }
   fileRefs[type].value = null
 
   // Removing any file is a change - trigger unsaved warning
   hasUnsavedChanges.value = true
-  console.log('[clearFile] hasUnsavedChanges set to true')
 }
 
 // Use sample data for a specific section
