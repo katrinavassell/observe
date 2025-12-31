@@ -692,14 +692,11 @@ const pendingNavigationPath = ref<string | null>(null)
 
 // Navigation guard - intercept route changes when there are unsaved changes
 onBeforeRouteLeave((to, _from, next) => {
-  console.log('[NavGuard] hasUnsavedChanges:', hasUnsavedChanges.value, 'pendingPath:', pendingNavigationPath.value)
   if (hasUnsavedChanges.value && !pendingNavigationPath.value) {
-    console.log('[NavGuard] Showing dialog')
     pendingNavigationPath.value = to.fullPath
     showDiscardDialog.value = true
     next(false)
   } else {
-    console.log('[NavGuard] Allowing navigation')
     next()
   }
 })

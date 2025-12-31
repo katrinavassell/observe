@@ -110,6 +110,7 @@ export interface PlanHealth {
   planName: string
   planId: string
   customerCount: number
+  customerNames: string[]
   totalMRR: number
   avgMRR: number
   avgUsage: string
@@ -385,6 +386,7 @@ export function calculatePlanHealth(
     const avgMRR = activeSubs.length > 0 ? totalMRR / activeSubs.length : 0
 
     // Calculate health indicators
+    const customerNames: string[] = []
     const churnRiskCustomers: string[] = []
     const upsellReadyCustomers: string[] = []
     const negativeMarginCustomers: string[] = []
@@ -392,6 +394,7 @@ export function calculatePlanHealth(
     activeSubs.forEach(sub => {
       const customer = customerMap.get(sub.customer_id)
       const customerName = customer?.name || customer?.email || sub.customer_id
+      customerNames.push(customerName)
       const mrr = sub.mrr_override ?? (plan.price_amount / (plan.interval_months || 1))
 
       // Check for declining usage trend (churn risk)
@@ -453,6 +456,7 @@ export function calculatePlanHealth(
       planName: plan.name,
       planId: plan.plan_id,
       customerCount: activeSubs.length,
+      customerNames,
       totalMRR,
       avgMRR,
       avgUsage: avgUsage > 0 ? `${avgUsage.toFixed(0)}%` : 'N/A',

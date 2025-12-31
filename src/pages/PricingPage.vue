@@ -250,16 +250,8 @@ onMounted(async () => {
         <TabsList class="flex-wrap h-auto gap-1 p-1">
           <TabsTrigger value="saas">SaaS Metrics</TabsTrigger>
           <TabsTrigger value="health">Plan Health</TabsTrigger>
-          <!-- Hidden for P0 scope -->
-          <!-- <TabsTrigger value="experiments">Price Experiments</TabsTrigger> -->
-          <!-- <TabsTrigger value="bundling">Bundling</TabsTrigger> -->
-          <TabsTrigger v-if="analysisResult.meta.hasUsageData" value="usage">
-            Usage Anomalies
-          </TabsTrigger>
-          <TabsTrigger v-if="analysisResult.meta.hasCostData" value="margin">
-            Negative Margin
-          </TabsTrigger>
-          <!-- <TabsTrigger value="cohorts">Cohorts</TabsTrigger> -->
+          <TabsTrigger v-if="analysisResult.meta.hasUsageData" value="usage">Usage Anomalies</TabsTrigger>
+          <TabsTrigger v-if="analysisResult.meta.hasCostData" value="margin">Negative Margin</TabsTrigger>
         </TabsList>
 
         <!-- ========== SaaS Metrics Tab ========== -->
@@ -529,31 +521,58 @@ onMounted(async () => {
                   :key="plan.planId"
                   class="border-b border-border hover:bg-muted/50"
                 >
-                  <td class="p-3 font-medium">{{ plan.planName }}</td>
-                  <td class="p-3">
+                  <td class="p-3 text-sm font-medium">{{ plan.planName }}</td>
+                  <td class="p-3 text-sm">
                     <div class="flex items-center gap-2">
                       <Progress :value="plan.healthScore" class="w-16 h-2" />
                       <span
-                        class="text-sm font-semibold"
+                        class="font-semibold"
                         :class="plan.healthScore >= 80 ? 'text-green-600' : plan.healthScore >= 60 ? 'text-yellow-600' : 'text-red-600'"
                       >
                         {{ plan.healthScore }}
                       </span>
                     </div>
                   </td>
-                  <td class="p-3">{{ plan.customerCount }}</td>
-                  <td class="p-3 font-mono">${{ plan.totalMRR.toFixed(0) }}</td>
-                  <td class="p-3 font-mono">${{ plan.avgMRR.toFixed(0) }}</td>
-                  <td class="p-3">
-                    <Badge v-if="plan.churnRiskCount > 0" variant="destructive">
-                      {{ plan.churnRiskCount }}
-                    </Badge>
+                  <td class="p-3 text-sm">
+                    <Tooltip v-if="plan.customerNames.length > 0">
+                      <TooltipTrigger class="cursor-default underline decoration-dotted underline-offset-2">
+                        {{ plan.customerCount }}
+                      </TooltipTrigger>
+                      <TooltipContent side="top">
+                        <p class="font-medium mb-1">{{ plan.customerCount }} customers</p>
+                        <p class="text-muted-foreground">{{ plan.customerNames.slice(0, 5).join(', ') }}{{ plan.customerNames.length > 5 ? ` +${plan.customerNames.length - 5} more` : '' }}</p>
+                      </TooltipContent>
+                    </Tooltip>
+                    <span v-else>{{ plan.customerCount }}</span>
+                  </td>
+                  <td class="p-3 text-sm font-mono">${{ plan.totalMRR.toFixed(0) }}</td>
+                  <td class="p-3 text-sm font-mono">${{ plan.avgMRR.toFixed(0) }}</td>
+                  <td class="p-3 text-sm">
+                    <Tooltip v-if="plan.churnRiskCount > 0">
+                      <TooltipTrigger>
+                        <Badge variant="destructive" class="cursor-default">
+                          {{ plan.churnRiskCount }}
+                        </Badge>
+                      </TooltipTrigger>
+                      <TooltipContent side="top">
+                        <p class="font-medium mb-1">{{ plan.churnRiskCount }} at risk</p>
+                        <p class="text-muted-foreground">{{ plan.churnRiskCustomers.join(', ') }}</p>
+                      </TooltipContent>
+                    </Tooltip>
                     <span v-else class="text-muted-foreground">0</span>
                   </td>
-                  <td class="p-3">
-                    <Badge v-if="plan.upsellReadyCount > 0" variant="success">
-                      {{ plan.upsellReadyCount }}
-                    </Badge>
+                  <td class="p-3 text-sm">
+                    <Tooltip v-if="plan.upsellReadyCount > 0">
+                      <TooltipTrigger>
+                        <Badge variant="success" class="cursor-default">
+                          {{ plan.upsellReadyCount }}
+                        </Badge>
+                      </TooltipTrigger>
+                      <TooltipContent side="top">
+                        <p class="font-medium mb-1">{{ plan.upsellReadyCount }} ready for upsell</p>
+                        <p class="text-muted-foreground">{{ plan.upsellReadyCustomers.join(', ') }}</p>
+                      </TooltipContent>
+                    </Tooltip>
                     <span v-else class="text-muted-foreground">0</span>
                   </td>
                 </tr>
@@ -600,15 +619,15 @@ onMounted(async () => {
                   :key="anomaly.customerId"
                   class="border-b border-border hover:bg-muted/50"
                 >
-                  <td class="p-3 font-medium">{{ anomaly.customer }}</td>
-                  <td class="p-3"><Badge variant="secondary">{{ anomaly.plan }}</Badge></td>
-                  <td class="p-3">
-                    <span :class="anomaly.type === 'warning' ? 'text-yellow-600 font-semibold' : ''">
+                  <td class="p-3 text-sm font-medium">{{ anomaly.customer }}</td>
+                  <td class="p-3 text-sm"><Badge variant="secondary">{{ anomaly.plan }}</Badge></td>
+                  <td class="p-3 text-sm font-mono">
+                    <span :class="anomaly.type === 'warning' ? 'text-yellow-600' : ''">
                       {{ anomaly.usage }}
                     </span>
                   </td>
                   <td class="p-3 text-sm text-muted-foreground">{{ anomaly.description }}</td>
-                  <td class="p-3">
+                  <td class="p-3 text-sm">
                     <Badge :variant="anomaly.type === 'warning' ? 'destructive' : 'secondary'">
                       {{ anomaly.type === 'warning' ? 'Over Limit' : 'Under-utilized' }}
                     </Badge>
@@ -650,11 +669,11 @@ onMounted(async () => {
                   :key="customer.customerId"
                   class="border-b border-border hover:bg-muted/50"
                 >
-                  <td class="p-3 font-medium">{{ customer.customer }}</td>
-                  <td class="p-3"><Badge variant="secondary">{{ customer.plan }}</Badge></td>
-                  <td class="p-3 font-mono">{{ customer.mrr }}</td>
-                  <td class="p-3 font-mono text-destructive font-semibold">{{ customer.costs }}</td>
-                  <td class="p-3"><Badge variant="destructive">{{ customer.margin }}</Badge></td>
+                  <td class="p-3 text-sm font-medium">{{ customer.customer }}</td>
+                  <td class="p-3 text-sm"><Badge variant="secondary">{{ customer.plan }}</Badge></td>
+                  <td class="p-3 text-sm font-mono">{{ customer.mrr }}</td>
+                  <td class="p-3 text-sm font-mono text-destructive">{{ customer.costs }}</td>
+                  <td class="p-3 text-sm"><Badge variant="destructive">{{ customer.margin }}</Badge></td>
                   <td class="p-3 text-sm text-muted-foreground">{{ customer.reason }}</td>
                 </tr>
               </tbody>
