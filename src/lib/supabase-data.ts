@@ -476,6 +476,73 @@ export async function uploadUsageData(records: UsageRecord[]): Promise<{ count: 
 }
 
 // =============================================================================
+// CLEAR INDIVIDUAL DATA TYPES
+// =============================================================================
+
+/**
+ * Clear cost data only
+ * Updates user_data_status to reflect has_costs = false
+ */
+export async function clearCostData(): Promise<void> {
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('Not authenticated')
+
+  await supabase.from('cost_records').delete().eq('user_id', user.id)
+
+  // Update data status
+  await supabase
+    .from('user_data_status')
+    .upsert({
+      user_id: user.id,
+      has_costs: false,
+      costs_record_count: 0,
+    }, { onConflict: 'user_id' })
+}
+
+/**
+ * Clear usage data only
+ * Updates user_data_status to reflect has_usage = false
+ */
+export async function clearUsageData(): Promise<void> {
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('Not authenticated')
+
+  await supabase.from('usage_records').delete().eq('user_id', user.id)
+
+  // Update data status
+  await supabase
+    .from('user_data_status')
+    .upsert({
+      user_id: user.id,
+      has_usage: false,
+      usage_record_count: 0,
+    }, { onConflict: 'user_id' })
+}
+
+/**
+ * Clear revenue data only (plans, customers, subscriptions)
+ * Updates user_data_status to reflect has_revenue = false
+ */
+export async function clearRevenueData(): Promise<void> {
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('Not authenticated')
+
+  // Delete in order to respect foreign key constraints
+  await supabase.from('subscriptions').delete().eq('user_id', user.id)
+  await supabase.from('customers').delete().eq('user_id', user.id)
+  await supabase.from('plans').delete().eq('user_id', user.id)
+
+  // Update data status
+  await supabase
+    .from('user_data_status')
+    .upsert({
+      user_id: user.id,
+      has_revenue: false,
+      revenue_customer_count: 0,
+    }, { onConflict: 'user_id' })
+}
+
+// =============================================================================
 // CLEAR USER DATA
 // =============================================================================
 

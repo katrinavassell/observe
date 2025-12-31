@@ -30,6 +30,9 @@ import {
   loadSampleUsage,
   uploadCostData,
   uploadUsageData,
+  clearCostData,
+  clearUsageData,
+  clearRevenueData,
   type CostRecord,
   type UsageRecord,
 } from '@/lib/supabase-data'
@@ -96,6 +99,11 @@ const uploadError = ref<string | null>(null)
 const costsFile = ref<{ name: string; isSample: boolean } | null>(null)
 const usageFile = ref<{ name: string; isSample: boolean } | null>(null)
 
+// Track pending deletions (file removed but not yet saved to database)
+const pendingCostsDeletion = ref(false)
+const pendingUsageDeletion = ref(false)
+const pendingRevenueDeletion = ref(false)
+
 // Drag states
 const isDraggingStripe = ref(false)
 const isDraggingCosts = ref(false)
@@ -119,6 +127,10 @@ async function handleTrySampleData() {
     reconciliationReport.value = null
     showReconciliation.value = false
     hasUnsavedChanges.value = false
+    // Reset all pending deletions since sample data replaces everything
+    pendingCostsDeletion.value = false
+    pendingUsageDeletion.value = false
+    pendingRevenueDeletion.value = false
     // Mark all sections as having sample data (no File objects = saved data)
     stripeSampleLoaded.value = true
     stripeCustomersFile.value = { name: 'customers.csv' }
@@ -185,6 +197,7 @@ async function processStripeFile(file: File) {
     reconciliationReport.value = null
     showReconciliation.value = false
     uploadError.value = null
+    pendingRevenueDeletion.value = false  // Clear pending deletion since we have new data
 
     if (fileType === 'customers') {
       stripeCustomersFile.value = { name: file.name, file }
@@ -231,6 +244,12 @@ function clearStripeFile(type: 'customers' | 'subscriptions' | 'invoices') {
     parsedInvoices.value = []
   }
   stripeSampleLoaded.value = false
+
+  // If ALL stripe files are now cleared, mark revenue for deletion
+  if (!stripeCustomersFile.value && !stripeSubscriptionsFile.value && !stripeInvoicesFile.value) {
+    pendingRevenueDeletion.value = true
+  }
+
   // Reset reconciliation when files are removed
   reconciliationReport.value = null
   showReconciliation.value = false
@@ -381,6 +400,7 @@ async function processFile(file: File, type: 'costs' | 'usage') {
       const result = await uploadCostData(records)
       await refetchDataMode()
       fileRefs[type].value = { name: file.name, isSample: false }
+      pendingCostsDeletion.value = false  // Clear pending deletion since we have new data
       toast.success('Costs uploaded!', {
         description: `${result.count} cost records saved`,
       })
@@ -406,6 +426,7 @@ async function processFile(file: File, type: 'costs' | 'usage') {
       const result = await uploadUsageData(records)
       await refetchDataMode()
       fileRefs[type].value = { name: file.name, isSample: false }
+      pendingUsageDeletion.value = false  // Clear pending deletion since we have new data
       toast.success('Usage uploaded!', {
         description: `${result.count} usage records saved`,
       })
@@ -421,7 +442,10 @@ async function processFile(file: File, type: 'costs' | 'usage') {
 
 function clearFile(type: 'costs' | 'usage') {
   const fileRefs = { costs: costsFile, usage: usageFile }
+  const deletionRefs = { costs: pendingCostsDeletion, usage: pendingUsageDeletion }
+
   fileRefs[type].value = null
+  deletionRefs[type].value = true  // Mark for deletion on save
 
   // Removing any file is a change - trigger unsaved warning
   hasUnsavedChanges.value = true
@@ -444,6 +468,7 @@ async function handleUseSampleRevenue() {
     reconciliationReport.value = null
     showReconciliation.value = false
     hasUnsavedChanges.value = false
+    pendingRevenueDeletion.value = false  // Clear pending deletion since we have new data
     // Mark Stripe files as loaded with sample data (no File objects = saved data)
     stripeSampleLoaded.value = true
     stripeCustomersFile.value = { name: 'customers.csv' }
@@ -471,6 +496,7 @@ async function handleUseSampleData(type: 'costs' | 'usage') {
     usage: loadSampleUsage,
   }
   const fileRefs = { costs: costsFile, usage: usageFile }
+  const deletionRefs = { costs: pendingCostsDeletion, usage: pendingUsageDeletion }
   const fileNames = {
     costs: 'sample-costs.csv',
     usage: 'sample-usage.csv',
@@ -483,6 +509,7 @@ async function handleUseSampleData(type: 'costs' | 'usage') {
     await refetchDataMode()
     // Update the dropzone to show sample data is loaded
     fileRefs[type].value = { name: fileNames[type], isSample: true }
+    deletionRefs[type].value = false  // Clear pending deletion since we have new data
     toast.success(`Sample ${type} data loaded!`, {
       description: 'Go to Pricing to see the analysis.',
     })
@@ -554,11 +581,13 @@ const stripeFileCount = computed(() =>
 )
 
 const uploadProgress = computed(() => {
-  // Check actual database status for each section
+  // Check both database status AND local file state
+  // If user removed a file locally, show as not done
+  const hasRevenueFiles = stripeCustomersFile.value || stripeSubscriptionsFile.value || stripeInvoicesFile.value
   const items = [
-    { label: 'Revenue', done: hasRevenue.value },
-    { label: 'AI Costs', done: hasCosts.value },
-    { label: 'Usage', done: hasUsage.value },
+    { label: 'Revenue', done: hasRevenue.value && hasRevenueFiles },
+    { label: 'AI Costs', done: hasCosts.value && costsFile.value },
+    { label: 'Usage', done: hasUsage.value && usageFile.value },
   ]
   return items
 })
@@ -718,6 +747,10 @@ function handleDiscardConfirm() {
   reconciliationReport.value = null
   showReconciliation.value = false
   hasUnsavedChanges.value = false
+  // Reset pending deletions (user chose to discard changes)
+  pendingCostsDeletion.value = false
+  pendingUsageDeletion.value = false
+  pendingRevenueDeletion.value = false
   // Navigate to the pending destination
   if (pendingNavigationPath.value) {
     const path = pendingNavigationPath.value
@@ -726,11 +759,39 @@ function handleDiscardConfirm() {
   }
 }
 
-function handleContinue() {
-  // User clicked "Save and Analyze" - this is an intentional action to proceed
-  // Clear the flag so the navigation guard doesn't trigger
-  hasUnsavedChanges.value = false
-  router.push('/')
+async function handleContinue() {
+  // User clicked "Save and Analyze" - process any pending deletions
+  try {
+    const deletionPromises: Promise<void>[] = []
+
+    if (pendingCostsDeletion.value) {
+      deletionPromises.push(clearCostData())
+    }
+    if (pendingUsageDeletion.value) {
+      deletionPromises.push(clearUsageData())
+    }
+    if (pendingRevenueDeletion.value) {
+      deletionPromises.push(clearRevenueData())
+    }
+
+    if (deletionPromises.length > 0) {
+      await Promise.all(deletionPromises)
+      await refetchDataMode()
+    }
+
+    // Reset pending deletion flags
+    pendingCostsDeletion.value = false
+    pendingUsageDeletion.value = false
+    pendingRevenueDeletion.value = false
+
+    // Clear the flag so the navigation guard doesn't trigger
+    hasUnsavedChanges.value = false
+    router.push('/')
+  } catch (error) {
+    toast.error('Failed to save changes', {
+      description: error instanceof Error ? error.message : 'Please try again.',
+    })
+  }
 }
 
 </script>
@@ -1442,7 +1503,7 @@ function handleContinue() {
             </span>
           </div>
         </div>
-        <Button @click="handleContinue">
+        <Button @click="handleContinue" :disabled="!hasAnyData">
           Save and Analyze
           <ArrowRight class="h-4 w-4 ml-2" />
         </Button>
