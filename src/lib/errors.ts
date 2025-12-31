@@ -24,6 +24,8 @@ export class AppError extends Error {
   public readonly code?: string
   /** Additional context data */
   public readonly context?: Record<string, unknown>
+  /** Original error that caused this error */
+  public readonly cause?: Error
 
   constructor(
     message: string,
@@ -34,11 +36,14 @@ export class AppError extends Error {
       cause?: Error
     }
   ) {
-    super(message, { cause: options?.cause })
+    super(message)
     this.name = 'AppError'
     this.statusCode = options?.statusCode
     this.code = options?.code
     this.context = options?.context
+    if (options?.cause) {
+      this.cause = options.cause
+    }
   }
 }
 

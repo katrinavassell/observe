@@ -220,20 +220,6 @@ export interface AnalysisResult {
 // =============================================================================
 
 /**
- * Baseline margin percentage from July PRD analysis.
- * Used as reference point for calculating margin change trends.
- * This represents the historical margin before cost growth impact.
- */
-const BASELINE_MARGIN_JULY_PERCENT = 66
-
-/**
- * Default month-over-month cost growth percentage.
- * Applied to sample data per PRD specification.
- * In production, this should be calculated from historical cost data.
- */
-const DEFAULT_COST_GROWTH_MOM_PERCENT = 15
-
-/**
  * Average customer lifespan multiplier for LTV calculation.
  * Based on 90% monthly retention rate: 1 / (1 - 0.9) = 10 months.
  * LTV = ARPU * AVERAGE_CUSTOMER_LIFESPAN_MONTHS
@@ -610,7 +596,7 @@ export function calculatePlanHealth(
     })
 
     // Health score calculation using configured penalties
-    let healthScore = HEALTH_SCORE.BASE
+    let healthScore: number = HEALTH_SCORE.BASE
     const churnPenalty = Math.min(
       churnRiskCustomers.length * HEALTH_SCORE.CHURN_RISK_PENALTY_PER_CUSTOMER,
       HEALTH_SCORE.CHURN_RISK_PENALTY_MAX

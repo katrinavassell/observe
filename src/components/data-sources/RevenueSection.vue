@@ -23,7 +23,7 @@ import {
   ArrowRight,
 } from 'lucide-vue-next'
 import { Card, CardContent, Button } from '@/components/ui'
-import { useStripeUpload, type StripeFile } from '@/composables/useStripeUpload'
+import { useStripeUpload } from '@/composables/useStripeUpload'
 
 const props = defineProps<{
   /** Whether sample revenue data is being loaded */

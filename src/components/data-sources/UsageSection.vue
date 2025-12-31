@@ -20,7 +20,7 @@ import {
   X,
   Info,
 } from 'lucide-vue-next'
-import { Card, CardContent, Button } from '@/components/ui'
+import { Card, CardContent } from '@/components/ui'
 import Alert from '@/components/ui/alert.vue'
 import { uploadUsageData, type UsageRecord } from '@/lib/supabase-data'
 
