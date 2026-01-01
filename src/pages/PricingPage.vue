@@ -36,6 +36,9 @@ import Progress from '@/components/ui/progress.vue'
 import Alert from '@/components/ui/alert.vue'
 import MrrChart from '@/components/charts/MrrChart.vue'
 import CohortChart from '@/components/charts/CohortChart.vue'
+import MarginCompressionAlert from '@/components/charts/MarginCompressionAlert.vue'
+import CostBreakdownChart from '@/components/charts/CostBreakdownChart.vue'
+import GapCallout from '@/components/charts/GapCallout.vue'
 import { analyzeData, type AnalysisResult } from '@/lib/pricing-analyzer'
 import { getSampleDataSummary } from '@/lib/sample-data'
 import { useDataMode } from '@/composables/useDataMode'
@@ -468,9 +471,17 @@ onMounted(async () => {
             </Card>
           </div>
 
-          <!-- Margin Alert Banner -->
+          <!-- Margin Compression Alert (Hero Section) -->
+          <MarginCompressionAlert
+            v-if="analysisResult.meta.hasCostData && analysisResult.costGrowthMetrics.growthGap > 10"
+            :data="analysisResult.monthlyMetrics"
+            :revenue-growth="analysisResult.costGrowthMetrics.revenueGrowth"
+            :cost-growth="analysisResult.costGrowthMetrics.costGrowth"
+          />
+
+          <!-- Legacy Margin Alert Banner (fallback for smaller gaps) -->
           <Alert
-            v-if="analysisResult.meta.hasCostData && analysisResult.saasMetrics.marginChange < -10"
+            v-else-if="analysisResult.meta.hasCostData && analysisResult.saasMetrics.marginChange < -10"
             variant="destructive"
             class="border-amber-500/50 bg-amber-50 dark:bg-amber-950/20"
           >
@@ -622,6 +633,20 @@ onMounted(async () => {
               </div>
             </CardContent>
           </Card>
+
+          <!-- Cost Breakdown by Provider -->
+          <CostBreakdownChart
+            v-if="analysisResult.meta.hasCostData"
+            :providers="analysisResult.costGrowthMetrics.providers"
+            :total-costs="analysisResult.costGrowthMetrics.totalCosts"
+          />
+
+          <!-- Gap Callout - What You Can't See -->
+          <GapCallout
+            v-if="analysisResult.meta.hasCostData"
+            :show-estimated-margins="analysisResult.negativeMarginCustomers.length > 0"
+            @see-margins="() => {}"
+          />
         </TabsContent>
 
         <!-- ========== Plan Health Tab ========== -->
