@@ -32,6 +32,8 @@ const props = defineProps<{
   isStripeConnected?: boolean
   /** Connected Stripe account name */
   stripeAccountName?: string
+  /** Whether Stripe sync is in progress */
+  isSyncing?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -170,9 +172,11 @@ function handleClearFile(type: 'customers' | 'subscriptions' | 'invoices'): void
                 variant="outline"
                 size="sm"
                 class="text-green-700 border-green-300 hover:bg-green-100"
+                :disabled="props.isSyncing"
                 @click="emit('syncStripe')"
               >
-                Sync Now
+                <Loader2 v-if="props.isSyncing" class="h-3 w-3 mr-1 animate-spin" />
+                {{ props.isSyncing ? 'Syncing...' : 'Sync Now' }}
               </Button>
               <Button
                 variant="ghost"

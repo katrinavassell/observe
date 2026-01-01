@@ -617,6 +617,19 @@ export async function connectStripeWithApiKey(apiKey: string): Promise<ConnectSt
   })
 }
 
+export interface StripeStatus {
+  connected: boolean
+  account_id: string | null
+  account_name: string | null
+}
+
+/**
+ * Check if Stripe is connected for the current user.
+ */
+export async function getStripeStatus(): Promise<StripeStatus> {
+  return request('/integrations/stripe/status')
+}
+
 export interface SyncResult {
   success: boolean
   message: string

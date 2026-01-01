@@ -15,8 +15,19 @@ const Stripe = require('stripe')
 const app = express()
 const PORT = 8000
 
-// Store API keys in memory (per-session, not persistent)
+// Store API keys and account info in memory (per-session, not persistent)
 const apiKeys = new Map()
+const accountInfo = new Map() // userId -> { account_id, account_name }
+
+// Helper to safely convert Unix timestamp to ISO string
+function toISOString(timestamp) {
+  if (!timestamp) return null
+  try {
+    return new Date(timestamp * 1000).toISOString()
+  } catch {
+    return null
+  }
+}
 
 app.use(cors())
 app.use(express.json())
@@ -42,7 +53,7 @@ function getUserId(req) {
 }
 
 // Connect Stripe with API key
-app.post('/api/integrations/stripe/connect', async (req, res) => {
+app.post('/integrations/stripe/connect', async (req, res) => {
   try {
     const { api_key } = req.body
     const userId = getUserId(req)
@@ -59,13 +70,14 @@ app.post('/api/integrations/stripe/connect', async (req, res) => {
     const stripe = new Stripe(api_key)
     const account = await stripe.accounts.retrieve()
 
-    // Store the API key
-    apiKeys.set(userId, api_key)
-
     const accountName = account.business_profile?.name ||
                        account.settings?.dashboard?.display_name ||
                        account.email ||
                        account.id
+
+    // Store the API key and account info
+    apiKeys.set(userId, api_key)
+    accountInfo.set(userId, { account_id: account.id, account_name: accountName })
 
     res.json({
       success: true,
@@ -79,13 +91,34 @@ app.post('/api/integrations/stripe/connect', async (req, res) => {
   }
 })
 
+// Check Stripe connection status
+app.get('/integrations/stripe/status', (req, res) => {
+  const userId = getUserId(req)
+  const info = accountInfo.get(userId)
+  const hasKey = apiKeys.has(userId)
+
+  if (hasKey && info) {
+    res.json({
+      connected: true,
+      account_id: info.account_id,
+      account_name: info.account_name,
+    })
+  } else {
+    res.json({
+      connected: false,
+      account_id: null,
+      account_name: null,
+    })
+  }
+})
+
 // Basic sync endpoint
-app.post('/api/integrations/stripe/sync', async (req, res) => {
-  res.redirect(307, '/api/integrations/stripe/sync-enhanced')
+app.post('/integrations/stripe/sync', async (req, res) => {
+  res.redirect(307, '/integrations/stripe/sync-enhanced')
 })
 
 // Enhanced sync with all data
-app.post('/api/integrations/stripe/sync-enhanced', async (req, res) => {
+app.post('/integrations/stripe/sync-enhanced', async (req, res) => {
   const startedAt = new Date().toISOString()
   const errors = []
 
@@ -102,7 +135,7 @@ app.post('/api/integrations/stripe/sync-enhanced', async (req, res) => {
       stripe.subscriptions.list({
         limit: 100,
         status: 'all',
-        expand: ['data.items.data.price.product']
+        expand: ['data.items.data.price']
       }).autoPagingToArray({ limit: 10000 }),
       stripe.invoices.list({
         limit: 100,
@@ -141,7 +174,7 @@ app.post('/api/integrations/stripe/sync-enhanced', async (req, res) => {
         email: c.email,
         name: c.name,
         description: c.description,
-        created: new Date(c.created * 1000).toISOString(),
+        created: toISOString(c.created),
         metadata: c.metadata || {},
         total_spend: totalSpend,
         subscription_count: customerSubCount.get(c.id) || 0,
@@ -154,6 +187,9 @@ app.post('/api/integrations/stripe/sync-enhanced', async (req, res) => {
       }
     })
 
+    // Create product lookup map
+    const productMap = new Map(products.map(p => [p.id, p]))
+
     // Transform subscriptions
     const transformedSubscriptions = subscriptions.map(s => {
       const mrr = calculateMrr(s)
@@ -164,27 +200,31 @@ app.post('/api/integrations/stripe/sync-enhanced', async (req, res) => {
         id: s.id,
         customer_id: s.customer,
         status: s.status,
-        created: new Date(s.created * 1000).toISOString(),
-        current_period_start: new Date(s.current_period_start * 1000).toISOString(),
-        current_period_end: new Date(s.current_period_end * 1000).toISOString(),
-        canceled_at: s.canceled_at ? new Date(s.canceled_at * 1000).toISOString() : null,
-        ended_at: s.ended_at ? new Date(s.ended_at * 1000).toISOString() : null,
-        trial_end: s.trial_end ? new Date(s.trial_end * 1000).toISOString() : null,
+        created: toISOString(s.created),
+        current_period_start: toISOString(s.current_period_start),
+        current_period_end: toISOString(s.current_period_end),
+        canceled_at: toISOString(s.canceled_at),
+        ended_at: toISOString(s.ended_at),
+        trial_end: toISOString(s.trial_end),
         metadata: s.metadata || {},
         mrr,
         currency: s.currency,
         billing_interval: interval,
         interval_count: intervalCount,
-        items: s.items.data.map(item => ({
-          id: item.id,
-          price_id: item.price.id,
-          product_id: typeof item.price.product === 'string' ? item.price.product : item.price.product.id,
-          product_name: typeof item.price.product === 'string' ? item.price.product : item.price.product.name,
-          quantity: item.quantity || 1,
-          unit_amount: (item.price.unit_amount || 0) / 100,
-          usage_type: item.price.recurring?.usage_type || 'licensed',
-          metadata: item.metadata || {},
-        })),
+        items: s.items.data.map(item => {
+          const productId = typeof item.price.product === 'string' ? item.price.product : item.price.product?.id
+          const product = productMap.get(productId)
+          return {
+            id: item.id,
+            price_id: item.price.id,
+            product_id: productId,
+            product_name: product?.name || productId,
+            quantity: item.quantity || 1,
+            unit_amount: (item.price.unit_amount || 0) / 100,
+            usage_type: item.price.recurring?.usage_type || 'licensed',
+            metadata: item.metadata || {},
+          }
+        }),
         discount_percent: s.discount?.coupon?.percent_off || null,
       }
     })
@@ -198,9 +238,9 @@ app.post('/api/integrations/stripe/sync-enhanced', async (req, res) => {
       amount_paid: i.amount_paid / 100,
       amount_due: i.amount_due / 100,
       currency: i.currency,
-      created: new Date(i.created * 1000).toISOString(),
-      period_start: new Date(i.period_start * 1000).toISOString(),
-      period_end: new Date(i.period_end * 1000).toISOString(),
+      created: toISOString(i.created),
+      period_start: toISOString(i.period_start),
+      period_end: toISOString(i.period_end),
       line_items: (i.lines?.data || []).map(line => ({
         id: line.id,
         description: line.description,
@@ -217,7 +257,7 @@ app.post('/api/integrations/stripe/sync-enhanced', async (req, res) => {
     const usage = []
     const meteredItems = transformedSubscriptions.flatMap(sub =>
       sub.items
-        .filter(item =/api> item.usage_type === 'metered')
+        .filter(item => item.usage_type === 'metered')
         .map(item => ({ item, customerId: sub.customer_id }))
     )
 
@@ -229,8 +269,8 @@ app.post('/api/integrations/stripe/sync-enhanced', async (req, res) => {
             id: summary.id,
             subscription_item_id: item.id,
             customer_id: customerId,
-            period_start: new Date(summary.period.start * 1000).toISOString(),
-            period_end: new Date(summary.period.end * 1000).toISOString(),
+            period_start: toISOString(summary.period?.start),
+            period_end: toISOString(summary.period?.end),
             total_usage: summary.total_usage,
             metric: item.product_name,
           })
@@ -348,7 +388,8 @@ function calculateMrr(subscription) {
 app.listen(PORT, () => {
   console.log(`\n🚀 Stripe Dev Server running at http://localhost:${PORT}`)
   console.log(`\nEndpoints:`)
-  console.log(`  POST /api/integrations/stripe/connect`)
+  console.log(`  POST /integrations/stripe/connect`)
+  console.log(`  POST /integrations/stripe/sync`)
   console.log(`  POST /integrations/stripe/sync-enhanced`)
   console.log(`\nNow run 'npm run dev' in another terminal.\n`)
 })

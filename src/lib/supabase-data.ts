@@ -813,3 +813,108 @@ export async function fetchAnalyzerData(): Promise<AnalyzerData | null> {
     })) || [],
   }
 }
+
+// =============================================================================
+// SAVE STRIPE DATA
+// =============================================================================
+
+import type { EnhancedSyncResult } from '@/api/client'
+
+/**
+ * Save Stripe sync data to Supabase
+ * Transforms Stripe data to match our database schema
+ */
+export async function saveStripeData(stripeData: EnhancedSyncResult): Promise<void> {
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('Not authenticated')
+
+  // Clear existing revenue data first
+  await clearRevenueData()
+
+  // 1. Create plans from products/prices
+  const planMap = new Map<string, { plan_id: string; name: string; price_amount: number }>()
+
+  for (const product of stripeData.products) {
+    // Find the primary price for this product
+    const price = stripeData.prices.find(p => p.product_id === product.id && p.active)
+    if (price) {
+      planMap.set(product.id, {
+        plan_id: product.id,
+        name: product.name,
+        price_amount: price.unit_amount || 0,
+      })
+    }
+  }
+
+  const plans = Array.from(planMap.values()).map(p => ({
+    user_id: user.id,
+    plan_id: p.plan_id,
+    name: p.name,
+    price_amount: p.price_amount,
+    interval_months: 1,
+    billing_model: 'recurring' as const,
+  }))
+
+  if (plans.length > 0) {
+    const { error: plansError } = await supabase.from('plans').insert(plans)
+    if (plansError) throw new Error(`Failed to insert plans: ${plansError.message}`)
+  }
+
+  // 2. Insert customers
+  const customers = stripeData.customers.map(c => ({
+    user_id: user.id,
+    customer_id: c.id,
+    name: c.name || c.email || c.id,
+    email: c.email,
+    segment: c.segment,
+    created_at: c.created,
+  }))
+
+  if (customers.length > 0) {
+    const { error: customersError } = await supabase.from('customers').insert(customers)
+    if (customersError) throw new Error(`Failed to insert customers: ${customersError.message}`)
+  }
+
+  // 3. Insert subscriptions
+  const subscriptions = stripeData.subscriptions
+    .filter(s => s.status === 'active' || s.status === 'trialing')
+    .map(s => {
+      // Get the first item's product as the plan
+      const firstItem = s.items[0]
+      const planId = firstItem?.product_id || 'unknown'
+
+      return {
+        user_id: user.id,
+        subscription_id: s.id,
+        customer_id: s.customer_id,
+        plan_id: planId,
+        is_active: s.status === 'active' || s.status === 'trialing',
+        current_period_start: s.current_period_start,
+        current_period_end: s.current_period_end,
+        cancelled_at: s.canceled_at,
+        mrr_override: s.mrr,
+      }
+    })
+
+  if (subscriptions.length > 0) {
+    const { error: subsError } = await supabase.from('subscriptions').insert(subscriptions)
+    if (subsError) throw new Error(`Failed to insert subscriptions: ${subsError.message}`)
+  }
+
+  // 4. Update data status
+  const { error: statusError } = await supabase
+    .from('user_data_status')
+    .upsert({
+      user_id: user.id,
+      data_mode: 'user',
+      has_revenue: true,
+      has_costs: false,
+      has_usage: stripeData.usage.length > 0,
+      revenue_customer_count: customers.length,
+      costs_record_count: 0,
+      usage_record_count: stripeData.usage.length,
+      last_sync_at: new Date().toISOString(),
+    }, { onConflict: 'user_id' })
+
+  if (statusError) throw new Error(`Failed to update data status: ${statusError.message}`)
+}

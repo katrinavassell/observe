@@ -9,9 +9,10 @@
  * - Unsaved changes confirmation
  */
 
-import { ref, watch } from 'vue'
+import { ref, watch, onMounted, onUnmounted } from 'vue'
 import { toast } from 'vue-sonner'
 import { TrendingUp } from 'lucide-vue-next'
+import { getStripeStatus } from '@/api/client'
 import { Card, CardContent, Button } from '@/components/ui'
 import {
   RevenueSection,
@@ -41,7 +42,21 @@ const {
   hasRevenue,
   hasCosts,
   hasUsage,
+  lastSyncAt,
 } = useDataMode()
+
+// Sync cadence constants (best practices for billing data)
+const SYNC_STALE_THRESHOLD_MS = 60 * 60 * 1000 // 1 hour - sync if older
+const SYNC_INTERVAL_MS = 4 * 60 * 60 * 1000 // 4 hours - background sync interval
+let syncIntervalId: ReturnType<typeof setInterval> | null = null
+
+/** Check if data is stale and needs refresh */
+function isDataStale(): boolean {
+  if (!lastSyncAt.value) return true
+  const lastSync = new Date(lastSyncAt.value).getTime()
+  const now = Date.now()
+  return (now - lastSync) > SYNC_STALE_THRESHOLD_MS
+}
 
 /** Track file state for each section */
 const revenueFiles = ref<{ customers: boolean; subscriptions: boolean; invoices: boolean }>({
@@ -62,9 +77,48 @@ const isLoadingUsage = ref(false)
 const showStripeModal = ref(false)
 const isStripeConnected = ref(false)
 const stripeAccountName = ref('')
+const isSyncing = ref(false)
 
 /** Component refs */
 const revenueSectionRef = ref<InstanceType<typeof RevenueSection> | null>(null)
+
+// =============================================================================
+// LIFECYCLE - Check Stripe status and auto-sync
+// =============================================================================
+
+onMounted(async () => {
+  try {
+    const status = await getStripeStatus()
+    if (status.connected) {
+      isStripeConnected.value = true
+      stripeAccountName.value = status.account_name || ''
+
+      // Auto-sync if data is stale (older than 1 hour)
+      if (isDataStale()) {
+        toast.info('Refreshing Stripe data...')
+        await handleStripeSync()
+      }
+
+      // Set up background sync (every 4 hours)
+      syncIntervalId = setInterval(async () => {
+        if (isStripeConnected.value && !isSyncing.value) {
+          console.log('[Stripe] Background sync triggered')
+          await handleStripeSync()
+        }
+      }, SYNC_INTERVAL_MS)
+    }
+  } catch {
+    // Silently fail - user just hasn't connected Stripe yet
+  }
+})
+
+onUnmounted(() => {
+  // Clean up sync interval
+  if (syncIntervalId) {
+    clearInterval(syncIntervalId)
+    syncIntervalId = null
+  }
+})
 
 // =============================================================================
 // SAMPLE DATA HANDLERS
@@ -225,21 +279,42 @@ function handleStripeConnect(): void {
 async function handleStripeConnected(accountName: string): Promise<void> {
   isStripeConnected.value = true
   stripeAccountName.value = accountName
-  toast.success(`Connected to ${accountName}`)
-  await refetchDataMode()
+  toast.success(`Connected to ${accountName}. Syncing data...`)
+
+  // Auto-sync immediately after connecting
+  await handleStripeSync()
+
+  // Set up background sync if not already running
+  if (!syncIntervalId) {
+    syncIntervalId = setInterval(async () => {
+      if (isStripeConnected.value && !isSyncing.value) {
+        console.log('[Stripe] Background sync triggered')
+        await handleStripeSync()
+      }
+    }, SYNC_INTERVAL_MS)
+  }
 }
 
 async function handleStripeSync(): Promise<void> {
+  if (isSyncing.value) return // Prevent duplicate syncs
+
+  isSyncing.value = true
   try {
-    toast.info('Syncing Stripe data...')
     const { syncStripeDataEnhanced } = await import('@/api/client')
+    const { saveStripeData } = await import('@/lib/supabase-data')
     const result = await syncStripeDataEnhanced()
+
+    // Save to Supabase
+    await saveStripeData(result)
+
     toast.success(`Synced ${result.summary.total_customers} customers, ${result.summary.active_subscriptions} subscriptions`)
     await refetchDataMode()
   } catch (error) {
     toast.error('Sync failed', {
       description: error instanceof Error ? error.message : 'Please try again',
     })
+  } finally {
+    isSyncing.value = false
   }
 }
 
@@ -337,6 +412,7 @@ watch(
       :is-loading-sample="isLoadingRevenue"
       :is-stripe-connected="isStripeConnected"
       :stripe-account-name="stripeAccountName"
+      :is-syncing="isSyncing"
       @use-sample="handleUseSampleRevenue"
       @connect-stripe="handleStripeConnect"
       @sync-stripe="handleStripeSync"
