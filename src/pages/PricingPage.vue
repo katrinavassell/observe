@@ -30,6 +30,7 @@ import {
 } from '@/components/ui'
 import Progress from '@/components/ui/progress.vue'
 import Alert from '@/components/ui/alert.vue'
+import MrrChart from '@/components/charts/MrrChart.vue'
 import { analyzeData, type AnalysisResult } from '@/lib/pricing-analyzer'
 import { getSampleDataSummary } from '@/lib/sample-data'
 import { useDataMode } from '@/composables/useDataMode'
@@ -153,7 +154,10 @@ onMounted(async () => {
     return
   }
 
-  // If user already has data, load and analyze it
+  // Refresh data mode to get current state (user may have just uploaded data)
+  await refetchDataMode()
+
+  // If user has data, load and analyze it
   if (hasData.value) {
     await loadExistingData()
   }
@@ -486,6 +490,27 @@ onMounted(async () => {
               </CardContent>
             </Card>
           </div>
+
+          <!-- MRR Trend Chart -->
+          <Card v-if="analysisResult.monthlyMetrics.length > 1">
+            <CardHeader class="pb-2">
+              <div class="flex items-center gap-2">
+                <CardTitle class="text-base font-semibold">MRR Trend</CardTitle>
+                <Tooltip>
+                  <TooltipTrigger>
+                    <Info class="h-3.5 w-3.5 text-muted-foreground/60" />
+                  </TooltipTrigger>
+                  <TooltipContent>Monthly recurring revenue over time{{ analysisResult.meta.hasCostData ? ', with costs overlay' : '' }}</TooltipContent>
+                </Tooltip>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <MrrChart
+                :data="analysisResult.monthlyMetrics"
+                :show-costs="analysisResult.meta.hasCostData"
+              />
+            </CardContent>
+          </Card>
 
           <!-- MRR Movement -->
           <Card>

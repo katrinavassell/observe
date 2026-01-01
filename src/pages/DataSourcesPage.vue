@@ -26,6 +26,9 @@ import {
   loadSampleRevenue,
   loadSampleCosts,
   loadSampleUsage,
+  clearCostData,
+  clearUsageData,
+  clearRevenueData,
 } from '@/lib/supabase-data'
 
 // =============================================================================
@@ -55,12 +58,6 @@ const isLoadingRevenue = ref(false)
 const isLoadingCosts = ref(false)
 const isLoadingUsage = ref(false)
 
-/** Pending deletions (file removed but not yet saved) */
-const pendingCostsDeletion = ref(false)
-const pendingUsageDeletion = ref(false)
-const pendingRevenueDeletion = ref(false)
-
-
 /** Stripe API Key Modal */
 const showStripeModal = ref(false)
 const isStripeConnected = ref(false)
@@ -82,11 +79,6 @@ async function handleTrySampleData(): Promise<void> {
   try {
     await loadSampleDataToSupabase()
     await refetchDataMode()
-
-    // Reset all state
-    pendingCostsDeletion.value = false
-    pendingUsageDeletion.value = false
-    pendingRevenueDeletion.value = false
 
     // Update file indicators
     revenueFiles.value = { customers: true, subscriptions: true, invoices: true }
@@ -117,7 +109,6 @@ async function handleUseSampleRevenue(): Promise<void> {
     await loadSampleRevenue()
     await refetchDataMode()
     revenueFiles.value = { customers: true, subscriptions: true, invoices: true }
-    pendingRevenueDeletion.value = false
 
     // Update the RevenueSection component to show sample files
     revenueSectionRef.value?.setSampleDataLoaded()
@@ -141,7 +132,6 @@ async function handleUseSampleCosts(): Promise<void> {
     await loadSampleCosts()
     await refetchDataMode()
     costsFile.value = { name: 'sample-costs.csv', isSample: true }
-    pendingCostsDeletion.value = false
     toast.success('Sample costs data loaded!')
   } catch (error) {
     toast.error('Failed to load sample costs data', {
@@ -161,7 +151,6 @@ async function handleUseSampleUsage(): Promise<void> {
     await loadSampleUsage()
     await refetchDataMode()
     usageFile.value = { name: 'sample-usage.csv', isSample: true }
-    pendingUsageDeletion.value = false
     toast.success('Sample usage data loaded!')
   } catch (error) {
     toast.error('Failed to load sample usage data', {
@@ -177,34 +166,56 @@ async function handleUseSampleUsage(): Promise<void> {
 // =============================================================================
 
 function handleRevenueFilesChanged(): void {
-  pendingRevenueDeletion.value = false
+  // Revenue files updated - data is auto-saved by the component
 }
 
-function handleRevenueFilesCleared(): void {
-  pendingRevenueDeletion.value = true
+async function handleRevenueFilesCleared(): Promise<void> {
   revenueFiles.value = { customers: false, subscriptions: false, invoices: false }
+  try {
+    await clearRevenueData()
+    await refetchDataMode()
+    toast.success('Revenue data cleared')
+  } catch (error) {
+    toast.error('Failed to clear revenue data', {
+      description: error instanceof Error ? error.message : 'Please try again.',
+    })
+  }
 }
 
-function handleCostsFileUploaded(file: { name: string; isSample: boolean }): void {
+async function handleCostsFileUploaded(file: { name: string; isSample: boolean }): Promise<void> {
   costsFile.value = file
-  pendingCostsDeletion.value = false
-  refetchDataMode()
+  await refetchDataMode()
 }
 
-function handleCostsFileCleared(): void {
+async function handleCostsFileCleared(): Promise<void> {
   costsFile.value = null
-  pendingCostsDeletion.value = true
+  try {
+    await clearCostData()
+    await refetchDataMode()
+    toast.success('Cost data cleared')
+  } catch (error) {
+    toast.error('Failed to clear cost data', {
+      description: error instanceof Error ? error.message : 'Please try again.',
+    })
+  }
 }
 
-function handleUsageFileUploaded(file: { name: string; isSample: boolean }): void {
+async function handleUsageFileUploaded(file: { name: string; isSample: boolean }): Promise<void> {
   usageFile.value = file
-  pendingUsageDeletion.value = false
-  refetchDataMode()
+  await refetchDataMode()
 }
 
-function handleUsageFileCleared(): void {
+async function handleUsageFileCleared(): Promise<void> {
   usageFile.value = null
-  pendingUsageDeletion.value = true
+  try {
+    await clearUsageData()
+    await refetchDataMode()
+    toast.success('Usage data cleared')
+  } catch (error) {
+    toast.error('Failed to clear usage data', {
+      description: error instanceof Error ? error.message : 'Please try again.',
+    })
+  }
 }
 
 function handleStripeConnect(): void {

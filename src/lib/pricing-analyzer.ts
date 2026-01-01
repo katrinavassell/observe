@@ -197,6 +197,14 @@ export interface CohortData {
   estimatedLTV?: string
 }
 
+export interface MonthlyMetrics {
+  month: string
+  mrr: number
+  costs: number
+  margin: number
+  customerCount: number
+}
+
 export interface AnalysisResult {
   saasMetrics: SaaSMetrics
   planHealth: PlanHealth[]
@@ -205,6 +213,7 @@ export interface AnalysisResult {
   usageAnomalies: UsageAnomaly[]
   negativeMarginCustomers: NegativeMarginCustomer[]
   cohorts: CohortData[]
+  monthlyMetrics: MonthlyMetrics[]
   meta: {
     customerCount: number
     planCount: number
@@ -734,6 +743,93 @@ export function calculateCohorts(
   }).slice(0, 6) // Last 6 cohorts
 }
 
+/**
+ * Calculate monthly metrics (MRR, costs, margin) for trend visualization.
+ * Uses cost data periods and subscription data to build monthly breakdown.
+ */
+export function calculateMonthlyMetrics(
+  subscriptions: Subscription[],
+  plans: Plan[],
+  costs: CostRecord[] | undefined
+): MonthlyMetrics[] {
+  const planMap = new Map(plans.map(p => [p.plan_id, p]))
+  const monthlyData = new Map<string, MonthlyMetrics>()
+
+  // Get months from cost data (most reliable source of monthly periods)
+  const costsByMonth = new Map<string, number>()
+  costs?.forEach(c => {
+    const month = c.period_start?.substring(0, 7) || ''
+    if (month) {
+      costsByMonth.set(month, (costsByMonth.get(month) || 0) + c.amount)
+    }
+  })
+
+  // Get all unique months from costs
+  const months = Array.from(costsByMonth.keys()).sort()
+
+  // If no cost data, generate last 6 months
+  if (months.length === 0) {
+    const now = new Date()
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+      const month = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+      months.push(month)
+    }
+  }
+
+  // Calculate MRR for each month based on active subscriptions
+  // For simplicity, we estimate MRR based on subscription creation dates
+  months.forEach(month => {
+    const monthDate = new Date(month + '-01')
+    const monthEnd = new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 0)
+
+    let mrr = 0
+    let customerCount = 0
+    const customersInMonth = new Set<string>()
+
+    subscriptions.forEach(sub => {
+      const plan = planMap.get(sub.plan_id)
+      if (!plan) return
+
+      // Check if subscription was active during this month
+      const subStart = sub.current_period_start ? new Date(sub.current_period_start) : null
+      const subEnd = sub.cancelled_at ? new Date(sub.cancelled_at) : null
+
+      // Subscription is active in this month if:
+      // - It started before or during this month
+      // - It wasn't cancelled before this month started
+      const wasActiveInMonth =
+        (subStart === null || subStart <= monthEnd) &&
+        (subEnd === null || subEnd >= monthDate)
+
+      if (wasActiveInMonth || sub.is_active) {
+        const intervalMonths = plan.interval_months || 1
+        const subMrr = sub.mrr_override ?? (plan.price_amount / intervalMonths)
+        mrr += subMrr
+
+        if (!customersInMonth.has(sub.customer_id)) {
+          customersInMonth.add(sub.customer_id)
+          customerCount++
+        }
+      }
+    })
+
+    const monthCosts = costsByMonth.get(month) || 0
+    const margin = mrr > 0 ? ((mrr - monthCosts) / mrr) * 100 : 0
+
+    monthlyData.set(month, {
+      month,
+      mrr: Math.round(mrr * 100) / 100,
+      costs: Math.round(monthCosts * 100) / 100,
+      margin: Math.round(margin * 10) / 10,
+      customerCount,
+    })
+  })
+
+  // Return sorted by month (ascending for chart display)
+  return Array.from(monthlyData.values()).sort((a, b) => a.month.localeCompare(b.month))
+}
+
 export function generatePriceExperiments(
   subscriptions: Subscription[],
   plans: Plan[],
@@ -1207,6 +1303,7 @@ export function analyzeData(data: AnalyzerData): AnalysisResult {
     usageAnomalies: analyzeUsageAnomalies(usage || [], subscriptions, plans, customers),
     negativeMarginCustomers: analyzeNegativeMargins(costs || [], subscriptions, plans, customers),
     cohorts: calculateCohorts(customers, subscriptions, plans),
+    monthlyMetrics: calculateMonthlyMetrics(subscriptions, plans, costs),
     meta: {
       customerCount: customers.length,
       planCount: plans.length,
