@@ -31,6 +31,7 @@ import {
 import Progress from '@/components/ui/progress.vue'
 import Alert from '@/components/ui/alert.vue'
 import MrrChart from '@/components/charts/MrrChart.vue'
+import CohortChart from '@/components/charts/CohortChart.vue'
 import { analyzeData, type AnalysisResult } from '@/lib/pricing-analyzer'
 import { getSampleDataSummary } from '@/lib/sample-data'
 import { useDataMode } from '@/composables/useDataMode'
@@ -301,6 +302,7 @@ onMounted(async () => {
             <TooltipContent>Upload AI costs data to unlock this tab</TooltipContent>
           </Tooltip>
           <TabsTrigger v-else value="margin">Negative Margin</TabsTrigger>
+          <TabsTrigger value="cohorts">Cohorts</TabsTrigger>
         </TabsList>
 
         <!-- ========== SaaS Metrics Tab ========== -->
@@ -829,12 +831,84 @@ onMounted(async () => {
           </Card>
         </TabsContent>
 
-        <!-- Hidden for P0 scope: Cohorts Tab -->
-        <!--
-        <TabsContent value="cohorts" class="space-y-4">
-          ... content hidden ...
+        <!-- ========== Cohorts Tab ========== -->
+        <TabsContent value="cohorts" class="space-y-6">
+          <!-- Cohort Retention Chart -->
+          <Card v-if="analysisResult.cohorts.length > 0">
+            <CardHeader class="pb-2">
+              <div class="flex items-center gap-2">
+                <CardTitle class="text-base font-semibold">Cohort Retention</CardTitle>
+                <Tooltip>
+                  <TooltipTrigger>
+                    <Info class="h-3.5 w-3.5 text-muted-foreground/60" />
+                  </TooltipTrigger>
+                  <TooltipContent>Active vs churned customers by signup cohort</TooltipContent>
+                </Tooltip>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <CohortChart :data="analysisResult.cohorts" />
+            </CardContent>
+          </Card>
+
+          <!-- Cohort Table -->
+          <div v-if="analysisResult.cohorts.length > 0" class="overflow-x-auto">
+            <table class="w-full">
+              <thead>
+                <tr class="border-b border-border">
+                  <th class="text-left p-3 font-medium text-sm">Cohort</th>
+                  <th class="text-center p-3 font-medium text-sm">Customers</th>
+                  <th class="text-center p-3 font-medium text-sm">Active</th>
+                  <th class="text-center p-3 font-medium text-sm">Churned</th>
+                  <th class="text-center p-3 font-medium text-sm">
+                    <div class="flex items-center justify-center gap-1">
+                      Retention
+                      <Tooltip>
+                        <TooltipTrigger>
+                          <Info class="h-3 w-3 text-muted-foreground/60" />
+                        </TooltipTrigger>
+                        <TooltipContent>Percentage of customers still active</TooltipContent>
+                      </Tooltip>
+                    </div>
+                  </th>
+                  <th class="text-right p-3 font-medium text-sm">Avg MRR</th>
+                  <th class="text-right p-3 font-medium text-sm">Total MRR</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr
+                  v-for="cohort in analysisResult.cohorts"
+                  :key="cohort.cohort"
+                  class="border-b border-border hover:bg-muted/50"
+                >
+                  <td class="p-3 text-sm font-medium">{{ cohort.cohort }}</td>
+                  <td class="p-3 text-sm text-center">{{ cohort.customerCount }}</td>
+                  <td class="p-3 text-sm text-center">
+                    <span class="text-green-600 dark:text-green-400">{{ cohort.activeCount }}</span>
+                  </td>
+                  <td class="p-3 text-sm text-center">
+                    <span class="text-red-600 dark:text-red-400">{{ cohort.churnedCount }}</span>
+                  </td>
+                  <td class="p-3 text-sm text-center">
+                    <Badge
+                      :variant="cohort.retentionRate >= 80 ? 'success' : cohort.retentionRate >= 50 ? 'secondary' : 'destructive'"
+                    >
+                      {{ cohort.retentionRate }}%
+                    </Badge>
+                  </td>
+                  <td class="p-3 text-sm text-right font-mono">{{ cohort.avgMRR }}</td>
+                  <td class="p-3 text-sm text-right font-mono">{{ cohort.totalMRR }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <Card v-else>
+            <CardContent class="p-6 text-center text-muted-foreground">
+              No cohort data available.
+            </CardContent>
+          </Card>
         </TabsContent>
-        -->
       </Tabs>
     </template>
   </div>

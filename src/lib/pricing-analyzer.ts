@@ -191,6 +191,9 @@ export interface NegativeMarginCustomer {
 export interface CohortData {
   cohort: string
   customerCount: number
+  activeCount: number
+  churnedCount: number
+  retentionRate: number
   avgMRR: string
   totalMRR: string
   avgTenureMonths?: number
@@ -695,6 +698,7 @@ export function calculateCohorts(
 
   cohorts.forEach((data, cohortKey) => {
     const activeSubs = data.subscriptions.filter(s => s.is_active)
+    const churnedSubs = data.subscriptions.filter(s => !s.is_active && s.cancelled_at)
     let totalMRR = 0
 
     activeSubs.forEach(sub => {
@@ -712,6 +716,12 @@ export function calculateCohorts(
 
     const avgMRR = activeSubs.length > 0 ? totalMRR / activeSubs.length : 0
 
+    // Calculate retention metrics
+    const activeCount = activeSubs.length
+    const churnedCount = churnedSubs.length
+    const totalWithSubs = activeCount + churnedCount
+    const retentionRate = totalWithSubs > 0 ? Math.round((activeCount / totalWithSubs) * 100) : 100
+
     // Calculate average tenure
     let totalTenureMonths = 0
     data.customers.forEach(c => {
@@ -727,6 +737,9 @@ export function calculateCohorts(
     cohortResults.push({
       cohort: cohortKey,
       customerCount: data.customers.length,
+      activeCount,
+      churnedCount,
+      retentionRate,
       avgMRR: formatCurrency(avgMRR),
       totalMRR: formatCurrency(totalMRR),
       avgTenureMonths: Math.round(avgTenure),
