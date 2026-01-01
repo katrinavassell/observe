@@ -233,22 +233,24 @@ function calculateMrrFromItems(subscription: StripeApiSubscription): number {
       const { interval, interval_count } = price.recurring
       let monthlyAmount = unitAmount * quantity
 
-      // Normalize to monthly
+      // Normalize to monthly, accounting for interval_count
       switch (interval) {
         case 'year':
-          monthlyAmount = monthlyAmount / 12
+          // e.g., $1200/year with interval_count=2 means $1200 every 2 years = $50/month
+          monthlyAmount = monthlyAmount / (12 * interval_count)
+          break
+        case 'month':
+          // e.g., $100/month with interval_count=3 means $100 every 3 months = $33.33/month
+          monthlyAmount = monthlyAmount / interval_count
           break
         case 'week':
-          monthlyAmount = monthlyAmount * 4.33 // Average weeks per month
+          // e.g., $100/week with interval_count=2 means $100 every 2 weeks = $216.67/month
+          monthlyAmount = (monthlyAmount * 4.33) / interval_count
           break
         case 'day':
-          monthlyAmount = monthlyAmount * 30.44 // Average days per month
+          // e.g., $10/day with interval_count=7 means $10 every 7 days = $43.49/month
+          monthlyAmount = (monthlyAmount * 30.44) / interval_count
           break
-      }
-
-      // Account for interval count (e.g., every 3 months)
-      if (interval_count > 1 && interval === 'month') {
-        monthlyAmount = monthlyAmount / interval_count
       }
 
       totalMonthlyAmount += monthlyAmount

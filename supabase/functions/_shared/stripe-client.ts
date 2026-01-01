@@ -91,7 +91,23 @@ export async function fetchAllStripePages<T>(
   let startingAfter: string | undefined
 
   while (hasMore) {
-    const searchParams = new URLSearchParams({ limit: '100', ...params })
+    const searchParams = new URLSearchParams()
+    searchParams.set('limit', '100')
+
+    // Handle regular params and expand[] params separately
+    for (const [key, value] of Object.entries(params)) {
+      if (key === 'expand[]') {
+        // Stripe expects expand[] to be appended multiple times for multiple expansions
+        // If value contains comma-separated expansions, split and append each
+        const expansions = value.split(',').map(e => e.trim()).filter(Boolean)
+        for (const exp of expansions) {
+          searchParams.append('expand[]', exp)
+        }
+      } else {
+        searchParams.set(key, value)
+      }
+    }
+
     if (startingAfter) {
       searchParams.set('starting_after', startingAfter)
     }

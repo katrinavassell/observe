@@ -202,7 +202,7 @@ serve(async (req) => {
     const account = await stripeRequest<{ id: string; business_profile?: { name?: string } }>(apiKey, 'account')
     const accountName = account.business_profile?.name || account.id
 
-    // Fetch all data in parallel
+    // Fetch all data in parallel with error handling for partial success
     const [
       rawCustomers,
       rawSubscriptions,
@@ -210,16 +210,31 @@ serve(async (req) => {
       rawProducts,
       rawPrices,
     ] = await Promise.all([
-      fetchAllStripePages<StripeCustomer>(apiKey, 'customers'),
+      fetchAllStripePages<StripeCustomer>(apiKey, 'customers').catch(err => {
+        errors.push({ type: 'customers', message: err.message })
+        return [] as StripeCustomer[]
+      }),
       fetchAllStripePages<StripeSubscription>(apiKey, 'subscriptions', {
         status: 'all',
         'expand[]': 'data.items.data.price.product',
+      }).catch(err => {
+        errors.push({ type: 'subscriptions', message: err.message })
+        return [] as StripeSubscription[]
       }),
       fetchAllStripePages<StripeInvoice>(apiKey, 'invoices', {
         'expand[]': 'data.lines',
+      }).catch(err => {
+        errors.push({ type: 'invoices', message: err.message })
+        return [] as StripeInvoice[]
       }),
-      fetchAllStripePages<StripeProduct>(apiKey, 'products', { active: 'true' }),
-      fetchAllStripePages<StripePrice>(apiKey, 'prices', { active: 'true' }),
+      fetchAllStripePages<StripeProduct>(apiKey, 'products', { active: 'true' }).catch(err => {
+        errors.push({ type: 'products', message: err.message })
+        return [] as StripeProduct[]
+      }),
+      fetchAllStripePages<StripePrice>(apiKey, 'prices', { active: 'true' }).catch(err => {
+        errors.push({ type: 'prices', message: err.message })
+        return [] as StripePrice[]
+      }),
     ])
 
     // Calculate customer spend
