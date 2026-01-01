@@ -21,6 +21,7 @@ import {
   UsageSection,
   ComingSoonSection,
 } from '@/components/data-sources'
+import StripeApiKeyModal from '@/components/integrations/StripeApiKeyModal.vue'
 import { useDataMode } from '@/composables/useDataMode'
 import {
   loadSampleData as loadSampleDataToSupabase,
@@ -69,6 +70,11 @@ const pendingRevenueDeletion = ref(false)
 const hasUnsavedChanges = ref(false)
 const showDiscardDialog = ref(false)
 const pendingNavigationPath = ref<string | null>(null)
+
+/** Stripe API Key Modal */
+const showStripeModal = ref(false)
+const isStripeConnected = ref(false)
+const stripeAccountName = ref('')
 
 /** Component refs */
 const revenueSectionRef = ref<InstanceType<typeof RevenueSection> | null>(null)
@@ -236,7 +242,14 @@ function handleUsageFileCleared(): void {
 }
 
 function handleStripeConnect(): void {
-  toast.info('Stripe integration coming soon')
+  showStripeModal.value = true
+}
+
+function handleStripeConnected(accountName: string): void {
+  isStripeConnected.value = true
+  stripeAccountName.value = accountName
+  toast.success(`Connected to ${accountName}`)
+  refetchDataMode()
 }
 
 // =============================================================================
@@ -394,6 +407,8 @@ watch(
     <RevenueSection
       ref="revenueSectionRef"
       :is-loading-sample="isLoadingRevenue"
+      :is-stripe-connected="isStripeConnected"
+      :stripe-account-name="stripeAccountName"
       @use-sample="handleUseSampleRevenue"
       @connect-stripe="handleStripeConnect"
       @files-changed="handleRevenueFilesChanged"
@@ -468,5 +483,12 @@ watch(
     :destructive="true"
     @cancel="handleDiscardCancel"
     @confirm="handleDiscardConfirm"
+  />
+
+  <!-- Stripe API Key Modal -->
+  <StripeApiKeyModal
+    :open="showStripeModal"
+    @close="showStripeModal = false"
+    @connected="handleStripeConnected"
   />
 </template>

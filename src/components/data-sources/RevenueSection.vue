@@ -28,6 +28,10 @@ import { useStripeUpload } from '@/composables/useStripeUpload'
 const props = defineProps<{
   /** Whether sample revenue data is being loaded */
   isLoadingSample?: boolean
+  /** Whether Stripe is connected */
+  isStripeConnected?: boolean
+  /** Connected Stripe account name */
+  stripeAccountName?: string
 }>()
 
 const emit = defineEmits<{
@@ -131,37 +135,63 @@ function handleClearFile(type: 'customers' | 'subscriptions' | 'invoices'): void
             </div>
             <div>
               <p class="font-medium">Stripe</p>
-              <p class="text-xs text-muted-foreground">Pull customers, subscriptions, and invoices</p>
+              <p class="text-xs text-muted-foreground">
+                {{ props.isStripeConnected ? props.stripeAccountName : 'Pull customers, subscriptions, and invoices' }}
+              </p>
             </div>
           </div>
-          <Button variant="outline" size="sm" @click="emit('connectStripe')">
-            Connect
+          <Button
+            :variant="props.isStripeConnected ? 'outline' : 'outline'"
+            size="sm"
+            :class="props.isStripeConnected ? 'border-green-500/50 text-green-600 hover:text-green-700 hover:bg-green-50' : ''"
+            @click="emit('connectStripe')"
+          >
+            <span v-if="props.isStripeConnected" class="flex items-center gap-1.5">
+              <span class="h-2 w-2 rounded-full bg-green-500"></span>
+              Connected
+            </span>
+            <span v-else>Connect</span>
           </Button>
         </div>
 
-        <!-- Divider -->
-        <div class="relative">
-          <div class="absolute inset-0 flex items-center">
-            <div class="w-full border-t"></div>
-          </div>
-          <div class="relative flex justify-center text-xs">
-            <span class="bg-card px-2 text-muted-foreground">or</span>
+        <!-- When connected via API, show sync status -->
+        <div v-if="props.isStripeConnected" class="bg-green-50 border border-green-200 rounded-lg p-4">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2 text-sm text-green-700">
+              <CheckCircle class="h-4 w-4" />
+              <span>Connected to Stripe API - data will sync automatically</span>
+            </div>
+            <Button variant="outline" size="sm" class="text-green-700 border-green-300 hover:bg-green-100">
+              Sync Now
+            </Button>
           </div>
         </div>
 
-        <!-- Hidden file input (multiple) -->
-        <input
-          ref="stripeFileInput"
-          type="file"
-          accept=".csv"
-          multiple
-          class="hidden"
-          @change="handleFileSelect"
-        />
+        <!-- CSV Upload Section - only show when NOT connected via API -->
+        <template v-if="!props.isStripeConnected">
+          <!-- Divider -->
+          <div class="relative">
+            <div class="absolute inset-0 flex items-center">
+              <div class="w-full border-t"></div>
+            </div>
+            <div class="relative flex justify-center text-xs">
+              <span class="bg-card px-2 text-muted-foreground">or upload CSVs</span>
+            </div>
+          </div>
 
-        <!-- Stripe CSV Dropzone - only show when < 3 files -->
-        <div
-          v-if="stripeFileCount < 3"
+          <!-- Hidden file input (multiple) -->
+          <input
+            ref="stripeFileInput"
+            type="file"
+            accept=".csv"
+            multiple
+            class="hidden"
+            @change="handleFileSelect"
+          />
+
+          <!-- Stripe CSV Dropzone - only show when < 3 files -->
+          <div
+            v-if="stripeFileCount < 3"
           :class="[
             'border-2 border-dashed rounded-lg p-5 transition-colors',
             isDragging
