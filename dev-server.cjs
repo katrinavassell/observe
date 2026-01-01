@@ -42,7 +42,7 @@ function getUserId(req) {
 }
 
 // Connect Stripe with API key
-app.post('/integrations/stripe/connect', async (req, res) => {
+app.post('/api/integrations/stripe/connect', async (req, res) => {
   try {
     const { api_key } = req.body
     const userId = getUserId(req)
@@ -80,12 +80,12 @@ app.post('/integrations/stripe/connect', async (req, res) => {
 })
 
 // Basic sync endpoint
-app.post('/integrations/stripe/sync', async (req, res) => {
-  res.redirect(307, '/integrations/stripe/sync-enhanced')
+app.post('/api/integrations/stripe/sync', async (req, res) => {
+  res.redirect(307, '/api/integrations/stripe/sync-enhanced')
 })
 
 // Enhanced sync with all data
-app.post('/integrations/stripe/sync-enhanced', async (req, res) => {
+app.post('/api/integrations/stripe/sync-enhanced', async (req, res) => {
   const startedAt = new Date().toISOString()
   const errors = []
 
@@ -217,7 +217,7 @@ app.post('/integrations/stripe/sync-enhanced', async (req, res) => {
     const usage = []
     const meteredItems = transformedSubscriptions.flatMap(sub =>
       sub.items
-        .filter(item => item.usage_type === 'metered')
+        .filter(item =/api> item.usage_type === 'metered')
         .map(item => ({ item, customerId: sub.customer_id }))
     )
 
@@ -348,7 +348,7 @@ function calculateMrr(subscription) {
 app.listen(PORT, () => {
   console.log(`\n🚀 Stripe Dev Server running at http://localhost:${PORT}`)
   console.log(`\nEndpoints:`)
-  console.log(`  POST /integrations/stripe/connect`)
+  console.log(`  POST /api/integrations/stripe/connect`)
   console.log(`  POST /integrations/stripe/sync-enhanced`)
   console.log(`\nNow run 'npm run dev' in another terminal.\n`)
 })
