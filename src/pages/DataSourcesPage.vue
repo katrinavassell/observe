@@ -9,12 +9,10 @@
  * - Unsaved changes confirmation
  */
 
-import { ref, computed, watch } from 'vue'
-import { useRouter, onBeforeRouteLeave } from 'vue-router'
+import { ref, watch } from 'vue'
 import { toast } from 'vue-sonner'
-import { TrendingUp, Check, ArrowRight } from 'lucide-vue-next'
+import { TrendingUp } from 'lucide-vue-next'
 import { Card, CardContent, Button } from '@/components/ui'
-import ConfirmDialog from '@/components/ui/confirm-dialog.vue'
 import {
   RevenueSection,
   CostsSection,
@@ -28,16 +26,12 @@ import {
   loadSampleRevenue,
   loadSampleCosts,
   loadSampleUsage,
-  clearCostData,
-  clearUsageData,
-  clearRevenueData,
 } from '@/lib/supabase-data'
 
 // =============================================================================
 // STATE MANAGEMENT
 // =============================================================================
 
-const router = useRouter()
 const {
   dataMode,
   refetch: refetchDataMode,
@@ -66,10 +60,6 @@ const pendingCostsDeletion = ref(false)
 const pendingUsageDeletion = ref(false)
 const pendingRevenueDeletion = ref(false)
 
-/** Unsaved changes tracking */
-const hasUnsavedChanges = ref(false)
-const showDiscardDialog = ref(false)
-const pendingNavigationPath = ref<string | null>(null)
 
 /** Stripe API Key Modal */
 const showStripeModal = ref(false)
@@ -78,24 +68,6 @@ const stripeAccountName = ref('')
 
 /** Component refs */
 const revenueSectionRef = ref<InstanceType<typeof RevenueSection> | null>(null)
-
-// =============================================================================
-// COMPUTED PROPERTIES
-// =============================================================================
-
-/** Whether any data has been uploaded (for showing progress bar) */
-const hasAnyData = computed(() =>
-  hasRevenue.value || hasCosts.value || hasUsage.value ||
-  revenueFiles.value.subscriptions ||
-  costsFile.value || usageFile.value
-)
-
-/** Progress tracking for the sticky bar */
-const uploadProgress = computed(() => [
-  { label: 'Revenue', done: hasRevenue.value && !pendingRevenueDeletion.value },
-  { label: 'AI Costs', done: hasCosts.value && costsFile.value && !pendingCostsDeletion.value },
-  { label: 'Usage', done: hasUsage.value && usageFile.value && !pendingUsageDeletion.value },
-])
 
 // =============================================================================
 // SAMPLE DATA HANDLERS
@@ -112,7 +84,6 @@ async function handleTrySampleData(): Promise<void> {
     await refetchDataMode()
 
     // Reset all state
-    hasUnsavedChanges.value = false
     pendingCostsDeletion.value = false
     pendingUsageDeletion.value = false
     pendingRevenueDeletion.value = false
@@ -147,7 +118,6 @@ async function handleUseSampleRevenue(): Promise<void> {
     await refetchDataMode()
     revenueFiles.value = { customers: true, subscriptions: true, invoices: true }
     pendingRevenueDeletion.value = false
-    hasUnsavedChanges.value = false
 
     // Update the RevenueSection component to show sample files
     revenueSectionRef.value?.setSampleDataLoaded()
@@ -207,12 +177,10 @@ async function handleUseSampleUsage(): Promise<void> {
 // =============================================================================
 
 function handleRevenueFilesChanged(): void {
-  hasUnsavedChanges.value = true
   pendingRevenueDeletion.value = false
 }
 
 function handleRevenueFilesCleared(): void {
-  hasUnsavedChanges.value = true
   pendingRevenueDeletion.value = true
   revenueFiles.value = { customers: false, subscriptions: false, invoices: false }
 }
@@ -226,7 +194,6 @@ function handleCostsFileUploaded(file: { name: string; isSample: boolean }): voi
 function handleCostsFileCleared(): void {
   costsFile.value = null
   pendingCostsDeletion.value = true
-  hasUnsavedChanges.value = true
 }
 
 function handleUsageFileUploaded(file: { name: string; isSample: boolean }): void {
@@ -238,7 +205,6 @@ function handleUsageFileUploaded(file: { name: string; isSample: boolean }): voi
 function handleUsageFileCleared(): void {
   usageFile.value = null
   pendingUsageDeletion.value = true
-  hasUnsavedChanges.value = true
 }
 
 function handleStripeConnect(): void {
@@ -252,75 +218,26 @@ function handleStripeConnected(accountName: string): void {
   refetchDataMode()
 }
 
-// =============================================================================
-// NAVIGATION HANDLERS
-// =============================================================================
-
-/**
- * Save changes and navigate to analysis.
- * Processes any pending deletions before navigating.
- */
-async function handleContinue(): Promise<void> {
+async function handleStripeSync(): Promise<void> {
   try {
-    const deletionPromises: Promise<void>[] = []
-
-    if (pendingCostsDeletion.value) {
-      deletionPromises.push(clearCostData())
-    }
-    if (pendingUsageDeletion.value) {
-      deletionPromises.push(clearUsageData())
-    }
-    if (pendingRevenueDeletion.value) {
-      deletionPromises.push(clearRevenueData())
-    }
-
-    if (deletionPromises.length > 0) {
-      await Promise.all(deletionPromises)
-      await refetchDataMode()
-    }
-
-    // Reset state
-    pendingCostsDeletion.value = false
-    pendingUsageDeletion.value = false
-    pendingRevenueDeletion.value = false
-    hasUnsavedChanges.value = false
-
-    router.push('/')
+    toast.info('Syncing Stripe data...')
+    const { syncStripeDataEnhanced } = await import('@/api/client')
+    const result = await syncStripeDataEnhanced()
+    toast.success(`Synced ${result.summary.total_customers} customers, ${result.summary.active_subscriptions} subscriptions`)
+    refetchDataMode()
   } catch (error) {
-    toast.error('Failed to save changes', {
-      description: error instanceof Error ? error.message : 'Please try again.',
+    toast.error('Sync failed', {
+      description: error instanceof Error ? error.message : 'Please try again',
     })
   }
 }
 
-// Navigation guard for unsaved changes
-onBeforeRouteLeave((to, _from, next) => {
-  if (hasUnsavedChanges.value && !pendingNavigationPath.value) {
-    pendingNavigationPath.value = to.fullPath
-    showDiscardDialog.value = true
-    next(false)
-  } else {
-    next()
-  }
-})
-
-function handleDiscardCancel(): void {
-  showDiscardDialog.value = false
-  pendingNavigationPath.value = null
-}
-
-function handleDiscardConfirm(): void {
-  showDiscardDialog.value = false
-  hasUnsavedChanges.value = false
-  pendingCostsDeletion.value = false
-  pendingUsageDeletion.value = false
-  pendingRevenueDeletion.value = false
-
-  if (pendingNavigationPath.value) {
-    const path = pendingNavigationPath.value
-    pendingNavigationPath.value = null
-    router.push(path)
-  }
+function handleStripeDisconnect(): void {
+  isStripeConnected.value = false
+  stripeAccountName.value = ''
+  toast.info('Stripe disconnected')
+  // Optionally reopen modal to connect with different key
+  showStripeModal.value = true
 }
 
 // =============================================================================
@@ -411,6 +328,8 @@ watch(
       :stripe-account-name="stripeAccountName"
       @use-sample="handleUseSampleRevenue"
       @connect-stripe="handleStripeConnect"
+      @sync-stripe="handleStripeSync"
+      @disconnect-stripe="handleStripeDisconnect"
       @files-changed="handleRevenueFilesChanged"
       @all-files-cleared="handleRevenueFilesCleared"
     />
@@ -436,54 +355,6 @@ watch(
     <!-- Coming Soon Section -->
     <ComingSoonSection />
   </div>
-
-  <!-- Sticky Progress Bar -->
-  <div
-    v-if="hasAnyData"
-    class="fixed bottom-0 left-64 right-0 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 z-50"
-  >
-    <div class="container max-w-3xl py-4">
-      <div class="flex items-center justify-between">
-        <div class="flex items-center gap-6">
-          <div
-            v-for="item in uploadProgress"
-            :key="item.label"
-            class="flex items-center gap-2 text-sm"
-          >
-            <div
-              :class="[
-                'h-5 w-5 rounded-full flex items-center justify-center',
-                item.done
-                  ? 'bg-green-500 text-white'
-                  : 'border-2 border-muted-foreground/30'
-              ]"
-            >
-              <Check v-if="item.done" class="h-3 w-3" />
-            </div>
-            <span :class="item.done ? 'text-foreground font-medium' : 'text-muted-foreground'">
-              {{ item.label }}
-            </span>
-          </div>
-        </div>
-        <Button @click="handleContinue" :disabled="!hasAnyData">
-          Save and Analyze
-          <ArrowRight class="h-4 w-4 ml-2" />
-        </Button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Discard Changes Confirmation Dialog -->
-  <ConfirmDialog
-    :open="showDiscardDialog"
-    title="Discard changes to data sources?"
-    description="Your uploaded files and connections will be lost."
-    cancel-text="Cancel"
-    confirm-text="Discard"
-    :destructive="true"
-    @cancel="handleDiscardCancel"
-    @confirm="handleDiscardConfirm"
-  />
 
   <!-- Stripe API Key Modal -->
   <StripeApiKeyModal

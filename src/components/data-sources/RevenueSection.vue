@@ -39,6 +39,10 @@ const emit = defineEmits<{
   useSample: []
   /** Emitted when Stripe connect button is clicked */
   connectStripe: []
+  /** Emitted when Stripe sync button is clicked */
+  syncStripe: []
+  /** Emitted when Stripe disconnect button is clicked */
+  disconnectStripe: []
   /** Emitted when files change (for unsaved changes tracking) */
   filesChanged: []
   /** Emitted when all revenue files are cleared */
@@ -159,11 +163,26 @@ function handleClearFile(type: 'customers' | 'subscriptions' | 'invoices'): void
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-2 text-sm text-green-700">
               <CheckCircle class="h-4 w-4" />
-              <span>Connected to Stripe API - data will sync automatically</span>
+              <span>Connected to Stripe API</span>
             </div>
-            <Button variant="outline" size="sm" class="text-green-700 border-green-300 hover:bg-green-100">
-              Sync Now
-            </Button>
+            <div class="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                class="text-green-700 border-green-300 hover:bg-green-100"
+                @click="emit('syncStripe')"
+              >
+                Sync Now
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                class="text-muted-foreground hover:text-destructive"
+                @click="emit('disconnectStripe')"
+              >
+                Disconnect
+              </Button>
+            </div>
           </div>
         </div>
 
@@ -427,6 +446,7 @@ function handleClearFile(type: 'customers' | 'subscriptions' | 'invoices'): void
             We auto-detect file types from the CSV headers. Just drop them all in!
           </p>
         </div>
+        </template>
       </CardContent>
     </Card>
   </section>
