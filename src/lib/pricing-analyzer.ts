@@ -218,6 +218,9 @@ export interface CostGrowthMetrics {
   growthGap: number      // Cost growth - Revenue growth
   providers: ProviderCost[]
   totalCosts: number
+  previousProviders: ProviderCost[]  // Previous period for comparison
+  previousTotalCosts: number         // Previous period total
+  trendAcceleration: 'accelerating' | 'decelerating' | 'stable'  // Is the gap accelerating?
 }
 
 export interface MonthlyMetrics {
@@ -953,12 +956,50 @@ export function calculateCostGrowthMetrics(
   // Calculate growth gap
   const growthGap = costGrowth - revenueGrowth
 
-  // Calculate total costs (latest month)
+  // Calculate total costs (latest month and previous month)
   const latestMonth = recentMonths[recentMonths.length - 1]
+  const previousMonth = recentMonths[recentMonths.length - 2]
   const totalCosts = latestMonth?.costs || 0
+  const previousTotalCosts = previousMonth?.costs || 0
 
-  // Calculate provider breakdown
-  const providers = calculateProviderBreakdown(costs, totalCosts)
+  // Get current and previous month strings for provider filtering
+  const latestMonthStr = latestMonth?.month || ''
+  const previousMonthStr = previousMonth?.month || ''
+
+  // Filter costs by period
+  const currentPeriodCosts = costs?.filter(c => c.period_start?.startsWith(latestMonthStr))
+  const previousPeriodCosts = costs?.filter(c => c.period_start?.startsWith(previousMonthStr))
+
+  // Calculate provider breakdown for current and previous periods
+  const providers = calculateProviderBreakdown(currentPeriodCosts, totalCosts)
+  const previousProviders = calculateProviderBreakdown(previousPeriodCosts, previousTotalCosts)
+
+  // Calculate trend acceleration (is the gap accelerating or decelerating?)
+  let trendAcceleration: 'accelerating' | 'decelerating' | 'stable' = 'stable'
+  if (recentMonths.length >= 4) {
+    const midpoint = Math.floor(recentMonths.length / 2)
+    const firstHalf = recentMonths.slice(0, midpoint)
+    const secondHalf = recentMonths.slice(midpoint)
+
+    // Calculate average cost-to-revenue ratio for each half
+    const firstHalfRatio = firstHalf.reduce((sum, m) => {
+      return sum + (m.mrr > 0 ? m.costs / m.mrr : 0)
+    }, 0) / firstHalf.length
+
+    const secondHalfRatio = secondHalf.reduce((sum, m) => {
+      return sum + (m.mrr > 0 ? m.costs / m.mrr : 0)
+    }, 0) / secondHalf.length
+
+    const ratioChange = firstHalfRatio > 0
+      ? ((secondHalfRatio - firstHalfRatio) / firstHalfRatio) * 100
+      : 0
+
+    if (ratioChange > 5) {
+      trendAcceleration = 'accelerating'
+    } else if (ratioChange < -5) {
+      trendAcceleration = 'decelerating'
+    }
+  }
 
   return {
     revenueGrowth,
@@ -966,6 +1007,9 @@ export function calculateCostGrowthMetrics(
     growthGap,
     providers,
     totalCosts,
+    previousProviders,
+    previousTotalCosts,
+    trendAcceleration,
   }
 }
 

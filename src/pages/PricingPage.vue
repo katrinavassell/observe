@@ -639,12 +639,16 @@ onMounted(async () => {
             v-if="analysisResult.meta.hasCostData"
             :providers="analysisResult.costGrowthMetrics.providers"
             :total-costs="analysisResult.costGrowthMetrics.totalCosts"
+            :previous-providers="analysisResult.costGrowthMetrics.previousProviders"
+            :previous-total-costs="analysisResult.costGrowthMetrics.previousTotalCosts"
           />
 
           <!-- Gap Callout - What You Can't See -->
           <GapCallout
             v-if="analysisResult.meta.hasCostData"
             :show-estimated-margins="analysisResult.negativeMarginCustomers.length > 0"
+            :total-costs="analysisResult.costGrowthMetrics.totalCosts"
+            :growth-gap="analysisResult.costGrowthMetrics.growthGap"
             @see-margins="() => {}"
           />
         </TabsContent>
