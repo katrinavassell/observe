@@ -57,7 +57,7 @@ app.post('/integrations/stripe/connect', async (req, res) => {
 
     // Validate by calling Stripe account endpoint
     const stripe = new Stripe(api_key)
-    const account = await stripe.accounts.retrieve()
+    const account = await stripe.account.retrieve()
 
     // Store the API key
     apiKeys.set(userId, api_key)
@@ -92,7 +92,7 @@ app.post('/integrations/stripe/sync-enhanced', async (req, res) => {
   try {
     const userId = getUserId(req)
     const stripe = getStripeClient(userId)
-    const account = await stripe.accounts.retrieve()
+    const account = await stripe.account.retrieve()
 
     console.log('Starting enhanced sync...')
 
