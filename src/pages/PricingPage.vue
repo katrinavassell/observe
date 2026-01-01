@@ -30,6 +30,7 @@ import {
 } from '@/components/ui'
 import Progress from '@/components/ui/progress.vue'
 import Alert from '@/components/ui/alert.vue'
+import MRRTrendChart from '@/components/charts/MRRTrendChart.vue'
 import { analyzeData, type AnalysisResult } from '@/lib/pricing-analyzer'
 import { getSampleDataSummary } from '@/lib/sample-data'
 import { useDataMode } from '@/composables/useDataMode'
@@ -249,6 +250,7 @@ onMounted(async () => {
       <Tabs default-value="saas" class="space-y-6">
         <TabsList class="flex-wrap h-auto gap-1 p-1">
           <TabsTrigger value="saas">SaaS Metrics</TabsTrigger>
+          <TabsTrigger value="monthly">Monthly Trends</TabsTrigger>
           <TabsTrigger value="health">Plan Health</TabsTrigger>
           <TabsTrigger v-if="analysisResult.meta.hasUsageData" value="usage">Usage Anomalies</TabsTrigger>
           <TabsTrigger v-if="analysisResult.meta.hasCostData" value="margin">Negative Margin</TabsTrigger>
@@ -495,6 +497,92 @@ onMounted(async () => {
                     ={{ analysisResult.saasMetrics.formatted.netNewMRR }}
                   </p>
                 </div>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <!-- ========== Monthly Trends Tab ========== -->
+        <TabsContent value="monthly" class="space-y-6">
+          <!-- MRR Trend Chart -->
+          <Card>
+            <CardHeader class="pb-2">
+              <div class="flex items-center gap-2">
+                <CardTitle class="text-base font-semibold">MRR & Cost Trend</CardTitle>
+                <Tooltip>
+                  <TooltipTrigger>
+                    <Info class="h-3.5 w-3.5 text-muted-foreground/60" />
+                  </TooltipTrigger>
+                  <TooltipContent>Monthly Recurring Revenue and infrastructure costs over time</TooltipContent>
+                </Tooltip>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <MRRTrendChart :monthly-metrics="analysisResult.monthlyMetrics" />
+            </CardContent>
+          </Card>
+
+          <!-- Monthly Metrics Table -->
+          <Card>
+            <CardHeader class="pb-2">
+              <div class="flex items-center gap-2">
+                <CardTitle class="text-base font-semibold">Monthly Revenue Breakdown</CardTitle>
+                <Tooltip>
+                  <TooltipTrigger>
+                    <Info class="h-3.5 w-3.5 text-muted-foreground/60" />
+                  </TooltipTrigger>
+                  <TooltipContent>Detailed MRR movement by month including new, expansion, contraction, and churn</TooltipContent>
+                </Tooltip>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div class="overflow-x-auto">
+                <table class="w-full">
+                  <thead>
+                    <tr class="border-b border-border">
+                      <th class="text-left p-3 font-medium text-sm">Month</th>
+                      <th class="text-right p-3 font-medium text-sm">MRR</th>
+                      <th class="text-right p-3 font-medium text-sm text-green-600">New</th>
+                      <th class="text-right p-3 font-medium text-sm text-blue-600">Expansion</th>
+                      <th class="text-right p-3 font-medium text-sm text-orange-600">Contraction</th>
+                      <th class="text-right p-3 font-medium text-sm text-red-600">Churn</th>
+                      <th class="text-right p-3 font-medium text-sm">Net New</th>
+                      <th class="text-right p-3 font-medium text-sm">Customers</th>
+                      <th class="text-right p-3 font-medium text-sm">Margin</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr
+                      v-for="month in analysisResult.monthlyMetrics"
+                      :key="month.month"
+                      class="border-b border-border hover:bg-muted/50"
+                    >
+                      <td class="p-3 text-sm font-medium">{{ month.monthLabel }}</td>
+                      <td class="p-3 text-sm font-mono text-right">{{ month.formatted.mrr }}</td>
+                      <td class="p-3 text-sm font-mono text-right text-green-600">
+                        {{ month.newMRR > 0 ? '+' : '' }}{{ month.formatted.newMRR }}
+                      </td>
+                      <td class="p-3 text-sm font-mono text-right text-blue-600">
+                        {{ month.expansionMRR > 0 ? '+' : '' }}{{ month.formatted.expansionMRR }}
+                      </td>
+                      <td class="p-3 text-sm font-mono text-right text-orange-600">
+                        {{ month.contractionMRR > 0 ? '-' : '' }}{{ month.formatted.contractionMRR }}
+                      </td>
+                      <td class="p-3 text-sm font-mono text-right text-red-600">
+                        {{ month.churnedMRR > 0 ? '-' : '' }}{{ month.formatted.churnedMRR }}
+                      </td>
+                      <td class="p-3 text-sm font-mono text-right" :class="month.netNewMRR >= 0 ? 'text-green-600' : 'text-red-600'">
+                        {{ month.netNewMRR >= 0 ? '+' : '' }}{{ month.formatted.netNewMRR }}
+                      </td>
+                      <td class="p-3 text-sm text-right">{{ month.customerCount }}</td>
+                      <td class="p-3 text-sm text-right">
+                        <Badge :variant="month.margin >= 50 ? 'success' : month.margin >= 30 ? 'secondary' : 'destructive'">
+                          {{ month.formatted.margin }}
+                        </Badge>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
               </div>
             </CardContent>
           </Card>
