@@ -208,6 +208,56 @@ export interface MonthlyMetrics {
   customerCount: number
 }
 
+/**
+ * Revenue breakdown for a single customer
+ */
+export interface CustomerRevenue {
+  customerId: string
+  customerName: string
+  email: string
+  planName: string
+  planId: string
+  mrr: number
+  previousMrr: number
+  mrrChange: number // positive = expansion, negative = contraction
+  mrrChangePercent: number
+  tenureMonths: number
+  status: 'active' | 'churned' | 'new'
+  segment?: string
+}
+
+/**
+ * Upcoming renewal or expiration
+ */
+export interface RenewalInfo {
+  customerId: string
+  customerName: string
+  planName: string
+  mrr: number
+  renewalDate: string
+  daysUntilRenewal: number
+  riskLevel: 'low' | 'medium' | 'high'
+  riskReason?: string
+}
+
+/**
+ * Cohort retention matrix cell
+ */
+export interface CohortRetentionCell {
+  month: number // 0 = signup month, 1 = month 1, etc.
+  retention: number // percentage 0-100
+  customers: number // count of customers retained
+}
+
+/**
+ * Enhanced cohort data with retention over time
+ */
+export interface CohortRetentionRow {
+  cohort: string // "2024-07" format
+  cohortSize: number
+  retentionByMonth: CohortRetentionCell[]
+}
+
 export interface AnalysisResult {
   saasMetrics: SaaSMetrics
   planHealth: PlanHealth[]
@@ -217,6 +267,10 @@ export interface AnalysisResult {
   negativeMarginCustomers: NegativeMarginCustomer[]
   cohorts: CohortData[]
   monthlyMetrics: MonthlyMetrics[]
+  // New features
+  customerRevenue: CustomerRevenue[]
+  upcomingRenewals: RenewalInfo[]
+  cohortRetentionMatrix: CohortRetentionRow[]
   meta: {
     customerCount: number
     planCount: number
@@ -1221,6 +1275,243 @@ export function analyzeNegativeMargins(
  * console.log(result.saasMetrics.formatted.mrr) // "$11.2K"
  * ```
  */
+
+// =============================================================================
+// CUSTOMER REVENUE CALCULATION
+// =============================================================================
+
+/**
+ * Calculate revenue breakdown by customer
+ */
+export function calculateCustomerRevenue(
+  customers: Customer[],
+  subscriptions: Subscription[],
+  plans: Plan[]
+): CustomerRevenue[] {
+  const planMap = new Map(plans.map(p => [p.plan_id, p]))
+  const customerMap = new Map(customers.map(c => [c.customer_id, c]))
+  const now = new Date()
+  const thirtyDaysAgo = new Date()
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+
+  return subscriptions.map(sub => {
+    const customer = customerMap.get(sub.customer_id)
+    const plan = planMap.get(sub.plan_id)
+
+    const intervalMonths = plan?.interval_months || 1
+    const currentMrr = sub.mrr_override !== undefined
+      ? sub.mrr_override
+      : (plan?.price_amount || 0) / intervalMonths
+    const previousMrr = sub.previous_mrr ?? currentMrr
+
+    const mrrChange = currentMrr - previousMrr
+    const mrrChangePercent = previousMrr > 0 ? (mrrChange / previousMrr) * 100 : 0
+
+    // Calculate tenure
+    const createdAt = customer?.created_at ? new Date(customer.created_at) : now
+    const tenureMs = now.getTime() - createdAt.getTime()
+    const tenureMonths = Math.floor(tenureMs / (30 * 24 * 60 * 60 * 1000))
+
+    // Determine status
+    let status: 'active' | 'churned' | 'new' = 'active'
+    if (!sub.is_active || sub.cancelled_at) {
+      status = 'churned'
+    } else if (previousMrr === 0 && sub.current_period_start) {
+      const periodStart = new Date(sub.current_period_start)
+      if (periodStart > thirtyDaysAgo) {
+        status = 'new'
+      }
+    }
+
+    return {
+      customerId: sub.customer_id,
+      customerName: customer?.name || sub.customer_id,
+      email: customer?.email || '',
+      planName: plan?.name || sub.plan_id,
+      planId: sub.plan_id,
+      mrr: currentMrr,
+      previousMrr,
+      mrrChange,
+      mrrChangePercent: Math.round(mrrChangePercent * 10) / 10,
+      tenureMonths,
+      status,
+      segment: customer?.segment,
+    }
+  }).sort((a, b) => b.mrr - a.mrr) // Sort by MRR descending
+}
+
+// =============================================================================
+// RENEWAL TRACKING CALCULATION
+// =============================================================================
+
+/**
+ * Calculate upcoming renewals and identify at-risk renewals
+ */
+export function calculateUpcomingRenewals(
+  subscriptions: Subscription[],
+  plans: Plan[],
+  customers: Customer[],
+  usage?: UsageRecord[]
+): RenewalInfo[] {
+  const planMap = new Map(plans.map(p => [p.plan_id, p]))
+  const customerMap = new Map(customers.map(c => [c.customer_id, c]))
+  const now = new Date()
+
+  // Get usage trends for risk assessment
+  const usageTrends = new Map<string, number>()
+  if (usage && usage.length > 0) {
+    // Group usage by customer and calculate trend
+    const customerUsage = new Map<string, number[]>()
+    usage.forEach(u => {
+      const existing = customerUsage.get(u.customer_id) || []
+      existing.push(u.metric_value)
+      customerUsage.set(u.customer_id, existing)
+    })
+
+    customerUsage.forEach((values, customerId) => {
+      if (values.length >= 2) {
+        const first = values[0] || 0
+        const last = values[values.length - 1] || 0
+        const trend = first > 0 ? (last - first) / first : 0
+        usageTrends.set(customerId, trend)
+      }
+    })
+  }
+
+  return subscriptions
+    .filter(sub => sub.is_active && sub.current_period_end)
+    .map(sub => {
+      const customer = customerMap.get(sub.customer_id)
+      const plan = planMap.get(sub.plan_id)
+
+      const renewalDate = new Date(sub.current_period_end!)
+      const daysUntilRenewal = Math.ceil((renewalDate.getTime() - now.getTime()) / (24 * 60 * 60 * 1000))
+
+      const intervalMonths = plan?.interval_months || 1
+      const mrr = sub.mrr_override !== undefined
+        ? sub.mrr_override
+        : (plan?.price_amount || 0) / intervalMonths
+
+      // Assess risk level
+      let riskLevel: 'low' | 'medium' | 'high' = 'low'
+      let riskReason: string | undefined
+
+      // Check usage decline
+      const usageTrend = usageTrends.get(sub.customer_id)
+      if (usageTrend !== undefined && usageTrend < -0.25) {
+        riskLevel = 'high'
+        riskReason = 'Usage declined >25%'
+      } else if (usageTrend !== undefined && usageTrend < -0.1) {
+        riskLevel = 'medium'
+        riskReason = 'Usage declining'
+      }
+
+      // Check if renewal is soon
+      if (daysUntilRenewal <= 7 && riskLevel === 'low') {
+        riskLevel = 'medium'
+        riskReason = 'Renewal due soon'
+      }
+
+      return {
+        customerId: sub.customer_id,
+        customerName: customer?.name || sub.customer_id,
+        planName: plan?.name || sub.plan_id,
+        mrr,
+        renewalDate: renewalDate.toISOString().split('T')[0] || '',
+        daysUntilRenewal,
+        riskLevel,
+        riskReason,
+      }
+    })
+    .filter(r => r.daysUntilRenewal >= 0 && r.daysUntilRenewal <= 90) // Next 90 days
+    .sort((a, b) => a.daysUntilRenewal - b.daysUntilRenewal)
+}
+
+// =============================================================================
+// COHORT RETENTION MATRIX CALCULATION
+// =============================================================================
+
+/**
+ * Calculate cohort retention matrix showing retention over time
+ */
+export function calculateCohortRetentionMatrix(
+  customers: Customer[],
+  subscriptions: Subscription[]
+): CohortRetentionRow[] {
+  // Group customers by signup month
+  const cohorts = new Map<string, { customers: Set<string>; created: Date }>()
+
+  customers.forEach(c => {
+    const createdAt = c.created_at ? new Date(c.created_at) : new Date()
+    const cohortKey = `${createdAt.getFullYear()}-${String(createdAt.getMonth() + 1).padStart(2, '0')}`
+
+    if (!cohorts.has(cohortKey)) {
+      cohorts.set(cohortKey, { customers: new Set(), created: createdAt })
+    }
+    cohorts.get(cohortKey)!.customers.add(c.customer_id)
+  })
+
+  // Build subscription status map
+  const subMap = new Map<string, Subscription>()
+  subscriptions.forEach(s => subMap.set(s.customer_id, s))
+
+  const now = new Date()
+  const rows: CohortRetentionRow[] = []
+
+  // Sort cohorts by date
+  const sortedCohorts = Array.from(cohorts.entries()).sort((a, b) => a[0].localeCompare(b[0]))
+
+  sortedCohorts.forEach(([cohortKey, cohortData]) => {
+    const cohortSize = cohortData.customers.size
+    if (cohortSize === 0) return
+
+    const cohortDate = new Date(cohortKey + '-01')
+    const monthsSinceCohort = Math.floor(
+      (now.getTime() - cohortDate.getTime()) / (30 * 24 * 60 * 60 * 1000)
+    )
+
+    const retentionByMonth: CohortRetentionCell[] = []
+
+    // Month 0 is always 100% (signup month)
+    retentionByMonth.push({ month: 0, retention: 100, customers: cohortSize })
+
+    // Calculate retention for each subsequent month
+    for (let month = 1; month <= Math.min(monthsSinceCohort, 12); month++) {
+      let retained = 0
+
+      cohortData.customers.forEach(customerId => {
+        const sub = subMap.get(customerId)
+        if (sub) {
+          // Check if still active or cancelled after this month
+          if (sub.is_active) {
+            retained++
+          } else if (sub.cancelled_at) {
+            const cancelledAt = new Date(sub.cancelled_at)
+            const monthsUntilCancel = Math.floor(
+              (cancelledAt.getTime() - cohortDate.getTime()) / (30 * 24 * 60 * 60 * 1000)
+            )
+            if (monthsUntilCancel > month) {
+              retained++
+            }
+          }
+        }
+      })
+
+      const retention = Math.round((retained / cohortSize) * 100)
+      retentionByMonth.push({ month, retention, customers: retained })
+    }
+
+    rows.push({
+      cohort: cohortKey,
+      cohortSize,
+      retentionByMonth,
+    })
+  })
+
+  // Return last 6 cohorts, most recent first
+  return rows.slice(-6).reverse()
+}
+
 export function analyzeData(data: AnalyzerData): AnalysisResult {
   const { customers, plans, subscriptions, invoices, usage, costs } = data
 
@@ -1235,9 +1526,11 @@ export function analyzeData(data: AnalyzerData): AnalysisResult {
   // MRR movement
   const mrrMovement = calculateMRRMovement(subscriptions, plans)
 
-  // NRR calculation (simplified - would need historical data for accuracy)
+  // NRR calculation: (Starting MRR + Expansion - Contraction - Churn) / Starting MRR
+  // This measures revenue retention from existing customers (excludes new customers)
   const previousMRR = mrr - mrrMovement.netNew
-  const nrr = previousMRR > 0 ? ((mrr - mrrMovement.new) / previousMRR) * 100 : 100
+  const retainedAndExpanded = previousMRR + mrrMovement.expansion - mrrMovement.contraction - mrrMovement.churned
+  const nrr = previousMRR > 0 ? (retainedAndExpanded / previousMRR) * 100 : 100
 
   // MRR growth
   const mrrGrowth = previousMRR > 0 ? ((mrr - previousMRR) / previousMRR) * 100 : 0
@@ -1317,6 +1610,10 @@ export function analyzeData(data: AnalyzerData): AnalysisResult {
     negativeMarginCustomers: analyzeNegativeMargins(costs || [], subscriptions, plans, customers),
     cohorts: calculateCohorts(customers, subscriptions, plans),
     monthlyMetrics: calculateMonthlyMetrics(subscriptions, plans, costs),
+    // New features
+    customerRevenue: calculateCustomerRevenue(customers, subscriptions, plans),
+    upcomingRenewals: calculateUpcomingRenewals(subscriptions, plans, customers, usage),
+    cohortRetentionMatrix: calculateCohortRetentionMatrix(customers, subscriptions),
     meta: {
       customerCount: customers.length,
       planCount: plans.length,

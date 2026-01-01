@@ -30,6 +30,7 @@ export function useDataMode() {
   const revenueCustomerCount = computed(() => dataStatus.value?.revenue_customer_count ?? 0)
   const costsRecordCount = computed(() => dataStatus.value?.costs_record_count ?? 0)
   const usageRecordCount = computed(() => dataStatus.value?.usage_record_count ?? 0)
+  const lastSyncAt = computed(() => dataStatus.value?.last_sync_at ?? null)
 
   async function refetch() {
     isLoading.value = true
@@ -47,6 +48,7 @@ export function useDataMode() {
         revenue_customer_count: 0,
         costs_record_count: 0,
         usage_record_count: 0,
+        last_sync_at: null,
       }
     } finally {
       isLoading.value = false
@@ -104,6 +106,7 @@ export function useDataMode() {
     revenueCustomerCount,
     costsRecordCount,
     usageRecordCount,
+    lastSyncAt,
 
     // Actions
     switchToSampleData,

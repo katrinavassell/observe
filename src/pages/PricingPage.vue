@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   TrendingUp,
@@ -12,6 +12,10 @@ import {
   Plug,
   Search,
   ExternalLink,
+  Calendar,
+  ArrowUp,
+  ArrowDown,
+  Minus,
 } from 'lucide-vue-next'
 import {
   Card,
@@ -59,13 +63,56 @@ const error = ref<string | null>(null)
 const analysisResult = ref<AnalysisResult | null>(null)
 const dataSource = ref<'none' | 'sample' | 'user'>('none')
 
-const { dataMode, hasData, refetch: refetchDataMode } = useDataMode()
+const { dataMode, hasData, lastSyncAt, refetch: refetchDataMode } = useDataMode()
+
+// Format relative time (e.g., "2 hours ago")
+const lastSyncFormatted = computed(() => {
+  if (!lastSyncAt.value) return null
+
+  const syncDate = new Date(lastSyncAt.value)
+  const now = new Date()
+  const diffMs = now.getTime() - syncDate.getTime()
+  const diffMins = Math.floor(diffMs / 60000)
+  const diffHours = Math.floor(diffMins / 60)
+  const diffDays = Math.floor(diffHours / 24)
+
+  if (diffMins < 1) return 'just now'
+  if (diffMins < 60) return `${diffMins} minute${diffMins === 1 ? '' : 's'} ago`
+  if (diffHours < 24) return `${diffHours} hour${diffHours === 1 ? '' : 's'} ago`
+  if (diffDays < 7) return `${diffDays} day${diffDays === 1 ? '' : 's'} ago`
+
+  return syncDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+})
 
 // =============================================================================
 // COMPUTED
 // =============================================================================
 
 const sampleSummary = getSampleDataSummary()
+
+// Helper to format currency
+function formatCurrency(amount: number): string {
+  if (amount >= 1000) {
+    return `$${(amount / 1000).toFixed(1)}k`
+  }
+  return `$${amount.toFixed(0)}`
+}
+
+// ARR Waterfall data computed from MRR movement
+const arrWaterfallData = computed(() => {
+  if (!analysisResult.value) return []
+  const metrics = analysisResult.value.saasMetrics
+  const previousARR = (metrics.mrr - metrics.mrrMovement.netNew) * 12
+
+  return [
+    { label: 'Starting ARR', value: previousARR, type: 'base' as const },
+    { label: 'New', value: metrics.mrrMovement.new * 12, type: 'positive' as const },
+    { label: 'Expansion', value: metrics.mrrMovement.expansion * 12, type: 'positive' as const },
+    { label: 'Contraction', value: -metrics.mrrMovement.contraction * 12, type: 'negative' as const },
+    { label: 'Churned', value: -metrics.mrrMovement.churned * 12, type: 'negative' as const },
+    { label: 'Ending ARR', value: metrics.arr, type: 'total' as const },
+  ]
+})
 
 // =============================================================================
 // METHODS
@@ -265,8 +312,8 @@ onMounted(async () => {
     <!-- ==================== RESULTS STATE ==================== -->
     <template v-else-if="analysisResult">
       <!-- Results Header -->
-      <div class="flex items-center justify-between">
-        <div class="flex items-center gap-3">
+      <div class="flex items-center justify-between flex-wrap gap-2">
+        <div class="flex items-center gap-3 flex-wrap">
           <Badge variant="secondary">
             {{ analysisResult.meta.customerCount }} customers
           </Badge>
@@ -276,6 +323,9 @@ onMounted(async () => {
           <Badge variant="outline">
             Source: {{ dataSource === 'sample' ? 'Sample Data' : 'Your Data' }}
           </Badge>
+          <span v-if="lastSyncFormatted" class="text-xs text-muted-foreground">
+            Updated {{ lastSyncFormatted }}
+          </span>
         </div>
       </div>
 
@@ -303,6 +353,8 @@ onMounted(async () => {
           </Tooltip>
           <TabsTrigger v-else value="margin">Negative Margin</TabsTrigger>
           <TabsTrigger value="cohorts">Cohorts</TabsTrigger>
+          <TabsTrigger value="revenue">Revenue by Customer</TabsTrigger>
+          <TabsTrigger value="renewals">Renewals</TabsTrigger>
         </TabsList>
 
         <!-- ========== SaaS Metrics Tab ========== -->
@@ -906,6 +958,301 @@ onMounted(async () => {
           <Card v-else>
             <CardContent class="p-6 text-center text-muted-foreground">
               No cohort data available.
+            </CardContent>
+          </Card>
+
+          <!-- Cohort Retention Matrix -->
+          <Card v-if="analysisResult.cohortRetentionMatrix.length > 0">
+            <CardHeader class="pb-2">
+              <div class="flex items-center gap-2">
+                <CardTitle class="text-base font-semibold">Retention Matrix</CardTitle>
+                <Tooltip>
+                  <TooltipTrigger>
+                    <Info class="h-3.5 w-3.5 text-muted-foreground/60" />
+                  </TooltipTrigger>
+                  <TooltipContent>Customer retention percentage by month after signup</TooltipContent>
+                </Tooltip>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                  <thead>
+                    <tr class="border-b border-border">
+                      <th class="text-left p-2 font-medium">Cohort</th>
+                      <th class="text-center p-2 font-medium">Size</th>
+                      <th
+                        v-for="n in 6"
+                        :key="n"
+                        class="text-center p-2 font-medium min-w-[60px]"
+                      >
+                        M{{ n - 1 }}
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr
+                      v-for="row in analysisResult.cohortRetentionMatrix"
+                      :key="row.cohort"
+                      class="border-b border-border hover:bg-muted/50"
+                    >
+                      <td class="p-2 font-medium">{{ row.cohort }}</td>
+                      <td class="p-2 text-center text-muted-foreground">{{ row.cohortSize }}</td>
+                      <td
+                        v-for="cell in row.retentionByMonth.slice(0, 6)"
+                        :key="cell.month"
+                        class="p-2 text-center"
+                      >
+                        <span
+                          class="inline-block px-2 py-0.5 rounded text-xs font-medium"
+                          :class="{
+                            'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300': cell.retention >= 80,
+                            'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300': cell.retention >= 50 && cell.retention < 80,
+                            'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300': cell.retention < 50,
+                          }"
+                        >
+                          {{ cell.retention }}%
+                        </span>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <!-- ========== Revenue by Customer Tab ========== -->
+        <TabsContent value="revenue" class="space-y-6">
+          <!-- ARR Waterfall -->
+          <Card v-if="arrWaterfallData.length > 0">
+            <CardHeader class="pb-2">
+              <div class="flex items-center gap-2">
+                <CardTitle class="text-base font-semibold">ARR Waterfall</CardTitle>
+                <Tooltip>
+                  <TooltipTrigger>
+                    <Info class="h-3.5 w-3.5 text-muted-foreground/60" />
+                  </TooltipTrigger>
+                  <TooltipContent>ARR changes from new, expansion, contraction, and churn</TooltipContent>
+                </Tooltip>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div class="flex items-end gap-2 h-48">
+                <div
+                  v-for="bar in arrWaterfallData"
+                  :key="bar.label"
+                  class="flex-1 flex flex-col items-center"
+                >
+                  <span class="text-xs font-medium mb-1">
+                    {{ bar.value >= 0 ? '+' : '' }}{{ formatCurrency(bar.value) }}
+                  </span>
+                  <div
+                    class="w-full rounded-t transition-all duration-300"
+                    :class="{
+                      'bg-slate-400': bar.type === 'base',
+                      'bg-green-500': bar.type === 'positive',
+                      'bg-red-500': bar.type === 'negative',
+                      'bg-primary': bar.type === 'total',
+                    }"
+                    :style="{ height: `${Math.max(20, Math.abs(bar.value) / (analysisResult?.saasMetrics.arr || 1) * 150)}px` }"
+                  ></div>
+                  <span class="text-[10px] text-muted-foreground mt-1 text-center">
+                    {{ bar.label }}
+                  </span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <!-- Customer Revenue Table -->
+          <div v-if="analysisResult.customerRevenue.length > 0" class="overflow-x-auto">
+            <table class="w-full">
+              <thead>
+                <tr class="border-b border-border">
+                  <th class="text-left p-3 font-medium text-sm">Customer</th>
+                  <th class="text-left p-3 font-medium text-sm">Plan</th>
+                  <th class="text-right p-3 font-medium text-sm">MRR</th>
+                  <th class="text-right p-3 font-medium text-sm">
+                    <div class="flex items-center justify-end gap-1">
+                      Change
+                      <Tooltip>
+                        <TooltipTrigger>
+                          <Info class="h-3 w-3 text-muted-foreground/60" />
+                        </TooltipTrigger>
+                        <TooltipContent>MRR change from previous period</TooltipContent>
+                      </Tooltip>
+                    </div>
+                  </th>
+                  <th class="text-center p-3 font-medium text-sm">Tenure</th>
+                  <th class="text-center p-3 font-medium text-sm">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr
+                  v-for="customer in analysisResult.customerRevenue.slice(0, 20)"
+                  :key="customer.customerId"
+                  class="border-b border-border hover:bg-muted/50"
+                >
+                  <td class="p-3">
+                    <div>
+                      <p class="text-sm font-medium">{{ customer.customerName }}</p>
+                      <p class="text-xs text-muted-foreground">{{ customer.email }}</p>
+                    </div>
+                  </td>
+                  <td class="p-3 text-sm">
+                    <Badge variant="secondary">{{ customer.planName }}</Badge>
+                  </td>
+                  <td class="p-3 text-sm text-right font-mono font-medium">
+                    ${{ customer.mrr.toFixed(0) }}
+                  </td>
+                  <td class="p-3 text-sm text-right">
+                    <div class="flex items-center justify-end gap-1">
+                      <ArrowUp v-if="customer.mrrChange > 0" class="h-3 w-3 text-green-600" />
+                      <ArrowDown v-else-if="customer.mrrChange < 0" class="h-3 w-3 text-red-600" />
+                      <Minus v-else class="h-3 w-3 text-muted-foreground" />
+                      <span
+                        :class="{
+                          'text-green-600': customer.mrrChange > 0,
+                          'text-red-600': customer.mrrChange < 0,
+                          'text-muted-foreground': customer.mrrChange === 0,
+                        }"
+                      >
+                        {{ customer.mrrChange > 0 ? '+' : '' }}${{ customer.mrrChange.toFixed(0) }}
+                      </span>
+                    </div>
+                  </td>
+                  <td class="p-3 text-sm text-center text-muted-foreground">
+                    {{ customer.tenureMonths }}mo
+                  </td>
+                  <td class="p-3 text-sm text-center">
+                    <Badge
+                      :variant="customer.status === 'active' ? 'success' : customer.status === 'new' ? 'secondary' : 'destructive'"
+                    >
+                      {{ customer.status }}
+                    </Badge>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+            <p v-if="analysisResult.customerRevenue.length > 20" class="text-xs text-muted-foreground text-center mt-3">
+              Showing top 20 of {{ analysisResult.customerRevenue.length }} customers by MRR
+            </p>
+          </div>
+          <Card v-else>
+            <CardContent class="p-6 text-center text-muted-foreground">
+              No customer revenue data available.
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <!-- ========== Renewals Tab ========== -->
+        <TabsContent value="renewals" class="space-y-6">
+          <!-- Summary Cards -->
+          <div v-if="analysisResult.upcomingRenewals.length > 0" class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <Card>
+              <CardContent class="p-5">
+                <div class="flex items-center gap-3">
+                  <div class="p-2 bg-primary/10 rounded-lg">
+                    <Calendar class="h-5 w-5 text-primary" />
+                  </div>
+                  <div>
+                    <p class="text-xs text-muted-foreground">Renewals (90 days)</p>
+                    <p class="text-2xl font-bold">{{ analysisResult.upcomingRenewals.length }}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent class="p-5">
+                <div class="flex items-center gap-3">
+                  <div class="p-2 bg-green-500/10 rounded-lg">
+                    <TrendingUp class="h-5 w-5 text-green-600" />
+                  </div>
+                  <div>
+                    <p class="text-xs text-muted-foreground">MRR at Renewal</p>
+                    <p class="text-2xl font-bold">
+                      ${{ analysisResult.upcomingRenewals.reduce((sum, r) => sum + r.mrr, 0).toLocaleString() }}
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent class="p-5">
+                <div class="flex items-center gap-3">
+                  <div class="p-2 bg-red-500/10 rounded-lg">
+                    <AlertTriangle class="h-5 w-5 text-red-600" />
+                  </div>
+                  <div>
+                    <p class="text-xs text-muted-foreground">At Risk</p>
+                    <p class="text-2xl font-bold">
+                      {{ analysisResult.upcomingRenewals.filter(r => r.riskLevel === 'high').length }}
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          <!-- Renewals Table -->
+          <div v-if="analysisResult.upcomingRenewals.length > 0" class="overflow-x-auto">
+            <table class="w-full">
+              <thead>
+                <tr class="border-b border-border">
+                  <th class="text-left p-3 font-medium text-sm">Customer</th>
+                  <th class="text-left p-3 font-medium text-sm">Plan</th>
+                  <th class="text-right p-3 font-medium text-sm">MRR</th>
+                  <th class="text-center p-3 font-medium text-sm">Renewal Date</th>
+                  <th class="text-center p-3 font-medium text-sm">Days Left</th>
+                  <th class="text-center p-3 font-medium text-sm">Risk</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr
+                  v-for="renewal in analysisResult.upcomingRenewals"
+                  :key="renewal.customerId"
+                  class="border-b border-border hover:bg-muted/50"
+                  :class="{ 'bg-red-50/50 dark:bg-red-950/20': renewal.riskLevel === 'high' }"
+                >
+                  <td class="p-3 text-sm font-medium">{{ renewal.customerName }}</td>
+                  <td class="p-3 text-sm">
+                    <Badge variant="secondary">{{ renewal.planName }}</Badge>
+                  </td>
+                  <td class="p-3 text-sm text-right font-mono">${{ renewal.mrr.toFixed(0) }}</td>
+                  <td class="p-3 text-sm text-center">{{ renewal.renewalDate }}</td>
+                  <td class="p-3 text-sm text-center">
+                    <span
+                      :class="{
+                        'text-red-600 font-medium': renewal.daysUntilRenewal <= 7,
+                        'text-yellow-600': renewal.daysUntilRenewal <= 30,
+                      }"
+                    >
+                      {{ renewal.daysUntilRenewal }}
+                    </span>
+                  </td>
+                  <td class="p-3 text-sm text-center">
+                    <Tooltip v-if="renewal.riskReason">
+                      <TooltipTrigger>
+                        <Badge
+                          :variant="renewal.riskLevel === 'high' ? 'destructive' : renewal.riskLevel === 'medium' ? 'secondary' : 'success'"
+                        >
+                          {{ renewal.riskLevel }}
+                        </Badge>
+                      </TooltipTrigger>
+                      <TooltipContent>{{ renewal.riskReason }}</TooltipContent>
+                    </Tooltip>
+                    <Badge v-else :variant="renewal.riskLevel === 'low' ? 'success' : 'secondary'">
+                      {{ renewal.riskLevel }}
+                    </Badge>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <Card v-else>
+            <CardContent class="p-6 text-center text-muted-foreground">
+              No upcoming renewals found in the next 90 days.
             </CardContent>
           </Card>
         </TabsContent>
