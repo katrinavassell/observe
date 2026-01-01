@@ -33,8 +33,13 @@ const props = defineProps<{
 
 const chartData = computed(() => {
   const labels = props.data.map(d => {
-    const [year, month] = d.month.split('-')
-    const date = new Date(parseInt(year!), parseInt(month!) - 1)
+    const parts = d.month?.split('-') || []
+    const year = parts[0] || '2024'
+    const month = parts[1] || '01'
+    const date = new Date(parseInt(year), parseInt(month) - 1)
+    if (isNaN(date.getTime())) {
+      return d.month || 'Unknown'
+    }
     return date.toLocaleDateString('en-US', { month: 'short', year: '2-digit' })
   })
 
@@ -42,12 +47,13 @@ const chartData = computed(() => {
     {
       label: 'MRR',
       data: props.data.map(d => d.mrr),
-      borderColor: 'hsl(var(--primary))',
-      backgroundColor: 'hsla(var(--primary), 0.1)',
+      borderColor: 'rgb(99, 102, 241)', // Indigo
+      backgroundColor: 'rgba(99, 102, 241, 0.1)',
       fill: true,
       tension: 0.3,
       pointRadius: 4,
       pointHoverRadius: 6,
+      pointBackgroundColor: 'rgb(99, 102, 241)',
     },
   ]
 
@@ -55,12 +61,13 @@ const chartData = computed(() => {
     datasets.push({
       label: 'Costs',
       data: props.data.map(d => d.costs),
-      borderColor: 'hsl(0 84% 60%)',
-      backgroundColor: 'hsla(0, 84%, 60%, 0.1)',
+      borderColor: 'rgb(239, 68, 68)', // Red
+      backgroundColor: 'rgba(239, 68, 68, 0.1)',
       fill: true,
       tension: 0.3,
       pointRadius: 4,
       pointHoverRadius: 6,
+      pointBackgroundColor: 'rgb(239, 68, 68)',
     })
   }
 

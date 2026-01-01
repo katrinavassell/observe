@@ -403,32 +403,37 @@ export function loadCuratedSampleData(): AnalyzerData {
     period_end: `${u.month}-28T23:59:59Z`,
   }))
 
-  // 5. Allocate costs to match PRD total of $6,200
-  // PRD specifies: Acme $2,400, DataFlow $340, TinyStartup $85
-  // Remaining: $6,200 - $2,400 - $340 - $85 = $3,375 for 27 other customers
-  // Average for others: ~$125 each
-  const CUSTOMER_COSTS: Record<string, number> = {
-    // Negative margin customers (per PRD)
-    'cust_001': 2400, // Acme Corp - token overages (12M vs 10M limit) → -20% margin
-    'cust_014': 340,  // DataFlow Inc - heavy token usage (2.1M vs 2M limit) → -71% margin
-    'cust_019': 85,   // TinyStartup - heavy API usage relative to tier → -73% margin
-    // Other customers get proportional allocation of remaining $3,375
-    // $3,375 / 27 = ~$125 average
-  }
-
-  // Calculate total for non-negative-margin customers
-  const negativeMarginTotal = 2400 + 340 + 85 // = $2,825
-  const remainingCosts = 6200 - negativeMarginTotal // = $3,375
-  const otherCustomerCount = data.customers.length - 3 // = 27
-  const avgOtherCost = remainingCosts / otherCustomerCount // = $125
-
-  const costs: CostRecord[] = data.customers.map(c => ({
-    customer_id: c.customer_id,
-    cost_type: 'infrastructure',
-    amount: CUSTOMER_COSTS[c.customer_id] ?? avgOtherCost,
-    period_start: '2024-12-01T00:00:00Z',
-    period_end: '2024-12-31T23:59:59Z',
+  // 5. Use actual cost data from JSON (has 6 months of historical data)
+  // This enables MRR vs Costs trend visualization
+  const costs: CostRecord[] = data.costs.map(c => ({
+    customer_id: 'aggregate', // Aggregate costs (not per-customer)
+    cost_type: c.provider,
+    amount: c.cost,
+    period_start: `${c.month}-01T00:00:00Z`,
+    period_end: `${c.month}-28T23:59:59Z`,
   }))
+
+  // Also add per-customer costs for December (for negative margin analysis)
+  // PRD specifies: Acme $2,400, DataFlow $340, TinyStartup $85
+  const CUSTOMER_COSTS: Record<string, number> = {
+    'cust_001': 2400, // Acme Corp - token overages → -20% margin
+    'cust_014': 340,  // DataFlow Inc - heavy usage → -71% margin
+    'cust_019': 85,   // TinyStartup - heavy API usage → -73% margin
+  }
+  const negativeMarginTotal = 2400 + 340 + 85
+  const remainingCosts = 6200 - negativeMarginTotal
+  const otherCustomerCount = data.customers.length - 3
+  const avgOtherCost = remainingCosts / otherCustomerCount
+
+  data.customers.forEach(c => {
+    costs.push({
+      customer_id: c.customer_id,
+      cost_type: 'infrastructure',
+      amount: CUSTOMER_COSTS[c.customer_id] ?? avgOtherCost,
+      period_start: '2024-12-01T00:00:00Z',
+      period_end: '2024-12-31T23:59:59Z',
+    })
+  })
 
   return { customers, plans, subscriptions, usage, costs }
 }

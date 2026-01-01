@@ -283,7 +283,7 @@ onMounted(async () => {
         <TabsList class="flex-wrap h-auto gap-1 p-1">
           <TabsTrigger value="saas">SaaS Metrics</TabsTrigger>
           <TabsTrigger value="health">Plan Health</TabsTrigger>
-          <Tooltip v-if="!analysisResult.meta.hasUsageData">
+          <Tooltip v-if="!analysisResult?.meta?.hasUsageData">
             <TooltipTrigger as-child>
               <span class="inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 py-1.5 text-sm font-medium opacity-50 cursor-not-allowed">
                 Usage Anomalies
@@ -292,7 +292,7 @@ onMounted(async () => {
             <TooltipContent>Upload usage data to unlock this tab</TooltipContent>
           </Tooltip>
           <TabsTrigger v-else value="usage">Usage Anomalies</TabsTrigger>
-          <Tooltip v-if="!analysisResult.meta.hasCostData">
+          <Tooltip v-if="!analysisResult?.meta?.hasCostData">
             <TooltipTrigger as-child>
               <span class="inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 py-1.5 text-sm font-medium opacity-50 cursor-not-allowed">
                 Negative Margin

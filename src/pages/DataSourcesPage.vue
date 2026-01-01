@@ -222,11 +222,11 @@ function handleStripeConnect(): void {
   showStripeModal.value = true
 }
 
-function handleStripeConnected(accountName: string): void {
+async function handleStripeConnected(accountName: string): Promise<void> {
   isStripeConnected.value = true
   stripeAccountName.value = accountName
   toast.success(`Connected to ${accountName}`)
-  refetchDataMode()
+  await refetchDataMode()
 }
 
 async function handleStripeSync(): Promise<void> {
@@ -235,7 +235,7 @@ async function handleStripeSync(): Promise<void> {
     const { syncStripeDataEnhanced } = await import('@/api/client')
     const result = await syncStripeDataEnhanced()
     toast.success(`Synced ${result.summary.total_customers} customers, ${result.summary.active_subscriptions} subscriptions`)
-    refetchDataMode()
+    await refetchDataMode()
   } catch (error) {
     toast.error('Sync failed', {
       description: error instanceof Error ? error.message : 'Please try again',
