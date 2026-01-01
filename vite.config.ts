@@ -12,6 +12,7 @@ export default defineConfig({
   server: {
     port: 5174,
     proxy: {
+      // All API routes -> local dev server
       '/api': {
         target: 'http://localhost:8000',
         changeOrigin: true,

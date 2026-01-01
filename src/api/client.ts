@@ -14,11 +14,22 @@
  * @module api/client
  */
 
+import { supabase } from '@/lib/supabase'
+
 /** Base URL for all API requests (proxied to backend in dev) */
 const API_BASE = '/api'
 
 /**
+ * Get the current Supabase session token for authenticated API calls.
+ */
+async function getAuthToken(): Promise<string | null> {
+  const { data: { session } } = await supabase.auth.getSession()
+  return session?.access_token || null
+}
+
+/**
  * Generic HTTP request helper with JSON handling and error management.
+ * Automatically includes Supabase auth token for authenticated endpoints.
  *
  * @template T - Expected response type
  * @param endpoint - API endpoint path (without base URL)
@@ -32,16 +43,35 @@ async function request<T>(
 ): Promise<T> {
   const url = `${API_BASE}${endpoint}`
 
+  // Get auth token for Supabase Edge Functions
+  const token = await getAuthToken()
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...(options.headers as Record<string, string>),
+  }
+
+  // Add Authorization header if we have a token
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`
+  }
+
   const response = await fetch(url, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...options.headers,
-    },
     ...options,
+    headers,
   })
 
   if (!response.ok) {
-    throw new Error(`API Error: ${response.status} ${response.statusText}`)
+    // Try to parse error message from response
+    let errorMessage = `API Error: ${response.status} ${response.statusText}`
+    try {
+      const errorData = await response.json()
+      if (errorData.error) {
+        errorMessage = errorData.error
+      }
+    } catch {
+      // Ignore JSON parse errors
+    }
+    throw new Error(errorMessage)
   }
 
   return response.json()
