@@ -1105,3 +1105,47 @@ export async function connectOpenAI(apiKey: string): Promise<OpenAIConnectResult
 
   return data as OpenAIConnectResult
 }
+
+export interface OpenAIStatus {
+  connected: boolean
+  has_usage_access: boolean
+  api_key_prefix?: string
+  connected_at?: string
+  last_synced_at?: string | null
+}
+
+/**
+ * Check if OpenAI is connected for the current user.
+ * Uses Supabase Edge Function directly.
+ */
+export async function getOpenAIStatus(): Promise<OpenAIStatus> {
+  const { data, error } = await supabase.functions.invoke('openai-status')
+
+  if (error) {
+    return { connected: false, has_usage_access: false }
+  }
+
+  return data as OpenAIStatus
+}
+
+export interface AnthropicStatus {
+  connected: boolean
+  has_usage_access: boolean
+  api_key_prefix?: string
+  connected_at?: string
+  last_synced_at?: string | null
+}
+
+/**
+ * Check if Anthropic is connected for the current user.
+ * Uses Supabase Edge Function directly.
+ */
+export async function getAnthropicStatus(): Promise<AnthropicStatus> {
+  const { data, error } = await supabase.functions.invoke('anthropic-status')
+
+  if (error) {
+    return { connected: false, has_usage_access: false }
+  }
+
+  return data as AnthropicStatus
+}

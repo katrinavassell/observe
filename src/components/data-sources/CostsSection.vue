@@ -9,7 +9,7 @@
  * - Template downloads
  */
 
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { toast } from 'vue-sonner'
 import Papa from 'papaparse'
 import {
@@ -28,6 +28,7 @@ import {
 } from '@/lib/validation'
 import AnthropicApiKeyModal from '@/components/integrations/AnthropicApiKeyModal.vue'
 import OpenAIApiKeyModal from '@/components/integrations/OpenAIApiKeyModal.vue'
+import { getOpenAIStatus, getAnthropicStatus } from '@/api/client'
 
 const props = defineProps<{
   /** Current file info if any */
@@ -188,6 +189,20 @@ function handleConnectAnthropic(): void {
 function handleAnthropicConnected(): void {
   isAnthropicConnected.value = true
 }
+
+// Fetch integration status on mount
+onMounted(async () => {
+  try {
+    const [openaiStatus, anthropicStatus] = await Promise.all([
+      getOpenAIStatus(),
+      getAnthropicStatus(),
+    ])
+    isOpenAIConnected.value = openaiStatus.connected
+    isAnthropicConnected.value = anthropicStatus.connected
+  } catch {
+    // Silently fail - integrations will just show as not connected
+  }
+})
 </script>
 
 <template>
