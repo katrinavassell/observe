@@ -1,406 +1,518 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+/**
+ * DashboardPage - Board-ready SaaS metrics overview
+ *
+ * Layout:
+ * - Header with title, badges, and refresh
+ * - Date range selector
+ * - Key metrics row (4 cards)
+ * - Tabs: Overview | MRR Breakdown | Alerts | Actions
+ */
+
+import { ref, computed, watch, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/vue-query'
-import { TrendingUp, TrendingDown, Users, AlertTriangle, CheckCircle, Download, Minus, ChevronRight, CreditCard, Sparkles } from 'lucide-vue-next'
-import { Card, CardContent, CardHeader, CardTitle, Badge, Button } from '@/components/ui'
+import {
+  TrendingDown,
+  AlertTriangle,
+  CheckCircle,
+  RefreshCw,
+  Download,
+  BarChart3,
+  Sparkles,
+  CreditCard,
+  Clock,
+  ArrowDownRight,
+} from 'lucide-vue-next'
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  Badge,
+  Button,
+  Tabs,
+  TabsList,
+  TabsTrigger,
+  TabsContent,
+} from '@/components/ui'
 import Skeleton from '@/components/ui/skeleton.vue'
-import Progress from '@/components/ui/progress.vue'
-import GettingStartedCard from '@/components/onboarding/GettingStartedCard.vue'
-import { getRevenueAnalytics, getMatches, getDataStatus, loadSampleData, type TrendData, type Discrepancy } from '@/api/client'
-import { formatCurrency, formatPercent } from '@/lib/utils'
-import { useAppMode } from '@/composables/useAppMode'
+import {
+  MetricCard,
+  AlertCard,
+  MrrMonthlyBreakdown,
+  QuickActions,
+} from '@/components/dashboard'
+import type { Alert, MrrMonthData, QuickAction } from '@/components/dashboard'
+import { analyzeData, type AnalysisResult } from '@/lib/pricing-analyzer'
+import { fetchAnalyzerData, loadSampleData as loadSampleDataToSupabase } from '@/lib/supabase-data'
+import { useDataMode } from '@/composables/useDataMode'
+import { toast } from 'vue-sonner'
+
+// =============================================================================
+// ROUTING & STATE
+// =============================================================================
 
 const router = useRouter()
-const queryClient = useQueryClient()
-const showGettingStarted = ref(true)
-const { labels } = useAppMode()
 
-const { data: revenue, isLoading: revenueLoading } = useQuery({
-  queryKey: ['revenue-analytics'],
-  queryFn: getRevenueAnalytics,
+const isLoading = ref(false)
+const isSampleLoading = ref(false)
+const analysisResult = ref<AnalysisResult | null>(null)
+const activeTab = ref('overview')
+const dateRange = ref('30d')
+
+const { dataMode, hasData, lastSyncAt, refetch: refetchDataMode } = useDataMode()
+
+// =============================================================================
+// COMPUTED - Metrics
+// =============================================================================
+
+const mrr = computed(() => analysisResult.value?.saasMetrics.mrr ?? 0)
+const customerCount = computed(() => analysisResult.value?.saasMetrics.customerCount ?? 0)
+const margin = computed(() => analysisResult.value?.saasMetrics.margin ?? 0)
+const marginChange = computed(() => analysisResult.value?.saasMetrics.marginChange ?? 0)
+const mrrGrowth = computed(() => analysisResult.value?.saasMetrics.mrrGrowth ?? 0)
+const arpu = computed(() => analysisResult.value?.saasMetrics.arpu ?? 0)
+const nrr = computed(() => analysisResult.value?.saasMetrics.nrr ?? 0)
+const churnRate = computed(() => {
+  const churnMrr = analysisResult.value?.saasMetrics.mrrMovement.churned ?? 0
+  return mrr.value > 0 ? (churnMrr / mrr.value) * 100 : 0
 })
 
-const { data: matches } = useQuery({
-  queryKey: ['matches-pending'],
-  queryFn: () => getMatches({ status: 'pending' }),
+// Last sync formatted
+const lastSyncFormatted = computed(() => {
+  if (!lastSyncAt.value) return null
+  const syncDate = new Date(lastSyncAt.value)
+  const now = new Date()
+  const diffMs = now.getTime() - syncDate.getTime()
+  const diffMins = Math.floor(diffMs / 60000)
+  const diffHours = Math.floor(diffMins / 60)
+
+  if (diffMins < 1) return 'just now'
+  if (diffMins < 60) return `${diffMins}m ago`
+  if (diffHours < 24) return `${diffHours}h ago`
+  return syncDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 })
 
-const { data: dataStatus, isLoading: statusLoading } = useQuery({
-  queryKey: ['data-status'],
-  queryFn: getDataStatus,
+// =============================================================================
+// COMPUTED - MRR Monthly Data
+// =============================================================================
+
+const mrrMonthlyData = computed<MrrMonthData[]>(() => {
+  if (!analysisResult.value?.monthlyMetrics) return []
+
+  return analysisResult.value.monthlyMetrics.map((m, index) => ({
+    month: m.monthLabel,
+    monthShort: m.monthLabel.substring(0, 3),
+    new: m.newMRR,
+    expansion: m.expansionMRR,
+    contraction: m.contractionMRR,
+    churn: m.churnedMRR,
+    netNew: m.netNewMRR,
+    total: m.mrr,
+    previousTotal: index > 0 ? analysisResult.value!.monthlyMetrics[index - 1]?.mrr : undefined,
+  }))
 })
 
-const hasData = computed(() => dataStatus.value?.has_data ?? false)
-const isLoading = computed(() => revenueLoading.value || statusLoading.value)
+// =============================================================================
+// COMPUTED - Alerts
+// =============================================================================
 
-const loadSampleMutation = useMutation({
-  mutationFn: loadSampleData,
-  onSuccess: () => {
-    queryClient.invalidateQueries({ queryKey: ['data-status'] })
-    queryClient.invalidateQueries({ queryKey: ['revenue-analytics'] })
-    queryClient.invalidateQueries({ queryKey: ['accounts'] })
-    queryClient.invalidateQueries({ queryKey: ['matches'] })
+const alerts = computed<Alert[]>(() => {
+  const alertList: Alert[] = []
+
+  // Margin compression alert
+  if (margin.value < 30 && mrr.value > 0) {
+    alertList.push({
+      id: 'margin-compression',
+      title: 'Margin Compression',
+      description: `Gross margin at ${margin.value.toFixed(1)}%, below healthy threshold of 30%`,
+      severity: 'critical',
+      icon: AlertTriangle,
+      actions: [
+        { label: 'Run Simulation', action: () => router.push('/pricing') },
+        { label: 'View Costs', action: () => router.push('/pricing?tab=margins') },
+      ],
+    })
+  }
+
+  // High churn alert
+  if (churnRate.value > 5) {
+    alertList.push({
+      id: 'high-churn',
+      title: 'High Churn Rate',
+      description: `${churnRate.value.toFixed(1)}% monthly churn detected`,
+      severity: 'warning',
+      icon: TrendingDown,
+      actions: [
+        { label: 'Review At-Risk', action: () => router.push('/pricing?tab=plans') },
+        { label: 'Analyze Cohorts', action: () => router.push('/pricing?tab=revenue') },
+      ],
+    })
+  }
+
+  // Low NRR alert
+  if (nrr.value < 100 && nrr.value > 0) {
+    alertList.push({
+      id: 'low-nrr',
+      title: 'Negative Net Retention',
+      description: `NRR at ${nrr.value}%, existing customers shrinking`,
+      severity: 'warning',
+      icon: ArrowDownRight,
+      actions: [
+        { label: 'View Expansion', action: () => router.push('/pricing?tab=revenue') },
+      ],
+    })
+  }
+
+  // Negative margin customers
+  const negMarginCount = analysisResult.value?.negativeMarginCustomers.length ?? 0
+  if (negMarginCount > 0) {
+    alertList.push({
+      id: 'negative-margins',
+      title: `${negMarginCount} Customers with Negative Margin`,
+      description: 'Some customers are costing more than they generate in revenue',
+      severity: 'warning',
+      icon: AlertTriangle,
+      actions: [
+        { label: 'View Details', action: () => router.push('/pricing?tab=margins') },
+      ],
+    })
+  }
+
+  return alertList
+})
+
+// =============================================================================
+// COMPUTED - Quick Actions
+// =============================================================================
+
+const quickActions = computed<QuickAction[]>(() => [
+  {
+    label: 'Run Pricing Simulation',
+    description: 'Test price changes before implementing',
+    icon: BarChart3,
+    action: () => router.push('/pricing'),
+    variant: 'default',
   },
-})
+  {
+    label: 'Refresh Data',
+    description: 'Reload from connected sources',
+    icon: RefreshCw,
+    action: () => loadData(),
+    variant: 'secondary',
+  },
+  {
+    label: 'Export Report',
+    description: 'Download PDF or CSV report',
+    icon: Download,
+    action: () => toast.info('Export coming soon'),
+    variant: 'outline',
+  },
+])
 
-const arr = computed(() => revenue.value?.metrics.total_arr ?? 0)
-const mrr = computed(() => revenue.value?.metrics.total_mrr ?? 0)
-const accountCount = computed(() => revenue.value?.metrics.account_count ?? 0)
-const confidenceScore = computed(() => revenue.value?.confidence_score ?? 0)
-const discrepancies = computed(() => revenue.value?.discrepancies ?? [])
-const bySegment = computed(() => revenue.value?.metrics.breakdown.by_segment ?? {})
-const byPlan = computed(() => revenue.value?.metrics.breakdown.by_plan ?? {})
-const pendingCount = computed(() => matches.value?.pending_count ?? 0)
+// =============================================================================
+// METHODS
+// =============================================================================
 
-// Trends
-const arrTrend = computed(() => revenue.value?.metrics.arr_trend)
-const mrrTrend = computed(() => revenue.value?.metrics.mrr_trend)
-const accountTrend = computed(() => revenue.value?.metrics.account_trend)
+async function loadData() {
+  isLoading.value = true
 
-function formatTrendPercent(trend?: TrendData): string {
-  if (!trend) return ''
-  const sign = trend.change_percent >= 0 ? '+' : ''
-  return `${sign}${trend.change_percent.toFixed(1)}%`
-}
-
-function getTrendIcon(trend?: TrendData) {
-  if (!trend) return Minus
-  if (trend.direction === 'up') return TrendingUp
-  if (trend.direction === 'down') return TrendingDown
-  return Minus
-}
-
-function getTrendColor(trend?: TrendData): string {
-  if (!trend) return 'text-muted-foreground'
-  if (trend.direction === 'up') return 'text-success'
-  if (trend.direction === 'down') return 'text-destructive'
-  return 'text-muted-foreground'
-}
-
-function navigateToMatches() {
-  router.push('/matches')
-}
-
-function navigateToDiscrepancy(disc: Discrepancy) {
-  // Navigate to accounts page with filter based on discrepancy type
-  if (disc.entity_type === 'account' && disc.entity_id) {
-    router.push(`/accounts?id=${disc.entity_id}`)
-  } else {
-    // Navigate to accounts page (could add more specific filters)
-    router.push('/accounts')
+  try {
+    const data = await fetchAnalyzerData()
+    if (data) {
+      analysisResult.value = analyzeData(data)
+    }
+  } catch (err) {
+    console.error('Failed to load data:', err)
+    toast.error('Failed to load data')
+  } finally {
+    isLoading.value = false
   }
 }
+
+async function handleLoadSampleData() {
+  isSampleLoading.value = true
+
+  try {
+    await loadSampleDataToSupabase()
+    await refetchDataMode()
+    await loadData()
+    toast.success('Sample data loaded')
+  } catch (err) {
+    console.error('Failed to load sample data:', err)
+    toast.error('Failed to load sample data')
+  } finally {
+    isSampleLoading.value = false
+  }
+}
+
+// =============================================================================
+// LIFECYCLE
+// =============================================================================
+
+onMounted(() => {
+  if (hasData.value) {
+    loadData()
+  }
+})
+
+watch(hasData, (newValue) => {
+  if (newValue) {
+    loadData()
+  }
+})
 </script>
 
 <template>
-  <div class="space-y-8">
+  <div class="min-h-screen bg-background">
     <!-- Header -->
-    <div class="flex items-center justify-between">
-      <div>
-        <h1 class="text-3xl font-bold tracking-tight">Dashboard</h1>
-        <p class="text-muted-foreground">
-          Board-ready SaaS metrics overview
-        </p>
-      </div>
-      <Button variant="outline">
-        <Download class="mr-2 h-4 w-4" />
-        Export Report
-      </Button>
-    </div>
-
-    <!-- Loading State -->
-    <div v-if="isLoading" class="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-      <Card v-for="i in 4" :key="i">
-        <CardHeader class="flex flex-row items-center justify-between pb-2">
-          <Skeleton class="h-4 w-24" />
-        </CardHeader>
-        <CardContent>
-          <Skeleton class="h-8 w-32" />
-          <Skeleton class="mt-2 h-3 w-20" />
-        </CardContent>
-      </Card>
-    </div>
-
-    <!-- Welcome State (No Data) -->
-    <div v-else-if="!hasData" class="space-y-8">
-      <Card class="border-dashed">
-        <CardContent class="flex flex-col items-center justify-center py-16 px-4">
-          <Sparkles class="h-12 w-12 text-primary/60" />
-          <h2 class="mt-6 text-2xl font-semibold text-center">Welcome to Tanso</h2>
-          <p class="mt-2 text-muted-foreground text-center max-w-md">
-            Get board-ready SaaS metrics in minutes. Connect your billing system
-            or upload a CSV to get started.
-          </p>
-
-          <div class="flex flex-col sm:flex-row gap-4 mt-8">
-            <Button
-              size="lg"
-              @click="router.push('/data-sources')"
-            >
-              <CreditCard class="mr-2 h-5 w-5" />
-              Connect Your Data
-            </Button>
+    <div class="sticky top-0 z-10 bg-background/95 backdrop-blur border-b">
+      <div class="container mx-auto px-4 py-4">
+        <div class="flex items-center justify-between">
+          <div>
+            <h1 class="text-2xl font-bold">Dashboard</h1>
+            <p class="text-sm text-muted-foreground">Board-ready SaaS metrics overview</p>
+          </div>
+          <div class="flex items-center gap-3">
+            <Badge v-if="dataMode === 'sample'" variant="outline">
+              Sample Data
+            </Badge>
+            <Badge v-if="lastSyncFormatted" variant="secondary">
+              <Clock class="h-3 w-3 mr-1" />
+              {{ lastSyncFormatted }}
+            </Badge>
             <Button
               variant="outline"
-              size="lg"
-              :disabled="loadSampleMutation.isPending.value"
-              @click="loadSampleMutation.mutate()"
+              size="sm"
+              :disabled="isLoading"
+              @click="loadData"
             >
-              <Sparkles class="mr-2 h-5 w-5" />
-              {{ loadSampleMutation.isPending.value ? 'Loading...' : 'Try Sample Data' }}
+              <RefreshCw
+                class="h-4 w-4"
+                :class="{ 'animate-spin': isLoading }"
+              />
             </Button>
           </div>
-
-          <p class="mt-6 text-xs text-muted-foreground text-center max-w-sm">
-            Sample data includes 30 customers across 4 plans with 6 months of history
-          </p>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </div>
 
-    <template v-else>
-      <!-- Getting Started Card -->
-      <GettingStartedCard
-        v-if="showGettingStarted"
-        class="max-w-md"
-        @dismiss="showGettingStarted = false"
-      />
-
-      <!-- KPI Cards -->
-      <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <!-- ARR / Volume Card (Primary) -->
-        <Card class="bg-primary text-primary-foreground">
-          <CardHeader class="flex flex-row items-center justify-between pb-2">
-            <CardTitle class="text-sm font-medium text-primary-foreground/80">{{ labels.arr }}</CardTitle>
-            <component :is="getTrendIcon(arrTrend)" class="h-4 w-4 text-primary-foreground/60" />
-          </CardHeader>
-          <CardContent>
-            <div class="text-3xl font-bold">{{ formatCurrency(arr) }}</div>
-            <div class="flex items-center gap-2">
-              <p class="text-xs text-primary-foreground/60">
-                Annual Recurring Revenue
+    <!-- Main Content -->
+    <div class="container mx-auto px-4 py-6 space-y-6">
+      <!-- Welcome State (No Data) -->
+      <div v-if="!hasData && !isLoading" class="py-12">
+        <Card class="max-w-2xl mx-auto border-dashed">
+          <CardContent class="p-12 text-center space-y-6">
+            <div class="mx-auto w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
+              <Sparkles class="h-8 w-8 text-primary" />
+            </div>
+            <div class="space-y-2">
+              <h2 class="text-xl font-semibold">Welcome to Tanso</h2>
+              <p class="text-muted-foreground max-w-md mx-auto">
+                Get board-ready SaaS metrics in minutes. Connect your billing system
+                or try our sample data.
               </p>
-              <span
-                v-if="arrTrend"
-                class="inline-flex items-center gap-1 rounded-full bg-primary-foreground/20 px-1.5 py-0.5 text-[10px] font-semibold"
+            </div>
+            <div class="flex flex-col sm:flex-row gap-3 justify-center pt-4">
+              <Button size="lg" @click="router.push('/data-sources')">
+                <CreditCard class="mr-2 h-5 w-5" />
+                Connect Your Data
+              </Button>
+              <Button
+                variant="outline"
+                size="lg"
+                :disabled="isSampleLoading"
+                @click="handleLoadSampleData"
               >
-                <component :is="getTrendIcon(arrTrend)" class="h-3 w-3" />
-                {{ formatTrendPercent(arrTrend) }} MoM
-              </span>
+                <Sparkles class="mr-2 h-5 w-5" />
+                {{ isSampleLoading ? 'Loading...' : 'Try Sample Data' }}
+              </Button>
             </div>
-          </CardContent>
-        </Card>
-
-        <!-- MRR / Monthly Volume Card -->
-        <Card>
-          <CardHeader class="flex flex-row items-center justify-between pb-2">
-            <CardTitle class="text-sm font-medium text-muted-foreground">{{ labels.mrr }}</CardTitle>
-            <component :is="getTrendIcon(mrrTrend)" :class="['h-4 w-4', mrrTrend ? getTrendColor(mrrTrend) : 'text-muted-foreground']" />
-          </CardHeader>
-          <CardContent>
-            <div class="text-3xl font-bold">{{ formatCurrency(mrr) }}</div>
-            <div class="flex items-center gap-2">
-              <p class="text-xs text-muted-foreground">
-                Monthly Recurring Revenue
-              </p>
-              <span
-                v-if="mrrTrend"
-                :class="[
-                  'inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-semibold',
-                  mrrTrend.direction === 'up' ? 'bg-success/10 text-success' : mrrTrend.direction === 'down' ? 'bg-destructive/10 text-destructive' : 'bg-muted text-muted-foreground'
-                ]"
-              >
-                <component :is="getTrendIcon(mrrTrend)" class="h-3 w-3" />
-                {{ formatTrendPercent(mrrTrend) }}
-              </span>
-            </div>
-          </CardContent>
-        </Card>
-
-        <!-- Accounts Card -->
-        <Card>
-          <CardHeader class="flex flex-row items-center justify-between pb-2">
-            <CardTitle class="text-sm font-medium text-muted-foreground">{{ labels.accounts }}</CardTitle>
-            <Users class="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div class="text-3xl font-bold">{{ accountCount }}</div>
-            <div class="flex items-center gap-2">
-              <p class="text-xs text-muted-foreground">
-                Total customers
-              </p>
-              <span
-                v-if="accountTrend && accountTrend.change_amount > 0"
-                class="inline-flex items-center gap-1 rounded-full bg-success/10 px-1.5 py-0.5 text-[10px] font-semibold text-success"
-              >
-                +{{ accountTrend.change_amount.toFixed(0) }} new
-              </span>
-            </div>
-          </CardContent>
-        </Card>
-
-        <!-- Data Quality Card -->
-        <Card :class="confidenceScore < 0.8 ? 'border-warning' : ''">
-          <CardHeader class="flex flex-row items-center justify-between pb-2">
-            <CardTitle class="text-sm font-medium text-muted-foreground">Data Quality</CardTitle>
-            <component
-              :is="confidenceScore >= 0.8 ? CheckCircle : AlertTriangle"
-              :class="[
-                'h-4 w-4',
-                confidenceScore >= 0.8 ? 'text-success' : 'text-warning'
-              ]"
-            />
-          </CardHeader>
-          <CardContent>
-            <div class="text-3xl font-bold">{{ formatPercent(confidenceScore) }}</div>
-            <p class="text-xs text-muted-foreground">Reconciliation score</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      <!-- Charts Row -->
-      <div class="grid gap-4 md:grid-cols-2">
-        <!-- Revenue by Segment -->
-        <Card>
-          <CardHeader>
-            <CardTitle class="text-base">
-              Revenue by Segment
-            </CardTitle>
-          </CardHeader>
-          <CardContent class="space-y-4">
-            <div
-              v-for="(value, segment) in bySegment"
-              :key="segment"
-              class="space-y-2"
-            >
-              <div class="flex items-center justify-between text-sm">
-                <span class="font-medium">{{ segment }}</span>
-                <span class="text-muted-foreground">{{ formatCurrency(value) }}</span>
-              </div>
-              <Progress
-                :value="value"
-                :max="Math.max(...Object.values(bySegment))"
-                class="h-2"
-              />
-            </div>
-            <div v-if="Object.keys(bySegment).length === 0" class="py-8 text-center text-muted-foreground">
-              No segment data available
-            </div>
-          </CardContent>
-        </Card>
-
-        <!-- ARR by Plan -->
-        <Card>
-          <CardHeader>
-            <CardTitle class="text-base">
-              ARR by Plan Tier
-            </CardTitle>
-          </CardHeader>
-          <CardContent class="space-y-4">
-            <div
-              v-for="(value, plan) in byPlan"
-              :key="plan"
-              class="space-y-2"
-            >
-              <div class="flex items-center justify-between text-sm">
-                <span class="font-medium capitalize">{{ plan }}</span>
-                <span class="text-muted-foreground">{{ formatCurrency(value) }}</span>
-              </div>
-              <Progress
-                :value="value"
-                :max="Math.max(...Object.values(byPlan))"
-                class="h-2"
-              />
-            </div>
-            <div v-if="Object.keys(byPlan).length === 0" class="py-8 text-center text-muted-foreground">
-              No plan data available
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      <!-- Data Health Panel -->
-      <Card class="max-w-lg">
-        <CardHeader>
-          <CardTitle class="text-base">Data Health</CardTitle>
-        </CardHeader>
-        <CardContent class="space-y-4">
-          <!-- Confidence Score Bar -->
-          <div class="space-y-2">
-            <Progress :value="confidenceScore * 100" class="h-1.5" />
-            <p class="text-xs text-muted-foreground">
-              {{ formatPercent(confidenceScore) }} confidence
+            <p class="text-xs text-muted-foreground max-w-sm mx-auto">
+              Sample data includes 30 customers across 4 plans with 6 months of history
             </p>
-          </div>
+          </CardContent>
+        </Card>
+      </div>
 
-          <!-- Health Items -->
-          <div class="space-y-2">
-            <div
-              v-if="discrepancies.length > 0"
-              class="flex items-center justify-between gap-2 rounded-md bg-destructive/10 p-3 text-sm text-destructive cursor-pointer hover:bg-destructive/20 transition-colors"
-              @click="router.push('/accounts')"
-            >
-              <div class="flex items-center gap-2">
-                <AlertTriangle class="h-4 w-4" />
-                <span>{{ discrepancies.length }} discrepancies found</span>
+      <!-- Loading State -->
+      <div v-else-if="isLoading && !analysisResult" class="space-y-6">
+        <div class="grid gap-4 grid-cols-2 md:grid-cols-4">
+          <Card v-for="i in 4" :key="i">
+            <CardContent class="p-6">
+              <Skeleton class="h-4 w-24 mb-2" />
+              <Skeleton class="h-8 w-32" />
+            </CardContent>
+          </Card>
+        </div>
+        <Card>
+          <CardContent class="p-6">
+            <Skeleton class="h-64 w-full" />
+          </CardContent>
+        </Card>
+      </div>
+
+      <!-- Dashboard Content -->
+      <template v-else-if="analysisResult">
+        <!-- Date Range Selector -->
+        <div class="flex items-center justify-between">
+          <Tabs v-model="dateRange" class="w-auto">
+            <TabsList>
+              <TabsTrigger value="7d">7D</TabsTrigger>
+              <TabsTrigger value="30d">30D</TabsTrigger>
+              <TabsTrigger value="90d">90D</TabsTrigger>
+              <TabsTrigger value="ytd">YTD</TabsTrigger>
+            </TabsList>
+          </Tabs>
+          <p class="text-sm text-muted-foreground">
+            {{ mrrMonthlyData.length }} months of data
+          </p>
+        </div>
+
+        <!-- Key Metrics Row -->
+        <div class="grid gap-4 grid-cols-2 md:grid-cols-4">
+          <MetricCard
+            title="MRR"
+            :value="mrr"
+            :trend="mrrGrowth"
+            format="currency"
+            subtitle="Monthly Recurring"
+            highlight
+          />
+          <MetricCard
+            title="Margin"
+            :value="margin"
+            :trend="marginChange"
+            format="percent"
+            subtitle="Gross Margin"
+          />
+          <MetricCard
+            title="Customers"
+            :value="customerCount"
+            format="number"
+            subtitle="Active accounts"
+          />
+          <MetricCard
+            title="ARPU"
+            :value="arpu"
+            format="currency"
+            subtitle="Avg Revenue/User"
+          />
+        </div>
+
+        <!-- Main Tabs -->
+        <Tabs v-model="activeTab" class="space-y-6">
+          <TabsList class="bg-muted p-1 rounded-lg">
+            <TabsTrigger value="overview">Overview</TabsTrigger>
+            <TabsTrigger value="mrr">MRR Breakdown</TabsTrigger>
+            <TabsTrigger value="alerts">
+              Alerts
+              <Badge
+                v-if="alerts.length > 0"
+                variant="destructive"
+                class="ml-1.5 h-5 w-5 p-0 flex items-center justify-center"
+              >
+                {{ alerts.length }}
+              </Badge>
+            </TabsTrigger>
+            <TabsTrigger value="actions">Quick Actions</TabsTrigger>
+          </TabsList>
+
+          <!-- Overview Tab -->
+          <TabsContent value="overview" class="space-y-6">
+            <!-- MRR Summary (compact) -->
+            <MrrMonthlyBreakdown
+              :data="mrrMonthlyData.slice(-3)"
+              compact
+            />
+
+            <!-- Alerts Summary -->
+            <div v-if="alerts.length > 0" class="space-y-4">
+              <div class="flex items-center justify-between">
+                <h3 class="text-lg font-semibold">Priority Alerts</h3>
+                <Badge variant="destructive">{{ alerts.length }}</Badge>
               </div>
-              <ChevronRight class="h-4 w-4 opacity-60" />
-            </div>
-
-            <div
-              v-if="pendingCount > 0"
-              class="flex items-center justify-between gap-2 rounded-md bg-warning/10 p-3 text-sm text-warning cursor-pointer hover:bg-warning/20 transition-colors"
-              @click="navigateToMatches"
-            >
-              <div class="flex items-center gap-2">
-                <AlertTriangle class="h-4 w-4" />
-                <span>{{ pendingCount }} matches pending review</span>
+              <div class="grid gap-4 md:grid-cols-2">
+                <AlertCard
+                  v-for="alert in alerts.slice(0, 2)"
+                  :key="alert.id"
+                  :alert="alert"
+                />
               </div>
-              <ChevronRight class="h-4 w-4 opacity-60" />
+              <Button
+                v-if="alerts.length > 2"
+                variant="ghost"
+                class="w-full"
+                @click="activeTab = 'alerts'"
+              >
+                View All {{ alerts.length }} Alerts
+              </Button>
             </div>
 
-            <div
-              v-if="discrepancies.length === 0 && pendingCount === 0"
-              class="flex items-center gap-2 rounded-md bg-success/10 p-3 text-sm text-success"
-            >
-              <CheckCircle class="h-4 w-4" />
-              <span>All data reconciled</span>
-            </div>
-          </div>
+            <!-- All Clear -->
+            <Card v-else class="bg-green-50 dark:bg-green-950/20 border-green-200">
+              <CardContent class="p-6 text-center">
+                <CheckCircle class="h-12 w-12 text-green-500 mx-auto mb-4" />
+                <h3 class="text-lg font-semibold text-green-800 dark:text-green-200">All Clear</h3>
+                <p class="text-green-700 dark:text-green-300">No alerts at this time. Keep it up!</p>
+              </CardContent>
+            </Card>
 
-          <!-- Discrepancy List -->
-          <div v-if="discrepancies.length > 0" class="space-y-2 border-t pt-4">
-            <div
-              v-for="(disc, index) in discrepancies.slice(0, 3)"
-              :key="index"
-              class="flex items-center justify-between gap-2 p-2 -mx-2 rounded-md cursor-pointer hover:bg-muted transition-colors"
-              @click="navigateToDiscrepancy(disc)"
-            >
-              <div class="flex items-start gap-2 min-w-0">
-                <Badge
-                  :variant="disc.severity === 'high' ? 'destructive' : disc.severity === 'medium' ? 'warning' : 'secondary'"
-                  class="text-[10px] uppercase shrink-0"
-                >
-                  {{ disc.severity }}
-                </Badge>
-                <span class="text-sm text-muted-foreground truncate">{{ disc.description }}</span>
-              </div>
-              <ChevronRight class="h-4 w-4 text-muted-foreground/40 shrink-0" />
+            <!-- Quick Actions Preview -->
+            <Card>
+              <CardHeader>
+                <CardTitle>Quick Actions</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div class="grid gap-4 md:grid-cols-3">
+                  <Card
+                    v-for="action in quickActions"
+                    :key="action.label"
+                    class="hover:shadow-md transition-shadow cursor-pointer"
+                    @click="action.action"
+                  >
+                    <CardContent class="p-6 text-center">
+                      <component :is="action.icon" class="h-8 w-8 mx-auto mb-3 text-primary" />
+                      <p class="font-semibold mb-1">{{ action.label }}</p>
+                      <p class="text-sm text-muted-foreground">{{ action.description }}</p>
+                    </CardContent>
+                  </Card>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <!-- MRR Breakdown Tab -->
+          <TabsContent value="mrr" class="space-y-6">
+            <MrrMonthlyBreakdown
+              :data="mrrMonthlyData"
+              show-growth
+            />
+          </TabsContent>
+
+          <!-- Alerts Tab -->
+          <TabsContent value="alerts" class="space-y-4">
+            <div v-if="alerts.length === 0" class="text-center py-12">
+              <CheckCircle class="h-12 w-12 text-green-500 mx-auto mb-4" />
+              <h3 class="text-lg font-semibold mb-2">All Clear!</h3>
+              <p class="text-muted-foreground">No alerts at this time.</p>
             </div>
 
-            <Button
-              v-if="discrepancies.length > 3"
-              variant="ghost"
-              size="sm"
-              class="w-full mt-2"
-              @click="router.push('/accounts')"
-            >
-              View all {{ discrepancies.length }} discrepancies
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-    </template>
+            <div v-else class="space-y-4">
+              <AlertCard
+                v-for="alert in alerts"
+                :key="alert.id"
+                :alert="alert"
+              />
+            </div>
+          </TabsContent>
+
+          <!-- Quick Actions Tab -->
+          <TabsContent value="actions" class="space-y-6">
+            <QuickActions :actions="quickActions" />
+          </TabsContent>
+        </Tabs>
+      </template>
+    </div>
   </div>
 </template>

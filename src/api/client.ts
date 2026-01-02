@@ -932,6 +932,44 @@ export async function analyzeStripeDataWithClaude(
   })
 }
 
+// Customer Insights
+export interface CustomerInsight {
+  customerId: string
+  customerName: string
+  email: string
+  company?: string
+  planName: string
+  mrr: number
+  usageCost?: number
+  trueMargin: number  // Percentage
+  status: 'active' | 'churned' | 'trial'
+  riskLevel: 'high' | 'medium' | 'low'
+  tenureMonths: number
+  renewalDate?: string
+  usagePercentage?: number
+  lastActivity?: string
+  segment?: string
+  customerSince: string
+}
+
+/**
+ * Fetch customer insights with profitability and risk analysis.
+ * Combines subscription MRR with usage costs to calculate true margin.
+ *
+ * @returns Array of customer insights sorted by MRR descending
+ */
+export async function getCustomerInsights(): Promise<CustomerInsight[]> {
+  // For now, calculate insights from Stripe data
+  // This will be replaced with a dedicated backend endpoint later
+  try {
+    const result = await request<{ customers: CustomerInsight[] }>('/analytics/customer-insights')
+    return result.customers
+  } catch {
+    // Fallback: return empty array if endpoint doesn't exist yet
+    return []
+  }
+}
+
 // Integration request types
 export interface IntegrationRequestParams {
   email: string
