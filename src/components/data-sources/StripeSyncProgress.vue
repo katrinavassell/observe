@@ -9,7 +9,7 @@
  * - Completion summary
  */
 
-import { computed } from 'vue'
+import { computed, type DeepReadonly } from 'vue'
 import {
   Users,
   CreditCard,
@@ -20,7 +20,8 @@ import {
   Clock,
   AlertTriangle,
 } from 'lucide-vue-next'
-import { Card, CardContent, Progress, Button, Badge, Alert } from '@/components/ui'
+import { Card, CardContent, Progress, Button, Badge } from '@/components/ui'
+import Alert from '@/components/ui/alert.vue'
 import type { SyncState } from '@/composables/useStripeConnection'
 import type { StripeSyncStatus } from '@/lib/stripe-api'
 
@@ -29,7 +30,7 @@ import type { StripeSyncStatus } from '@/lib/stripe-api'
 // =============================================================================
 
 const props = defineProps<{
-  syncState: SyncState
+  syncState: SyncState | DeepReadonly<SyncState>
   onCancel?: () => void
   onRetry?: () => void
 }>()
@@ -180,14 +181,8 @@ function getStatusColor(status: StripeSyncStatus): string {
       <div v-if="isInProgress || isComplete" class="space-y-2">
         <Progress
           :value="overallProgress"
-          :class="[
-            isComplete ? 'bg-green-500/20' : '',
-            isFailed ? 'bg-destructive/20' : '',
-          ]"
-          :indicator-class="[
-            isComplete ? 'bg-green-500' : '',
-            isFailed ? 'bg-destructive' : '',
-          ]"
+          :class="`${isComplete ? 'bg-green-500/20' : ''} ${isFailed ? 'bg-destructive/20' : ''}`"
+          :indicator-class="`${isComplete ? 'bg-green-500' : ''} ${isFailed ? 'bg-destructive' : ''}`"
         />
       </div>
 
@@ -213,10 +208,7 @@ function getStatusColor(status: StripeSyncStatus): string {
               v-if="progress.status !== 'pending'"
               :value="progress.percentage"
               class="h-1"
-              :indicator-class="[
-                progress.status === 'completed' ? 'bg-green-500' : '',
-                progress.status === 'failed' ? 'bg-destructive' : '',
-              ]"
+              :indicator-class="`${progress.status === 'completed' ? 'bg-green-500' : ''} ${progress.status === 'failed' ? 'bg-destructive' : ''}`"
             />
           </div>
           <component

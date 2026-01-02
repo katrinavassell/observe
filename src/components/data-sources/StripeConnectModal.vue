@@ -20,7 +20,8 @@ import {
   DialogClose,
 } from 'radix-vue'
 import { X, Key, AlertCircle, CheckCircle2, Loader2, ExternalLink } from 'lucide-vue-next'
-import { Button, Input, Badge, Alert } from '@/components/ui'
+import { Button, Input, Badge } from '@/components/ui'
+import Alert from '@/components/ui/alert.vue'
 import { useStripeConnection } from '@/composables/useStripeConnection'
 import { detectKeyMode } from '@/lib/stripe-api'
 
@@ -64,14 +65,6 @@ const keyMode = computed(() => {
 
 const isValidKeyFormat = computed(() => {
   return keyMode.value !== null
-})
-
-const maskedKey = computed(() => {
-  if (!apiKeyInput.value) return ''
-  if (showKey.value) return apiKeyInput.value
-  const prefix = apiKeyInput.value.slice(0, 8)
-  const suffix = apiKeyInput.value.slice(-4)
-  return `${prefix}${'•'.repeat(20)}${suffix}`
 })
 
 const canConnect = computed(() => {

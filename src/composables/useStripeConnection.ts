@@ -28,8 +28,6 @@ import {
   type TransformedCustomer,
   type TransformedSubscription,
   type TransformedInvoice,
-  type StripeCustomer,
-  type StripeSubscription,
 } from '@/lib/stripe-api'
 import { supabase } from '@/lib/supabase'
 
@@ -47,7 +45,7 @@ export interface SyncState {
   /** Total records synced */
   totalSynced: number
   /** Any errors that occurred */
-  errors: Array<{ type: StripeSyncDataType; message: string }>
+  errors: { type: StripeSyncDataType; message: string }[]
   /** When sync started */
   startedAt: Date | null
   /** When sync completed */

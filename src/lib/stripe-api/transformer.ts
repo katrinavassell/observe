@@ -47,7 +47,7 @@ function calculateUnitPrice(price: StripePrice | null): number {
 
   // For tiered pricing, use the first tier's unit amount
   if (price.billing_scheme === 'tiered' && price.tiers && price.tiers.length > 0) {
-    const firstTier = price.tiers[0]
+    const firstTier = price.tiers[0]!
     return (firstTier.unit_amount ?? firstTier.flat_amount ?? 0) / 100
   }
 
@@ -120,8 +120,8 @@ export function transformSubscription(
     customerId: extractCustomerId(subscription.customer),
     status: subscription.status,
     planId: price?.id || subscription.plan?.id || '',
-    planName: getProductName(price) || price?.nickname || subscription.plan?.nickname || null,
-    pricePerUnit: calculateUnitPrice(price),
+    planName: getProductName(price ?? null) || price?.nickname || subscription.plan?.nickname || null,
+    pricePerUnit: calculateUnitPrice(price ?? null),
     currency: price?.currency || subscription.plan?.currency || 'usd',
     interval: price?.recurring?.interval || subscription.plan?.interval || 'month',
     intervalCount: price?.recurring?.interval_count || subscription.plan?.interval_count || 1,
@@ -164,9 +164,7 @@ export function transformInvoice(
     id: crypto.randomUUID(),
     stripeId: invoice.id,
     customerId: extractCustomerId(invoice.customer),
-    subscriptionId: typeof invoice.subscription === 'string'
-      ? invoice.subscription
-      : invoice.subscription?.id || null,
+    subscriptionId: invoice.subscription,
     number: invoice.number,
     status: invoice.status,
     amountDue: invoice.amount_due / 100,

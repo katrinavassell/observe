@@ -26,7 +26,7 @@ import {
   Zap,
 } from 'lucide-vue-next'
 import { Card, CardContent, Button, Badge } from '@/components/ui'
-import { useStripeUpload, type StripeFile } from '@/composables/useStripeUpload'
+import { useStripeUpload } from '@/composables/useStripeUpload'
 import { useStripeConnection } from '@/composables/useStripeConnection'
 import StripeConnectModal from './StripeConnectModal.vue'
 import StripeSyncProgress from './StripeSyncProgress.vue'
@@ -90,12 +90,10 @@ const {
 
 // API Connection composable
 const {
-  isValidating,
   validation,
   isSyncing,
   syncState,
   isConnected,
-  syncProgress,
   startSync,
   cancelSync,
   resetSync,
@@ -116,11 +114,6 @@ const showSyncProgress = ref(false)
 // =============================================================================
 // COMPUTED
 // =============================================================================
-
-/** Whether we're showing the API connection flow vs CSV upload */
-const connectionMode = computed(() => {
-  return isConnected.value || isSyncing.value || showSyncProgress.value
-})
 
 /** Status text for the connection badge */
 const connectionStatus = computed(() => {
@@ -178,7 +171,7 @@ function handleOpenConnectModal(): void {
   showConnectModal.value = true
 }
 
-function handleConnected(accountName: string): void {
+function handleConnected(_accountName: string): void {
   // Connection validated, modal will show "Start Import" button
 }
 

@@ -242,7 +242,7 @@ export class StripeApiClient {
   /**
    * Generic paginated list fetcher using async generator
    */
-  private async *paginate<T>(
+  private async *paginate<T extends { id: string }>(
     endpoint: string,
     params: Record<string, string | number | undefined> = {}
   ): AsyncGenerator<T, void, undefined> {
@@ -250,7 +250,7 @@ export class StripeApiClient {
     let hasMore = true
 
     while (hasMore) {
-      const response = await this.request<StripeList<T & { id: string }>>(endpoint, {
+      const response = await this.request<StripeList<T>>(endpoint, {
         params: {
           limit: DEFAULT_PAGE_SIZE,
           starting_after: startingAfter,
@@ -263,8 +263,9 @@ export class StripeApiClient {
       }
 
       hasMore = response.has_more
-      if (hasMore && response.data.length > 0) {
-        startingAfter = response.data[response.data.length - 1].id
+      const lastItem = response.data[response.data.length - 1]
+      if (hasMore && lastItem) {
+        startingAfter = lastItem.id
       }
     }
   }
