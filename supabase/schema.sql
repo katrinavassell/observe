@@ -111,6 +111,21 @@ CREATE INDEX IF NOT EXISTS idx_cost_records_user_id ON cost_records(user_id);
 CREATE INDEX IF NOT EXISTS idx_cost_records_period ON cost_records(user_id, period_start, period_end);
 
 -- =============================================================================
+-- FOREIGN KEY CONSTRAINTS
+-- =============================================================================
+
+-- FK constraints for subscriptions table to enable Supabase joins
+ALTER TABLE subscriptions
+  ADD CONSTRAINT fk_subscriptions_customer
+  FOREIGN KEY (user_id, customer_id)
+  REFERENCES customers(user_id, customer_id);
+
+ALTER TABLE subscriptions
+  ADD CONSTRAINT fk_subscriptions_plan
+  FOREIGN KEY (user_id, plan_id)
+  REFERENCES plans(user_id, plan_id);
+
+-- =============================================================================
 -- ROW LEVEL SECURITY (RLS)
 -- =============================================================================
 
