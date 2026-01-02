@@ -27,6 +27,7 @@ import {
   validateCostRecords,
 } from '@/lib/validation'
 import AnthropicApiKeyModal from '@/components/integrations/AnthropicApiKeyModal.vue'
+import OpenAIApiKeyModal from '@/components/integrations/OpenAIApiKeyModal.vue'
 
 const props = defineProps<{
   /** Current file info if any */
@@ -52,6 +53,8 @@ const fileInput = ref<HTMLInputElement | null>(null)
 // Modal state
 const showAnthropicModal = ref(false)
 const isAnthropicConnected = ref(false)
+const showOpenAIModal = ref(false)
+const isOpenAIConnected = ref(false)
 
 function triggerFileInput(): void {
   fileInput.value?.click()
@@ -171,9 +174,11 @@ function downloadTemplate(): void {
 }
 
 function handleConnectOpenAI(): void {
-  toast.info('OpenAI integration coming soon', {
-    description: 'Export usage from OpenAI Dashboard and upload as CSV',
-  })
+  showOpenAIModal.value = true
+}
+
+function handleOpenAIConnected(): void {
+  isOpenAIConnected.value = true
 }
 
 function handleConnectAnthropic(): void {
@@ -204,12 +209,20 @@ function handleAnthropicConnected(): void {
             </div>
             <div>
               <p class="font-medium">OpenAI</p>
-              <p class="text-xs text-muted-foreground">Pull monthly usage and token costs</p>
+              <p class="text-xs text-muted-foreground">
+                {{ isOpenAIConnected ? 'Connected' : 'Pull monthly usage and token costs' }}
+              </p>
             </div>
           </div>
-          <Button variant="outline" size="sm" @click="handleConnectOpenAI">
+          <Button
+            v-if="!isOpenAIConnected"
+            variant="outline"
+            size="sm"
+            @click="handleConnectOpenAI"
+          >
             Connect
           </Button>
+          <CheckCircle v-else class="h-5 w-5 text-green-500" />
         </div>
 
         <!-- Anthropic -->
@@ -317,6 +330,13 @@ function handleAnthropicConnected(): void {
         </div>
       </CardContent>
     </Card>
+
+    <!-- OpenAI API Key Modal -->
+    <OpenAIApiKeyModal
+      :open="showOpenAIModal"
+      @close="showOpenAIModal = false"
+      @connected="handleOpenAIConnected"
+    />
 
     <!-- Anthropic API Key Modal -->
     <AnthropicApiKeyModal

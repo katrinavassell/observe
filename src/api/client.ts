@@ -1078,3 +1078,30 @@ export async function connectAnthropic(apiKey: string): Promise<AnthropicConnect
 
   return data as AnthropicConnectResult
 }
+
+export interface OpenAIConnectResult {
+  success: boolean
+  message: string
+  has_usage_access: boolean
+  cost_synced: number
+  months_synced?: number
+}
+
+/**
+ * Connect an OpenAI account using an API key.
+ * Validates the key and syncs usage/cost data if available.
+ *
+ * @param apiKey - OpenAI API key (sk-...)
+ * @returns Connection result with cost sync info
+ */
+export async function connectOpenAI(apiKey: string): Promise<OpenAIConnectResult> {
+  const { data, error } = await supabase.functions.invoke('openai-connect', {
+    body: { api_key: apiKey },
+  })
+
+  if (error) {
+    throw new Error(error.message || 'Failed to connect OpenAI')
+  }
+
+  return data as OpenAIConnectResult
+}
