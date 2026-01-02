@@ -16,6 +16,7 @@ import {
   ArrowUp,
   ArrowDown,
   Minus,
+  Calculator,
 } from 'lucide-vue-next'
 import {
   Card,
@@ -39,6 +40,7 @@ import CohortChart from '@/components/charts/CohortChart.vue'
 import MarginCompressionAlert from '@/components/charts/MarginCompressionAlert.vue'
 import CostBreakdownChart from '@/components/charts/CostBreakdownChart.vue'
 import GapCallout from '@/components/charts/GapCallout.vue'
+import { SimulationModal } from '@/components/simulation'
 import { analyzeData, type AnalysisResult } from '@/lib/pricing-analyzer'
 import { getSampleDataSummary } from '@/lib/sample-data'
 import { useDataMode } from '@/composables/useDataMode'
@@ -65,6 +67,7 @@ const uploadProgress = ref(0)
 const error = ref<string | null>(null)
 const analysisResult = ref<AnalysisResult | null>(null)
 const dataSource = ref<'none' | 'sample' | 'user'>('none')
+const showSimulationModal = ref(false)
 
 const { dataMode, hasData, lastSyncAt, refetch: refetchDataMode } = useDataMode()
 
@@ -330,6 +333,10 @@ onMounted(async () => {
             Updated {{ lastSyncFormatted }}
           </span>
         </div>
+        <Button @click="showSimulationModal = true">
+          <Calculator class="h-4 w-4 mr-2" />
+          Run Simulation
+        </Button>
       </div>
 
       <!-- Tabbed Results -->
@@ -1287,5 +1294,12 @@ onMounted(async () => {
         </TabsContent>
       </Tabs>
     </template>
+
+    <!-- Simulation Modal -->
+    <SimulationModal
+      :open="showSimulationModal"
+      @close="showSimulationModal = false"
+      @scenario-created="showSimulationModal = false"
+    />
   </div>
 </template>
