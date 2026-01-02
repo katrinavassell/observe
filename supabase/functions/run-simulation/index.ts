@@ -54,15 +54,11 @@ serve(async (req: Request) => {
       },
     })
 
-    // Fetch billing data from subscriptions + customers + plans
+    // Fetch subscriptions, customers, and plans separately (avoids FK constraint issues)
     const { data: subscriptions, error: subsError } = await supabase
       .from('subscriptions')
-      .select(`
-        *,
-        customers!inner (id, customer_id, name, email, user_id),
-        plans!inner (id, plan_id, name, price_amount, interval_months)
-      `)
-      .eq('customers.user_id', userId)
+      .select('*')
+      .eq('user_id', userId)
       .eq('is_active', true)
 
     if (subsError) {
@@ -72,6 +68,38 @@ serve(async (req: Request) => {
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
+
+    // Fetch customers separately
+    const { data: customers, error: custError } = await supabase
+      .from('customers')
+      .select('*')
+      .eq('user_id', userId)
+
+    if (custError) {
+      console.error('Error fetching customers:', custError)
+      return new Response(
+        JSON.stringify({ success: false, error: { code: 'DATABASE_ERROR', message: custError.message } }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    // Fetch plans separately
+    const { data: plans, error: plansError } = await supabase
+      .from('plans')
+      .select('*')
+      .eq('user_id', userId)
+
+    if (plansError) {
+      console.error('Error fetching plans:', plansError)
+      return new Response(
+        JSON.stringify({ success: false, error: { code: 'DATABASE_ERROR', message: plansError.message } }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    // Build lookup maps for joining data
+    const customerMap = new Map((customers || []).map((c: any) => [c.customer_id, c]))
+    const planMap = new Map((plans || []).map((p: any) => [p.plan_id, p]))
 
     // Fetch cost records
     const { data: costRecords, error: costError } = await supabase
@@ -103,6 +131,8 @@ serve(async (req: Request) => {
 
     // Check if we have any data
     const hasData = (subscriptions && subscriptions.length > 0) ||
+                    (customers && customers.length > 0) ||
+                    (plans && plans.length > 0) ||
                     (costRecords && costRecords.length > 0) ||
                     (usageRecords && usageRecords.length > 0)
 
@@ -113,16 +143,18 @@ serve(async (req: Request) => {
       )
     }
 
-    // Transform subscriptions to BillingRecord format
+    // Transform subscriptions to BillingRecord format using lookup maps
     const billingData: BillingRecord[] = (subscriptions || []).map((sub: any) => {
-      const mrr = sub.mrr_override || (sub.plans.price_amount / sub.plans.interval_months)
+      const customer = customerMap.get(sub.customer_id) || { customer_id: sub.customer_id, email: null }
+      const plan = planMap.get(sub.plan_id) || { name: 'Unknown Plan', price_amount: 0, interval_months: 1 }
+      const mrr = sub.mrr_override || (plan.price_amount / plan.interval_months)
       return {
         date: sub.created_at,
-        customerId: sub.customers.customer_id,
-        customerEmail: sub.customers.email,
+        customerId: customer.customer_id,
+        customerEmail: customer.email,
         amount: mrr,
         currency: 'USD',
-        description: sub.plans.name,
+        description: plan.name,
         status: 'paid' as const,
       }
     })
