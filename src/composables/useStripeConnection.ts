@@ -91,6 +91,17 @@ function createInitialSyncState(): SyncState {
 }
 
 // =============================================================================
+// SHARED STATE (singleton - shared across all components)
+// =============================================================================
+
+const isValidating = ref(false)
+const validation = ref<StripeKeyValidation | null>(null)
+const isSyncing = ref(false)
+const syncState = ref<SyncState>(createInitialSyncState())
+const apiKey = ref<string | null>(null)
+const mode = ref<StripeKeyMode | null>(null)
+
+// =============================================================================
 // COMPOSABLE
 // =============================================================================
 
@@ -113,17 +124,6 @@ function createInitialSyncState(): SyncState {
  * ```
  */
 export function useStripeConnection() {
-  // ---------------------------------------------------------------------------
-  // STATE
-  // ---------------------------------------------------------------------------
-
-  const isValidating = ref(false)
-  const validation = ref<StripeKeyValidation | null>(null)
-  const isSyncing = ref(false)
-  const syncState = ref<SyncState>(createInitialSyncState())
-  const apiKey = ref<string | null>(null)
-  const mode = ref<StripeKeyMode | null>(null)
-
   // ---------------------------------------------------------------------------
   // COMPUTED
   // ---------------------------------------------------------------------------
