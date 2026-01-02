@@ -184,6 +184,10 @@ watch(() => props.open, (isOpen) => {
                 <CheckCircle2 class="h-4 w-4 text-green-500" />
                 Invoice history and payment status
               </li>
+              <li class="flex items-center gap-2">
+                <CheckCircle2 class="h-4 w-4 text-green-500" />
+                Usage data from metered billing
+              </li>
             </ul>
           </div>
 

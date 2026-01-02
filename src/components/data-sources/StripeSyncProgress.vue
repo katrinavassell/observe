@@ -14,6 +14,7 @@ import {
   Users,
   CreditCard,
   Receipt,
+  Activity,
   CheckCircle2,
   XCircle,
   Loader2,
@@ -23,7 +24,7 @@ import {
 import { Card, CardContent, Progress, Button, Badge } from '@/components/ui'
 import Alert from '@/components/ui/alert.vue'
 import type { SyncState } from '@/composables/useStripeConnection'
-import type { StripeSyncStatus } from '@/lib/stripe-api'
+import type { StripeSyncStatus, StripeSyncProgress } from '@/lib/stripe-api'
 
 // =============================================================================
 // PROPS & EMITS
@@ -46,9 +47,9 @@ const emit = defineEmits<{
 // =============================================================================
 
 const overallProgress = computed(() => {
-  const { customers, subscriptions, invoices } = props.syncState
-  const total = customers.total + subscriptions.total + invoices.total
-  const synced = customers.synced + subscriptions.synced + invoices.synced
+  const { customers, subscriptions, invoices, usage } = props.syncState
+  const total = customers.total + subscriptions.total + invoices.total + (usage?.total || 0)
+  const synced = customers.synced + subscriptions.synced + invoices.synced + (usage?.synced || 0)
 
   if (total === 0) return 0
   return Math.round((synced / total) * 100)
@@ -72,26 +73,45 @@ const duration = computed(() => {
   return `${minutes}m ${remainingSeconds}s`
 })
 
-const dataTypes = computed(() => [
-  {
-    key: 'customers' as const,
-    label: 'Customers',
-    icon: Users,
-    progress: props.syncState.customers,
-  },
-  {
-    key: 'subscriptions' as const,
-    label: 'Subscriptions',
-    icon: CreditCard,
-    progress: props.syncState.subscriptions,
-  },
-  {
-    key: 'invoices' as const,
-    label: 'Invoices',
-    icon: Receipt,
-    progress: props.syncState.invoices,
-  },
-])
+const dataTypes = computed(() => {
+  const types: Array<{
+    key: 'customers' | 'subscriptions' | 'invoices' | 'usage'
+    label: string
+    icon: typeof Users
+    progress: StripeSyncProgress
+  }> = [
+    {
+      key: 'customers',
+      label: 'Customers',
+      icon: Users,
+      progress: props.syncState.customers,
+    },
+    {
+      key: 'subscriptions',
+      label: 'Subscriptions',
+      icon: CreditCard,
+      progress: props.syncState.subscriptions,
+    },
+    {
+      key: 'invoices',
+      label: 'Invoices',
+      icon: Receipt,
+      progress: props.syncState.invoices,
+    },
+  ]
+
+  // Only show usage if there's data or it's in progress
+  if (props.syncState.usage && (props.syncState.usage.total > 0 || props.syncState.usage.status === 'in_progress')) {
+    types.push({
+      key: 'usage',
+      label: 'Usage Data',
+      icon: Activity,
+      progress: props.syncState.usage,
+    })
+  }
+
+  return types
+})
 
 // =============================================================================
 // HELPERS

@@ -258,11 +258,16 @@ export class StripeApiClient {
         },
       })
 
+      // Validate response structure
+      if (!response || !Array.isArray(response.data)) {
+        throw new Error(`Invalid array: API returned unexpected response structure for ${endpoint}`)
+      }
+
       for (const item of response.data) {
         yield item
       }
 
-      hasMore = response.has_more
+      hasMore = response.has_more ?? false
       const lastItem = response.data[response.data.length - 1]
       if (hasMore && lastItem) {
         startingAfter = lastItem.id
