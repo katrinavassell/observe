@@ -74,7 +74,7 @@ const chartData = computed(() => {
   return { labels, datasets }
 })
 
-const chartOptions = {
+const chartOptions = computed(() => ({
   responsive: true,
   maintainAspectRatio: false,
   interaction: {
@@ -118,7 +118,7 @@ const chartOptions = {
       },
     },
   },
-}
+}))
 </script>
 
 <template>
