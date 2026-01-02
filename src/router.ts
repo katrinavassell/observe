@@ -11,18 +11,16 @@ const router = createRouter({
       component: () => import('@/pages/LoginPage.vue'),
       meta: { requiresAuth: false },
     },
-    // Main app routes - Dashboard is the home page
+    // Main app routes - Pricing Analyzer is the home page
     {
       path: '/',
-      name: 'dashboard',
-      component: () => import('@/pages/DashboardPage.vue'),
+      name: 'pricing',
+      component: () => import('@/pages/PricingAnalyzerPage.vue'),
       meta: { requiresAuth: true },
     },
     {
       path: '/pricing',
-      name: 'pricing-analyzer',
-      component: () => import('@/pages/PricingAnalyzerPage.vue'),
-      meta: { requiresAuth: true },
+      redirect: '/',
     },
     {
       path: '/data-sources',
@@ -31,9 +29,9 @@ const router = createRouter({
       meta: { requiresAuth: true },
     },
     {
-      path: '/customers',
-      name: 'customer-insights',
-      component: () => import('@/pages/CustomerInsightsPage.vue'),
+      path: '/simulator',
+      name: 'simulator',
+      component: () => import('@/pages/SimulatorPage.vue'),
       meta: { requiresAuth: true },
     },
     // Legacy redirects
@@ -52,10 +50,6 @@ const router = createRouter({
     {
       path: '/dashboard',
       redirect: '/',
-    },
-    {
-      path: '/accounts',
-      redirect: '/customers',
     },
   ],
 })

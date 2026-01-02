@@ -26,6 +26,7 @@ import {
   validateCsvExtension,
   validateCostRecords,
 } from '@/lib/validation'
+import AnthropicApiKeyModal from '@/components/integrations/AnthropicApiKeyModal.vue'
 
 const props = defineProps<{
   /** Current file info if any */
@@ -47,6 +48,10 @@ const emit = defineEmits<{
 const isUploading = ref(false)
 const isDragging = ref(false)
 const fileInput = ref<HTMLInputElement | null>(null)
+
+// Modal state
+const showAnthropicModal = ref(false)
+const isAnthropicConnected = ref(false)
 
 function triggerFileInput(): void {
   fileInput.value?.click()
@@ -166,11 +171,17 @@ function downloadTemplate(): void {
 }
 
 function handleConnectOpenAI(): void {
-  toast.info('OpenAI integration coming soon')
+  toast.info('OpenAI integration coming soon', {
+    description: 'Export usage from OpenAI Dashboard and upload as CSV',
+  })
 }
 
 function handleConnectAnthropic(): void {
-  toast.info('Anthropic integration coming soon')
+  showAnthropicModal.value = true
+}
+
+function handleAnthropicConnected(): void {
+  isAnthropicConnected.value = true
 }
 </script>
 
@@ -209,12 +220,20 @@ function handleConnectAnthropic(): void {
             </div>
             <div>
               <p class="font-medium">Anthropic</p>
-              <p class="text-xs text-muted-foreground">Pull monthly usage and token costs</p>
+              <p class="text-xs text-muted-foreground">
+                {{ isAnthropicConnected ? 'Connected' : 'Pull monthly usage and token costs' }}
+              </p>
             </div>
           </div>
-          <Button variant="outline" size="sm" @click="handleConnectAnthropic">
+          <Button
+            v-if="!isAnthropicConnected"
+            variant="outline"
+            size="sm"
+            @click="handleConnectAnthropic"
+          >
             Connect
           </Button>
+          <CheckCircle v-else class="h-5 w-5 text-green-500" />
         </div>
 
         <!-- Divider -->
@@ -223,7 +242,7 @@ function handleConnectAnthropic(): void {
             <div class="w-full border-t"></div>
           </div>
           <div class="relative flex justify-center text-xs">
-            <span class="bg-card px-2 text-muted-foreground">or</span>
+            <span class="bg-card px-2 text-muted-foreground">add CSV for other providers</span>
           </div>
         </div>
 
@@ -298,5 +317,12 @@ function handleConnectAnthropic(): void {
         </div>
       </CardContent>
     </Card>
+
+    <!-- Anthropic API Key Modal -->
+    <AnthropicApiKeyModal
+      :open="showAnthropicModal"
+      @close="showAnthropicModal = false"
+      @connected="handleAnthropicConnected"
+    />
   </section>
 </template>

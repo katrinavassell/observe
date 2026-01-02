@@ -621,13 +621,40 @@ export interface StripeStatus {
   connected: boolean
   account_id: string | null
   account_name: string | null
+  is_live_mode?: boolean
+  connected_at?: string
 }
 
 /**
  * Check if Stripe is connected for the current user.
+ * Uses Supabase Edge Function directly.
  */
 export async function getStripeStatus(): Promise<StripeStatus> {
-  return request('/integrations/stripe/status')
+  const { data, error } = await supabase.functions.invoke('stripe-status')
+
+  if (error) {
+    // Return not connected on error
+    return { connected: false, account_id: null, account_name: null }
+  }
+
+  return data as StripeStatus
+}
+
+/**
+ * Disconnect Stripe integration.
+ * Uses Supabase Edge Function directly.
+ * @param clearData - If true, also clears all synced revenue/usage data
+ */
+export async function disconnectStripe(clearData = false): Promise<{ success: boolean; message: string }> {
+  const { data, error } = await supabase.functions.invoke('stripe-disconnect', {
+    body: { clear_data: clearData },
+  })
+
+  if (error) {
+    throw new Error(error.message || 'Failed to disconnect Stripe')
+  }
+
+  return data as { success: boolean; message: string }
 }
 
 export interface SyncResult {
@@ -1019,4 +1046,35 @@ export async function requestIntegration(
   return request(`/integrations/request?${searchParams.toString()}`, {
     method: 'POST',
   })
+}
+
+// =============================================================================
+// ANTHROPIC INTEGRATION
+// =============================================================================
+
+export interface AnthropicConnectResult {
+  success: boolean
+  message: string
+  has_usage_access: boolean
+  cost_synced: number
+  months_synced?: number
+}
+
+/**
+ * Connect an Anthropic account using an API key.
+ * Validates the key and syncs usage/cost data if available.
+ *
+ * @param apiKey - Anthropic API key (sk-ant-...)
+ * @returns Connection result with cost sync info
+ */
+export async function connectAnthropic(apiKey: string): Promise<AnthropicConnectResult> {
+  const { data, error } = await supabase.functions.invoke('anthropic-connect', {
+    body: { api_key: apiKey },
+  })
+
+  if (error) {
+    throw new Error(error.message || 'Failed to connect Anthropic')
+  }
+
+  return data as AnthropicConnectResult
 }

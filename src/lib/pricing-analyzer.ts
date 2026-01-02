@@ -1087,18 +1087,15 @@ export function calculateCostGrowthMetrics(
 
 /**
  * Calculate cost breakdown by AI provider.
- * If no provider data available, uses sample breakdown (OpenAI 84%, Anthropic 16%).
+ * Returns empty array if no provider data available (no fake data).
  */
 export function calculateProviderBreakdown(
   costs: CostRecord[] | undefined,
   totalCosts: number
 ): ProviderCost[] {
   if (!costs || costs.length === 0 || totalCosts === 0) {
-    // Return sample data when no real provider data available
-    return [
-      { name: 'OpenAI', amount: Math.round(totalCosts * 0.84), percentage: 84 },
-      { name: 'Anthropic', amount: Math.round(totalCosts * 0.16), percentage: 16 },
-    ]
+    // Return empty array - don't fake provider breakdown
+    return []
   }
 
   // Group costs by provider (cost_type field)
@@ -1143,14 +1140,6 @@ export function calculateProviderBreakdown(
 
   // Sort by amount descending
   providers.sort((a, b) => b.amount - a.amount)
-
-  // If no providers found, return sample data
-  if (providers.length === 0) {
-    return [
-      { name: 'OpenAI', amount: Math.round(totalCosts * 0.84), percentage: 84 },
-      { name: 'Anthropic', amount: Math.round(totalCosts * 0.16), percentage: 16 },
-    ]
-  }
 
   return providers
 }

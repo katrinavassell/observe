@@ -12,9 +12,11 @@
 
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
+import { toast } from 'vue-sonner'
 import {
   DollarSign,
   Upload,
+  Download,
   Info,
   CheckCircle,
   X,
@@ -208,6 +210,53 @@ function handleDisconnect(): void {
   disconnect()
   showSyncProgress.value = false
 }
+
+// =============================================================================
+// TEMPLATE DOWNLOADS
+// =============================================================================
+
+/**
+ * Download all Stripe CSV templates as a zip-like experience (downloads sequentially).
+ * Templates match Stripe export format.
+ */
+function downloadTemplates(): void {
+  // Customers template (Stripe format)
+  const customersContent = `id,email,name,description,created (UTC),metadata
+cus_001,alice@acme.com,Alice Smith,Enterprise customer,2024-01-15 10:30:00,{"company":"Acme Corp"}
+cus_002,bob@startup.io,Bob Jones,Startup tier,2024-02-01 14:22:00,{"company":"Startup Inc"}
+cus_003,carol@bigco.com,Carol White,Pro tier,2024-03-10 09:15:00,{"company":"BigCo"}`
+
+  // Subscriptions template (Stripe format)
+  const subscriptionsContent = `id,customer,status,current_period_start (UTC),current_period_end (UTC),plan_amount,plan_interval,plan_nickname,canceled_at (UTC),cancel_at_period_end
+sub_001,cus_001,active,2024-06-01 00:00:00,2024-07-01 00:00:00,49900,month,Enterprise,,false
+sub_002,cus_002,active,2024-06-01 00:00:00,2024-07-01 00:00:00,9900,month,Startup,,false
+sub_003,cus_003,canceled,2024-05-01 00:00:00,2024-06-01 00:00:00,19900,month,Pro,2024-05-28 15:30:00,true`
+
+  // Invoices template (Stripe format)
+  const invoicesContent = `id,customer,status,amount_due,amount_paid,currency,created (UTC),period_start (UTC),period_end (UTC)
+inv_001,cus_001,paid,49900,49900,usd,2024-06-01 00:00:00,2024-05-01 00:00:00,2024-06-01 00:00:00
+inv_002,cus_002,paid,9900,9900,usd,2024-06-01 00:00:00,2024-05-01 00:00:00,2024-06-01 00:00:00
+inv_003,cus_003,paid,19900,19900,usd,2024-05-01 00:00:00,2024-04-01 00:00:00,2024-05-01 00:00:00`
+
+  // Download each template
+  downloadFile(customersContent, 'customers-template.csv')
+  setTimeout(() => downloadFile(subscriptionsContent, 'subscriptions-template.csv'), 100)
+  setTimeout(() => downloadFile(invoicesContent, 'invoices-template.csv'), 200)
+
+  toast.success('Templates downloaded', {
+    description: 'Fill in your data and upload them back.',
+  })
+}
+
+function downloadFile(content: string, filename: string): void {
+  const blob = new Blob([content], { type: 'text/csv' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(url)
+}
 </script>
 
 <template>
@@ -224,6 +273,7 @@ function handleDisconnect(): void {
       @cancel="handleCancelSync"
       @retry="handleRetrySync"
       @close="handleCloseSyncProgress"
+      @disconnect="handleDisconnect"
     />
 
     <!-- Main Card (when not showing sync progress) -->
@@ -257,7 +307,7 @@ function handleDisconnect(): void {
                 </Badge>
               </div>
               <p class="text-xs text-muted-foreground">
-                {{ isConnected ? validation?.accountName : 'Pull customers, subscriptions, and invoices' }}
+                {{ isConnected ? validation?.accountName : 'Sync customers, subscriptions, invoices & usage' }}
               </p>
             </div>
           </div>
@@ -362,7 +412,7 @@ function handleDisconnect(): void {
             <p class="text-sm text-muted-foreground">
               Drop your Stripe exports here or <span class="text-primary font-medium">browse</span>
             </p>
-            <p class="text-xs text-muted-foreground/60 mt-1">Drop all 3 files at once or one at a time</p>
+            <p class="text-xs text-muted-foreground/60 mt-1">Drop files one at a time or all at once</p>
           </div>
         </div>
 
@@ -429,6 +479,7 @@ function handleDisconnect(): void {
               <X class="h-3 w-3 text-muted-foreground" />
             </button>
           </div>
+
         </div>
 
         <!-- Reconcile button - only show when subscriptions are uploaded -->
@@ -528,6 +579,15 @@ function handleDisconnect(): void {
 
         <!-- Action links (only when not connected) -->
         <div v-if="!isConnected" class="flex items-center justify-center gap-4">
+          <button
+            type="button"
+            class="text-xs text-primary hover:underline flex items-center gap-1"
+            @click="downloadTemplates"
+          >
+            <Download class="h-3 w-3" />
+            Download templates
+          </button>
+          <span class="text-muted-foreground/30">|</span>
           <button
             type="button"
             class="text-xs text-muted-foreground hover:text-foreground"

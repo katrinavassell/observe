@@ -40,6 +40,7 @@ const emit = defineEmits<{
   cancel: []
   retry: []
   close: []
+  disconnect: []
 }>()
 
 // =============================================================================
@@ -98,17 +99,13 @@ const dataTypes = computed(() => {
       icon: Receipt,
       progress: props.syncState.invoices,
     },
-  ]
-
-  // Only show usage if there's data or it's in progress
-  if (props.syncState.usage && (props.syncState.usage.total > 0 || props.syncState.usage.status === 'in_progress')) {
-    types.push({
+    {
       key: 'usage',
-      label: 'Usage Data',
+      label: 'Usage',
       icon: Activity,
       progress: props.syncState.usage,
-    })
-  }
+    },
+  ]
 
   return types
 })
@@ -230,6 +227,10 @@ function getStatusColor(status: StripeSyncStatus): string {
               class="h-1"
               :indicator-class="`${progress.status === 'completed' ? 'bg-green-500' : ''} ${progress.status === 'failed' ? 'bg-destructive' : ''}`"
             />
+            <!-- Usage warning -->
+            <p v-if="key === 'usage' && isComplete" class="text-xs text-muted-foreground mt-1">
+              Uploading usage data below will override this
+            </p>
           </div>
           <component
             :is="getStatusIcon(progress.status)"
@@ -285,11 +286,17 @@ function getStatusColor(status: StripeSyncStatus): string {
 
         <template v-else-if="isComplete">
           <Button
-            class="w-full"
+            variant="outline"
+            class="flex-1"
+            @click="emit('disconnect')"
+          >
+            Disconnect
+          </Button>
+          <Button
+            class="flex-1"
             @click="emit('close')"
           >
-            <CheckCircle2 class="h-4 w-4 mr-2" />
-            View Analysis
+            Done
           </Button>
         </template>
       </div>

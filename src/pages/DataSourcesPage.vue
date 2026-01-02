@@ -12,7 +12,7 @@
 import { ref, watch, onMounted, onUnmounted } from 'vue'
 import { toast } from 'vue-sonner'
 import { TrendingUp } from 'lucide-vue-next'
-import { getStripeStatus } from '@/api/client'
+import { getStripeStatus, disconnectStripe } from '@/api/client'
 import { Card, CardContent, Button } from '@/components/ui'
 import {
   RevenueSection,
@@ -318,12 +318,33 @@ async function handleStripeSync(): Promise<void> {
   }
 }
 
-function handleStripeDisconnect(): void {
-  isStripeConnected.value = false
-  stripeAccountName.value = ''
-  toast.info('Stripe disconnected')
-  // Optionally reopen modal to connect with different key
-  showStripeModal.value = true
+async function handleStripeDisconnect(): Promise<void> {
+  try {
+    // Call backend to disconnect and clear synced data
+    await disconnectStripe(true)
+
+    // Clear local state
+    isStripeConnected.value = false
+    stripeAccountName.value = ''
+
+    // Clear file indicators
+    revenueFiles.value = { customers: false, subscriptions: false, invoices: false }
+
+    // Stop background sync
+    if (syncIntervalId) {
+      clearInterval(syncIntervalId)
+      syncIntervalId = null
+    }
+
+    // Refresh data mode
+    await refetchDataMode()
+
+    toast.success('Stripe disconnected and data cleared')
+  } catch (error) {
+    toast.error('Failed to disconnect Stripe', {
+      description: error instanceof Error ? error.message : 'Please try again',
+    })
+  }
 }
 
 // =============================================================================

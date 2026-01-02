@@ -35,6 +35,7 @@ export interface MonthlyMrrData {
   churnedMRR: number
   netNewMRR: number
   customerCount: number
+  costs?: number
   margin?: number
   formatted: {
     mrr: string

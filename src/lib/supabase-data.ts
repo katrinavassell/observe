@@ -289,26 +289,28 @@ export async function loadSampleData(): Promise<void> {
   const { error: usageError } = await supabase.from('usage_records').insert(usageRecords)
   if (usageError) throw usageError
 
-  // 5. Insert cost records (allocated per PRD, using current month)
-  const CUSTOMER_COSTS: Record<string, number> = {
-    'cust_001': 2400, // Acme Corp
-    'cust_014': 340,  // DataFlow Inc
-    'cust_019': 85,   // TinyStartup
-  }
-  const negativeMarginTotal = 2400 + 340 + 85
-  const remainingCosts = 6200 - negativeMarginTotal
-  const otherCustomerCount = data.customers.length - 3
-  const avgOtherCost = remainingCosts / otherCustomerCount
+  // 5. Insert aggregate cost records (no per-customer allocation - that would require real data)
   const currentMonth = getRelativeMonth(0)
 
-  const costRecords = data.customers.map(c => ({
-    user_id: user.id,
-    customer_id: c.customer_id,
-    cost_type: 'infrastructure',
-    amount: CUSTOMER_COSTS[c.customer_id] ?? avgOtherCost,
-    period_start: `${currentMonth}-01T00:00:00Z`,
-    period_end: getLastDayOfMonth(currentMonth),
-  }))
+  // Create aggregate cost records by provider (not per-customer)
+  const costRecords = [
+    {
+      user_id: user.id,
+      customer_id: null, // Aggregate - not tied to specific customer
+      cost_type: 'openai',
+      amount: 4200,
+      period_start: `${currentMonth}-01T00:00:00Z`,
+      period_end: getLastDayOfMonth(currentMonth),
+    },
+    {
+      user_id: user.id,
+      customer_id: null,
+      cost_type: 'anthropic',
+      amount: 2000,
+      period_start: `${currentMonth}-01T00:00:00Z`,
+      period_end: getLastDayOfMonth(currentMonth),
+    },
+  ]
 
   const { error: costsError } = await supabase.from('cost_records').insert(costRecords)
   if (costsError) throw costsError
@@ -323,7 +325,7 @@ export async function loadSampleData(): Promise<void> {
       has_costs: true,
       has_usage: true,
       revenue_customer_count: data.customers.length,
-      costs_record_count: costRecords.length,
+      costs_record_count: 2, // Aggregate costs only
       usage_record_count: usageRecords.length,
       last_sync_at: new Date().toISOString(),
     }, { onConflict: 'user_id' })
@@ -434,34 +436,33 @@ export async function loadSampleRevenue(): Promise<void> {
 }
 
 /**
- * Load only sample cost data
+ * Load only sample cost data (aggregate costs by provider, not per-customer)
  */
 export async function loadSampleCosts(): Promise<void> {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('Not authenticated')
 
-  const data = sampleDataJson as SampleDataJson
-
-  // Allocate costs per PRD (using current month)
-  const CUSTOMER_COSTS: Record<string, number> = {
-    'cust_001': 2400,
-    'cust_014': 340,
-    'cust_019': 85,
-  }
-  const negativeMarginTotal = 2400 + 340 + 85
-  const remainingCosts = 6200 - negativeMarginTotal
-  const otherCustomerCount = data.customers.length - 3
-  const avgOtherCost = remainingCosts / otherCustomerCount
   const currentMonth = getRelativeMonth(0)
 
-  const costRecords = data.customers.map(c => ({
-    user_id: user.id,
-    customer_id: c.customer_id,
-    cost_type: 'infrastructure',
-    amount: CUSTOMER_COSTS[c.customer_id] ?? avgOtherCost,
-    period_start: `${currentMonth}-01T00:00:00Z`,
-    period_end: getLastDayOfMonth(currentMonth),
-  }))
+  // Create aggregate cost records by provider (not per-customer)
+  const costRecords = [
+    {
+      user_id: user.id,
+      customer_id: null, // Aggregate - not tied to specific customer
+      cost_type: 'openai',
+      amount: 4200,
+      period_start: `${currentMonth}-01T00:00:00Z`,
+      period_end: getLastDayOfMonth(currentMonth),
+    },
+    {
+      user_id: user.id,
+      customer_id: null,
+      cost_type: 'anthropic',
+      amount: 2000,
+      period_start: `${currentMonth}-01T00:00:00Z`,
+      period_end: getLastDayOfMonth(currentMonth),
+    },
+  ]
 
   // Delete existing costs first, then insert
   const { error: deleteError } = await supabase.from('cost_records').delete().eq('user_id', user.id)
@@ -477,7 +478,7 @@ export async function loadSampleCosts(): Promise<void> {
       user_id: user.id,
       data_mode: 'sample',
       has_costs: true,
-      costs_record_count: costRecords.length,
+      costs_record_count: 2, // Aggregate costs only
       last_sync_at: new Date().toISOString(),
     }, { onConflict: 'user_id' })
   if (statusError) throw new Error(`Failed to update data status: ${statusError.message}`)

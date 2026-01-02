@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
-import { LayoutDashboard, DollarSign, Plug, LogOut } from 'lucide-vue-next'
+import { LayoutDashboard, DollarSign, Plug, LogOut, Calculator } from 'lucide-vue-next'
 import { useAuth } from '@/composables/useAuth'
 
 const route = useRoute()
@@ -13,6 +13,12 @@ const navItems = computed(() => [
     label: 'Pricing',
     icon: DollarSign,
     description: 'Margin analysis & plan health'
+  },
+  {
+    path: '/simulator',
+    label: 'Simulator',
+    icon: Calculator,
+    description: 'What-if pricing scenarios'
   },
   { path: '/data-sources', label: 'Data Sources', icon: Plug, description: 'Connect integrations or upload files' },
 ])

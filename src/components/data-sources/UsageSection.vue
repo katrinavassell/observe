@@ -9,7 +9,7 @@
  * - Stripe metered billing info
  */
 
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { toast } from 'vue-sonner'
 import Papa from 'papaparse'
 import {
@@ -28,6 +28,7 @@ import {
   validateCsvExtension,
   validateUsageRecords,
 } from '@/lib/validation'
+import { useStripeConnection } from '@/composables/useStripeConnection'
 
 const props = defineProps<{
   /** Current file info if any */
@@ -44,6 +45,10 @@ const emit = defineEmits<{
   /** Emitted when user wants to use sample data */
   useSample: []
 }>()
+
+// Stripe connection to check for synced usage
+const { syncState, isConnected } = useStripeConnection()
+const hasStripeUsage = computed(() => isConnected.value && syncState.value.usage.synced > 0)
 
 // Upload state
 const isUploading = ref(false)
@@ -184,6 +189,16 @@ function downloadTemplate(): void {
 
     <Card>
       <CardContent class="p-5 space-y-4">
+        <!-- Info if Stripe usage exists -->
+        <Alert v-if="hasStripeUsage" variant="info" class="bg-blue-50/50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800">
+          <Info class="h-4 w-4 text-blue-600 dark:text-blue-400" />
+          <div class="ml-2">
+            <p class="text-sm text-blue-800 dark:text-blue-200">
+              You have usage data from Stripe. Any CSV data will be added to it.
+            </p>
+          </div>
+        </Alert>
+
         <!-- Hidden file input -->
         <input
           ref="fileInput"

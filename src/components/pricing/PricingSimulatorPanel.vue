@@ -7,7 +7,7 @@
  */
 
 import { ref, computed, watch } from 'vue'
-import { Loader2, Calculator, Save, RotateCcw, TrendingUp, TrendingDown, Users } from 'lucide-vue-next'
+import { Loader2, Calculator, RotateCcw, TrendingUp, TrendingDown, Users } from 'lucide-vue-next'
 import { Card, CardContent, CardHeader, CardTitle, Badge, Button, Input } from '@/components/ui'
 import { useSimulation } from '@/composables/useSimulation'
 import type { PricingModelConfig } from '@/types/simulation'
@@ -30,14 +30,13 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'simulation-complete': [results: unknown]
-  'save-scenario': [name: string]
 }>()
 
 // =============================================================================
 // STATE
 // =============================================================================
 
-const { isRunning, runPreviewAsync, currentResults, error } = useSimulation()
+const { isRunning, runPreviewAsync, error } = useSimulation()
 
 // Proposed prices - editable
 const proposedPrices = ref<Record<string, number>>({})
@@ -279,16 +278,7 @@ function formatCurrency(amount: number): string {
         >
           <Loader2 v-if="isRunning" class="h-4 w-4 mr-1.5 animate-spin" />
           <Calculator v-else class="h-4 w-4 mr-1.5" />
-          {{ isRunning ? 'Running...' : 'Apply Simulation' }}
-        </Button>
-        <Button
-          variant="secondary"
-          size="sm"
-          :disabled="!currentResults"
-          @click="$emit('save-scenario', 'New Scenario')"
-        >
-          <Save class="h-4 w-4 mr-1.5" />
-          Save
+          {{ isRunning ? 'Running...' : 'Run Simulation' }}
         </Button>
       </div>
     </CardContent>
