@@ -93,12 +93,17 @@ const lastSyncFormatted = computed(() => {
 
 const sampleSummary = getSampleDataSummary()
 
-// Helper to format currency
+// Helper to format currency (compact format for charts/labels)
 function formatCurrency(amount: number): string {
   if (amount >= 1000) {
     return `$${(amount / 1000).toFixed(1)}k`
   }
   return `$${amount.toFixed(0)}`
+}
+
+// Helper to format currency for tables (with thousand separators)
+function formatTableCurrency(amount: number): string {
+  return `$${amount.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
 }
 
 // ARR Waterfall data computed from MRR movement
@@ -139,7 +144,7 @@ async function loadSampleData() {
     if (data) {
       try {
         analysisResult.value = analyzeData(data)
-      } catch (analyzeErr) {
+      } catch {
         throw new Error('Failed to analyze data. The data format may be invalid.')
       }
     } else {
@@ -171,7 +176,7 @@ async function loadExistingData() {
     if (data) {
       try {
         analysisResult.value = analyzeData(data)
-      } catch (analyzeErr) {
+      } catch {
         throw new Error('Failed to analyze data. The data format may be invalid.')
       }
       dataSource.value = dataMode.value as 'sample' | 'user'
@@ -672,8 +677,8 @@ onMounted(async () => {
                     </div>
                   </th>
                   <th class="text-center p-3 font-medium text-sm">Customers</th>
-                  <th class="text-left p-3 font-medium text-sm">Total MRR</th>
-                  <th class="text-left p-3 font-medium text-sm">Avg MRR</th>
+                  <th class="text-right p-3 font-medium text-sm">Total MRR</th>
+                  <th class="text-right p-3 font-medium text-sm">Avg MRR</th>
                   <th class="text-center p-3 font-medium text-sm">
                     <div class="flex items-center justify-center gap-1">
                       Churn Risk
@@ -728,8 +733,8 @@ onMounted(async () => {
                     </Tooltip>
                     <span v-else>{{ plan.customerCount }}</span>
                   </td>
-                  <td class="p-3 text-sm font-mono">${{ plan.totalMRR.toFixed(0) }}</td>
-                  <td class="p-3 text-sm font-mono">${{ plan.avgMRR.toFixed(0) }}</td>
+                  <td class="p-3 text-sm text-right font-mono">{{ formatTableCurrency(plan.totalMRR) }}</td>
+                  <td class="p-3 text-sm text-right font-mono">{{ formatTableCurrency(plan.avgMRR) }}</td>
                   <td class="p-3 text-sm text-center">
                     <Tooltip v-if="plan.churnRiskCount > 0">
                       <TooltipTrigger>
@@ -1133,7 +1138,7 @@ onMounted(async () => {
                     <Badge variant="secondary">{{ customer.planName }}</Badge>
                   </td>
                   <td class="p-3 text-sm text-right font-mono font-medium">
-                    ${{ customer.mrr.toFixed(0) }}
+                    {{ formatTableCurrency(customer.mrr) }}
                   </td>
                   <td class="p-3 text-sm text-right">
                     <div class="flex items-center justify-end gap-1">
@@ -1141,13 +1146,14 @@ onMounted(async () => {
                       <ArrowDown v-else-if="customer.mrrChange < 0" class="h-3 w-3 text-red-600" />
                       <Minus v-else class="h-3 w-3 text-muted-foreground" />
                       <span
+                        class="font-mono"
                         :class="{
                           'text-green-600': customer.mrrChange > 0,
                           'text-red-600': customer.mrrChange < 0,
                           'text-muted-foreground': customer.mrrChange === 0,
                         }"
                       >
-                        {{ customer.mrrChange > 0 ? '+' : '' }}${{ customer.mrrChange.toFixed(0) }}
+                        {{ customer.mrrChange > 0 ? '+' : customer.mrrChange < 0 ? '-' : '' }}{{ formatTableCurrency(Math.abs(customer.mrrChange)) }}
                       </span>
                     </div>
                   </td>
@@ -1200,8 +1206,8 @@ onMounted(async () => {
                   </div>
                   <div>
                     <p class="text-xs text-muted-foreground">MRR at Renewal</p>
-                    <p class="text-2xl font-bold">
-                      ${{ analysisResult.upcomingRenewals.reduce((sum, r) => sum + r.mrr, 0).toLocaleString() }}
+                    <p class="text-2xl font-bold font-mono">
+                      {{ formatTableCurrency(analysisResult.upcomingRenewals.reduce((sum, r) => sum + r.mrr, 0)) }}
                     </p>
                   </div>
                 </div>
@@ -1248,7 +1254,7 @@ onMounted(async () => {
                   <td class="p-3 text-sm">
                     <Badge variant="secondary">{{ renewal.planName }}</Badge>
                   </td>
-                  <td class="p-3 text-sm text-right font-mono">${{ renewal.mrr.toFixed(0) }}</td>
+                  <td class="p-3 text-sm text-right font-mono">{{ formatTableCurrency(renewal.mrr) }}</td>
                   <td class="p-3 text-sm text-center">{{ renewal.renewalDate }}</td>
                   <td class="p-3 text-sm text-center">
                     <span
