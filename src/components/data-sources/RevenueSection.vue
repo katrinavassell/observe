@@ -1,15 +1,17 @@
 <script setup lang="ts">
 /**
- * RevenueSection - Stripe data upload and reconciliation component.
+ * RevenueSection - Stripe data upload and connection component.
  *
  * Handles:
+ * - Stripe API connection via secret key
  * - Stripe CSV file uploads (customers, subscriptions, invoices)
  * - Auto-detection of file types
- * - Data reconciliation across files
+ * - Data reconciliation and sync progress
  * - Sample data loading
  */
 
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
+import { useRouter } from 'vue-router'
 import {
   DollarSign,
   Upload,
@@ -21,9 +23,17 @@ import {
   AlertTriangle,
   Loader2,
   ArrowRight,
+  Zap,
 } from 'lucide-vue-next'
-import { Card, CardContent, Button } from '@/components/ui'
-import { useStripeUpload } from '@/composables/useStripeUpload'
+import { Card, CardContent, Button, Badge } from '@/components/ui'
+import { useStripeUpload, type StripeFile } from '@/composables/useStripeUpload'
+import { useStripeConnection } from '@/composables/useStripeConnection'
+import StripeConnectModal from './StripeConnectModal.vue'
+import StripeSyncProgress from './StripeSyncProgress.vue'
+
+// =============================================================================
+// PROPS & EMITS
+// =============================================================================
 
 const props = defineProps<{
   /** Whether sample revenue data is being loaded */
@@ -39,7 +49,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   /** Emitted when user wants to use sample revenue data */
   useSample: []
-  /** Emitted when Stripe connect button is clicked */
+  /** Emitted when Stripe connect button is clicked (deprecated, handled internally now) */
   connectStripe: []
   /** Emitted when Stripe sync button is clicked */
   syncStripe: []
@@ -51,7 +61,13 @@ const emit = defineEmits<{
   allFilesCleared: []
 }>()
 
-// Initialize the Stripe upload composable
+// =============================================================================
+// COMPOSABLES & STATE
+// =============================================================================
+
+const router = useRouter()
+
+// CSV Upload composable
 const {
   stripeCustomersFile,
   stripeSubscriptionsFile,
@@ -72,16 +88,51 @@ const {
   formatCurrency,
 } = useStripeUpload()
 
+// API Connection composable
+const {
+  isValidating,
+  validation,
+  isSyncing,
+  syncState,
+  isConnected,
+  syncProgress,
+  startSync,
+  cancelSync,
+  resetSync,
+  disconnect,
+} = useStripeConnection()
+
 // Expose setSampleDataLoaded for parent to call when sample data is loaded
 defineExpose({
   setSampleDataLoaded,
 })
 
-// File input ref
+// Local state
 const stripeFileInput = ref<HTMLInputElement | null>(null)
-
-// Show Stripe export instructions
 const showStripeInstructions = ref(false)
+const showConnectModal = ref(false)
+const showSyncProgress = ref(false)
+
+// =============================================================================
+// COMPUTED
+// =============================================================================
+
+/** Whether we're showing the API connection flow vs CSV upload */
+const connectionMode = computed(() => {
+  return isConnected.value || isSyncing.value || showSyncProgress.value
+})
+
+/** Status text for the connection badge */
+const connectionStatus = computed(() => {
+  if (isSyncing.value) return 'Syncing...'
+  if (isConnected.value && syncState.value.status === 'completed') return 'Connected'
+  if (isConnected.value) return 'Ready'
+  return null
+})
+
+// =============================================================================
+// FILE HANDLERS
+// =============================================================================
 
 function triggerFileInput(): void {
   stripeFileInput.value?.click()
@@ -96,7 +147,6 @@ function handleFileSelect(event: Event): void {
     }
     emit('filesChanged')
   }
-  // Reset input so same file can be selected again
   input.value = ''
 }
 
@@ -115,10 +165,55 @@ function handleClearFile(type: 'customers' | 'subscriptions' | 'invoices'): void
   clearStripeFile(type)
   emit('filesChanged')
 
-  // Check if all files are now cleared
   if (!stripeCustomersFile.value && !stripeSubscriptionsFile.value && !stripeInvoicesFile.value) {
     emit('allFilesCleared')
   }
+}
+
+// =============================================================================
+// CONNECTION HANDLERS
+// =============================================================================
+
+function handleOpenConnectModal(): void {
+  showConnectModal.value = true
+}
+
+function handleConnected(accountName: string): void {
+  // Connection validated, modal will show "Start Import" button
+}
+
+async function handleStartSync(): Promise<void> {
+  showConnectModal.value = false
+  showSyncProgress.value = true
+
+  const success = await startSync()
+
+  if (success) {
+    emit('filesChanged')
+  }
+}
+
+function handleCancelSync(): void {
+  cancelSync()
+}
+
+function handleRetrySync(): void {
+  resetSync()
+  startSync()
+}
+
+function handleCloseSyncProgress(): void {
+  showSyncProgress.value = false
+
+  if (syncState.value.status === 'completed') {
+    // Navigate to analysis
+    router.push('/')
+  }
+}
+
+function handleDisconnect(): void {
+  disconnect()
+  showSyncProgress.value = false
 }
 </script>
 
@@ -129,9 +224,19 @@ function handleClearFile(type: 'customers' | 'subscriptions' | 'invoices'): void
       <h2 class="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Revenue</h2>
     </div>
 
-    <Card>
+    <!-- Sync Progress Card (when syncing or just completed) -->
+    <StripeSyncProgress
+      v-if="showSyncProgress"
+      :sync-state="syncState"
+      @cancel="handleCancelSync"
+      @retry="handleRetrySync"
+      @close="handleCloseSyncProgress"
+    />
+
+    <!-- Main Card (when not showing sync progress) -->
+    <Card v-else>
       <CardContent class="p-5 space-y-4">
-        <!-- Stripe Connect -->
+        <!-- Stripe Connect (API) -->
         <div class="flex items-center justify-between">
           <div class="flex items-center gap-3">
             <div class="h-10 w-10 rounded-lg bg-[#635BFF]/10 flex items-center justify-center">
@@ -140,81 +245,112 @@ function handleClearFile(type: 'customers' | 'subscriptions' | 'invoices'): void
               </svg>
             </div>
             <div>
-              <p class="font-medium">Stripe</p>
+              <div class="flex items-center gap-2">
+                <p class="font-medium">Stripe</p>
+                <Badge
+                  v-if="isConnected"
+                  variant="outline"
+                  class="text-green-600 border-green-600/30 bg-green-500/5"
+                >
+                  <CheckCircle class="h-3 w-3 mr-1" />
+                  {{ connectionStatus }}
+                </Badge>
+                <Badge
+                  v-if="isConnected && validation?.mode === 'test'"
+                  variant="secondary"
+                  class="text-xs"
+                >
+                  Test Mode
+                </Badge>
+              </div>
               <p class="text-xs text-muted-foreground">
-                {{ props.isStripeConnected ? props.stripeAccountName : 'Pull customers, subscriptions, and invoices' }}
+                {{ isConnected ? validation?.accountName : 'Pull customers, subscriptions, and invoices' }}
               </p>
             </div>
           </div>
-          <Button
-            :variant="props.isStripeConnected ? 'outline' : 'outline'"
-            size="sm"
-            :class="props.isStripeConnected ? 'border-green-500/50 text-green-600 hover:text-green-700 hover:bg-green-50' : ''"
-            @click="emit('connectStripe')"
-          >
-            <span v-if="props.isStripeConnected" class="flex items-center gap-1.5">
-              <span class="h-2 w-2 rounded-full bg-green-500"></span>
-              Connected
-            </span>
-            <span v-else>Connect</span>
-          </Button>
+          <div class="flex items-center gap-2">
+            <Button
+              v-if="isConnected"
+              variant="ghost"
+              size="sm"
+              @click="handleDisconnect"
+            >
+              Disconnect
+            </Button>
+            <Button
+              v-if="isConnected && syncState.status !== 'completed'"
+              size="sm"
+              @click="handleStartSync"
+              :disabled="isSyncing"
+            >
+              <Zap class="h-4 w-4 mr-1" />
+              {{ isSyncing ? 'Syncing...' : 'Sync Now' }}
+            </Button>
+            <Button
+              v-else-if="!isConnected"
+              variant="outline"
+              size="sm"
+              @click="handleOpenConnectModal"
+            >
+              Connect
+            </Button>
+          </div>
         </div>
 
-        <!-- When connected via API, show sync status -->
-        <div v-if="props.isStripeConnected" class="bg-green-50 border border-green-200 rounded-lg p-4">
-          <div class="flex items-center justify-between">
-            <div class="flex items-center gap-2 text-sm text-green-700">
-              <CheckCircle class="h-4 w-4" />
-              <span>Connected to Stripe API</span>
+        <!-- Show connected summary if API sync completed -->
+        <div
+          v-if="isConnected && syncState.status === 'completed'"
+          class="rounded-lg bg-green-500/5 border border-green-500/20 p-4"
+        >
+          <div class="flex items-center gap-2 text-green-600 mb-2">
+            <CheckCircle class="h-5 w-5" />
+            <span class="font-medium">Data synced successfully</span>
+          </div>
+          <div class="text-sm text-muted-foreground grid grid-cols-3 gap-4">
+            <div>
+              <p class="text-lg font-semibold text-foreground">
+                {{ syncState.customers.synced }}
+              </p>
+              <p class="text-xs">Customers</p>
             </div>
-            <div class="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                class="text-green-700 border-green-300 hover:bg-green-100"
-                :disabled="props.isSyncing"
-                @click="emit('syncStripe')"
-              >
-                <Loader2 v-if="props.isSyncing" class="h-3 w-3 mr-1 animate-spin" />
-                {{ props.isSyncing ? 'Syncing...' : 'Sync Now' }}
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                class="text-muted-foreground hover:text-destructive"
-                @click="emit('disconnectStripe')"
-              >
-                Disconnect
-              </Button>
+            <div>
+              <p class="text-lg font-semibold text-foreground">
+                {{ syncState.subscriptions.synced }}
+              </p>
+              <p class="text-xs">Subscriptions</p>
+            </div>
+            <div>
+              <p class="text-lg font-semibold text-foreground">
+                {{ syncState.invoices.synced }}
+              </p>
+              <p class="text-xs">Invoices</p>
             </div>
           </div>
         </div>
 
-        <!-- CSV Upload Section - only show when NOT connected via API -->
-        <template v-if="!props.isStripeConnected">
-          <!-- Divider -->
-          <div class="relative">
-            <div class="absolute inset-0 flex items-center">
-              <div class="w-full border-t"></div>
-            </div>
-            <div class="relative flex justify-center text-xs">
-              <span class="bg-card px-2 text-muted-foreground">or upload CSVs</span>
-            </div>
+        <!-- Divider (only show when not connected via API) -->
+        <div v-if="!isConnected" class="relative">
+          <div class="absolute inset-0 flex items-center">
+            <div class="w-full border-t"></div>
           </div>
+          <div class="relative flex justify-center text-xs">
+            <span class="bg-card px-2 text-muted-foreground">or upload CSVs</span>
+          </div>
+        </div>
 
-          <!-- Hidden file input (multiple) -->
-          <input
-            ref="stripeFileInput"
-            type="file"
-            accept=".csv"
-            multiple
-            class="hidden"
-            @change="handleFileSelect"
-          />
+        <!-- Hidden file input (multiple) -->
+        <input
+          ref="stripeFileInput"
+          type="file"
+          accept=".csv"
+          multiple
+          class="hidden"
+          @change="handleFileSelect"
+        />
 
-          <!-- Stripe CSV Dropzone - only show when < 3 files -->
-          <div
-            v-if="stripeFileCount < 3"
+        <!-- Stripe CSV Dropzone - only show when < 3 files and not connected via API -->
+        <div
+          v-if="stripeFileCount < 3 && !isConnected"
           :class="[
             'border-2 border-dashed rounded-lg p-5 transition-colors',
             isDragging
@@ -237,8 +373,12 @@ function handleClearFile(type: 'customers' | 'subscriptions' | 'invoices'): void
           </div>
         </div>
 
-        <!-- File slots - only show when at least 1 file uploaded -->
-        <div v-if="stripeFileCount > 0" class="space-y-2 border rounded-lg p-4" :class="{ 'mt-4': stripeFileCount < 3 }">
+        <!-- File slots - only show when at least 1 file uploaded and not connected via API -->
+        <div
+          v-if="stripeFileCount > 0 && !isConnected"
+          class="space-y-2 border rounded-lg p-4"
+          :class="{ 'mt-4': stripeFileCount < 3 }"
+        >
           <!-- Customers slot -->
           <div class="flex items-center justify-between text-sm">
             <div class="flex items-center gap-2">
@@ -299,7 +439,7 @@ function handleClearFile(type: 'customers' | 'subscriptions' | 'invoices'): void
         </div>
 
         <!-- Reconcile button - only show when subscriptions are uploaded -->
-        <div v-if="canReconcile && !showReconciliation" class="flex justify-center">
+        <div v-if="canReconcile && !showReconciliation && !isConnected" class="flex justify-center">
           <Button
             @click="handleReconcile"
             :disabled="isReconciling"
@@ -311,7 +451,7 @@ function handleClearFile(type: 'customers' | 'subscriptions' | 'invoices'): void
         </div>
 
         <!-- Reconciliation Report -->
-        <div v-if="showReconciliation && reconciliationReport" class="border rounded-lg p-4 space-y-3 bg-muted/30">
+        <div v-if="showReconciliation && reconciliationReport && !isConnected" class="border rounded-lg p-4 space-y-3 bg-muted/30">
           <div class="flex items-center gap-2">
             <CheckCircle class="h-5 w-5 text-green-500" />
             <h3 class="font-medium">Data Reconciliation</h3>
@@ -393,8 +533,8 @@ function handleClearFile(type: 'customers' | 'subscriptions' | 'invoices'): void
           </div>
         </div>
 
-        <!-- Action links -->
-        <div class="flex items-center justify-center gap-4">
+        <!-- Action links (only when not connected) -->
+        <div v-if="!isConnected" class="flex items-center justify-center gap-4">
           <button
             type="button"
             class="text-xs text-muted-foreground hover:text-foreground"
@@ -421,7 +561,7 @@ function handleClearFile(type: 'customers' | 'subscriptions' | 'invoices'): void
         </div>
 
         <!-- Stripe export instructions (collapsible) -->
-        <div v-if="showStripeInstructions" class="bg-muted/50 rounded-lg p-4 text-sm space-y-3">
+        <div v-if="showStripeInstructions && !isConnected" class="bg-muted/50 rounded-lg p-4 text-sm space-y-3">
           <p class="font-medium">Export these CSVs from your Stripe Dashboard:</p>
           <div class="space-y-2">
             <div class="flex items-start gap-2">
@@ -450,8 +590,15 @@ function handleClearFile(type: 'customers' | 'subscriptions' | 'invoices'): void
             We auto-detect file types from the CSV headers. Just drop them all in!
           </p>
         </div>
-        </template>
       </CardContent>
     </Card>
+
+    <!-- Stripe Connect Modal -->
+    <StripeConnectModal
+      :open="showConnectModal"
+      @update:open="showConnectModal = $event"
+      @connected="handleConnected"
+      @start-sync="handleStartSync"
+    />
   </section>
 </template>
