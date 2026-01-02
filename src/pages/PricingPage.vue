@@ -345,37 +345,17 @@ onMounted(async () => {
         </Button>
       </div>
 
-      <!-- Tabbed Results -->
-      <Tabs default-value="saas" class="space-y-6">
+      <!-- Tabbed Results - Consolidated View -->
+      <Tabs default-value="overview" class="space-y-6">
         <TabsList class="flex-wrap h-auto gap-1 p-1">
-          <TabsTrigger value="saas">SaaS Metrics</TabsTrigger>
-          <TabsTrigger value="monthly">Monthly Trends</TabsTrigger>
-          <TabsTrigger value="health">Plan Health</TabsTrigger>
-          <Tooltip v-if="!analysisResult?.meta?.hasUsageData">
-            <TooltipTrigger as-child>
-              <span class="inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 py-1.5 text-sm font-medium opacity-50 cursor-not-allowed">
-                Usage Anomalies
-              </span>
-            </TooltipTrigger>
-            <TooltipContent>Upload usage data to unlock this tab</TooltipContent>
-          </Tooltip>
-          <TabsTrigger v-else value="usage">Usage Anomalies</TabsTrigger>
-          <Tooltip v-if="!analysisResult?.meta?.hasCostData">
-            <TooltipTrigger as-child>
-              <span class="inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 py-1.5 text-sm font-medium opacity-50 cursor-not-allowed">
-                Negative Margin
-              </span>
-            </TooltipTrigger>
-            <TooltipContent>Upload AI costs data to unlock this tab</TooltipContent>
-          </Tooltip>
-          <TabsTrigger v-else value="margin">Negative Margin</TabsTrigger>
-          <TabsTrigger value="cohorts">Cohorts</TabsTrigger>
-          <TabsTrigger value="revenue">Revenue by Customer</TabsTrigger>
-          <TabsTrigger value="renewals">Renewals</TabsTrigger>
+          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="trends">Trends & Revenue</TabsTrigger>
+          <TabsTrigger value="customers">Customer Health</TabsTrigger>
+          <TabsTrigger value="risk">Risk Analysis</TabsTrigger>
         </TabsList>
 
-        <!-- ========== SaaS Metrics Tab ========== -->
-        <TabsContent value="saas" class="space-y-6">
+        <!-- ========== Overview Tab (Consolidated SaaS Metrics) ========== -->
+        <TabsContent value="overview" class="space-y-6">
           <!-- Hero Metrics - 4 column grid per PRD -->
           <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <!-- ARR Card -->
@@ -667,8 +647,8 @@ onMounted(async () => {
           />
         </TabsContent>
 
-        <!-- ========== Monthly Trends Tab ========== -->
-        <TabsContent value="monthly" class="space-y-6">
+        <!-- ========== Trends & Revenue Tab (Monthly Trends + Revenue by Customer) ========== -->
+        <TabsContent value="trends" class="space-y-6">
           <!-- MRR Trend Chart -->
           <Card>
             <CardHeader class="pb-2">
@@ -751,10 +731,130 @@ onMounted(async () => {
               </div>
             </CardContent>
           </Card>
+
+          <!-- ARR Waterfall (from Revenue by Customer) -->
+          <Card v-if="arrWaterfallData.length > 0">
+            <CardHeader class="pb-2">
+              <div class="flex items-center gap-2">
+                <CardTitle class="text-base font-semibold">ARR Waterfall</CardTitle>
+                <Tooltip>
+                  <TooltipTrigger>
+                    <Info class="h-3.5 w-3.5 text-muted-foreground/60" />
+                  </TooltipTrigger>
+                  <TooltipContent>ARR changes from new, expansion, contraction, and churn</TooltipContent>
+                </Tooltip>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div class="flex items-end gap-2 h-48">
+                <div
+                  v-for="bar in arrWaterfallData"
+                  :key="bar.label"
+                  class="flex-1 flex flex-col items-center"
+                >
+                  <span class="text-xs font-medium mb-1" :class="{
+                    'text-green-600': bar.type === 'positive',
+                    'text-red-600': bar.type === 'negative',
+                  }">
+                    {{ bar.value >= 0 ? '+' : '' }}{{ formatCurrency(bar.value) }}
+                  </span>
+                  <div
+                    class="w-full rounded-t transition-all duration-300"
+                    :class="{
+                      'bg-slate-400': bar.type === 'base',
+                      'bg-green-500': bar.type === 'positive',
+                      'bg-red-500': bar.type === 'negative',
+                      'bg-primary': bar.type === 'total',
+                    }"
+                    :style="{ height: `${Math.max(20, Math.abs(bar.value) / (analysisResult?.saasMetrics.arr || 1) * 150)}px` }"
+                  ></div>
+                  <span class="text-[10px] text-muted-foreground mt-1 text-center">
+                    {{ bar.label }}
+                  </span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <!-- Customer Revenue Table -->
+          <Card>
+            <CardHeader class="pb-2">
+              <CardTitle class="text-base font-semibold">Revenue by Customer</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div v-if="analysisResult.customerRevenue.length > 0" class="overflow-x-auto">
+                <table class="w-full">
+                  <thead>
+                    <tr class="border-b border-border">
+                      <th class="text-left p-3 font-medium text-sm">Customer</th>
+                      <th class="text-left p-3 font-medium text-sm">Plan</th>
+                      <th class="text-right p-3 font-medium text-sm">MRR</th>
+                      <th class="text-right p-3 font-medium text-sm">Change</th>
+                      <th class="text-center p-3 font-medium text-sm">Tenure</th>
+                      <th class="text-center p-3 font-medium text-sm">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr
+                      v-for="customer in analysisResult.customerRevenue.slice(0, 15)"
+                      :key="customer.customerId"
+                      class="border-b border-border hover:bg-muted/50"
+                    >
+                      <td class="p-3">
+                        <div>
+                          <p class="text-sm font-medium">{{ customer.customerName }}</p>
+                          <p class="text-xs text-muted-foreground">{{ customer.email }}</p>
+                        </div>
+                      </td>
+                      <td class="p-3 text-sm">
+                        <Badge variant="secondary">{{ customer.planName }}</Badge>
+                      </td>
+                      <td class="p-3 text-sm text-right font-mono font-medium">
+                        {{ formatTableCurrency(customer.mrr) }}
+                      </td>
+                      <td class="p-3 text-sm text-right">
+                        <div class="flex items-center justify-end gap-1">
+                          <ArrowUp v-if="customer.mrrChange > 0" class="h-3 w-3 text-green-600" />
+                          <ArrowDown v-else-if="customer.mrrChange < 0" class="h-3 w-3 text-red-600" />
+                          <Minus v-else class="h-3 w-3 text-muted-foreground" />
+                          <span
+                            class="font-mono"
+                            :class="{
+                              'text-green-600 dark:text-green-400': customer.mrrChange > 0,
+                              'text-red-600 dark:text-red-400': customer.mrrChange < 0,
+                              'text-muted-foreground': customer.mrrChange === 0,
+                            }"
+                          >
+                            {{ customer.mrrChange > 0 ? '+' : '' }}{{ formatTableCurrency(customer.mrrChange) }}
+                          </span>
+                        </div>
+                      </td>
+                      <td class="p-3 text-sm text-center text-muted-foreground">
+                        {{ customer.tenureMonths }}mo
+                      </td>
+                      <td class="p-3 text-sm text-center">
+                        <Badge
+                          :variant="customer.status === 'active' ? 'success' : customer.status === 'new' ? 'secondary' : 'destructive'"
+                        >
+                          {{ customer.status }}
+                        </Badge>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+                <p v-if="analysisResult.customerRevenue.length > 15" class="text-xs text-muted-foreground text-center mt-3">
+                  Showing top 15 of {{ analysisResult.customerRevenue.length }} customers by MRR
+                </p>
+              </div>
+              <p v-else class="text-center text-muted-foreground py-6">
+                No customer revenue data available.
+              </p>
+            </CardContent>
+          </Card>
         </TabsContent>
 
-        <!-- ========== Plan Health Tab ========== -->
-        <TabsContent value="health" class="space-y-4">
+        <!-- ========== Customer Health Tab (Plan Health + Usage Anomalies + Renewals) ========== -->
+        <TabsContent value="customers" class="space-y-6">
           <div v-if="analysisResult.planHealth.length > 0" class="overflow-x-auto">
             <table class="w-full">
               <thead>
@@ -867,69 +967,144 @@ onMounted(async () => {
               No plan health data available.
             </CardContent>
           </Card>
-        </TabsContent>
 
-        <!-- Hidden for P0 scope: Price Experiments Tab -->
-        <!--
-        <TabsContent value="experiments" class="space-y-4">
-          ... content hidden ...
-        </TabsContent>
-        -->
-
-        <!-- Hidden for P0 scope: Bundling Tab -->
-        <!--
-        <TabsContent value="bundling" class="space-y-4">
-          ... content hidden ...
-        </TabsContent>
-        -->
-
-        <!-- ========== Usage Anomalies Tab ========== -->
-        <TabsContent v-if="analysisResult.meta.hasUsageData" value="usage" class="space-y-4">
-          <div v-if="analysisResult.usageAnomalies.length > 0" class="overflow-x-auto">
-            <table class="w-full">
-              <thead>
-                <tr class="border-b border-border">
-                  <th class="text-left p-3 font-medium text-sm">Customer</th>
-                  <th class="text-left p-3 font-medium text-sm">Plan</th>
-                  <th class="text-left p-3 font-medium text-sm">Usage</th>
-                  <th class="text-left p-3 font-medium text-sm">Description</th>
-                  <th class="text-left p-3 font-medium text-sm">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr
-                  v-for="anomaly in analysisResult.usageAnomalies"
-                  :key="anomaly.customerId"
-                  class="border-b border-border hover:bg-muted/50"
-                >
-                  <td class="p-3 text-sm font-medium">{{ anomaly.customer }}</td>
-                  <td class="p-3 text-sm"><Badge variant="secondary">{{ anomaly.plan }}</Badge></td>
-                  <td class="p-3 text-sm font-mono">
-                    <span :class="anomaly.type === 'warning' ? 'text-yellow-600' : ''">
-                      {{ anomaly.usage }}
-                    </span>
-                  </td>
-                  <td class="p-3 text-sm text-muted-foreground">{{ anomaly.description }}</td>
-                  <td class="p-3 text-sm">
-                    <Badge
-                      :variant="anomaly.status === 'churn_risk' ? 'destructive' : anomaly.status === 'upsell' ? 'success' : 'secondary'"
+          <!-- Usage Anomalies Section -->
+          <Card v-if="analysisResult.meta.hasUsageData">
+            <CardHeader class="pb-2">
+              <CardTitle class="text-base font-semibold">Usage Anomalies</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div v-if="analysisResult.usageAnomalies.length > 0" class="overflow-x-auto">
+                <table class="w-full">
+                  <thead>
+                    <tr class="border-b border-border">
+                      <th class="text-left p-3 font-medium text-sm">Customer</th>
+                      <th class="text-left p-3 font-medium text-sm">Plan</th>
+                      <th class="text-left p-3 font-medium text-sm">Usage</th>
+                      <th class="text-left p-3 font-medium text-sm">Description</th>
+                      <th class="text-left p-3 font-medium text-sm">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr
+                      v-for="anomaly in analysisResult.usageAnomalies"
+                      :key="anomaly.customerId"
+                      class="border-b border-border hover:bg-muted/50"
                     >
-                      {{ anomaly.status === 'churn_risk' ? 'Churn Risk' : anomaly.status === 'upsell' ? 'Upsell Ready' : 'Anomaly' }}
-                    </Badge>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-          <Card v-else>
-            <CardContent class="p-6 text-center text-muted-foreground">
-              No usage anomalies detected.
+                      <td class="p-3 text-sm font-medium">{{ anomaly.customer }}</td>
+                      <td class="p-3 text-sm"><Badge variant="secondary">{{ anomaly.plan }}</Badge></td>
+                      <td class="p-3 text-sm font-mono">
+                        <span :class="anomaly.type === 'warning' ? 'text-orange-600 dark:text-orange-400' : 'text-green-600 dark:text-green-400'">
+                          {{ anomaly.usage }}
+                        </span>
+                      </td>
+                      <td class="p-3 text-sm text-muted-foreground">{{ anomaly.description }}</td>
+                      <td class="p-3 text-sm">
+                        <Badge
+                          :variant="anomaly.status === 'churn_risk' ? 'destructive' : anomaly.status === 'upsell' ? 'success' : 'secondary'"
+                        >
+                          {{ anomaly.status === 'churn_risk' ? 'Churn Risk' : anomaly.status === 'upsell' ? 'Upsell Ready' : 'Anomaly' }}
+                        </Badge>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <p v-else class="text-center text-muted-foreground py-4">
+                No usage anomalies detected.
+              </p>
+            </CardContent>
+          </Card>
+
+          <!-- Renewals Section -->
+          <Card>
+            <CardHeader class="pb-2">
+              <CardTitle class="text-base font-semibold">Upcoming Renewals</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <!-- Summary Stats -->
+              <div v-if="analysisResult.upcomingRenewals.length > 0" class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+                <div class="flex items-center gap-3 p-3 bg-muted/50 rounded-lg">
+                  <Calendar class="h-5 w-5 text-primary" />
+                  <div>
+                    <p class="text-xs text-muted-foreground">Renewals (90 days)</p>
+                    <p class="text-lg font-bold">{{ analysisResult.upcomingRenewals.length }}</p>
+                  </div>
+                </div>
+                <div class="flex items-center gap-3 p-3 bg-green-500/10 rounded-lg">
+                  <TrendingUp class="h-5 w-5 text-green-600" />
+                  <div>
+                    <p class="text-xs text-muted-foreground">MRR at Renewal</p>
+                    <p class="text-lg font-bold font-mono text-green-600 dark:text-green-400">
+                      {{ formatTableCurrency(analysisResult.upcomingRenewals.reduce((sum, r) => sum + r.mrr, 0)) }}
+                    </p>
+                  </div>
+                </div>
+                <div class="flex items-center gap-3 p-3 bg-red-500/10 rounded-lg">
+                  <AlertTriangle class="h-5 w-5 text-red-600" />
+                  <div>
+                    <p class="text-xs text-muted-foreground">At Risk</p>
+                    <p class="text-lg font-bold text-red-600 dark:text-red-400">
+                      {{ analysisResult.upcomingRenewals.filter(r => r.riskLevel === 'high').length }}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Renewals Table -->
+              <div v-if="analysisResult.upcomingRenewals.length > 0" class="overflow-x-auto">
+                <table class="w-full">
+                  <thead>
+                    <tr class="border-b border-border">
+                      <th class="text-left p-3 font-medium text-sm">Customer</th>
+                      <th class="text-left p-3 font-medium text-sm">Plan</th>
+                      <th class="text-right p-3 font-medium text-sm">MRR</th>
+                      <th class="text-center p-3 font-medium text-sm">Renewal Date</th>
+                      <th class="text-center p-3 font-medium text-sm">Days Left</th>
+                      <th class="text-center p-3 font-medium text-sm">Risk</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr
+                      v-for="renewal in analysisResult.upcomingRenewals"
+                      :key="renewal.customerId"
+                      class="border-b border-border hover:bg-muted/50"
+                      :class="{ 'bg-red-50/50 dark:bg-red-950/20': renewal.riskLevel === 'high' }"
+                    >
+                      <td class="p-3 text-sm font-medium">{{ renewal.customerName }}</td>
+                      <td class="p-3 text-sm"><Badge variant="secondary">{{ renewal.planName }}</Badge></td>
+                      <td class="p-3 text-sm text-right font-mono">{{ formatTableCurrency(renewal.mrr) }}</td>
+                      <td class="p-3 text-sm text-center">{{ renewal.renewalDate }}</td>
+                      <td class="p-3 text-sm text-center">
+                        <span
+                          :class="{
+                            'text-red-600 dark:text-red-400 font-medium': renewal.daysUntilRenewal <= 7,
+                            'text-orange-600 dark:text-orange-400': renewal.daysUntilRenewal <= 30 && renewal.daysUntilRenewal > 7,
+                          }"
+                        >
+                          {{ renewal.daysUntilRenewal }}
+                        </span>
+                      </td>
+                      <td class="p-3 text-sm text-center">
+                        <Badge
+                          :variant="renewal.riskLevel === 'high' ? 'destructive' : renewal.riskLevel === 'medium' ? 'secondary' : 'success'"
+                        >
+                          {{ renewal.riskLevel }}
+                        </Badge>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <p v-else class="text-center text-muted-foreground py-4">
+                No upcoming renewals found in the next 90 days.
+              </p>
             </CardContent>
           </Card>
         </TabsContent>
 
-        <!-- ========== Negative Margin Tab ========== -->
-        <TabsContent v-if="analysisResult.meta.hasCostData" value="margin" class="space-y-4">
+        <!-- ========== Risk Analysis Tab (Cohorts + Negative Margin) ========== -->
+        <TabsContent value="risk" class="space-y-6">
           <Alert v-if="analysisResult.negativeMarginCustomers.length > 0" variant="destructive">
             <AlertTriangle class="h-4 w-4" />
             <span class="font-medium">{{ analysisResult.negativeMarginCustomers.length }} customers with negative margins detected</span>
@@ -1010,11 +1185,8 @@ onMounted(async () => {
               </div>
             </CardContent>
           </Card>
-        </TabsContent>
 
-        <!-- ========== Cohorts Tab ========== -->
-        <TabsContent value="cohorts" class="space-y-6">
-          <!-- Cohort Retention Chart -->
+          <!-- Cohort Retention Section -->
           <Card v-if="analysisResult.cohorts.length > 0">
             <CardHeader class="pb-2">
               <div class="flex items-center gap-2">
@@ -1033,60 +1205,54 @@ onMounted(async () => {
           </Card>
 
           <!-- Cohort Table -->
-          <div v-if="analysisResult.cohorts.length > 0" class="overflow-x-auto">
-            <table class="w-full">
-              <thead>
-                <tr class="border-b border-border">
-                  <th class="text-left p-3 font-medium text-sm">Cohort</th>
-                  <th class="text-center p-3 font-medium text-sm">Customers</th>
-                  <th class="text-center p-3 font-medium text-sm">Active</th>
-                  <th class="text-center p-3 font-medium text-sm">Churned</th>
-                  <th class="text-center p-3 font-medium text-sm">
-                    <div class="flex items-center justify-center gap-1">
-                      Retention
-                      <Tooltip>
-                        <TooltipTrigger>
-                          <Info class="h-3 w-3 text-muted-foreground/60" />
-                        </TooltipTrigger>
-                        <TooltipContent>Percentage of customers still active</TooltipContent>
-                      </Tooltip>
-                    </div>
-                  </th>
-                  <th class="text-right p-3 font-medium text-sm">Avg MRR</th>
-                  <th class="text-right p-3 font-medium text-sm">Total MRR</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr
-                  v-for="cohort in analysisResult.cohorts"
-                  :key="cohort.cohort"
-                  class="border-b border-border hover:bg-muted/50"
-                >
-                  <td class="p-3 text-sm font-medium">{{ cohort.cohort }}</td>
-                  <td class="p-3 text-sm text-center">{{ cohort.customerCount }}</td>
-                  <td class="p-3 text-sm text-center">
-                    <span class="text-green-600 dark:text-green-400">{{ cohort.activeCount }}</span>
-                  </td>
-                  <td class="p-3 text-sm text-center">
-                    <span class="text-red-600 dark:text-red-400">{{ cohort.churnedCount }}</span>
-                  </td>
-                  <td class="p-3 text-sm text-center">
-                    <Badge
-                      :variant="cohort.retentionRate >= 80 ? 'success' : cohort.retentionRate >= 50 ? 'secondary' : 'destructive'"
+          <Card>
+            <CardHeader class="pb-2">
+              <CardTitle class="text-base font-semibold">Cohort Summary</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div v-if="analysisResult.cohorts.length > 0" class="overflow-x-auto">
+                <table class="w-full">
+                  <thead>
+                    <tr class="border-b border-border">
+                      <th class="text-left p-3 font-medium text-sm">Cohort</th>
+                      <th class="text-center p-3 font-medium text-sm">Customers</th>
+                      <th class="text-center p-3 font-medium text-sm">Active</th>
+                      <th class="text-center p-3 font-medium text-sm">Churned</th>
+                      <th class="text-center p-3 font-medium text-sm">Retention</th>
+                      <th class="text-right p-3 font-medium text-sm">Avg MRR</th>
+                      <th class="text-right p-3 font-medium text-sm">Total MRR</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr
+                      v-for="cohort in analysisResult.cohorts"
+                      :key="cohort.cohort"
+                      class="border-b border-border hover:bg-muted/50"
                     >
-                      {{ cohort.retentionRate }}%
-                    </Badge>
-                  </td>
-                  <td class="p-3 text-sm text-right font-mono">{{ cohort.avgMRR }}</td>
-                  <td class="p-3 text-sm text-right font-mono">{{ cohort.totalMRR }}</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-
-          <Card v-else>
-            <CardContent class="p-6 text-center text-muted-foreground">
-              No cohort data available.
+                      <td class="p-3 text-sm font-medium">{{ cohort.cohort }}</td>
+                      <td class="p-3 text-sm text-center">{{ cohort.customerCount }}</td>
+                      <td class="p-3 text-sm text-center">
+                        <span class="text-green-600 dark:text-green-400">{{ cohort.activeCount }}</span>
+                      </td>
+                      <td class="p-3 text-sm text-center">
+                        <span class="text-red-600 dark:text-red-400">{{ cohort.churnedCount }}</span>
+                      </td>
+                      <td class="p-3 text-sm text-center">
+                        <Badge
+                          :variant="cohort.retentionRate >= 80 ? 'success' : cohort.retentionRate >= 50 ? 'secondary' : 'destructive'"
+                        >
+                          {{ cohort.retentionRate }}%
+                        </Badge>
+                      </td>
+                      <td class="p-3 text-sm text-right font-mono">{{ cohort.avgMRR }}</td>
+                      <td class="p-3 text-sm text-right font-mono">{{ cohort.totalMRR }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <p v-else class="text-center text-muted-foreground py-4">
+                No cohort data available.
+              </p>
             </CardContent>
           </Card>
 
@@ -1147,242 +1313,6 @@ onMounted(async () => {
                   </tbody>
                 </table>
               </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <!-- ========== Revenue by Customer Tab ========== -->
-        <TabsContent value="revenue" class="space-y-6">
-          <!-- ARR Waterfall -->
-          <Card v-if="arrWaterfallData.length > 0">
-            <CardHeader class="pb-2">
-              <div class="flex items-center gap-2">
-                <CardTitle class="text-base font-semibold">ARR Waterfall</CardTitle>
-                <Tooltip>
-                  <TooltipTrigger>
-                    <Info class="h-3.5 w-3.5 text-muted-foreground/60" />
-                  </TooltipTrigger>
-                  <TooltipContent>ARR changes from new, expansion, contraction, and churn</TooltipContent>
-                </Tooltip>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div class="flex items-end gap-2 h-48">
-                <div
-                  v-for="bar in arrWaterfallData"
-                  :key="bar.label"
-                  class="flex-1 flex flex-col items-center"
-                >
-                  <span class="text-xs font-medium mb-1">
-                    {{ bar.value >= 0 ? '+' : '' }}{{ formatCurrency(bar.value) }}
-                  </span>
-                  <div
-                    class="w-full rounded-t transition-all duration-300"
-                    :class="{
-                      'bg-slate-400': bar.type === 'base',
-                      'bg-green-500': bar.type === 'positive',
-                      'bg-red-500': bar.type === 'negative',
-                      'bg-primary': bar.type === 'total',
-                    }"
-                    :style="{ height: `${Math.max(20, Math.abs(bar.value) / (analysisResult?.saasMetrics.arr || 1) * 150)}px` }"
-                  ></div>
-                  <span class="text-[10px] text-muted-foreground mt-1 text-center">
-                    {{ bar.label }}
-                  </span>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <!-- Customer Revenue Table -->
-          <div v-if="analysisResult.customerRevenue.length > 0" class="overflow-x-auto">
-            <table class="w-full">
-              <thead>
-                <tr class="border-b border-border">
-                  <th class="text-left p-3 font-medium text-sm">Customer</th>
-                  <th class="text-left p-3 font-medium text-sm">Plan</th>
-                  <th class="text-right p-3 font-medium text-sm">MRR</th>
-                  <th class="text-right p-3 font-medium text-sm">
-                    <div class="flex items-center justify-end gap-1">
-                      Change
-                      <Tooltip>
-                        <TooltipTrigger>
-                          <Info class="h-3 w-3 text-muted-foreground/60" />
-                        </TooltipTrigger>
-                        <TooltipContent>MRR change from previous period</TooltipContent>
-                      </Tooltip>
-                    </div>
-                  </th>
-                  <th class="text-center p-3 font-medium text-sm">Tenure</th>
-                  <th class="text-center p-3 font-medium text-sm">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr
-                  v-for="customer in analysisResult.customerRevenue.slice(0, 20)"
-                  :key="customer.customerId"
-                  class="border-b border-border hover:bg-muted/50"
-                >
-                  <td class="p-3">
-                    <div>
-                      <p class="text-sm font-medium">{{ customer.customerName }}</p>
-                      <p class="text-xs text-muted-foreground">{{ customer.email }}</p>
-                    </div>
-                  </td>
-                  <td class="p-3 text-sm">
-                    <Badge variant="secondary">{{ customer.planName }}</Badge>
-                  </td>
-                  <td class="p-3 text-sm text-right font-mono font-medium">
-                    {{ formatTableCurrency(customer.mrr) }}
-                  </td>
-                  <td class="p-3 text-sm text-right">
-                    <div class="flex items-center justify-end gap-1">
-                      <ArrowUp v-if="customer.mrrChange > 0" class="h-3 w-3 text-green-600" />
-                      <ArrowDown v-else-if="customer.mrrChange < 0" class="h-3 w-3 text-red-600" />
-                      <Minus v-else class="h-3 w-3 text-muted-foreground" />
-                      <span
-                        class="font-mono"
-                        :class="{
-                          'text-green-600': customer.mrrChange > 0,
-                          'text-red-600': customer.mrrChange < 0,
-                          'text-muted-foreground': customer.mrrChange === 0,
-                        }"
-                      >
-                        {{ customer.mrrChange > 0 ? '+' : customer.mrrChange < 0 ? '-' : '' }}{{ formatTableCurrency(Math.abs(customer.mrrChange)) }}
-                      </span>
-                    </div>
-                  </td>
-                  <td class="p-3 text-sm text-center text-muted-foreground">
-                    {{ customer.tenureMonths }}mo
-                  </td>
-                  <td class="p-3 text-sm text-center">
-                    <Badge
-                      :variant="customer.status === 'active' ? 'success' : customer.status === 'new' ? 'secondary' : 'destructive'"
-                    >
-                      {{ customer.status }}
-                    </Badge>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-            <p v-if="analysisResult.customerRevenue.length > 20" class="text-xs text-muted-foreground text-center mt-3">
-              Showing top 20 of {{ analysisResult.customerRevenue.length }} customers by MRR
-            </p>
-          </div>
-          <Card v-else>
-            <CardContent class="p-6 text-center text-muted-foreground">
-              No customer revenue data available.
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <!-- ========== Renewals Tab ========== -->
-        <TabsContent value="renewals" class="space-y-6">
-          <!-- Summary Cards -->
-          <div v-if="analysisResult.upcomingRenewals.length > 0" class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <Card>
-              <CardContent class="p-5">
-                <div class="flex items-center gap-3">
-                  <div class="p-2 bg-primary/10 rounded-lg">
-                    <Calendar class="h-5 w-5 text-primary" />
-                  </div>
-                  <div>
-                    <p class="text-xs text-muted-foreground">Renewals (90 days)</p>
-                    <p class="text-2xl font-bold">{{ analysisResult.upcomingRenewals.length }}</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent class="p-5">
-                <div class="flex items-center gap-3">
-                  <div class="p-2 bg-green-500/10 rounded-lg">
-                    <TrendingUp class="h-5 w-5 text-green-600" />
-                  </div>
-                  <div>
-                    <p class="text-xs text-muted-foreground">MRR at Renewal</p>
-                    <p class="text-2xl font-bold font-mono">
-                      {{ formatTableCurrency(analysisResult.upcomingRenewals.reduce((sum, r) => sum + r.mrr, 0)) }}
-                    </p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent class="p-5">
-                <div class="flex items-center gap-3">
-                  <div class="p-2 bg-red-500/10 rounded-lg">
-                    <AlertTriangle class="h-5 w-5 text-red-600" />
-                  </div>
-                  <div>
-                    <p class="text-xs text-muted-foreground">At Risk</p>
-                    <p class="text-2xl font-bold">
-                      {{ analysisResult.upcomingRenewals.filter(r => r.riskLevel === 'high').length }}
-                    </p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          <!-- Renewals Table -->
-          <div v-if="analysisResult.upcomingRenewals.length > 0" class="overflow-x-auto">
-            <table class="w-full">
-              <thead>
-                <tr class="border-b border-border">
-                  <th class="text-left p-3 font-medium text-sm">Customer</th>
-                  <th class="text-left p-3 font-medium text-sm">Plan</th>
-                  <th class="text-right p-3 font-medium text-sm">MRR</th>
-                  <th class="text-center p-3 font-medium text-sm">Renewal Date</th>
-                  <th class="text-center p-3 font-medium text-sm">Days Left</th>
-                  <th class="text-center p-3 font-medium text-sm">Risk</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr
-                  v-for="renewal in analysisResult.upcomingRenewals"
-                  :key="renewal.customerId"
-                  class="border-b border-border hover:bg-muted/50"
-                  :class="{ 'bg-red-50/50 dark:bg-red-950/20': renewal.riskLevel === 'high' }"
-                >
-                  <td class="p-3 text-sm font-medium">{{ renewal.customerName }}</td>
-                  <td class="p-3 text-sm">
-                    <Badge variant="secondary">{{ renewal.planName }}</Badge>
-                  </td>
-                  <td class="p-3 text-sm text-right font-mono">{{ formatTableCurrency(renewal.mrr) }}</td>
-                  <td class="p-3 text-sm text-center">{{ renewal.renewalDate }}</td>
-                  <td class="p-3 text-sm text-center">
-                    <span
-                      :class="{
-                        'text-red-600 font-medium': renewal.daysUntilRenewal <= 7,
-                        'text-yellow-600': renewal.daysUntilRenewal <= 30,
-                      }"
-                    >
-                      {{ renewal.daysUntilRenewal }}
-                    </span>
-                  </td>
-                  <td class="p-3 text-sm text-center">
-                    <Tooltip v-if="renewal.riskReason">
-                      <TooltipTrigger>
-                        <Badge
-                          :variant="renewal.riskLevel === 'high' ? 'destructive' : renewal.riskLevel === 'medium' ? 'secondary' : 'success'"
-                        >
-                          {{ renewal.riskLevel }}
-                        </Badge>
-                      </TooltipTrigger>
-                      <TooltipContent>{{ renewal.riskReason }}</TooltipContent>
-                    </Tooltip>
-                    <Badge v-else :variant="renewal.riskLevel === 'low' ? 'success' : 'secondary'">
-                      {{ renewal.riskLevel }}
-                    </Badge>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-          <Card v-else>
-            <CardContent class="p-6 text-center text-muted-foreground">
-              No upcoming renewals found in the next 90 days.
             </CardContent>
           </Card>
         </TabsContent>
