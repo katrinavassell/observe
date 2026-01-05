@@ -1,14 +1,16 @@
-import { createClient } from '@supabase/supabase-js'
+import { createClient, SupabaseClient } from '@supabase/supabase-js'
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error('Missing Supabase environment variables')
-}
+const isMissingCredentials = !supabaseUrl || !supabaseAnonKey
 
 // Using untyped client for now - types will be generated after schema is created
-export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+export const supabase: SupabaseClient = isMissingCredentials 
+  ? createClient('https://placeholder.supabase.co', 'placeholder-key')
+  : createClient(supabaseUrl, supabaseAnonKey)
+
+export const supabaseConfigured = !isMissingCredentials
 
 // Auth helpers
 export async function signInWithEmail(email: string, password: string) {

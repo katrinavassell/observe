@@ -10,7 +10,9 @@ export default defineConfig({
     },
   },
   server: {
-    port: 5174,
+    host: '0.0.0.0',
+    port: 5000,
+    allowedHosts: true,
     proxy: {
       // All API routes -> local dev server
       '/api': {
