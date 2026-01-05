@@ -1,4 +1,4 @@
-modules = ["vue-node-20", "nodejs-20", "web"]
+modules = ["vue-node-20", "nodejs-20", "web", "postgresql-16"]
 [agent]
 expertMode = true
 
@@ -30,10 +30,14 @@ waitForPort = 5000
 outputType = "webview"
 
 [[ports]]
+localPort = 3001
+externalPort = 3001
+
+[[ports]]
 localPort = 5000
 externalPort = 80
 
 [deployment]
 deploymentTarget = "autoscale"
-run = ["npm", "run", "preview", "--", "--host", "0.0.0.0", "--port", "5000"]
+run = ["bash", "-c", "npx tsx server/index.ts & npm run preview -- --host 0.0.0.0 --port 5000"]
 build = ["npm", "run", "build"]

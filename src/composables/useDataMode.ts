@@ -1,21 +1,26 @@
 import { ref, computed, onMounted } from 'vue'
-import { supabase } from '@/lib/supabase'
 import { logger } from '@/lib/logger'
-import {
-  getDataStatus,
-  loadSampleData as loadSampleDataApi,
-  clearUserData,
-  type DataMode,
-  type DataStatus,
-} from '@/lib/supabase-data'
+import * as api from '@/lib/api'
+
+export type DataMode = 'none' | 'sample' | 'user'
+
+export interface DataStatus {
+  data_mode: DataMode
+  has_data: boolean
+  customer_count: number
+  has_revenue: boolean
+  has_costs: boolean
+  has_usage: boolean
+  revenue_customer_count: number
+  costs_record_count: number
+  usage_record_count: number
+  last_sync_at: string | null
+}
 
 const dataStatus = ref<DataStatus | null>(null)
 const isLoading = ref(true)
 const isLoadingSample = ref(false)
 const isClearingSample = ref(false)
-
-// Track if auth listener is already set up (prevents multiple registrations)
-let authListenerInitialized = false
 
 export function useDataMode() {
   const dataMode = computed<DataMode>(() => dataStatus.value?.data_mode ?? 'none')
@@ -23,7 +28,6 @@ export function useDataMode() {
   const customerCount = computed(() => dataStatus.value?.customer_count ?? 0)
   const isSampleMode = computed(() => dataMode.value === 'sample')
 
-  // Section-level tracking
   const hasRevenue = computed(() => dataStatus.value?.has_revenue ?? false)
   const hasCosts = computed(() => dataStatus.value?.has_costs ?? false)
   const hasUsage = computed(() => dataStatus.value?.has_usage ?? false)
@@ -35,7 +39,7 @@ export function useDataMode() {
   async function refetch() {
     isLoading.value = true
     try {
-      dataStatus.value = await getDataStatus()
+      dataStatus.value = await api.getDataStatus()
     } catch (error) {
       logger.error('Failed to fetch data status', error)
       dataStatus.value = {
@@ -58,7 +62,7 @@ export function useDataMode() {
   async function switchToSampleData() {
     isLoadingSample.value = true
     try {
-      await loadSampleDataApi()
+      await api.loadSampleData()
       await refetch()
     } finally {
       isLoadingSample.value = false
@@ -68,38 +72,26 @@ export function useDataMode() {
   async function clearSample() {
     isClearingSample.value = true
     try {
-      await clearUserData()
+      await api.clearData()
       await refetch()
     } finally {
       isClearingSample.value = false
     }
   }
 
-  // Initialize on first use
   onMounted(() => {
     if (dataStatus.value === null) {
       refetch()
     }
   })
 
-  // Listen for auth changes (only register once to prevent memory leak)
-  if (!authListenerInitialized) {
-    authListenerInitialized = true
-    supabase.auth.onAuthStateChange(() => {
-      refetch()
-    })
-  }
-
   return {
-    // State
     dataMode,
     hasData,
     customerCount,
     isSampleMode,
     isLoading,
     status: dataStatus,
-
-    // Section-level state
     hasRevenue,
     hasCosts,
     hasUsage,
@@ -107,16 +99,10 @@ export function useDataMode() {
     costsRecordCount,
     usageRecordCount,
     lastSyncAt,
-
-    // Actions
     switchToSampleData,
     clearSample,
     refetch,
-
-    // Loading states
     isLoadingSample: computed(() => isLoadingSample.value),
     isClearingSample: computed(() => isClearingSample.value),
   }
 }
-
-export type { DataMode, DataStatus }
