@@ -282,6 +282,18 @@ app.get('/metrics/summary', ensureVisitor, async (req: AuthRequest, res: Respons
   }
 })
 
-app.listen(PORT, 'localhost', () => {
-  console.log(`Backend server running on http://localhost:${PORT}`)
-})
+async function startServer() {
+  try {
+    await pool.query('SELECT 1')
+    console.log('Database connection verified')
+    
+    app.listen(PORT, '127.0.0.1', () => {
+      console.log(`Backend server running on http://127.0.0.1:${PORT}`)
+    })
+  } catch (error) {
+    console.error('Failed to connect to database:', error)
+    process.exit(1)
+  }
+}
+
+startServer()

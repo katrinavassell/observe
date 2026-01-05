@@ -6,19 +6,31 @@ const isInitialized = ref(false)
 const isLoading = ref(true)
 const visitorId = ref<string | null>(null)
 
-export function useAuth() {
-  async function initialize() {
-    if (isInitialized.value) return
+async function sleep(ms: number) {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
 
-    try {
-      const result = await api.initSession()
-      visitorId.value = result.visitorId
-    } catch (error) {
-      logger.error('Failed to initialize session', error)
-    } finally {
-      isLoading.value = false
-      isInitialized.value = true
+export function useAuth() {
+  async function initialize(retries = 10, delay = 1000) {
+    if (isInitialized.value && visitorId.value) return
+
+    for (let attempt = 0; attempt < retries; attempt++) {
+      try {
+        const result = await api.initSession()
+        visitorId.value = result.visitorId
+        isInitialized.value = true
+        isLoading.value = false
+        return
+      } catch (error) {
+        if (attempt < retries - 1) {
+          await sleep(delay)
+        } else {
+          logger.error('Failed to initialize session after all retries', error)
+        }
+      }
     }
+    isLoading.value = false
+    isInitialized.value = true
   }
 
   onMounted(() => {

@@ -2,6 +2,10 @@ import { ref, computed, onMounted } from 'vue'
 import { logger } from '@/lib/logger'
 import * as api from '@/lib/api'
 
+async function sleep(ms: number) {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
 export type DataMode = 'none' | 'sample' | 'user'
 
 export interface DataStatus {
@@ -36,37 +40,53 @@ export function useDataMode() {
   const usageRecordCount = computed(() => dataStatus.value?.usage_record_count ?? 0)
   const lastSyncAt = computed(() => dataStatus.value?.last_sync_at ?? null)
 
-  async function refetch() {
+  async function refetch(retries = 5) {
     isLoading.value = true
-    try {
-      dataStatus.value = await api.getDataStatus()
-    } catch (error) {
-      logger.error('Failed to fetch data status', error)
-      dataStatus.value = {
-        data_mode: 'none',
-        has_data: false,
-        customer_count: 0,
-        has_revenue: false,
-        has_costs: false,
-        has_usage: false,
-        revenue_customer_count: 0,
-        costs_record_count: 0,
-        usage_record_count: 0,
-        last_sync_at: null,
+    for (let attempt = 0; attempt < retries; attempt++) {
+      try {
+        dataStatus.value = await api.getDataStatus()
+        isLoading.value = false
+        return
+      } catch (error) {
+        if (attempt < retries - 1) {
+          await sleep(1000)
+        } else {
+          logger.error('Failed to fetch data status', error)
+          dataStatus.value = {
+            data_mode: 'none',
+            has_data: false,
+            customer_count: 0,
+            has_revenue: false,
+            has_costs: false,
+            has_usage: false,
+            revenue_customer_count: 0,
+            costs_record_count: 0,
+            usage_record_count: 0,
+            last_sync_at: null,
+          }
+        }
       }
-    } finally {
-      isLoading.value = false
     }
+    isLoading.value = false
   }
 
-  async function switchToSampleData() {
+  async function switchToSampleData(retries = 5) {
     isLoadingSample.value = true
-    try {
-      await api.loadSampleData()
-      await refetch()
-    } finally {
-      isLoadingSample.value = false
+    for (let attempt = 0; attempt < retries; attempt++) {
+      try {
+        await api.loadSampleData()
+        await refetch()
+        isLoadingSample.value = false
+        return
+      } catch (error) {
+        if (attempt < retries - 1) {
+          await sleep(1000)
+        } else {
+          logger.error('Failed to load sample data', error)
+        }
+      }
     }
+    isLoadingSample.value = false
   }
 
   async function clearSample() {
