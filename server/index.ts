@@ -2,7 +2,6 @@ import express, { Request, Response, NextFunction } from 'express'
 import session from 'express-session'
 import pgSession from 'connect-pg-simple'
 import { Pool } from 'pg'
-import bcrypt from 'bcryptjs'
 import crypto from 'crypto'
 
 const app = express()
@@ -30,119 +29,54 @@ app.use(session({
   }),
   secret: process.env.SESSION_SECRET,
   resave: false,
-  saveUninitialized: false,
+  saveUninitialized: true,
   cookie: {
     secure: process.env.NODE_ENV === 'production',
     httpOnly: true,
     sameSite: 'lax',
-    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days for anonymous users
   },
 }))
 
 declare module 'express-session' {
   interface SessionData {
-    userId: string
+    visitorId: string
   }
 }
 
 interface AuthRequest extends Request {
-  userId?: string
+  visitorId?: string
 }
 
-function isAuthenticated(req: AuthRequest, res: Response, next: NextFunction) {
-  if (req.session.userId) {
-    req.userId = req.session.userId
+async function ensureVisitor(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    if (!req.session.visitorId) {
+      const visitorId = crypto.randomUUID()
+      req.session.visitorId = visitorId
+      
+      await pool.query(
+        'INSERT INTO user_data_status (user_id, data_mode) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+        [visitorId, 'none']
+      )
+    }
+    req.visitorId = req.session.visitorId
     next()
-  } else {
-    res.status(401).json({ error: 'Unauthorized' })
+  } catch (error) {
+    console.error('Visitor session error:', error)
+    res.status(500).json({ error: 'Session error' })
   }
 }
 
-app.post('/auth/register', async (req: Request, res: Response) => {
-  try {
-    const { email, password } = req.body
-    if (!email || !password) {
-      return res.status(400).json({ error: 'Email and password required' })
-    }
-
-    const existing = await pool.query('SELECT id FROM users WHERE email = $1', [email])
-    if (existing.rows.length > 0) {
-      return res.status(400).json({ error: 'Email already registered' })
-    }
-
-    const passwordHash = await bcrypt.hash(password, 10)
-    const result = await pool.query(
-      'INSERT INTO users (email, password_hash) VALUES ($1, $2) RETURNING id, email, created_at',
-      [email, passwordHash]
-    )
-
-    await pool.query(
-      'INSERT INTO user_data_status (user_id, data_mode) VALUES ($1, $2)',
-      [result.rows[0].id, 'none']
-    )
-
-    req.session.userId = result.rows[0].id
-    res.json({ user: { id: result.rows[0].id, email: result.rows[0].email } })
-  } catch (error) {
-    console.error('Register error:', error)
-    res.status(500).json({ error: 'Registration failed' })
-  }
+app.get('/session/init', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  res.json({ visitorId: req.visitorId })
 })
 
-app.post('/auth/login', async (req: Request, res: Response) => {
+app.get('/data/status', ensureVisitor, async (req: AuthRequest, res: Response) => {
   try {
-    const { email, password } = req.body
-    if (!email || !password) {
-      return res.status(400).json({ error: 'Email and password required' })
-    }
-
-    const result = await pool.query('SELECT id, email, password_hash FROM users WHERE email = $1', [email])
-    if (result.rows.length === 0) {
-      return res.status(401).json({ error: 'Invalid credentials' })
-    }
-
-    const user = result.rows[0]
-    const valid = await bcrypt.compare(password, user.password_hash)
-    if (!valid) {
-      return res.status(401).json({ error: 'Invalid credentials' })
-    }
-
-    req.session.userId = user.id
-    res.json({ user: { id: user.id, email: user.email } })
-  } catch (error) {
-    console.error('Login error:', error)
-    res.status(500).json({ error: 'Login failed' })
-  }
-})
-
-app.post('/auth/logout', (req: Request, res: Response) => {
-  req.session.destroy((err) => {
-    if (err) {
-      return res.status(500).json({ error: 'Logout failed' })
-    }
-    res.json({ success: true })
-  })
-})
-
-app.get('/auth/me', isAuthenticated, async (req: AuthRequest, res: Response) => {
-  try {
-    const result = await pool.query('SELECT id, email, created_at FROM users WHERE id = $1', [req.userId])
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'User not found' })
-    }
-    res.json({ user: result.rows[0] })
-  } catch (error) {
-    console.error('Get user error:', error)
-    res.status(500).json({ error: 'Failed to get user' })
-  }
-})
-
-app.get('/data/status', isAuthenticated, async (req: AuthRequest, res: Response) => {
-  try {
-    const statusResult = await pool.query('SELECT * FROM user_data_status WHERE user_id = $1', [req.userId])
-    const customersResult = await pool.query('SELECT COUNT(*) FROM customers WHERE user_id = $1', [req.userId])
-    const costsResult = await pool.query('SELECT COUNT(*) FROM cost_records WHERE user_id = $1', [req.userId])
-    const usageResult = await pool.query('SELECT COUNT(*) FROM usage_records WHERE user_id = $1', [req.userId])
+    const statusResult = await pool.query('SELECT * FROM user_data_status WHERE user_id = $1', [req.visitorId])
+    const customersResult = await pool.query('SELECT COUNT(*) FROM customers WHERE user_id = $1', [req.visitorId])
+    const costsResult = await pool.query('SELECT COUNT(*) FROM cost_records WHERE user_id = $1', [req.visitorId])
+    const usageResult = await pool.query('SELECT COUNT(*) FROM usage_records WHERE user_id = $1', [req.visitorId])
 
     const status = statusResult.rows[0] || { data_mode: 'none' }
     const customerCount = parseInt(customersResult.rows[0].count)
@@ -167,11 +101,11 @@ app.get('/data/status', isAuthenticated, async (req: AuthRequest, res: Response)
   }
 })
 
-app.get('/customers', isAuthenticated, async (req: AuthRequest, res: Response) => {
+app.get('/customers', ensureVisitor, async (req: AuthRequest, res: Response) => {
   try {
     const result = await pool.query(
       'SELECT * FROM customers WHERE user_id = $1 ORDER BY created_at DESC',
-      [req.userId]
+      [req.visitorId]
     )
     res.json(result.rows)
   } catch (error) {
@@ -180,11 +114,11 @@ app.get('/customers', isAuthenticated, async (req: AuthRequest, res: Response) =
   }
 })
 
-app.get('/subscriptions', isAuthenticated, async (req: AuthRequest, res: Response) => {
+app.get('/subscriptions', ensureVisitor, async (req: AuthRequest, res: Response) => {
   try {
     const result = await pool.query(
       'SELECT s.*, c.name as customer_name, c.email as customer_email, p.name as plan_name, p.price_amount FROM subscriptions s LEFT JOIN customers c ON s.user_id = c.user_id AND s.customer_id = c.customer_id LEFT JOIN plans p ON s.user_id = p.user_id AND s.plan_id = p.plan_id WHERE s.user_id = $1 ORDER BY s.created_at DESC',
-      [req.userId]
+      [req.visitorId]
     )
     res.json(result.rows)
   } catch (error) {
@@ -193,11 +127,11 @@ app.get('/subscriptions', isAuthenticated, async (req: AuthRequest, res: Respons
   }
 })
 
-app.get('/plans', isAuthenticated, async (req: AuthRequest, res: Response) => {
+app.get('/plans', ensureVisitor, async (req: AuthRequest, res: Response) => {
   try {
     const result = await pool.query(
       'SELECT * FROM plans WHERE user_id = $1 ORDER BY price_amount ASC',
-      [req.userId]
+      [req.visitorId]
     )
     res.json(result.rows)
   } catch (error) {
@@ -206,11 +140,11 @@ app.get('/plans', isAuthenticated, async (req: AuthRequest, res: Response) => {
   }
 })
 
-app.get('/usage', isAuthenticated, async (req: AuthRequest, res: Response) => {
+app.get('/usage', ensureVisitor, async (req: AuthRequest, res: Response) => {
   try {
     const result = await pool.query(
       'SELECT * FROM usage_records WHERE user_id = $1 ORDER BY period_start DESC',
-      [req.userId]
+      [req.visitorId]
     )
     res.json(result.rows)
   } catch (error) {
@@ -219,11 +153,11 @@ app.get('/usage', isAuthenticated, async (req: AuthRequest, res: Response) => {
   }
 })
 
-app.get('/costs', isAuthenticated, async (req: AuthRequest, res: Response) => {
+app.get('/costs', ensureVisitor, async (req: AuthRequest, res: Response) => {
   try {
     const result = await pool.query(
       'SELECT * FROM cost_records WHERE user_id = $1 ORDER BY period_start DESC',
-      [req.userId]
+      [req.visitorId]
     )
     res.json(result.rows)
   } catch (error) {
@@ -232,16 +166,16 @@ app.get('/costs', isAuthenticated, async (req: AuthRequest, res: Response) => {
   }
 })
 
-app.post('/data/sample', isAuthenticated, async (req: AuthRequest, res: Response) => {
+app.post('/data/sample', ensureVisitor, async (req: AuthRequest, res: Response) => {
   const client = await pool.connect()
   try {
     await client.query('BEGIN')
 
-    await client.query('DELETE FROM usage_records WHERE user_id = $1', [req.userId])
-    await client.query('DELETE FROM cost_records WHERE user_id = $1', [req.userId])
-    await client.query('DELETE FROM subscriptions WHERE user_id = $1', [req.userId])
-    await client.query('DELETE FROM customers WHERE user_id = $1', [req.userId])
-    await client.query('DELETE FROM plans WHERE user_id = $1', [req.userId])
+    await client.query('DELETE FROM usage_records WHERE user_id = $1', [req.visitorId])
+    await client.query('DELETE FROM cost_records WHERE user_id = $1', [req.visitorId])
+    await client.query('DELETE FROM subscriptions WHERE user_id = $1', [req.visitorId])
+    await client.query('DELETE FROM customers WHERE user_id = $1', [req.visitorId])
+    await client.query('DELETE FROM plans WHERE user_id = $1', [req.visitorId])
 
     const plans = [
       { plan_id: 'starter', name: 'Starter', price_amount: 29, interval_months: 1 },
@@ -251,7 +185,7 @@ app.post('/data/sample', isAuthenticated, async (req: AuthRequest, res: Response
     for (const plan of plans) {
       await client.query(
         'INSERT INTO plans (user_id, plan_id, name, price_amount, interval_months) VALUES ($1, $2, $3, $4, $5)',
-        [req.userId, plan.plan_id, plan.name, plan.price_amount, plan.interval_months]
+        [req.visitorId, plan.plan_id, plan.name, plan.price_amount, plan.interval_months]
       )
     }
 
@@ -265,7 +199,7 @@ app.post('/data/sample', isAuthenticated, async (req: AuthRequest, res: Response
     for (const customer of customers) {
       await client.query(
         'INSERT INTO customers (user_id, customer_id, name, email, segment) VALUES ($1, $2, $3, $4, $5)',
-        [req.userId, customer.customer_id, customer.name, customer.email, customer.segment]
+        [req.visitorId, customer.customer_id, customer.name, customer.email, customer.segment]
       )
     }
 
@@ -279,13 +213,13 @@ app.post('/data/sample', isAuthenticated, async (req: AuthRequest, res: Response
     for (const sub of subscriptions) {
       await client.query(
         'INSERT INTO subscriptions (user_id, subscription_id, customer_id, plan_id, is_active, mrr_override) VALUES ($1, $2, $3, $4, $5, $6)',
-        [req.userId, sub.subscription_id, sub.customer_id, sub.plan_id, sub.is_active, sub.mrr_override]
+        [req.visitorId, sub.subscription_id, sub.customer_id, sub.plan_id, sub.is_active, sub.mrr_override]
       )
     }
 
     await client.query(
       'INSERT INTO user_data_status (user_id, data_mode) VALUES ($1, $2) ON CONFLICT (user_id) DO UPDATE SET data_mode = $2, updated_at = NOW()',
-      [req.userId, 'sample']
+      [req.visitorId, 'sample']
     )
 
     await client.query('COMMIT')
@@ -299,18 +233,18 @@ app.post('/data/sample', isAuthenticated, async (req: AuthRequest, res: Response
   }
 })
 
-app.delete('/data/clear', isAuthenticated, async (req: AuthRequest, res: Response) => {
+app.delete('/data/clear', ensureVisitor, async (req: AuthRequest, res: Response) => {
   const client = await pool.connect()
   try {
     await client.query('BEGIN')
-    await client.query('DELETE FROM usage_records WHERE user_id = $1', [req.userId])
-    await client.query('DELETE FROM cost_records WHERE user_id = $1', [req.userId])
-    await client.query('DELETE FROM subscriptions WHERE user_id = $1', [req.userId])
-    await client.query('DELETE FROM customers WHERE user_id = $1', [req.userId])
-    await client.query('DELETE FROM plans WHERE user_id = $1', [req.userId])
+    await client.query('DELETE FROM usage_records WHERE user_id = $1', [req.visitorId])
+    await client.query('DELETE FROM cost_records WHERE user_id = $1', [req.visitorId])
+    await client.query('DELETE FROM subscriptions WHERE user_id = $1', [req.visitorId])
+    await client.query('DELETE FROM customers WHERE user_id = $1', [req.visitorId])
+    await client.query('DELETE FROM plans WHERE user_id = $1', [req.visitorId])
     await client.query(
       'UPDATE user_data_status SET data_mode = $2, updated_at = NOW() WHERE user_id = $1',
-      [req.userId, 'none']
+      [req.visitorId, 'none']
     )
     await client.query('COMMIT')
     res.json({ success: true })
@@ -323,13 +257,13 @@ app.delete('/data/clear', isAuthenticated, async (req: AuthRequest, res: Respons
   }
 })
 
-app.get('/metrics/summary', isAuthenticated, async (req: AuthRequest, res: Response) => {
+app.get('/metrics/summary', ensureVisitor, async (req: AuthRequest, res: Response) => {
   try {
-    const customersResult = await pool.query('SELECT COUNT(*) FROM customers WHERE user_id = $1', [req.userId])
-    const activeSubs = await pool.query('SELECT COUNT(*) FROM subscriptions WHERE user_id = $1 AND is_active = true', [req.userId])
+    const customersResult = await pool.query('SELECT COUNT(*) FROM customers WHERE user_id = $1', [req.visitorId])
+    const activeSubs = await pool.query('SELECT COUNT(*) FROM subscriptions WHERE user_id = $1 AND is_active = true', [req.visitorId])
     const mrrResult = await pool.query(
       'SELECT COALESCE(SUM(COALESCE(s.mrr_override, p.price_amount)), 0) as mrr FROM subscriptions s LEFT JOIN plans p ON s.user_id = p.user_id AND s.plan_id = p.plan_id WHERE s.user_id = $1 AND s.is_active = true',
-      [req.userId]
+      [req.visitorId]
     )
 
     const mrr = parseFloat(mrrResult.rows[0].mrr) || 0

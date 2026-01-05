@@ -1,11 +1,9 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
-import { LayoutDashboard, DollarSign, Plug, LogOut, Calculator } from 'lucide-vue-next'
-import { useAuth } from '@/composables/useAuth'
+import { LayoutDashboard, DollarSign, Plug, Calculator } from 'lucide-vue-next'
 
 const route = useRoute()
-const { signOut, user } = useAuth()
 
 const navItems = computed(() => [
   {
@@ -61,19 +59,6 @@ const isActive = (path: string) => route.path === path
           </router-link>
         </nav>
 
-        <!-- Footer -->
-        <div class="border-t p-4 space-y-3">
-          <div v-if="user" class="text-xs text-muted-foreground truncate" :title="user.email">
-            {{ user.email }}
-          </div>
-          <button
-            class="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors w-full"
-            @click="signOut"
-          >
-            <LogOut class="h-3.5 w-3.5" />
-            Sign out
-          </button>
-        </div>
       </div>
     </aside>
 

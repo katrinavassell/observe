@@ -56,8 +56,13 @@ Uses Replit's built-in PostgreSQL with the following tables:
 - GET /api/metrics/summary - Get MRR/ARR metrics
 
 ## Recent Changes
+- 2026-01-05: Removed login/signup requirements
+  - Users can now use the app without creating an account
+  - Anonymous sessions automatically created for each visitor
+  - Data is stored per-session for 30 days
+  - Removed Sign Out button from sidebar
 - 2026-01-05: Migrated from Supabase to Replit's built-in PostgreSQL
-  - Created Express.js backend with session auth
+  - Created Express.js backend with anonymous session support
   - Updated frontend composables to use new API
   - Set Vite to use port 5000 with host 0.0.0.0
   - Added allowedHosts: true for Replit proxy compatibility

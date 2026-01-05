@@ -26,40 +26,12 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
   return response.json()
 }
 
-export interface User {
-  id: string
-  email: string
-  created_at?: string
+export interface SessionResponse {
+  visitorId: string
 }
 
-export interface AuthResponse {
-  user: User
-}
-
-export async function register(email: string, password: string): Promise<AuthResponse> {
-  return request('/auth/register', {
-    method: 'POST',
-    body: JSON.stringify({ email, password }),
-  })
-}
-
-export async function login(email: string, password: string): Promise<AuthResponse> {
-  return request('/auth/login', {
-    method: 'POST',
-    body: JSON.stringify({ email, password }),
-  })
-}
-
-export async function logout(): Promise<{ success: boolean }> {
-  return request('/auth/logout', { method: 'POST' })
-}
-
-export async function getCurrentUser(): Promise<AuthResponse | null> {
-  try {
-    return await request('/auth/me')
-  } catch {
-    return null
-  }
+export async function initSession(): Promise<SessionResponse> {
+  return request('/session/init')
 }
 
 export interface DataStatus {
