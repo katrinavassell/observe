@@ -43,19 +43,26 @@ Uses Replit's built-in PostgreSQL with the following tables:
 - Frontend uses Vite proxy to route /api/* to backend
 
 ## API Endpoints
-- POST /api/auth/register - Create account
-- POST /api/auth/login - Login
-- POST /api/auth/logout - Logout
-- GET /api/auth/me - Get current user
+- GET /api/session/init - Initialize anonymous session
 - GET /api/data/status - Get data status
 - POST /api/data/sample - Load sample data
 - DELETE /api/data/clear - Clear user data
+- POST /api/data/upload/costs - Upload cost records from CSV
+- POST /api/data/upload/usage - Upload usage records from CSV
+- POST /api/data/upload/revenue - Upload revenue data (customers, plans, subscriptions)
 - GET /api/customers - List customers
 - GET /api/subscriptions - List subscriptions
 - GET /api/plans - List plans
+- GET /api/usage - List usage records
+- GET /api/costs - List cost records
 - GET /api/metrics/summary - Get MRR/ARR metrics
 
 ## Recent Changes
+- 2026-01-05: Migrated all upload flows from Supabase to Express backend
+  - Added backend endpoints for costs, usage, and revenue uploads
+  - Updated useStripeUpload composable to use new API
+  - Updated CostsSection and UsageSection components
+  - All data operations now use session-based anonymous auth
 - 2026-01-05: Removed login/signup requirements
   - Users can now use the app without creating an account
   - Anonymous sessions automatically created for each visitor

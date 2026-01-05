@@ -112,3 +112,67 @@ export interface MetricsSummary {
 export async function getMetricsSummary(): Promise<MetricsSummary> {
   return request('/metrics/summary')
 }
+
+// Upload endpoints
+export interface CostRecord {
+  customer_id?: string
+  month: string
+  cost: number
+  provider?: string
+}
+
+export async function uploadCostData(records: CostRecord[]): Promise<{ success: boolean; count: number }> {
+  return request('/data/upload/costs', {
+    method: 'POST',
+    body: JSON.stringify({ records }),
+  })
+}
+
+export interface UsageRecord {
+  customer_id: string
+  month: string
+  metric?: string
+  metric_key?: string
+  value?: number
+  metric_value?: number
+  limit?: number
+  metric_limit?: number
+}
+
+export async function uploadUsageData(records: UsageRecord[]): Promise<{ success: boolean; count: number }> {
+  return request('/data/upload/usage', {
+    method: 'POST',
+    body: JSON.stringify({ records }),
+  })
+}
+
+export interface RevenueUploadData {
+  customers: Array<{
+    customer_id: string
+    name: string
+    email?: string
+    segment?: string
+  }>
+  plans: Array<{
+    plan_id: string
+    name: string
+    price_amount: number
+    interval_months?: number
+  }>
+  subscriptions: Array<{
+    subscription_id: string
+    customer_id: string
+    plan_id: string
+    is_active?: boolean
+    mrr_override?: number
+    current_period_start?: string
+    current_period_end?: string
+  }>
+}
+
+export async function uploadRevenueData(data: RevenueUploadData): Promise<{ success: boolean; counts: { customers: number; plans: number; subscriptions: number } }> {
+  return request('/data/upload/revenue', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })
+}

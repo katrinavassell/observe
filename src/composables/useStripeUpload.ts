@@ -11,7 +11,7 @@
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { toast } from 'vue-sonner'
-import { supabase } from '@/lib/supabase'
+import * as api from '@/lib/api'
 import {
   parseCSVFile,
   detectStripeFileType,
@@ -20,7 +20,6 @@ import {
   parseStripeInvoices,
   reconcileStripeData,
   convertToDatabaseFormat,
-  uploadStripeData,
   formatCurrency,
   type StripeCustomer,
   type StripeSubscription,
@@ -67,38 +66,6 @@ const uploadError = ref<string | null>(null)
 
 // Drag state for dropzone
 const isDragging = ref(false)
-
-// Track if auth listener is initialized
-let authListenerInitialized = false
-
-/**
- * Clear all module-level state (used on logout)
- */
-function clearModuleState(): void {
-  stripeCustomersFile.value = null
-  stripeSubscriptionsFile.value = null
-  stripeInvoicesFile.value = null
-  stripeSampleLoaded.value = false
-  parsedCustomers.value = []
-  parsedSubscriptions.value = []
-  parsedInvoices.value = []
-  reconciliationReport.value = null
-  unifiedData.value = []
-  isReconciling.value = false
-  showReconciliation.value = false
-  isUploading.value = false
-  uploadError.value = null
-}
-
-// Listen for auth changes and clear state on logout (register only once)
-if (!authListenerInitialized) {
-  authListenerInitialized = true
-  supabase.auth.onAuthStateChange((event) => {
-    if (event === 'SIGNED_OUT') {
-      clearModuleState()
-    }
-  })
-}
 
 /**
  * Composable for managing Stripe CSV uploads and data reconciliation.
@@ -259,7 +226,7 @@ export function useStripeUpload(options: {
   }
 
   /**
-   * Upload reconciled data to Supabase and navigate to analysis.
+   * Upload reconciled data to the backend and navigate to analysis.
    */
   async function handleUploadAndContinue(): Promise<void> {
     if (!reconciliationReport.value || unifiedData.value.length === 0) {
@@ -271,13 +238,31 @@ export function useStripeUpload(options: {
     uploadError.value = null
 
     try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) {
-        throw new Error('Not authenticated')
-      }
-
-      const dbData = convertToDatabaseFormat(unifiedData.value, user.id)
-      await uploadStripeData(dbData)
+      const dbData = convertToDatabaseFormat(unifiedData.value, 'visitor')
+      
+      await api.uploadRevenueData({
+        customers: dbData.customers.map(c => ({
+          customer_id: c.customer_id,
+          name: c.name,
+          email: c.email || undefined,
+          segment: c.segment || undefined,
+        })),
+        plans: dbData.plans.map(p => ({
+          plan_id: p.plan_id,
+          name: p.name,
+          price_amount: p.price_amount,
+          interval_months: p.interval_months,
+        })),
+        subscriptions: dbData.subscriptions.map(s => ({
+          subscription_id: s.subscription_id,
+          customer_id: s.customer_id,
+          plan_id: s.plan_id,
+          is_active: s.is_active,
+          mrr_override: s.mrr_override || undefined,
+          current_period_start: s.current_period_start || undefined,
+          current_period_end: s.current_period_end || undefined,
+        })),
+      })
 
       if (options.onDataSaved) {
         await options.onDataSaved()

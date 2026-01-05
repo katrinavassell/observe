@@ -257,6 +257,152 @@ app.delete('/data/clear', ensureVisitor, async (req: AuthRequest, res: Response)
   }
 })
 
+// Upload cost records
+app.post('/data/upload/costs', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  const client = await pool.connect()
+  try {
+    const { records } = req.body
+    if (!Array.isArray(records) || records.length === 0) {
+      return res.status(400).json({ error: 'No records provided' })
+    }
+
+    await client.query('BEGIN')
+    await client.query('DELETE FROM cost_records WHERE user_id = $1', [req.visitorId])
+
+    for (const record of records) {
+      const periodStart = `${record.month}-01`
+      const periodEnd = new Date(record.month + '-01')
+      periodEnd.setMonth(periodEnd.getMonth() + 1)
+      periodEnd.setDate(0)
+
+      await client.query(
+        'INSERT INTO cost_records (user_id, customer_id, cost_type, amount, period_start, period_end) VALUES ($1, $2, $3, $4, $5, $6)',
+        [req.visitorId, record.customer_id || null, record.provider || 'infrastructure', record.cost, periodStart, periodEnd.toISOString().split('T')[0]]
+      )
+    }
+
+    await client.query(
+      'UPDATE user_data_status SET data_mode = $2, updated_at = NOW() WHERE user_id = $1',
+      [req.visitorId, 'user']
+    )
+
+    await client.query('COMMIT')
+    res.json({ success: true, count: records.length })
+  } catch (error) {
+    await client.query('ROLLBACK')
+    console.error('Upload costs error:', error)
+    res.status(500).json({ error: 'Failed to upload cost data' })
+  } finally {
+    client.release()
+  }
+})
+
+// Upload usage records
+app.post('/data/upload/usage', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  const client = await pool.connect()
+  try {
+    const { records } = req.body
+    if (!Array.isArray(records) || records.length === 0) {
+      return res.status(400).json({ error: 'No records provided' })
+    }
+
+    await client.query('BEGIN')
+    await client.query('DELETE FROM usage_records WHERE user_id = $1', [req.visitorId])
+
+    for (const record of records) {
+      const periodStart = `${record.month}-01`
+      const periodEnd = new Date(record.month + '-01')
+      periodEnd.setMonth(periodEnd.getMonth() + 1)
+      periodEnd.setDate(0)
+
+      await client.query(
+        'INSERT INTO usage_records (user_id, customer_id, metric_key, metric_value, metric_limit, period_start, period_end) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+        [req.visitorId, record.customer_id, record.metric || record.metric_key, record.value || record.metric_value, record.limit || record.metric_limit || null, periodStart, periodEnd.toISOString().split('T')[0]]
+      )
+    }
+
+    await client.query(
+      'UPDATE user_data_status SET data_mode = $2, updated_at = NOW() WHERE user_id = $1',
+      [req.visitorId, 'user']
+    )
+
+    await client.query('COMMIT')
+    res.json({ success: true, count: records.length })
+  } catch (error) {
+    await client.query('ROLLBACK')
+    console.error('Upload usage error:', error)
+    res.status(500).json({ error: 'Failed to upload usage data' })
+  } finally {
+    client.release()
+  }
+})
+
+// Upload revenue data (customers, plans, subscriptions)
+app.post('/data/upload/revenue', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  const client = await pool.connect()
+  try {
+    const { customers, plans, subscriptions } = req.body
+
+    await client.query('BEGIN')
+    
+    // Clear existing revenue data
+    await client.query('DELETE FROM subscriptions WHERE user_id = $1', [req.visitorId])
+    await client.query('DELETE FROM customers WHERE user_id = $1', [req.visitorId])
+    await client.query('DELETE FROM plans WHERE user_id = $1', [req.visitorId])
+
+    // Insert plans
+    if (Array.isArray(plans)) {
+      for (const plan of plans) {
+        await client.query(
+          'INSERT INTO plans (user_id, plan_id, name, price_amount, interval_months) VALUES ($1, $2, $3, $4, $5)',
+          [req.visitorId, plan.plan_id, plan.name, plan.price_amount, plan.interval_months || 1]
+        )
+      }
+    }
+
+    // Insert customers
+    if (Array.isArray(customers)) {
+      for (const customer of customers) {
+        await client.query(
+          'INSERT INTO customers (user_id, customer_id, name, email, segment) VALUES ($1, $2, $3, $4, $5)',
+          [req.visitorId, customer.customer_id, customer.name, customer.email || null, customer.segment || null]
+        )
+      }
+    }
+
+    // Insert subscriptions
+    if (Array.isArray(subscriptions)) {
+      for (const sub of subscriptions) {
+        await client.query(
+          'INSERT INTO subscriptions (user_id, subscription_id, customer_id, plan_id, is_active, mrr_override, current_period_start, current_period_end) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
+          [req.visitorId, sub.subscription_id, sub.customer_id, sub.plan_id, sub.is_active !== false, sub.mrr_override || null, sub.current_period_start || null, sub.current_period_end || null]
+        )
+      }
+    }
+
+    await client.query(
+      'UPDATE user_data_status SET data_mode = $2, updated_at = NOW() WHERE user_id = $1',
+      [req.visitorId, 'user']
+    )
+
+    await client.query('COMMIT')
+    res.json({ 
+      success: true, 
+      counts: {
+        customers: customers?.length || 0,
+        plans: plans?.length || 0,
+        subscriptions: subscriptions?.length || 0
+      }
+    })
+  } catch (error) {
+    await client.query('ROLLBACK')
+    console.error('Upload revenue error:', error)
+    res.status(500).json({ error: 'Failed to upload revenue data' })
+  } finally {
+    client.release()
+  }
+})
+
 app.get('/metrics/summary', ensureVisitor, async (req: AuthRequest, res: Response) => {
   try {
     const customersResult = await pool.query('SELECT COUNT(*) FROM customers WHERE user_id = $1', [req.visitorId])

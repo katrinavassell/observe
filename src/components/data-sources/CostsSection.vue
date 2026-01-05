@@ -20,7 +20,7 @@ import {
   X,
 } from 'lucide-vue-next'
 import { Card, CardContent, Button } from '@/components/ui'
-import { uploadCostData, type CostRecord } from '@/lib/supabase-data'
+import * as api from '@/lib/api'
 import {
   validateFileSize,
   validateCsvExtension,
@@ -133,7 +133,7 @@ async function processFile(file: File): Promise<void> {
         cost: parseFloat(String(r.cost)) || 0,
       }))
 
-    const result = await uploadCostData(records)
+    const result = await api.uploadCostData(records)
     emit('fileUploaded', { name: file.name, isSample: false })
 
     // Show success with validation summary
