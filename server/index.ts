@@ -166,6 +166,69 @@ app.get('/costs', ensureVisitor, async (req: AuthRequest, res: Response) => {
   }
 })
 
+app.get('/data/analyzer', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  try {
+    const [plans, customers, subscriptions, usage, costs] = await Promise.all([
+      pool.query('SELECT * FROM plans WHERE user_id = $1', [req.visitorId]),
+      pool.query('SELECT * FROM customers WHERE user_id = $1', [req.visitorId]),
+      pool.query('SELECT * FROM subscriptions WHERE user_id = $1', [req.visitorId]),
+      pool.query('SELECT * FROM usage_records WHERE user_id = $1', [req.visitorId]),
+      pool.query('SELECT * FROM cost_records WHERE user_id = $1', [req.visitorId]),
+    ])
+
+    if (customers.rows.length === 0) {
+      res.json(null)
+      return
+    }
+
+    res.json({
+      plans: plans.rows.map(p => ({
+        plan_id: p.plan_id,
+        name: p.name,
+        price_amount: Number(p.price_amount),
+        interval_months: p.interval_months || 1,
+        billing_model: p.billing_model || 'recurring',
+      })),
+      customers: customers.rows.map(c => ({
+        customer_id: c.customer_id,
+        name: c.name,
+        email: c.email || undefined,
+        segment: c.segment || undefined,
+        created_at: c.created_at,
+      })),
+      subscriptions: subscriptions.rows.map(s => ({
+        subscription_id: s.subscription_id,
+        customer_id: s.customer_id,
+        plan_id: s.plan_id,
+        is_active: s.is_active,
+        mrr_override: s.mrr_override ? Number(s.mrr_override) : undefined,
+        previous_mrr: s.previous_mrr ? Number(s.previous_mrr) : undefined,
+        current_period_start: s.current_period_start,
+        current_period_end: s.current_period_end,
+        cancelled_at: s.cancelled_at,
+      })),
+      usageRecords: usage.rows.map(u => ({
+        customer_id: u.customer_id,
+        metric_key: u.metric_key,
+        metric_value: Number(u.metric_value),
+        metric_limit: u.metric_limit ? Number(u.metric_limit) : undefined,
+        period_start: u.period_start,
+        period_end: u.period_end,
+      })),
+      costRecords: costs.rows.map(c => ({
+        customer_id: c.customer_id || undefined,
+        cost_type: c.cost_type,
+        amount: Number(c.amount),
+        period_start: c.period_start,
+        period_end: c.period_end,
+      })),
+    })
+  } catch (error) {
+    console.error('Get analyzer data error:', error)
+    res.status(500).json({ error: 'Failed to get analyzer data' })
+  }
+})
+
 app.post('/data/sample', ensureVisitor, async (req: AuthRequest, res: Response) => {
   const client = await pool.connect()
   try {

@@ -176,3 +176,50 @@ export async function uploadRevenueData(data: RevenueUploadData): Promise<{ succ
     body: JSON.stringify(data),
   })
 }
+
+export interface AnalyzerData {
+  plans: Array<{
+    plan_id: string
+    name: string
+    price_amount: number
+    interval_months: number
+    billing_model: 'recurring' | 'usage_based' | 'hybrid'
+  }>
+  customers: Array<{
+    customer_id: string
+    name: string
+    email?: string
+    segment?: string
+    created_at: string
+  }>
+  subscriptions: Array<{
+    subscription_id: string
+    customer_id: string
+    plan_id: string
+    is_active: boolean
+    mrr_override?: number
+    previous_mrr?: number
+    current_period_start?: string
+    current_period_end?: string
+    cancelled_at?: string
+  }>
+  usageRecords: Array<{
+    customer_id: string
+    metric_key: string
+    metric_value: number
+    metric_limit?: number
+    period_start: string
+    period_end: string
+  }>
+  costRecords: Array<{
+    customer_id?: string
+    cost_type: string
+    amount: number
+    period_start: string
+    period_end: string
+  }>
+}
+
+export async function fetchAnalyzerData(): Promise<AnalyzerData | null> {
+  return request('/data/analyzer')
+}

@@ -45,6 +45,7 @@ Uses Replit's built-in PostgreSQL with the following tables:
 ## API Endpoints
 - GET /api/session/init - Initialize anonymous session
 - GET /api/data/status - Get data status
+- GET /api/data/analyzer - Get all data for pricing analyzer
 - POST /api/data/sample - Load sample data
 - DELETE /api/data/clear - Clear user data
 - POST /api/data/upload/costs - Upload cost records from CSV

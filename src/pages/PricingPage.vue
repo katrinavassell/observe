@@ -45,10 +45,7 @@ import { SimulationModal } from '@/components/simulation'
 import { analyzeData, type AnalysisResult } from '@/lib/pricing-analyzer'
 import { getSampleDataSummary } from '@/lib/sample-data'
 import { useDataMode } from '@/composables/useDataMode'
-import {
-  loadSampleData as loadSampleDataToSupabase,
-  fetchAnalyzerData,
-} from '@/lib/supabase-data'
+import * as api from '@/lib/api'
 import { toast } from 'vue-sonner'
 
 // =============================================================================
@@ -140,11 +137,9 @@ async function loadSampleData() {
   }, 80)
 
   try {
-    // Load sample data to Supabase
-    await loadSampleDataToSupabase()
+    await api.loadSampleData()
 
-    // Fetch and analyze the data
-    const data = await fetchAnalyzerData()
+    const data = await api.fetchAnalyzerData()
     if (data) {
       try {
         analysisResult.value = analyzeData(data)
@@ -161,7 +156,6 @@ async function loadSampleData() {
     dataSource.value = 'sample'
     analysisComplete.value = true
 
-    // Refresh data mode status
     await refetchDataMode()
   } catch (err: unknown) {
     clearInterval(progressInterval)
@@ -176,7 +170,7 @@ async function loadExistingData() {
   error.value = null
 
   try {
-    const data = await fetchAnalyzerData()
+    const data = await api.fetchAnalyzerData()
     if (data) {
       try {
         analysisResult.value = analyzeData(data)
@@ -186,7 +180,6 @@ async function loadExistingData() {
       dataSource.value = dataMode.value as 'sample' | 'user'
       analysisComplete.value = true
     } else {
-      // No data available - this is expected for new users, not an error
       analysisComplete.value = false
     }
   } catch (err: unknown) {
