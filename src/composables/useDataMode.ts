@@ -72,6 +72,7 @@ export function useDataMode() {
 
   async function switchToSampleData(retries = 5) {
     isLoadingSample.value = true
+    let lastError: Error | null = null
     for (let attempt = 0; attempt < retries; attempt++) {
       try {
         await api.loadSampleData()
@@ -79,6 +80,7 @@ export function useDataMode() {
         isLoadingSample.value = false
         return
       } catch (error) {
+        lastError = error instanceof Error ? error : new Error(String(error))
         if (attempt < retries - 1) {
           await sleep(1000)
         } else {
@@ -87,6 +89,7 @@ export function useDataMode() {
       }
     }
     isLoadingSample.value = false
+    if (lastError) throw lastError
   }
 
   async function clearSample() {
