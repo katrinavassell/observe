@@ -23,7 +23,6 @@ import {
 import StripeApiKeyModal from '@/components/integrations/StripeApiKeyModal.vue'
 import { useDataMode } from '@/composables/useDataMode'
 import {
-  loadSampleData as loadSampleDataToSupabase,
   loadSampleRevenue,
   loadSampleCosts,
   loadSampleUsage,
@@ -43,6 +42,7 @@ const {
   hasCosts,
   hasUsage,
   lastSyncAt,
+  switchToSampleData,
 } = useDataMode()
 
 // Sync cadence constants (best practices for billing data)
@@ -131,7 +131,7 @@ onUnmounted(() => {
 async function handleTrySampleData(): Promise<void> {
   isLoadingSample.value = true
   try {
-    await loadSampleDataToSupabase()
+    await switchToSampleData()
     await refetchDataMode()
 
     // Update file indicators
