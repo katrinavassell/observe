@@ -129,9 +129,12 @@ onUnmounted(() => {
  * This is the primary CTA for trying the product.
  */
 async function handleTrySampleData(): Promise<void> {
+  console.log('[Sample Data] Button clicked, starting load...')
   isLoadingSample.value = true
   try {
+    console.log('[Sample Data] Calling switchToSampleData...')
     await switchToSampleData()
+    console.log('[Sample Data] switchToSampleData completed, refetching...')
     await refetchDataMode()
 
     // Update file indicators
