@@ -84,8 +84,14 @@ const revenueSectionRef = ref<InstanceType<typeof RevenueSection> | null>(null)
 // =============================================================================
 
 onMounted(async () => {
-  // Stripe integration requires configuration — default to not connected
-  isStripeConnected.value = false
+  try {
+    const { getStripeStatus } = await import('@/lib/api')
+    const status = await getStripeStatus()
+    isStripeConnected.value = status.connected
+    stripeAccountName.value = status.account_name || ''
+  } catch {
+    isStripeConnected.value = false
+  }
 })
 
 onUnmounted(() => {
@@ -269,43 +275,18 @@ async function handleStripeConnected(accountName: string): Promise<void> {
 }
 
 async function handleStripeSync(): Promise<void> {
-  if (isSyncing.value) return // Prevent duplicate syncs
+  if (isSyncing.value) return
 
   isSyncing.value = true
   try {
-    const { syncStripeDataEnhanced } = await import('@/api/client')
-    const { uploadRevenueData } = await import('@/lib/api')
-    const result = await syncStripeDataEnhanced()
+    const { syncStripeData } = await import('@/lib/api')
+    const result = await syncStripeData()
 
-    // Build revenue data from Stripe sync result
-    const planMap = new Map<string, { plan_id: string; name: string; price_amount: number }>()
-    for (const product of result.products) {
-      const price = result.prices.find((p: { product_id: string; active: boolean; unit_amount: number }) => p.product_id === product.id && p.active)
-      if (price) {
-        planMap.set(product.id, { plan_id: product.id, name: product.name, price_amount: price.unit_amount || 0 })
-      }
+    if (result.success) {
+      toast.success(`Synced ${result.synced.customers} customers, ${result.synced.subscriptions} subscriptions`)
+      revenueFiles.value = { customers: true, subscriptions: true, invoices: false }
+      await refetchDataMode()
     }
-
-    await uploadRevenueData({
-      customers: result.customers.map((c: { id: string; name: string; email: string; segment: string }) => ({
-        customer_id: c.id,
-        name: c.name || c.email || c.id,
-        email: c.email,
-        segment: c.segment,
-      })),
-      plans: Array.from(planMap.values()),
-      subscriptions: result.subscriptions
-        .filter((s: { status: string }) => s.status === 'active' || s.status === 'trialing')
-        .map((s: { id: string; customer_id: string; items: Array<{ product_id: string }> }) => ({
-          subscription_id: s.id,
-          customer_id: s.customer_id,
-          plan_id: s.items[0]?.product_id || 'unknown',
-          is_active: true,
-        })),
-    })
-
-    toast.success(`Synced ${result.summary.total_customers} customers, ${result.summary.active_subscriptions} subscriptions`)
-    await refetchDataMode()
   } catch (error) {
     toast.error('Sync failed', {
       description: error instanceof Error ? error.message : 'Please try again',

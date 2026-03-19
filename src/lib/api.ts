@@ -235,3 +235,31 @@ export interface AnalyzerData {
 export async function fetchAnalyzerData(): Promise<AnalyzerData | null> {
   return request('/data/analyzer')
 }
+
+// =============================================================================
+// STRIPE NATIVE INTEGRATION
+// =============================================================================
+
+export interface StripeStatus {
+  connected: boolean
+  account_id?: string
+  account_name?: string
+  error?: string
+}
+
+export async function getStripeStatus(): Promise<StripeStatus> {
+  return request('/stripe/status')
+}
+
+export interface StripeSyncResult {
+  success: boolean
+  synced: {
+    customers: number
+    subscriptions: number
+    plans: number
+  }
+}
+
+export async function syncStripeData(): Promise<StripeSyncResult> {
+  return request('/stripe/sync', { method: 'POST' })
+}

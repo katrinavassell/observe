@@ -3,6 +3,7 @@ import session from 'express-session'
 import pgSession from 'connect-pg-simple'
 import { Pool } from 'pg'
 import crypto from 'crypto'
+import { getUncachableStripeClient } from './stripe-client'
 
 const app = express()
 const PORT = 3001
@@ -539,5 +540,115 @@ async function startServer() {
     process.exit(1)
   }
 }
+
+// =============================================================================
+// STRIPE NATIVE INTEGRATION
+// =============================================================================
+
+// Check Stripe connection status (via native Replit integration)
+app.get('/stripe/status', ensureVisitor, async (_req: AuthRequest, res: Response) => {
+  try {
+    const stripe = await getUncachableStripeClient()
+    const account = await stripe.accounts.retrieve()
+    res.json({
+      connected: true,
+      account_id: account.id,
+      account_name: (account as { business_profile?: { name?: string }; display_name?: string }).business_profile?.name
+        || (account as { display_name?: string }).display_name
+        || account.id,
+    })
+  } catch (error) {
+    res.json({ connected: false, error: error instanceof Error ? error.message : 'Not connected' })
+  }
+})
+
+// Sync data from Stripe into the user's session
+app.post('/stripe/sync', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  const client = await pool.connect()
+  try {
+    const stripe = await getUncachableStripeClient()
+
+    // Fetch data from Stripe
+    const [stripeCustomers, stripeSubscriptions, stripeProducts] = await Promise.all([
+      stripe.customers.list({ limit: 100 }),
+      stripe.subscriptions.list({ limit: 100, status: 'all' }),
+      stripe.products.list({ limit: 100, active: true }),
+    ])
+
+    // Build plan map from products+prices
+    const pricesResult = await stripe.prices.list({ limit: 100, active: true })
+    const prices = pricesResult.data
+
+    await client.query('BEGIN')
+
+    // Clear existing revenue data
+    await client.query('DELETE FROM subscriptions WHERE user_id = $1', [req.visitorId])
+    await client.query('DELETE FROM customers WHERE user_id = $1', [req.visitorId])
+    await client.query('DELETE FROM plans WHERE user_id = $1', [req.visitorId])
+
+    // Insert plans (from Stripe products + prices)
+    const planIds = new Set<string>()
+    for (const price of prices) {
+      const planId = price.id
+      if (planIds.has(planId)) continue
+      planIds.add(planId)
+      const product = stripeProducts.data.find(p => p.id === (typeof price.product === 'string' ? price.product : price.product?.id))
+      const name = product?.name || planId
+      const amount = (price.unit_amount || 0) / 100
+      const intervalMonths = price.recurring?.interval === 'year' ? 12 : 1
+      await client.query(
+        'INSERT INTO plans (user_id, plan_id, name, price_amount, interval_months, billing_model) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT DO NOTHING',
+        [req.visitorId, planId, name, amount, intervalMonths, 'recurring']
+      )
+    }
+
+    // Insert customers
+    for (const customer of stripeCustomers.data) {
+      if (typeof customer === 'string') continue
+      await client.query(
+        'INSERT INTO customers (user_id, customer_id, name, email) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING',
+        [req.visitorId, customer.id, customer.name || customer.email || customer.id, customer.email || null]
+      )
+    }
+
+    // Insert subscriptions
+    let syncedSubs = 0
+    for (const sub of stripeSubscriptions.data) {
+      const priceId = sub.items?.data?.[0]?.price?.id
+      if (!priceId) continue
+      const unitAmount = sub.items.data[0].price.unit_amount || 0
+      const mrr = sub.items.data[0].price.recurring?.interval === 'year'
+        ? Math.round(unitAmount / 12 / 100)
+        : Math.round(unitAmount / 100)
+      await client.query(
+        'INSERT INTO subscriptions (user_id, subscription_id, customer_id, plan_id, is_active, mrr_override) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT DO NOTHING',
+        [req.visitorId, sub.id, sub.customer as string, priceId, sub.status === 'active', mrr]
+      )
+      syncedSubs++
+    }
+
+    await client.query(
+      'INSERT INTO user_data_status (user_id, data_mode) VALUES ($1, $2) ON CONFLICT (user_id) DO UPDATE SET data_mode = $2, updated_at = NOW()',
+      [req.visitorId, 'user']
+    )
+
+    await client.query('COMMIT')
+
+    res.json({
+      success: true,
+      synced: {
+        customers: stripeCustomers.data.length,
+        subscriptions: syncedSubs,
+        plans: planIds.size,
+      },
+    })
+  } catch (error) {
+    await client.query('ROLLBACK')
+    console.error('Stripe sync error:', error)
+    res.status(500).json({ error: error instanceof Error ? error.message : 'Stripe sync failed' })
+  } finally {
+    client.release()
+  }
+})
 
 startServer()
