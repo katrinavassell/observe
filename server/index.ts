@@ -550,10 +550,11 @@ app.post('/data/upload/revenue', ensureVisitor, async (req: AuthRequest, res: Re
       }
     }
 
-    // Dual-write subscriptions to observe_events
+    // Dual-write subscriptions to observe_events (use plan price as MRR fallback)
     if (Array.isArray(subscriptions)) {
+      const planPriceMap = new Map((plans || []).map((p: { plan_id: string; price_amount: number }) => [p.plan_id, parseFloat(p.price_amount as unknown as string) || 0]))
       for (const sub of subscriptions) {
-        const mrr = sub.mrr_override || 0
+        const mrr = sub.mrr_override || planPriceMap.get(sub.plan_id) || 0
         await client.query(
           `INSERT INTO observe_events (user_id, customer_id, feature_key, event_name, timestamp, revenue_amount, source, granularity)
            VALUES ($1, $2, 'subscription', 'revenue', NOW(), $3, 'csv', 'monthly_aggregate')`,

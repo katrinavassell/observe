@@ -2,7 +2,7 @@
 import { ref, computed } from 'vue'
 import { useQuery } from '@tanstack/vue-query'
 import { useRouter } from 'vue-router'
-import { getEvents, getEventsByCustomer, getFeatures, type ObserveEvent } from '@/lib/api'
+import { getEvents, getEventsByCustomer, getEventsByModel, getFeatures, type ObserveEvent } from '@/lib/api'
 import { Activity, ChevronRight, Filter, X } from 'lucide-vue-next'
 import MarginBadge from '@/components/shared/MarginBadge.vue'
 
@@ -49,11 +49,14 @@ const { data: customerAgg } = useQuery({
   queryFn: getEventsByCustomer,
 })
 
-const uniqueModels = computed(() => {
-  const models = new Set<string>()
-  eventsData.value?.events.forEach(e => { if (e.model) models.add(e.model) })
-  return Array.from(models).sort()
+const { data: modelAgg } = useQuery({
+  queryKey: ['events-by-model'],
+  queryFn: getEventsByModel,
 })
+
+const uniqueModels = computed(() =>
+  (modelAgg.value || []).map(m => m.model).sort()
+)
 
 const hasFilters = computed(() =>
   selectedFeature.value || selectedCustomer.value || selectedModel.value ||
