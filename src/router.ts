@@ -13,6 +13,11 @@ const router = createRouter({
       redirect: '/',
     },
     {
+      path: '/analytics',
+      name: 'analytics',
+      component: () => import('@/pages/AnalyticsPage.vue'),
+    },
+    {
       path: '/events',
       name: 'events',
       component: () => import('@/pages/EventsPage.vue'),

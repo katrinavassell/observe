@@ -4,6 +4,7 @@ import { useRoute } from 'vue-router'
 import {
   LayoutDashboard,
   DollarSign,
+  BarChart3,
   Plug,
   FlaskConical,
   Activity,
@@ -21,6 +22,12 @@ const navItems = computed(() => [
     label: 'Pricing',
     icon: DollarSign,
     description: 'Margin analysis & plan health',
+  },
+  {
+    path: '/analytics',
+    label: 'Analytics',
+    icon: BarChart3,
+    description: 'Revenue, costs & margin overview',
   },
   {
     path: '/events',
