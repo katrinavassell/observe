@@ -11,7 +11,7 @@
 
 import { ref, watch, onMounted, onUnmounted } from 'vue'
 import { toast } from 'vue-sonner'
-import { TrendingUp } from 'lucide-vue-next'
+import { TrendingUp, FlaskConical } from 'lucide-vue-next'
 import { Card, CardContent, Button } from '@/components/ui'
 import {
   RevenueSection,
@@ -21,6 +21,7 @@ import {
 } from '@/components/data-sources'
 import StripeApiKeyModal from '@/components/integrations/StripeApiKeyModal.vue'
 import { useDataMode } from '@/composables/useDataMode'
+import { useDemoMode } from '@/composables/useDemoMode'
 import {
   loadSampleData,
   clearRevenueData,
@@ -41,6 +42,8 @@ const {
   lastSyncAt,
   switchToSampleData,
 } = useDataMode()
+
+const { isDemoMode, isLoadingDemo, enterDemoMode } = useDemoMode()
 
 // Sync cadence constants (best practices for billing data)
 const SYNC_STALE_THRESHOLD_MS = 60 * 60 * 1000 // 1 hour - sync if older
@@ -370,30 +373,50 @@ watch(
       </p>
     </div>
 
-    <!-- Sample Data Hero -->
-    <Card class="border-primary/30 bg-gradient-to-br from-primary/5 to-primary/10">
+    <!-- Demo Mode Notice (when already in demo) -->
+    <Card v-if="isDemoMode" class="border-amber-400/50 bg-amber-50 dark:bg-amber-950/20">
       <CardContent class="p-6">
-        <div class="flex items-center gap-2 mb-3">
-          <TrendingUp class="h-5 w-5 text-primary" />
-          <h2 class="font-semibold">See it in action first</h2>
+        <div class="flex items-center gap-2 mb-2">
+          <FlaskConical class="h-5 w-5 text-amber-600" />
+          <h2 class="font-semibold text-amber-800 dark:text-amber-300">You're in demo mode</h2>
         </div>
-        <p class="text-sm text-muted-foreground mb-4">
-          Load 6 months of realistic SaaS data:
+        <p class="text-sm text-amber-700 dark:text-amber-400">
+          You're exploring Tanso with realistic demo data. Data import and connection features are disabled in demo mode.
+          Exit the demo from the banner above to connect your own data.
         </p>
-        <ul class="text-sm text-muted-foreground space-y-1 mb-5">
-          <li>- 30 customers across 4 pricing tiers</li>
-          <li>- Revenue, costs, and usage data</li>
-          <li>- Real margin compression and churn risk scenarios</li>
-        </ul>
-        <Button @click="handleTrySampleData" :disabled="isLoadingSample">
-          <TrendingUp class="h-4 w-4 mr-2" />
-          {{ isLoadingSample ? 'Loading...' : 'Try Sample Data' }}
-        </Button>
       </CardContent>
     </Card>
 
-    <!-- Divider -->
-    <div class="relative">
+    <!-- Try Demo Hero (only when not in demo mode) -->
+    <Card v-else class="border-primary/30 bg-gradient-to-br from-primary/5 to-primary/10">
+      <CardContent class="p-6">
+        <div class="flex items-center gap-2 mb-3">
+          <FlaskConical class="h-5 w-5 text-primary" />
+          <h2 class="font-semibold">Try Demo Mode</h2>
+        </div>
+        <p class="text-sm text-muted-foreground mb-4">
+          Explore the full dashboard with realistic pre-loaded SaaS data — no setup required:
+        </p>
+        <ul class="text-sm text-muted-foreground space-y-1 mb-5">
+          <li>- 5 customers across Starter, Pro, and Enterprise plans</li>
+          <li>- Revenue, AI costs, and feature usage data</li>
+          <li>- Feature-level margin and model cost analytics</li>
+        </ul>
+        <div class="flex items-center gap-3">
+          <Button @click="enterDemoMode" :disabled="isLoadingDemo">
+            <FlaskConical class="h-4 w-4 mr-2" />
+            {{ isLoadingDemo ? 'Loading Demo...' : 'Try Demo' }}
+          </Button>
+          <Button variant="outline" @click="handleTrySampleData" :disabled="isLoadingSample">
+            <TrendingUp class="h-4 w-4 mr-2" />
+            {{ isLoadingSample ? 'Loading...' : 'Load Sample Data Only' }}
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+
+    <!-- Divider (hidden in demo mode) -->
+    <div v-if="!isDemoMode" class="relative">
       <div class="absolute inset-0 flex items-center">
         <div class="w-full border-t"></div>
       </div>
@@ -402,8 +425,9 @@ watch(
       </div>
     </div>
 
-    <!-- Revenue Section -->
+    <!-- Revenue Section (hidden in demo mode) -->
     <RevenueSection
+      v-if="!isDemoMode"
       ref="revenueSectionRef"
       :is-loading-sample="isLoadingRevenue"
       :is-stripe-connected="isStripeConnected"
@@ -417,8 +441,9 @@ watch(
       @all-files-cleared="handleRevenueFilesCleared"
     />
 
-    <!-- Costs Section -->
+    <!-- Costs Section (hidden in demo mode) -->
     <CostsSection
+      v-if="!isDemoMode"
       :file="costsFile"
       :is-loading-sample="isLoadingCosts"
       @file-uploaded="handleCostsFileUploaded"
@@ -426,8 +451,9 @@ watch(
       @use-sample="handleUseSampleCosts"
     />
 
-    <!-- Usage Section -->
+    <!-- Usage Section (hidden in demo mode) -->
     <UsageSection
+      v-if="!isDemoMode"
       :file="usageFile"
       :is-loading-sample="isLoadingUsage"
       @file-uploaded="handleUsageFileUploaded"
@@ -435,8 +461,8 @@ watch(
       @use-sample="handleUseSampleUsage"
     />
 
-    <!-- Coming Soon Section -->
-    <ComingSoonSection />
+    <!-- Coming Soon Section (hidden in demo mode) -->
+    <ComingSoonSection v-if="!isDemoMode" />
   </div>
 
   <!-- Stripe API Key Modal -->

@@ -1,0 +1,42 @@
+import { ref, computed } from 'vue'
+import { useRouter } from 'vue-router'
+import { useDataMode } from '@/composables/useDataMode'
+import { logger } from '@/lib/logger'
+
+const isDemoActive = ref(false)
+
+export function useDemoMode() {
+  const router = useRouter()
+  const { switchToSampleData, clearSample, isLoadingSample } = useDataMode()
+
+  const isDemoMode = computed(() => isDemoActive.value)
+
+  async function enterDemoMode() {
+    try {
+      await switchToSampleData()
+      isDemoActive.value = true
+      router.push('/')
+    } catch (error) {
+      logger.error('Failed to enter demo mode', error)
+      throw error
+    }
+  }
+
+  async function exitDemoMode() {
+    try {
+      await clearSample()
+    } catch (error) {
+      logger.error('Failed to exit demo mode', error)
+    } finally {
+      isDemoActive.value = false
+      router.push('/data-sources')
+    }
+  }
+
+  return {
+    isDemoMode,
+    isLoadingDemo: isLoadingSample,
+    enterDemoMode,
+    exitDemoMode,
+  }
+}

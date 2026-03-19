@@ -10,9 +10,13 @@ import {
   Layers,
   Cpu,
   Users,
+  FlaskConical,
+  X,
 } from 'lucide-vue-next'
+import { useDemoMode } from '@/composables/useDemoMode'
 
 const route = useRoute()
+const { isDemoMode, exitDemoMode, isLoadingDemo } = useDemoMode()
 
 const navItems = computed(() => [
   {
@@ -104,6 +108,25 @@ function isActive(path: string) {
 
     <!-- Main Content -->
     <main class="ml-64 flex-1">
+      <!-- Demo Mode Banner -->
+      <div
+        v-if="isDemoMode"
+        class="sticky top-0 z-30 flex items-center justify-between gap-3 bg-amber-500 px-4 py-2 text-amber-950"
+      >
+        <div class="flex items-center gap-2 text-sm font-medium">
+          <FlaskConical class="h-4 w-4 shrink-0" />
+          You're viewing demo data — changes are not saved
+        </div>
+        <button
+          class="flex items-center gap-1.5 rounded-md bg-amber-600/30 px-3 py-1 text-xs font-semibold hover:bg-amber-600/50 transition-colors disabled:opacity-50"
+          :disabled="isLoadingDemo"
+          @click="exitDemoMode"
+        >
+          <X class="h-3 w-3" />
+          Exit Demo
+        </button>
+      </div>
+
       <div class="container py-8">
         <slot />
       </div>

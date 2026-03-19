@@ -5,19 +5,21 @@
 
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { RefreshCw, Loader2 } from 'lucide-vue-next'
+import { RefreshCw, Loader2, FlaskConical } from 'lucide-vue-next'
 import { Card, CardContent, Badge, Button } from '@/components/ui'
 import { PricingSimulatorPanel } from '@/components/pricing'
 import type { PlanPrice } from '@/components/pricing'
 import { analyzeData, type AnalysisResult } from '@/lib/pricing-analyzer'
 import * as api from '@/lib/api'
 import { useDataMode } from '@/composables/useDataMode'
+import { useDemoMode } from '@/composables/useDemoMode'
 import { toast } from 'vue-sonner'
 
 const router = useRouter()
 const isLoading = ref(false)
 const analysisResult = ref<AnalysisResult | null>(null)
 const { dataMode, hasData } = useDataMode()
+const { enterDemoMode, isLoadingDemo } = useDemoMode()
 
 const planPrices = computed<PlanPrice[]>(() => {
   if (!analysisResult.value) return []
@@ -53,8 +55,7 @@ async function loadData() {
     if (data) {
       analysisResult.value = analyzeData(data)
     } else {
-      toast.error('No data available. Please import data first.')
-      router.push('/data-sources')
+      analysisResult.value = null
     }
   } catch (err) {
     console.error('Failed to load data:', err)
@@ -136,12 +137,18 @@ watch(dataMode, () => {
         <Card>
           <CardContent class="py-12 text-center">
             <p class="text-lg font-medium mb-2">No Data Available</p>
-            <p class="text-sm text-muted-foreground mb-4">
-              Import your data to start simulating pricing changes.
+            <p class="text-sm text-muted-foreground mb-6">
+              Try the demo to explore pricing simulation with realistic data, or import your own.
             </p>
-            <Button @click="router.push('/data-sources')">
-              Import Data
-            </Button>
+            <div class="flex items-center justify-center gap-3">
+              <Button @click="enterDemoMode" :disabled="isLoadingDemo">
+                <FlaskConical class="h-4 w-4 mr-2" />
+                {{ isLoadingDemo ? 'Loading Demo...' : 'Try Demo' }}
+              </Button>
+              <Button variant="outline" @click="router.push('/data-sources')">
+                Import Data
+              </Button>
+            </div>
           </CardContent>
         </Card>
       </template>
