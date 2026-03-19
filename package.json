@@ -13,6 +13,7 @@
     "lint:fix": "eslint src/ --fix"
   },
   "dependencies": {
+    "@replit/connectors-sdk": "^0.3.0",
     "@supabase/supabase-js": "^2.89.0",
     "@tanstack/vue-query": "^5.92.3",
     "@types/bcryptjs": "^2.4.6",
