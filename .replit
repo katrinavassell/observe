@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 modules = ["vue-node-20", "nodejs-20", "web", "python-3.11", "postgresql-16"]
+=======
+modules = ["vue-node-20", "nodejs-20", "web", "postgresql-16", "python-3.11"]
+>>>>>>> f7e662903ad2d8370f334f3dceee181ceaeabbb3
 [agent]
 expertMode = true
 integrations = ["stripe:1.0.0", "github:1.0.0"]
@@ -39,10 +43,13 @@ exposeLocalhost = true
 localPort = 5000
 externalPort = 80
 
+<<<<<<< HEAD
 [[ports]]
 localPort = 5001
 externalPort = 3000
 
+=======
+>>>>>>> f7e662903ad2d8370f334f3dceee181ceaeabbb3
 [deployment]
 deploymentTarget = "autoscale"
 run = ["bash", "-c", "npx tsx server/index.ts & npm run preview -- --host 0.0.0.0 --port 5000"]
