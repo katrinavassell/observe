@@ -347,6 +347,9 @@ export interface EventsQuery {
   feature_key?: string
   customer_id?: string
   model?: string
+  source?: string
+  date_from?: string
+  date_to?: string
 }
 
 export async function getEvents(query: EventsQuery = {}): Promise<EventsResponse> {
@@ -356,8 +359,52 @@ export async function getEvents(query: EventsQuery = {}): Promise<EventsResponse
   if (query.feature_key) params.set('feature_key', query.feature_key)
   if (query.customer_id) params.set('customer_id', query.customer_id)
   if (query.model) params.set('model', query.model)
+  if (query.source) params.set('source', query.source)
+  if (query.date_from) params.set('date_from', query.date_from)
+  if (query.date_to) params.set('date_to', query.date_to)
   const qs = params.toString()
   return request(`/events${qs ? '?' + qs : ''}`)
+}
+
+export interface EventsByFeature {
+  feature_key: string
+  event_count: number
+  total_cost: number
+  total_revenue: number
+  margin_pct: number | null
+  last_seen: string
+}
+
+export async function getEventsByFeature(): Promise<EventsByFeature[]> {
+  return request('/events/by-feature')
+}
+
+export interface EventsByCustomer {
+  customer_id: string
+  customer_name: string
+  event_count: number
+  total_cost: number
+  total_revenue: number
+  margin_pct: number | null
+  last_seen: string
+}
+
+export async function getEventsByCustomer(): Promise<EventsByCustomer[]> {
+  return request('/events/by-customer')
+}
+
+export interface EventsByModel {
+  model: string
+  model_provider: string | null
+  event_count: number
+  total_cost: number
+  total_revenue: number
+  margin_pct: number | null
+  last_seen: string
+}
+
+export async function getEventsByModel(): Promise<EventsByModel[]> {
+  return request('/events/by-model')
 }
 
 export async function getFeatures(): Promise<FeatureSummary[]> {
@@ -373,7 +420,7 @@ export async function getModels(): Promise<ModelSummary[]> {
 }
 
 export async function getCustomerDetail(id: string): Promise<CustomerDetail> {
-  return request(`/customers/${encodeURIComponent(id)}/detail`)
+  return request(`/customers/${encodeURIComponent(id)}`)
 }
 
 // =============================================================================

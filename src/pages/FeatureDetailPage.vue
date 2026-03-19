@@ -1,10 +1,22 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useQuery } from '@tanstack/vue-query'
 import { getFeatureDetail } from '@/lib/api'
 import { ArrowLeft, ChevronRight } from 'lucide-vue-next'
 import MarginBadge from '@/components/shared/MarginBadge.vue'
+import { Bar } from 'vue-chartjs'
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  Title,
+  Tooltip,
+  Legend,
+} from 'chart.js'
+
+ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend)
 
 const route = useRoute()
 const router = useRouter()
@@ -16,6 +28,39 @@ const { data: feature, isLoading, isError } = useQuery({
   queryFn: () => getFeatureDetail(featureKey.value),
   enabled: computed(() => !!featureKey.value),
 })
+
+const chartData = computed(() => {
+  if (!feature.value || feature.value.by_customer.length === 0) return null
+  const top = feature.value.by_customer.slice(0, 8)
+  return {
+    labels: top.map(c => c.customer_name || c.customer_id),
+    datasets: [
+      {
+        label: 'Cost',
+        data: top.map(c => c.total_cost),
+        backgroundColor: 'rgba(239, 68, 68, 0.7)',
+      },
+      {
+        label: 'Revenue',
+        data: top.map(c => c.total_revenue),
+        backgroundColor: 'rgba(34, 197, 94, 0.7)',
+      },
+    ],
+  }
+})
+
+const chartOptions = {
+  responsive: true,
+  maintainAspectRatio: false,
+  indexAxis: 'y' as const,
+  plugins: {
+    legend: { position: 'top' as const },
+    title: { display: false },
+  },
+  scales: {
+    x: { beginAtZero: true },
+  },
+}
 
 function formatCurrency(val: number) {
   if (val >= 1000) return `$${(val / 1000).toFixed(1)}k`
@@ -75,6 +120,14 @@ function marginForEvent(cost: number | null, revenue: number | null): number | n
         <div class="rounded-lg border bg-card p-4">
           <div class="text-xs text-muted-foreground mb-1">Customers</div>
           <div class="text-2xl font-semibold">{{ feature.customer_count }}</div>
+        </div>
+      </div>
+
+      <!-- Chart: Cost vs Revenue by Customer -->
+      <div v-if="chartData" class="rounded-lg border bg-card p-4">
+        <div class="text-sm font-medium mb-4">Cost vs Revenue by Customer</div>
+        <div style="height: 240px;">
+          <Bar :data="chartData" :options="chartOptions" />
         </div>
       </div>
 

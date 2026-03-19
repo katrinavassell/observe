@@ -5,6 +5,18 @@ import { useQuery } from '@tanstack/vue-query'
 import { getCustomerDetail } from '@/lib/api'
 import { ArrowLeft, ChevronRight } from 'lucide-vue-next'
 import MarginBadge from '@/components/shared/MarginBadge.vue'
+import { Bar } from 'vue-chartjs'
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  Title,
+  Tooltip,
+  Legend,
+} from 'chart.js'
+
+ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend)
 
 const route = useRoute()
 const router = useRouter()
@@ -16,6 +28,39 @@ const { data: detail, isLoading, isError } = useQuery({
   queryFn: () => getCustomerDetail(customerId.value),
   enabled: computed(() => !!customerId.value),
 })
+
+const featureCostChartData = computed(() => {
+  if (!detail.value || detail.value.by_feature.length === 0) return null
+  const top = detail.value.by_feature.slice(0, 8)
+  return {
+    labels: top.map(f => f.feature_key),
+    datasets: [
+      {
+        label: 'Cost',
+        data: top.map(f => f.total_cost),
+        backgroundColor: 'rgba(239, 68, 68, 0.7)',
+      },
+      {
+        label: 'Revenue',
+        data: top.map(f => f.total_revenue),
+        backgroundColor: 'rgba(34, 197, 94, 0.7)',
+      },
+    ],
+  }
+})
+
+const chartOptions = {
+  responsive: true,
+  maintainAspectRatio: false,
+  indexAxis: 'y' as const,
+  plugins: {
+    legend: { position: 'top' as const },
+    title: { display: false },
+  },
+  scales: {
+    x: { beginAtZero: true },
+  },
+}
 
 function formatCurrency(val: number) {
   if (val >= 1000) return `$${(val / 1000).toFixed(1)}k`
@@ -104,6 +149,14 @@ function mrr() {
           </div>
           <div class="ml-auto">
             <span class="inline-flex items-center rounded-full bg-green-100 text-green-700 px-2 py-0.5 text-xs font-medium">Active</span>
+          </div>
+        </div>
+
+        <!-- Feature cost chart -->
+        <div v-if="featureCostChartData" class="rounded-lg border bg-card p-4">
+          <div class="text-sm font-medium mb-4">Cost vs Revenue by Feature</div>
+          <div style="height: 220px;">
+            <Bar :data="featureCostChartData" :options="chartOptions" />
           </div>
         </div>
 

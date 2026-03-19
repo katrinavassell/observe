@@ -516,6 +516,7 @@ app.post('/data/upload/revenue', ensureVisitor, async (req: AuthRequest, res: Re
     await client.query('DELETE FROM subscriptions WHERE user_id = $1', [req.visitorId])
     await client.query('DELETE FROM customers WHERE user_id = $1', [req.visitorId])
     await client.query('DELETE FROM plans WHERE user_id = $1', [req.visitorId])
+    await client.query("DELETE FROM observe_events WHERE user_id = $1 AND source = 'revenue_upload'", [req.visitorId])
 
     // Insert plans
     if (Array.isArray(plans)) {
@@ -665,6 +666,7 @@ app.post('/stripe/sync', ensureVisitor, async (req: AuthRequest, res: Response) 
     await client.query('DELETE FROM subscriptions WHERE user_id = $1', [req.visitorId])
     await client.query('DELETE FROM customers WHERE user_id = $1', [req.visitorId])
     await client.query('DELETE FROM plans WHERE user_id = $1', [req.visitorId])
+    await client.query("DELETE FROM observe_events WHERE user_id = $1 AND source = 'stripe_sync'", [req.visitorId])
 
     // Insert plans (from Stripe products + prices)
     const planIds = new Set<string>()
@@ -703,6 +705,11 @@ app.post('/stripe/sync', ensureVisitor, async (req: AuthRequest, res: Response) 
       await client.query(
         'INSERT INTO subscriptions (user_id, subscription_id, customer_id, plan_id, is_active, mrr_override) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT DO NOTHING',
         [req.visitorId, sub.id, sub.customer as string, priceId, sub.status === 'active', mrr]
+      )
+      await client.query(
+        `INSERT INTO observe_events (user_id, customer_id, feature_key, event_name, timestamp, revenue_amount, source, granularity)
+         VALUES ($1, $2, $3, $4, NOW(), $5, 'stripe_sync', 'monthly')`,
+        [req.visitorId, sub.customer as string, priceId, 'subscription_synced', mrr]
       )
       syncedSubs++
     }
@@ -743,6 +750,9 @@ app.get('/events', ensureVisitor, async (req: AuthRequest, res: Response) => {
     const featureKey = req.query.feature_key as string | undefined
     const customerId = req.query.customer_id as string | undefined
     const model = req.query.model as string | undefined
+    const source = req.query.source as string | undefined
+    const dateFrom = req.query.date_from as string | undefined
+    const dateTo = req.query.date_to as string | undefined
 
     let where = 'WHERE oe.user_id = $1'
     const params: unknown[] = [req.visitorId]
@@ -759,6 +769,18 @@ app.get('/events', ensureVisitor, async (req: AuthRequest, res: Response) => {
     if (model) {
       where += ` AND oe.model = $${paramIdx++}`
       params.push(model)
+    }
+    if (source) {
+      where += ` AND oe.source = $${paramIdx++}`
+      params.push(source)
+    }
+    if (dateFrom) {
+      where += ` AND oe.timestamp >= $${paramIdx++}`
+      params.push(dateFrom)
+    }
+    if (dateTo) {
+      where += ` AND oe.timestamp <= $${paramIdx++}`
+      params.push(dateTo)
     }
 
     const eventsResult = await pool.query(
@@ -785,6 +807,100 @@ app.get('/events', ensureVisitor, async (req: AuthRequest, res: Response) => {
   } catch (error) {
     console.error('Get events error:', error)
     res.status(500).json({ error: 'Failed to get events' })
+  }
+})
+
+// GET /events/by-feature — aggregate events grouped by feature_key
+app.get('/events/by-feature', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  try {
+    const result = await pool.query(
+      `SELECT feature_key, COUNT(*) as event_count,
+         COALESCE(SUM(cost_amount), 0) as total_cost,
+         COALESCE(SUM(revenue_amount), 0) as total_revenue,
+         MAX(timestamp) as last_seen
+       FROM observe_events WHERE user_id = $1 AND feature_key IS NOT NULL
+       GROUP BY feature_key ORDER BY total_cost DESC`,
+      [req.visitorId]
+    )
+    res.json(result.rows.map(row => {
+      const cost = parseFloat(row.total_cost) || 0
+      const revenue = parseFloat(row.total_revenue) || 0
+      return {
+        feature_key: row.feature_key,
+        event_count: parseInt(row.event_count),
+        total_cost: cost,
+        total_revenue: revenue,
+        margin_pct: revenue > 0 ? Math.round(((revenue - cost) / revenue) * 100) : null,
+        last_seen: row.last_seen,
+      }
+    }))
+  } catch (error) {
+    console.error('Get events/by-feature error:', error)
+    res.status(500).json({ error: 'Failed to get feature aggregations' })
+  }
+})
+
+// GET /events/by-customer — aggregate events grouped by customer_id
+app.get('/events/by-customer', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  try {
+    const result = await pool.query(
+      `SELECT oe.customer_id, c.name as customer_name, COUNT(*) as event_count,
+         COALESCE(SUM(oe.cost_amount), 0) as total_cost,
+         COALESCE(SUM(oe.revenue_amount), 0) as total_revenue,
+         MAX(oe.timestamp) as last_seen
+       FROM observe_events oe
+       LEFT JOIN customers c ON oe.user_id::uuid = c.user_id AND oe.customer_id = c.customer_id
+       WHERE oe.user_id = $1
+       GROUP BY oe.customer_id, c.name ORDER BY total_cost DESC`,
+      [req.visitorId]
+    )
+    res.json(result.rows.map(row => {
+      const cost = parseFloat(row.total_cost) || 0
+      const revenue = parseFloat(row.total_revenue) || 0
+      return {
+        customer_id: row.customer_id,
+        customer_name: row.customer_name || row.customer_id,
+        event_count: parseInt(row.event_count),
+        total_cost: cost,
+        total_revenue: revenue,
+        margin_pct: revenue > 0 ? Math.round(((revenue - cost) / revenue) * 100) : null,
+        last_seen: row.last_seen,
+      }
+    }))
+  } catch (error) {
+    console.error('Get events/by-customer error:', error)
+    res.status(500).json({ error: 'Failed to get customer aggregations' })
+  }
+})
+
+// GET /events/by-model — aggregate events grouped by model
+app.get('/events/by-model', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  try {
+    const result = await pool.query(
+      `SELECT model, model_provider, COUNT(*) as event_count,
+         COALESCE(SUM(cost_amount), 0) as total_cost,
+         COALESCE(SUM(revenue_amount), 0) as total_revenue,
+         MAX(timestamp) as last_seen
+       FROM observe_events WHERE user_id = $1 AND model IS NOT NULL
+       GROUP BY model, model_provider ORDER BY total_cost DESC`,
+      [req.visitorId]
+    )
+    res.json(result.rows.map(row => {
+      const cost = parseFloat(row.total_cost) || 0
+      const revenue = parseFloat(row.total_revenue) || 0
+      return {
+        model: row.model,
+        model_provider: row.model_provider,
+        event_count: parseInt(row.event_count),
+        total_cost: cost,
+        total_revenue: revenue,
+        margin_pct: revenue > 0 ? Math.round(((revenue - cost) / revenue) * 100) : null,
+        last_seen: row.last_seen,
+      }
+    }))
+  } catch (error) {
+    console.error('Get events/by-model error:', error)
+    res.status(500).json({ error: 'Failed to get model aggregations' })
   }
 })
 
@@ -950,8 +1066,8 @@ app.get('/models', ensureVisitor, async (req: AuthRequest, res: Response) => {
   }
 })
 
-// GET /customers/:id/detail — enriched customer detail with events
-app.get('/customers/:id/detail', ensureVisitor, async (req: AuthRequest, res: Response) => {
+// GET /customers/:id — enriched customer detail with events
+app.get('/customers/:id', ensureVisitor, async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params
 

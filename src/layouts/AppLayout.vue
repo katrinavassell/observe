@@ -5,7 +5,7 @@ import {
   LayoutDashboard,
   DollarSign,
   Plug,
-  Calculator,
+  FlaskConical,
   Activity,
   Layers,
   Cpu,
@@ -20,12 +20,6 @@ const navItems = computed(() => [
     label: 'Pricing',
     icon: DollarSign,
     description: 'Margin analysis & plan health',
-  },
-  {
-    path: '/simulator',
-    label: 'Simulator',
-    icon: Calculator,
-    description: 'What-if pricing scenarios',
   },
   {
     path: '/events',
@@ -50,6 +44,12 @@ const navItems = computed(() => [
     label: 'Customers',
     icon: Users,
     description: 'Customer profiles & usage',
+  },
+  {
+    path: '/simulations',
+    label: 'Simulations',
+    icon: FlaskConical,
+    description: 'What-if pricing scenarios',
   },
   {
     path: '/data-sources',

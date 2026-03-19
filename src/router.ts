@@ -48,9 +48,14 @@ const router = createRouter({
       component: () => import('@/pages/DataSourcesPage.vue'),
     },
     {
+      path: '/simulations',
+      name: 'simulations',
+      component: () => import('@/pages/SimulationsPage.vue'),
+    },
+    {
       path: '/simulator',
       name: 'simulator',
-      component: () => import('@/pages/SimulatorPage.vue'),
+      redirect: '/simulations',
     },
     // Legacy redirects
     {

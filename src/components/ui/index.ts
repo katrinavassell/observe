@@ -15,3 +15,8 @@ export { Tabs, TabsList, TabsTrigger, TabsContent } from './tabs'
 
 // Tooltip
 export { Tooltip, TooltipTrigger, TooltipContent } from './tooltip'
+
+// New primitives
+export { default as Label } from './label.vue'
+export { default as Select } from './select.vue'
+export { default as Sheet } from './sheet.vue'
