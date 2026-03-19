@@ -1,498 +1,200 @@
 # Component Reference
 
-This document describes the Vue components and composables in the Tanso metrics dashboard.
+Vue components and composables in Observe.
 
-## Page Components
+## Page Components (`src/pages/`)
 
-Located in `src/pages/`
+### Existing Pages
 
-### LoginPage.vue
+| Page | Route | Purpose |
+|------|-------|---------|
+| `PricingAnalyzerPage.vue` | `/` | MRR, margins, plan health, cohorts |
+| `DataSourcesPage.vue` | `/data-sources` | CSV upload, Stripe sync, sample data |
+| `SimulatorPage.vue` | `/simulator` | Basic pricing simulator (being replaced) |
 
-Authentication entry point with magic link login.
+### New Pages (Observe)
 
-**Features:**
-- Email input with validation
-- Magic link request via Supabase Auth
-- Error handling for invalid emails
-- Redirect to dashboard on success
-
-### PricingPage.vue
-
-Main analytics dashboard displaying all key metrics.
-
-**Features:**
-- MRR/ARR summary cards
-- MRR movement breakdown (New, Expansion, Contraction, Churn)
-- Plan health scores (0-100)
-- Negative margin customer detection
-- Margin compression alerts
-- Cohort analysis chart
-- Pricing scenario simulator
-
-**Props:** None (uses composables for state)
-
-### DataSourcesPage.vue
-
-Data import interface with multiple source options.
-
-**Features:**
-- Revenue section (Stripe CSV or API)
-- Costs section (CSV upload)
-- Usage section (CSV upload)
-- Sample data loader
-- Progress tracking footer
-- Stripe connection modal
-
-**Sections:**
-- `RevenueSection` - Stripe integration
-- `CostsSection` - Cost data upload
-- `UsageSection` - Usage metrics upload
-- `ComingSoonSection` - Future integrations
-
-### OnboardingScreen.vue
-
-Initial user setup flow shown when no data is loaded.
-
-**Features:**
-- Welcome message
-- Data source selection
-- Sample data option
-- Navigation to DataSourcesPage
+| Page | Route | Purpose |
+|------|-------|---------|
+| `EventsPage.vue` | `/events` | Filterable event stream |
+| `FeaturesPage.vue` | `/features` | Feature list with margin status |
+| `FeatureDetailPage.vue` | `/features/:key` | Single feature: timeseries, customers, models |
+| `ModelsPage.vue` | `/models` | AI model cost breakdown |
+| `CustomersPage.vue` | `/customers` | Customer list with margins |
+| `CustomerDetailPage.vue` | `/customers/:id` | Single customer: events, features, timeline |
+| `SimulationsPage.vue` | `/simulations` | Simulation list + pricing opportunities |
+| `SimulationNewPage.vue` | `/simulations/new` | 3-step wizard: Define → Scenarios → Review |
+| `SimulationDetailPage.vue` | `/simulations/:id` | Results, customer impact, rollout |
 
 ---
 
-## Chart Components
+## Chart Components (`src/components/charts/`)
 
-Located in `src/components/charts/`
-
-### MrrChart.vue
-
-Monthly Recurring Revenue visualization.
-
-**Props:**
-
-| Prop | Type | Description |
-|------|------|-------------|
-| `data` | `MrrDataPoint[]` | Array of { month, mrr } objects |
-| `height` | `number` | Chart height in pixels |
-
-### MRRTrendChart.vue
-
-MRR trend over time with optional forecast line.
-
-**Props:**
-
-| Prop | Type | Description |
-|------|------|-------------|
-| `historical` | `TrendPoint[]` | Historical MRR data |
-| `forecast` | `TrendPoint[]` | Projected MRR data |
-
-### CohortChart.vue
-
-Customer cohort retention curves.
-
-**Props:**
-
-| Prop | Type | Description |
-|------|------|-------------|
-| `cohorts` | `CohortData[]` | Cohort retention data |
-
-### CostBreakdownChart.vue
-
-Cost distribution by type or customer.
-
-**Props:**
-
-| Prop | Type | Description |
-|------|------|-------------|
-| `costs` | `CostRecord[]` | Cost records to visualize |
-| `groupBy` | `'type' \| 'customer'` | Grouping mode |
-
-### MarginCompressionAlert.vue
-
-Warning display for margin health issues.
-
-**Props:**
-
-| Prop | Type | Description |
-|------|------|-------------|
-| `compression` | `MarginCompression` | Compression analysis result |
-| `threshold` | `number` | Alert threshold percentage |
-
-### GapCallout.vue
-
-Data gap notifications (missing periods, orphaned records).
-
-**Props:**
-
-| Prop | Type | Description |
-|------|------|-------------|
-| `gaps` | `DataGap[]` | Detected data gaps |
-| `onResolve` | `() => void` | Resolution callback |
+| Component | Props | Purpose |
+|-----------|-------|---------|
+| `MrrChart.vue` | `data: MrrDataPoint[]` | MRR over time |
+| `MRRTrendChart.vue` | `historical, forecast` | MRR trend with projections |
+| `CohortChart.vue` | `cohorts: CohortData[]` | Cohort retention curves |
+| `CostBreakdownChart.vue` | `costs, groupBy` | Cost distribution |
+| `RevenueFlowChart.vue` | `data` | Revenue flow waterfall |
+| `MarginCompressionAlert.vue` | `compression, threshold` | Margin health warning |
+| `GapCallout.vue` | `gaps, onResolve` | Data gap notifications |
 
 ---
 
-## Data Source Components
+## Data Source Components (`src/components/data-sources/`)
 
-Located in `src/components/data-sources/`
-
-### RevenueSection.vue
-
-Stripe CSV upload and API connection interface.
-
-**Features:**
-- File dropzone for CSV upload
-- Stripe API connection button
-- Data reconciliation display
-- MRR summary after import
-
-**Emits:**
-
-| Event | Payload | Description |
-|-------|---------|-------------|
-| `data-imported` | `ImportResult` | After successful import |
-| `connect-stripe` | - | Open Stripe modal |
-
-### CostsSection.vue
-
-Cost data CSV upload and management.
-
-**Features:**
-- CSV file upload
-- Cost type mapping
-- Period selection
-- Preview before import
-
-**Expected CSV Format:**
-```
-customer_id,cost_type,amount,period_start,period_end
-cus_123,api_costs,150.00,2024-01-01,2024-01-31
-```
-
-### UsageSection.vue
-
-Usage metrics CSV upload.
-
-**Features:**
-- CSV file upload
-- Metric key mapping
-- Usage limit setting
-- Aggregation options
-
-**Expected CSV Format:**
-```
-customer_id,metric_key,metric_value,period_start,period_end
-cus_123,api_calls,15000,2024-01-01,2024-01-31
-```
-
-### StripeConnectModal.vue
-
-Modal for Stripe API key connection.
-
-**Props:**
-
-| Prop | Type | Description |
-|------|------|-------------|
-| `open` | `boolean` | Modal visibility |
-
-**Emits:**
-
-| Event | Payload | Description |
-|-------|---------|-------------|
-| `update:open` | `boolean` | Close modal |
-| `connected` | `string` | Account name on success |
-| `start-sync` | - | Begin data sync |
-
-**Features:**
-- API key input with show/hide toggle
-- Test/Live mode detection
-- Key validation via Edge Function
-- Connection status display
-
-### StripeSyncProgress.vue
-
-Real-time sync progress tracking.
-
-**Props:**
-
-| Prop | Type | Description |
-|------|------|-------------|
-| `syncState` | `SyncState` | Current sync status |
-
-**Emits:**
-
-| Event | Payload | Description |
-|-------|---------|-------------|
-| `cancel` | - | Cancel sync |
-| `retry` | - | Retry failed sync |
-| `close` | - | Close progress view |
-
-**Displays:**
-- Overall progress bar
-- Per-type progress (customers, subscriptions, invoices, usage)
-- Error messages
-- Duration tracking
+| Component | Purpose |
+|-----------|---------|
+| `RevenueSection.vue` | Stripe sync + revenue CSV upload |
+| `CostsSection.vue` | Cost CSV upload |
+| `UsageSection.vue` | Usage CSV upload |
+| `ComingSoonSection.vue` | Future integrations placeholder |
+| `StripeConnectModal.vue` | Stripe connection dialog |
+| `StripeSyncProgress.vue` | Sync progress display |
 
 ---
 
-## Simulation Components
+## Simulation Components (New — `src/components/simulations/`)
 
-Located in `src/components/simulation/`
+Ported from tansoflow. All Vue 3 + shadcn-vue.
 
-### SimulationModal.vue
-
-Pricing scenario configuration and execution.
-
-**Props:**
-
-| Prop | Type | Description |
-|------|------|-------------|
-| `open` | `boolean` | Modal visibility |
-
-**Emits:**
-
-| Event | Payload | Description |
-|-------|---------|-------------|
-| `update:open` | `boolean` | Close modal |
-| `simulation-complete` | `SimulationResult` | Results ready |
-
-**Features:**
-- Pricing model selection
-- Parameter adjustment
-- Growth rate slider
-- Run simulation button
-
-### SimulationResultsView.vue
-
-Simulation results display.
-
-**Props:**
-
-| Prop | Type | Description |
-|------|------|-------------|
-| `results` | `SimulationResult` | Simulation output |
-
-**Displays:**
-- Revenue/cost/margin summary
-- Monthly projections chart
-- Customer breakdown table
-- Plan comparison
+| Component | Purpose |
+|-----------|---------|
+| `SimulationCard.vue` | Simulation list item with status badge |
+| `OpportunityCard.vue` | Pricing opportunity with severity + suggested action |
+| `CustomerCard.vue` | Customer impact row with churn risk |
+| `MarginBadge.vue` | Color-coded margin status badge |
+| `TrendIndicator.vue` | Up/down/stable trend arrow |
+| `MiniSparkline.vue` | Small inline chart for trends |
 
 ---
 
-## UI Components
+## Pricing Components (`src/components/pricing/`)
 
-Located in `src/components/ui/`
+| Component | Purpose |
+|-----------|---------|
+| `MarginOverviewCard.vue` | Margin summary with chart |
+| `PricingSimulatorPanel.vue` | Inline simulator widget |
+| `RevenueFlowChart.vue` | Revenue flow visualization |
 
-Reusable UI primitives built on Radix Vue.
+---
 
-| Component | Description |
-|-----------|-------------|
-| `Button` | Primary, secondary, outline, ghost variants |
-| `Card` | Container with header, content, footer slots |
-| `Input` | Text input with validation states |
-| `Badge` | Status indicators and labels |
-| `Alert` | Info, warning, error, success messages |
+## UI Components (`src/components/ui/`)
+
+Reusable primitives built on Radix Vue (shadcn-vue):
+
+| Component | Variants |
+|-----------|----------|
+| `Button` | default, secondary, outline, ghost, destructive |
+| `Card` | CardHeader, CardTitle, CardDescription, CardContent |
+| `Badge` | default, secondary, outline, destructive |
+| `Input` | Standard text input |
+| `Alert` | Info/warning/error display |
 | `Progress` | Progress bar with percentage |
 | `Skeleton` | Loading placeholder |
-| `Tabs` | Tabbed content navigation |
-| `Tooltip` | Hover information tooltips |
+| `Tabs` | Tabs, TabsList, TabsTrigger, TabsContent |
+| `Tooltip` | Hover information |
+| `Separator` | Visual divider |
 | `FileDropzone` | Drag-and-drop file upload |
 | `DataSourceBadge` | Data source status indicator |
-
-### Button
-
-```vue
-<Button variant="default" size="md" :disabled="false">
-  Click me
-</Button>
-```
-
-**Props:**
-
-| Prop | Type | Default | Description |
-|------|------|---------|-------------|
-| `variant` | `'default' \| 'secondary' \| 'outline' \| 'ghost' \| 'destructive'` | `'default'` | Visual style |
-| `size` | `'sm' \| 'md' \| 'lg'` | `'md'` | Button size |
-| `disabled` | `boolean` | `false` | Disabled state |
-
-### Card
-
-```vue
-<Card>
-  <CardHeader>
-    <CardTitle>Title</CardTitle>
-    <CardDescription>Description</CardDescription>
-  </CardHeader>
-  <CardContent>
-    Content here
-  </CardContent>
-  <CardFooter>
-    <Button>Action</Button>
-  </CardFooter>
-</Card>
-```
-
-### Progress
-
-```vue
-<Progress :value="75" :indicator-class="'bg-green-500'" />
-```
-
-**Props:**
-
-| Prop | Type | Description |
-|------|------|-------------|
-| `value` | `number` | Progress percentage (0-100) |
-| `indicator-class` | `string` | Custom indicator color class |
+| `ConfirmDialog` | Confirmation modal |
 
 ---
 
-## Composables
-
-Located in `src/composables/`
+## Composables (`src/composables/`)
 
 ### useAuth
 
-Authentication and session management.
+Session management (anonymous visitors).
 
 ```typescript
-const { user, isAuthenticated, signIn, signOut } = useAuth()
+const { visitorId, isInitialized } = useAuth()
 ```
 
-**Returns:**
-
-| Property | Type | Description |
-|----------|------|-------------|
-| `user` | `Ref<User \| null>` | Current user |
-| `isAuthenticated` | `ComputedRef<boolean>` | Auth status |
-| `signIn` | `(email: string) => Promise<void>` | Send magic link |
-| `signOut` | `() => Promise<void>` | End session |
+Calls `/api/session/init` on mount to get/create a visitor session.
 
 ### useDataMode
 
-Data mode state management.
+Data mode tracking.
 
 ```typescript
-const { dataMode, hasData, refetch } = useDataMode()
+const { dataMode, hasData, hasRevenue, hasCosts, hasUsage, refetch } = useDataMode()
 ```
 
-**Returns:**
-
-| Property | Type | Description |
-|----------|------|-------------|
-| `dataMode` | `Ref<'none' \| 'sample' \| 'user'>` | Current mode |
-| `hasData` | `ComputedRef<boolean>` | Has any data |
-| `refetch` | `() => Promise<void>` | Refresh status |
+Polls `/api/data/status` to track what data is loaded.
 
 ### useStripeConnection
 
-Stripe API key management and data sync.
+Stripe connection and sync.
 
 ```typescript
-const {
-  isValidating,
-  validation,
-  isSyncing,
-  syncState,
-  validateApiKey,
-  startSync,
-  disconnect
-} = useStripeConnection()
+const { stripeStatus, isSyncing, checkStatus, syncData } = useStripeConnection()
 ```
 
-**Returns:**
+Uses `/api/stripe/status` and `/api/stripe/sync`.
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `isValidating` | `Ref<boolean>` | Validation in progress |
-| `validation` | `Ref<StripeKeyValidation \| null>` | Validation result |
-| `isSyncing` | `Ref<boolean>` | Sync in progress |
-| `syncState` | `Ref<SyncState>` | Detailed sync status |
-| `validateApiKey` | `(key: string) => Promise<StripeKeyValidation>` | Validate key |
-| `startSync` | `(key?: string) => Promise<boolean>` | Start data sync |
-| `disconnect` | `() => void` | Clear connection |
+### useSimulation (Legacy)
 
-### useSimulation
+Basic pricing simulation via server-side calculation.
 
-Pricing simulation execution.
+```typescript
+const { isRunning, results, runSimulation } = useSimulation()
+```
+
+Being replaced by `useSimulationState`.
+
+### useSimulationState (New)
+
+Full simulation engine ported from tansoflow. Manages segments, scenarios, customer impact, feature analysis, rollout workflow.
 
 ```typescript
 const {
-  isRunning,
-  results,
-  error,
+  simulations,
+  pricingOpportunities,
+  selectedSimulation,
+  createSimulation,
   runSimulation,
-  saveScenario
-} = useSimulation()
+  rolloutScenario,
+} = useSimulationState()
 ```
-
-**Returns:**
-
-| Property | Type | Description |
-|----------|------|-------------|
-| `isRunning` | `Ref<boolean>` | Simulation in progress |
-| `results` | `Ref<SimulationResult \| null>` | Latest results |
-| `error` | `Ref<string \| null>` | Error message |
-| `runSimulation` | `(model: PricingModel) => Promise<void>` | Execute simulation |
-| `saveScenario` | `(name: string) => Promise<void>` | Save to database |
-
-### useOnline
-
-Network connectivity detection.
-
-```typescript
-const { isOnline } = useOnline()
-```
-
-**Returns:**
-
-| Property | Type | Description |
-|----------|------|-------------|
-| `isOnline` | `Ref<boolean>` | Online status |
 
 ---
 
-## Component Patterns
+## Patterns
+
+### Data Fetching
+
+Use TanStack Vue Query for all server data:
+
+```typescript
+const { data, isLoading, error } = useQuery({
+  queryKey: ['events', 'by-feature'],
+  queryFn: () => getEventsByFeature(),
+})
+```
 
 ### Singleton State
 
-Composables like `useStripeConnection` use module-level refs for shared state:
+Composables use module-level refs for shared state across components:
 
 ```typescript
-// State is shared across all component instances
-const isValidating = ref(false)
-const validation = ref<StripeKeyValidation | null>(null)
+const sharedState = ref<Data | null>(null)
 
-export function useStripeConnection() {
-  // Return refs, not new instances
-  return { isValidating, validation, ... }
+export function useMyComposable() {
+  return { data: sharedState }
 }
 ```
 
-### Readonly Exports
+### Margin Status
 
-State is exposed as readonly to prevent external mutation:
+Use consistent status categorization everywhere:
 
 ```typescript
-return {
-  validation: readonly(validation),
-  // Actions can still mutate internally
-  validateApiKey,
+function getMarginStatus(marginPct: number): 'negative' | 'low' | 'profitable' | 'high' {
+  if (marginPct < 0) return 'negative'
+  if (marginPct < 20) return 'low'
+  if (marginPct < 50) return 'profitable'
+  return 'high'
 }
-```
-
-### Error Boundaries
-
-Components handle errors gracefully with fallback UI:
-
-```vue
-<template>
-  <Alert v-if="error" variant="destructive">
-    {{ error.message }}
-  </Alert>
-  <div v-else>
-    <!-- Normal content -->
-  </div>
-</template>
 ```

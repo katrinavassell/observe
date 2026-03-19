@@ -459,3 +459,85 @@ export interface StripeSyncResult {
 export async function syncStripeData(): Promise<StripeSyncResult> {
   return request('/stripe/sync', { method: 'POST' })
 }
+
+// =============================================================================
+// SIMULATIONS
+// =============================================================================
+
+import type {
+  Simulation,
+  SimulationScenario,
+  PricingOpportunity,
+} from '@/types/simulation'
+
+export type { Simulation, SimulationScenario, PricingOpportunity }
+
+export async function listSimulations(): Promise<Simulation[]> {
+  return request('/simulations')
+}
+
+export async function createSimulation(data: { name: string; scenarios?: SimulationScenario[]; time_range?: { start: string; end: string } }): Promise<Simulation> {
+  return request('/simulations', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })
+}
+
+export async function getSimulation(id: string): Promise<Simulation> {
+  return request(`/simulations/${encodeURIComponent(id)}`)
+}
+
+export async function updateSimulation(id: string, data: Partial<Simulation>): Promise<Simulation> {
+  return request(`/simulations/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  })
+}
+
+export async function deleteSimulation(id: string): Promise<void> {
+  return request(`/simulations/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  })
+}
+
+export async function getOpportunities(): Promise<PricingOpportunity[]> {
+  return request('/simulations/opportunities')
+}
+
+// =============================================================================
+// AI INSIGHTS
+// =============================================================================
+
+export interface AiInsight {
+  id: string
+  user_id: string
+  insight_type: 'margin_alert' | 'pricing_opportunity' | 'cost_optimization' | 'customer_risk'
+  title: string
+  description: string
+  severity: 'critical' | 'warning' | 'info' | 'positive'
+  feature_key: string | null
+  customer_id: string | null
+  metadata: Record<string, unknown>
+  tokens_used: number | null
+  cost_usd: number | null
+  created_at: string
+}
+
+export interface GenerateInsightsResponse {
+  insights: AiInsight[]
+  tokens_used: number
+  cost_usd: number
+  source: 'openai' | 'local'
+}
+
+export async function listInsights(): Promise<AiInsight[]> {
+  return request('/insights')
+}
+
+export async function generateInsights(): Promise<GenerateInsightsResponse> {
+  return request('/insights/generate', { method: 'POST' })
+}
+
+export async function clearInsights(): Promise<{ success: boolean }> {
+  return request('/insights', { method: 'DELETE' })
+}

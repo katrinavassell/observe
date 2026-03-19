@@ -235,6 +235,8 @@ app.post('/data/sample', ensureVisitor, async (req: AuthRequest, res: Response) 
   try {
     await client.query('BEGIN')
 
+    await client.query('DELETE FROM ai_insights WHERE user_id = $1', [req.visitorId])
+    await client.query('DELETE FROM simulations WHERE user_id = $1', [req.visitorId])
     await client.query('DELETE FROM observe_events WHERE user_id = $1', [req.visitorId])
     await client.query('DELETE FROM usage_records WHERE user_id = $1', [req.visitorId])
     await client.query('DELETE FROM cost_records WHERE user_id = $1', [req.visitorId])
@@ -316,6 +318,94 @@ app.post('/data/sample', ensureVisitor, async (req: AuthRequest, res: Response) 
       )
     }
 
+    // Sample simulations
+    const sampleSimulations = [
+      {
+        id: 'sim-001',
+        name: 'API Pricing Optimization',
+        status: 'completed',
+        segment_name: 'All Segments',
+        scenarios: [
+          { id: 'sc-001a', name: 'Conservative (+10%)', description: 'Moderate price increase across AI features', changes: [{ feature_key: 'ai_summarization', change_type: 'percentage_increase', change_value: 10 }, { feature_key: 'image_generation', change_type: 'percentage_increase', change_value: 10 }], projected_revenue: 3.08, projected_cost: 1.29, projected_margin_pct: 58 },
+          { id: 'sc-001b', name: 'Aggressive (+25%)', description: 'Larger price increase to improve margins', changes: [{ feature_key: 'ai_summarization', change_type: 'percentage_increase', change_value: 25 }, { feature_key: 'image_generation', change_type: 'percentage_increase', change_value: 25 }], projected_revenue: 3.50, projected_cost: 1.29, projected_margin_pct: 63 },
+        ],
+        feature_analysis: [
+          { feature_key: 'ai_summarization', current_cost: 0.82, current_revenue: 1.80, current_margin_pct: 54, projected_revenue: 2.25, projected_margin_pct: 64, margin_delta_pct: 10 },
+          { feature_key: 'image_generation', current_cost: 0.14, current_revenue: 0.95, current_margin_pct: 85, projected_revenue: 1.19, projected_margin_pct: 88, margin_delta_pct: 3 },
+          { feature_key: 'search', current_cost: 0.01, current_revenue: 0.045, current_margin_pct: 78, projected_revenue: 0.045, projected_margin_pct: 78, margin_delta_pct: 0 },
+        ],
+        customer_impacts: [
+          { customer_id: 'cus_001', customer_name: 'Acme Corp', current_revenue: 1.10, projected_revenue: 1.38, revenue_delta: 0.28, revenue_delta_pct: 25, churn_risk: 'low', segment: 'Enterprise' },
+          { customer_id: 'cus_002', customer_name: 'TechStart Inc', current_revenue: 0.45, projected_revenue: 0.56, revenue_delta: 0.11, revenue_delta_pct: 25, churn_risk: 'medium', segment: 'SMB' },
+          { customer_id: 'cus_003', customer_name: 'Global Solutions', current_revenue: 0.60, projected_revenue: 0.75, revenue_delta: 0.15, revenue_delta_pct: 25, churn_risk: 'low', segment: 'Mid-Market' },
+          { customer_id: 'cus_004', customer_name: 'Startup Labs', current_revenue: 0.15, projected_revenue: 0.19, revenue_delta: 0.04, revenue_delta_pct: 25, churn_risk: 'high', segment: 'SMB' },
+          { customer_id: 'cus_005', customer_name: 'Enterprise Co', current_revenue: 0.20, projected_revenue: 0.25, revenue_delta: 0.05, revenue_delta_pct: 25, churn_risk: 'low', segment: 'Enterprise' },
+        ],
+        margin_impact: { current_margin_pct: 54, projected_margin_pct: 63, margin_delta_pct: 9, total_current_revenue: 2.80, total_projected_revenue: 3.50, total_cost: 1.29, customers_affected: 5, high_churn_risk_count: 1 },
+        confidence_score: 78,
+        key_insight: 'A 25% price increase on AI features would improve overall margin from 54% to 63%, with only 1 customer at high churn risk (Startup Labs, SMB segment).',
+        winning_scenario_id: 'sc-001b',
+        created_at: '2026-03-10T09:00:00Z',
+      },
+      {
+        id: 'sim-002',
+        name: 'Enterprise Tier Restructure',
+        status: 'completed',
+        segment_name: 'Enterprise',
+        scenarios: [
+          { id: 'sc-002a', name: 'Bundle AI features', description: 'Include AI summarization in enterprise tier at flat rate', changes: [{ feature_key: 'ai_summarization', change_type: 'new_price', change_value: 0.40 }], projected_revenue: 2.60, projected_cost: 1.29, projected_margin_pct: 50 },
+          { id: 'sc-002b', name: 'Usage-based AI pricing', description: 'Move to per-unit pricing for AI features', changes: [{ feature_key: 'ai_summarization', change_type: 'percentage_increase', change_value: 15 }, { feature_key: 'search', change_type: 'percentage_increase', change_value: 50 }], projected_revenue: 3.15, projected_cost: 1.29, projected_margin_pct: 59 },
+          { id: 'sc-002c', name: 'Premium image tier', description: 'Increase image generation pricing for enterprise', changes: [{ feature_key: 'image_generation', change_type: 'percentage_increase', change_value: 40 }], projected_revenue: 3.18, projected_cost: 1.29, projected_margin_pct: 59 },
+        ],
+        feature_analysis: [
+          { feature_key: 'ai_summarization', current_cost: 0.82, current_revenue: 1.80, current_margin_pct: 54, projected_revenue: 2.07, projected_margin_pct: 60, margin_delta_pct: 6 },
+          { feature_key: 'image_generation', current_cost: 0.14, current_revenue: 0.95, current_margin_pct: 85, projected_revenue: 1.33, projected_margin_pct: 89, margin_delta_pct: 4 },
+        ],
+        customer_impacts: [
+          { customer_id: 'cus_001', customer_name: 'Acme Corp', current_revenue: 1.10, projected_revenue: 1.32, revenue_delta: 0.22, revenue_delta_pct: 20, churn_risk: 'low', segment: 'Enterprise' },
+          { customer_id: 'cus_005', customer_name: 'Enterprise Co', current_revenue: 0.20, projected_revenue: 0.28, revenue_delta: 0.08, revenue_delta_pct: 40, churn_risk: 'medium', segment: 'Enterprise' },
+        ],
+        margin_impact: { current_margin_pct: 54, projected_margin_pct: 59, margin_delta_pct: 5, total_current_revenue: 2.80, total_projected_revenue: 3.18, total_cost: 1.29, customers_affected: 2, high_churn_risk_count: 0 },
+        confidence_score: 65,
+        key_insight: 'Restructuring enterprise pricing with a premium image tier yields +5% margin improvement with no high churn risk customers.',
+        winning_scenario_id: 'sc-002c',
+        created_at: '2026-03-12T14:00:00Z',
+      },
+      {
+        id: 'sim-003',
+        name: 'Usage-Based Pricing Test',
+        status: 'draft',
+        scenarios: [
+          { id: 'sc-003a', name: 'Per-token pricing', description: 'Charge per 1000 tokens across all AI features', changes: [{ feature_key: 'ai_summarization', change_type: 'new_price', change_value: 0.03 }, { feature_key: 'search', change_type: 'new_price', change_value: 0.005 }] },
+        ],
+        feature_analysis: [],
+        customer_impacts: [],
+        confidence_score: null,
+        key_insight: null,
+        winning_scenario_id: null,
+        created_at: '2026-03-15T11:00:00Z',
+      },
+    ]
+
+    for (const sim of sampleSimulations) {
+      await client.query(
+        `INSERT INTO simulations (id, user_id, name, status, segment_name, scenarios, feature_analysis, customer_impacts, margin_impact, confidence_score, key_insight, winning_scenario_id, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $13)`,
+        [
+          sim.id, req.visitorId, sim.name, sim.status,
+          (sim as Record<string, unknown>).segment_name || null,
+          JSON.stringify(sim.scenarios),
+          JSON.stringify(sim.feature_analysis),
+          JSON.stringify(sim.customer_impacts),
+          (sim as Record<string, unknown>).margin_impact ? JSON.stringify((sim as Record<string, unknown>).margin_impact) : null,
+          sim.confidence_score,
+          sim.key_insight,
+          sim.winning_scenario_id,
+          sim.created_at,
+        ]
+      )
+    }
+
     await client.query(
       'INSERT INTO user_data_status (user_id, data_mode) VALUES ($1, $2) ON CONFLICT (user_id) DO UPDATE SET data_mode = $2, updated_at = NOW()',
       [req.visitorId, 'sample']
@@ -336,6 +426,8 @@ app.delete('/data/clear', ensureVisitor, async (req: AuthRequest, res: Response)
   const client = await pool.connect()
   try {
     await client.query('BEGIN')
+    await client.query('DELETE FROM ai_insights WHERE user_id = $1', [req.visitorId])
+    await client.query('DELETE FROM simulations WHERE user_id = $1', [req.visitorId])
     await client.query('DELETE FROM observe_events WHERE user_id = $1', [req.visitorId])
     await client.query('DELETE FROM usage_records WHERE user_id = $1', [req.visitorId])
     await client.query('DELETE FROM cost_records WHERE user_id = $1', [req.visitorId])
@@ -1154,6 +1246,755 @@ app.get('/customers/:id', ensureVisitor, async (req: AuthRequest, res: Response)
   } catch (error) {
     console.error('Get customer detail error:', error)
     res.status(500).json({ error: 'Failed to get customer detail' })
+  }
+})
+
+// =============================================================================
+// SIMULATIONS
+// =============================================================================
+
+// GET /simulations/opportunities — auto-detect pricing issues
+// NOTE: Must come BEFORE /simulations/:id to avoid matching 'opportunities' as an :id
+app.get('/simulations/opportunities', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  try {
+    const result = await pool.query(
+      `SELECT feature_key,
+         COALESCE(SUM(cost_amount), 0) as total_cost,
+         COALESCE(SUM(revenue_amount), 0) as total_revenue,
+         COUNT(*) as event_count
+       FROM observe_events
+       WHERE user_id = $1 AND feature_key IS NOT NULL
+       GROUP BY feature_key`,
+      [req.visitorId]
+    )
+
+    const opportunities: Array<{
+      id: string; title: string; description: string;
+      severity: string; suggested_action: string;
+      feature_key?: string; estimated_impact?: string;
+    }> = []
+
+    let idx = 0
+    for (const row of result.rows) {
+      const cost = parseFloat(row.total_cost) || 0
+      const revenue = parseFloat(row.total_revenue) || 0
+      const margin = revenue > 0 ? ((revenue - cost) / revenue) * 100 : -100
+
+      if (margin < 0) {
+        idx++
+        opportunities.push({
+          id: `opp-${idx}`,
+          title: `Negative margin on ${row.feature_key}`,
+          description: `Feature "${row.feature_key}" is losing money: margin is ${Math.round(margin)}%. Cost ($${cost.toFixed(2)}) exceeds revenue ($${revenue.toFixed(2)}).`,
+          severity: 'critical',
+          suggested_action: `Increase pricing for ${row.feature_key} or reduce cost by switching models.`,
+          feature_key: row.feature_key,
+          estimated_impact: `$${(cost - revenue).toFixed(2)} loss`,
+        })
+      } else if (margin < 20) {
+        idx++
+        opportunities.push({
+          id: `opp-${idx}`,
+          title: `Low margin on ${row.feature_key}`,
+          description: `Feature "${row.feature_key}" has only ${Math.round(margin)}% margin. Consider adjusting pricing to improve sustainability.`,
+          severity: 'warning',
+          suggested_action: `Increase pricing for ${row.feature_key} by at least ${Math.round(20 - margin)}% to reach 20% margin.`,
+          feature_key: row.feature_key,
+          estimated_impact: `+$${((revenue * 0.2 / (1 - 0.2)) - revenue + revenue - cost).toFixed(2)} potential improvement`,
+        })
+      }
+    }
+
+    res.json(opportunities)
+  } catch (error) {
+    console.error('Get opportunities error:', error)
+    res.status(500).json({ error: 'Failed to get opportunities' })
+  }
+})
+
+// GET /simulations — list all simulations
+app.get('/simulations', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  try {
+    const result = await pool.query(
+      'SELECT * FROM simulations WHERE user_id = $1 ORDER BY created_at DESC',
+      [req.visitorId]
+    )
+    res.json(result.rows.map((row: Record<string, unknown>) => ({
+      ...row,
+      scenarios: row.scenarios || [],
+      customer_impacts: row.customer_impacts || [],
+      feature_analysis: row.feature_analysis || [],
+    })))
+  } catch (error) {
+    console.error('List simulations error:', error)
+    res.status(500).json({ error: 'Failed to list simulations' })
+  }
+})
+
+// POST /simulations — create a new simulation
+app.post('/simulations', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  try {
+    const { name, scenarios, time_range } = req.body
+    if (!name) {
+      return res.status(400).json({ error: 'Name is required' })
+    }
+
+    const result = await pool.query(
+      `INSERT INTO simulations (user_id, name, scenarios, time_range, status)
+       VALUES ($1, $2, $3, $4, 'draft')
+       RETURNING *`,
+      [req.visitorId, name, JSON.stringify(scenarios || []), time_range ? JSON.stringify(time_range) : null]
+    )
+
+    const row = result.rows[0]
+    res.json({
+      ...row,
+      scenarios: row.scenarios || [],
+      customer_impacts: row.customer_impacts || [],
+      feature_analysis: row.feature_analysis || [],
+    })
+  } catch (error) {
+    console.error('Create simulation error:', error)
+    res.status(500).json({ error: 'Failed to create simulation' })
+  }
+})
+
+// GET /simulations/:id — get a single simulation
+app.get('/simulations/:id', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params
+    const result = await pool.query(
+      'SELECT * FROM simulations WHERE id = $1 AND user_id = $2',
+      [id, req.visitorId]
+    )
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Simulation not found' })
+    }
+    const row = result.rows[0]
+    res.json({
+      ...row,
+      scenarios: row.scenarios || [],
+      customer_impacts: row.customer_impacts || [],
+      feature_analysis: row.feature_analysis || [],
+    })
+  } catch (error) {
+    console.error('Get simulation error:', error)
+    res.status(500).json({ error: 'Failed to get simulation' })
+  }
+})
+
+// PUT /simulations/:id — update a simulation (including running it)
+app.put('/simulations/:id', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  const client = await pool.connect()
+  try {
+    const { id } = req.params
+    const updates = req.body
+
+    // Check ownership
+    const existing = await client.query(
+      'SELECT * FROM simulations WHERE id = $1 AND user_id = $2',
+      [id, req.visitorId]
+    )
+    if (existing.rows.length === 0) {
+      return res.status(404).json({ error: 'Simulation not found' })
+    }
+
+    const sim = existing.rows[0]
+
+    // If status is changing to 'running', compute results
+    if (updates.status === 'running') {
+      await client.query('BEGIN')
+
+      // Update status to running
+      await client.query(
+        "UPDATE simulations SET status = 'running', updated_at = NOW() WHERE id = $1",
+        [id]
+      )
+
+      const scenarios = updates.scenarios || sim.scenarios || []
+
+      // Query feature data
+      const featureResult = await client.query(
+        `SELECT feature_key,
+           COALESCE(SUM(cost_amount), 0) as total_cost,
+           COALESCE(SUM(revenue_amount), 0) as total_revenue,
+           COALESCE(SUM(usage_units), 0) as total_usage,
+           COUNT(*) as event_count
+         FROM observe_events
+         WHERE user_id = $1 AND feature_key IS NOT NULL
+         GROUP BY feature_key`,
+        [req.visitorId]
+      )
+
+      // Query customer data
+      const customerResult = await client.query(
+        `SELECT oe.customer_id, c.name as customer_name, c.segment,
+           COALESCE(SUM(oe.cost_amount), 0) as total_cost,
+           COALESCE(SUM(oe.revenue_amount), 0) as total_revenue
+         FROM observe_events oe
+         LEFT JOIN customers c ON oe.user_id::uuid = c.user_id AND oe.customer_id = c.customer_id
+         WHERE oe.user_id = $1
+         GROUP BY oe.customer_id, c.name, c.segment`,
+        [req.visitorId]
+      )
+
+      // Build feature data map
+      const featureMap = new Map<string, { cost: number; revenue: number; usage: number }>()
+      for (const row of featureResult.rows) {
+        featureMap.set(row.feature_key, {
+          cost: parseFloat(row.total_cost) || 0,
+          revenue: parseFloat(row.total_revenue) || 0,
+          usage: parseFloat(row.total_usage) || 0,
+        })
+      }
+
+      // Helper: apply a scenario's changes to compute projected revenue per feature
+      function computeScenarioProjections(changes: Array<{ feature_key: string; change_type: string; change_value: number }>) {
+        const projections = new Map<string, number>()
+        for (const [key, data] of featureMap.entries()) {
+          let projectedRevenue = data.revenue
+          const change = changes.find(c => c.feature_key === key)
+          if (change) {
+            switch (change.change_type) {
+              case 'percentage_increase':
+                projectedRevenue = data.revenue * (1 + change.change_value / 100)
+                break
+              case 'percentage_decrease':
+                projectedRevenue = data.revenue * (1 - change.change_value / 100)
+                break
+              case 'flat_increase':
+                projectedRevenue = data.revenue + change.change_value
+                break
+              case 'flat_decrease':
+                projectedRevenue = data.revenue - change.change_value
+                break
+              case 'new_price':
+                projectedRevenue = change.change_value * (data.usage || 1)
+                break
+            }
+          }
+          projections.set(key, projectedRevenue)
+        }
+        return projections
+      }
+
+      const totalCurrentRevenue = Array.from(featureMap.values()).reduce((s, d) => s + d.revenue, 0)
+      const totalCost = Array.from(featureMap.values()).reduce((s, d) => s + d.cost, 0)
+      const currentMarginPct = totalCurrentRevenue > 0 ? Math.round(((totalCurrentRevenue - totalCost) / totalCurrentRevenue) * 100) : 0
+
+      // Compute projections for EACH scenario independently
+      const updatedScenarios = scenarios.map((s: Record<string, unknown>) => {
+        const changes = (s.changes as Array<{ feature_key: string; change_type: string; change_value: number }>) || []
+        const projections = computeScenarioProjections(changes)
+        const scenarioRevenue = Array.from(projections.values()).reduce((sum, v) => sum + v, 0)
+        const scenarioMarginPct = scenarioRevenue > 0 ? Math.round(((scenarioRevenue - totalCost) / scenarioRevenue) * 100) : 0
+        return {
+          ...s,
+          projected_revenue: scenarioRevenue,
+          projected_cost: totalCost,
+          projected_margin_pct: scenarioMarginPct,
+        }
+      })
+
+      // Use the best scenario (highest margin) for feature analysis and customer impacts
+      let bestScenario = updatedScenarios[0]
+      for (const s of updatedScenarios) {
+        if ((s.projected_margin_pct || 0) > (bestScenario.projected_margin_pct || 0)) {
+          bestScenario = s
+        }
+      }
+
+      const bestChanges = (bestScenario.changes as Array<{ feature_key: string; change_type: string; change_value: number }>) || []
+      const featureProjections = computeScenarioProjections(bestChanges)
+      const totalProjectedRevenue = Array.from(featureProjections.values()).reduce((s, v) => s + v, 0)
+      const projectedMarginPct = totalProjectedRevenue > 0 ? Math.round(((totalProjectedRevenue - totalCost) / totalProjectedRevenue) * 100) : 0
+
+      // Feature analysis (based on best scenario)
+      const featureAnalysis = Array.from(featureMap.entries()).map(([key, data]) => {
+        const projectedRevenue = featureProjections.get(key) || data.revenue
+        const currentMargin = data.revenue > 0 ? Math.round(((data.revenue - data.cost) / data.revenue) * 100) : 0
+        const projectedMargin = projectedRevenue > 0 ? Math.round(((projectedRevenue - data.cost) / projectedRevenue) * 100) : 0
+        return {
+          feature_key: key,
+          current_cost: data.cost,
+          current_revenue: data.revenue,
+          current_margin_pct: currentMargin,
+          projected_revenue: projectedRevenue,
+          projected_margin_pct: projectedMargin,
+          margin_delta_pct: projectedMargin - currentMargin,
+        }
+      })
+
+      // Customer impacts (based on best scenario)
+      const revenueRatio = totalCurrentRevenue > 0 ? totalProjectedRevenue / totalCurrentRevenue : 1
+      const customerImpacts = customerResult.rows.map((row: Record<string, unknown>) => {
+        const currentRevenue = parseFloat(row.total_revenue as string) || 0
+        const projectedRevenue = currentRevenue * revenueRatio
+        const delta = projectedRevenue - currentRevenue
+        const deltaPct = currentRevenue > 0 ? Math.round((delta / currentRevenue) * 100) : 0
+
+        let churnRisk: 'low' | 'medium' | 'high' = 'low'
+        if (deltaPct > 30) churnRisk = 'high'
+        else if (deltaPct > 15) churnRisk = 'medium'
+        if (delta < 0) churnRisk = 'low'
+
+        return {
+          customer_id: row.customer_id as string,
+          customer_name: (row.customer_name as string) || (row.customer_id as string),
+          current_revenue: currentRevenue,
+          projected_revenue: projectedRevenue,
+          revenue_delta: delta,
+          revenue_delta_pct: deltaPct,
+          churn_risk: churnRisk,
+          segment: (row.segment as string) || undefined,
+        }
+      })
+
+      // Margin impact summary (based on best scenario)
+      const marginImpact = {
+        current_margin_pct: currentMarginPct,
+        projected_margin_pct: projectedMarginPct,
+        margin_delta_pct: projectedMarginPct - currentMarginPct,
+        total_current_revenue: totalCurrentRevenue,
+        total_projected_revenue: totalProjectedRevenue,
+        total_cost: totalCost,
+        customers_affected: customerImpacts.length,
+        high_churn_risk_count: customerImpacts.filter((c: { churn_risk: string }) => c.churn_risk === 'high').length,
+      }
+
+      // Confidence score: based on data volume
+      const totalEvents = featureResult.rows.reduce((s: number, r: { event_count: string }) => s + parseInt(r.event_count), 0)
+      const confidenceScore = Math.min(95, Math.max(30, Math.round(40 + Math.log2(totalEvents + 1) * 10)))
+
+      // Key insight
+      const marginDelta = projectedMarginPct - currentMarginPct
+      const highChurnCount = customerImpacts.filter((c: { churn_risk: string }) => c.churn_risk === 'high').length
+      let keyInsight = ''
+      if (marginDelta > 0) {
+        keyInsight = `This pricing change would improve overall margin from ${currentMarginPct}% to ${projectedMarginPct}% (+${marginDelta}pp).`
+      } else if (marginDelta < 0) {
+        keyInsight = `This pricing change would reduce margin from ${currentMarginPct}% to ${projectedMarginPct}% (${marginDelta}pp).`
+      } else {
+        keyInsight = `This pricing change has minimal impact on overall margin (${currentMarginPct}%).`
+      }
+      if (highChurnCount > 0) {
+        keyInsight += ` ${highChurnCount} customer${highChurnCount > 1 ? 's' : ''} at high churn risk.`
+      }
+
+      // Determine winning scenario (highest projected margin — already computed per-scenario)
+      const winningScenarioId = bestScenario.id as string || null
+
+      await client.query(
+        `UPDATE simulations SET
+           status = 'completed',
+           scenarios = $2,
+           feature_analysis = $3,
+           customer_impacts = $4,
+           margin_impact = $5,
+           confidence_score = $6,
+           key_insight = $7,
+           winning_scenario_id = $8,
+           updated_at = NOW()
+         WHERE id = $1`,
+        [
+          id,
+          JSON.stringify(updatedScenarios),
+          JSON.stringify(featureAnalysis),
+          JSON.stringify(customerImpacts),
+          JSON.stringify(marginImpact),
+          confidenceScore,
+          keyInsight,
+          winningScenarioId,
+        ]
+      )
+
+      await client.query('COMMIT')
+
+      const updated = await client.query('SELECT * FROM simulations WHERE id = $1', [id])
+      const row = updated.rows[0]
+      return res.json({
+        ...row,
+        scenarios: row.scenarios || [],
+        customer_impacts: row.customer_impacts || [],
+        feature_analysis: row.feature_analysis || [],
+      })
+    }
+
+    // Handle roll-out
+    if (updates.status === 'rolled_out') {
+      await client.query(
+        "UPDATE simulations SET status = 'rolled_out', rolled_out_at = NOW(), updated_at = NOW() WHERE id = $1",
+        [id]
+      )
+      const updated = await client.query('SELECT * FROM simulations WHERE id = $1', [id])
+      const row = updated.rows[0]
+      return res.json({
+        ...row,
+        scenarios: row.scenarios || [],
+        customer_impacts: row.customer_impacts || [],
+        feature_analysis: row.feature_analysis || [],
+      })
+    }
+
+    // Generic update
+    const setClauses: string[] = ['updated_at = NOW()']
+    const params: unknown[] = []
+    let paramIdx = 1
+
+    if (updates.name !== undefined) {
+      setClauses.push(`name = $${paramIdx++}`)
+      params.push(updates.name)
+    }
+    if (updates.scenarios !== undefined) {
+      setClauses.push(`scenarios = $${paramIdx++}`)
+      params.push(JSON.stringify(updates.scenarios))
+    }
+    if (updates.segment_name !== undefined) {
+      setClauses.push(`segment_name = $${paramIdx++}`)
+      params.push(updates.segment_name)
+    }
+    if (updates.time_range !== undefined) {
+      setClauses.push(`time_range = $${paramIdx++}`)
+      params.push(JSON.stringify(updates.time_range))
+    }
+
+    params.push(id)
+    await client.query(
+      `UPDATE simulations SET ${setClauses.join(', ')} WHERE id = $${paramIdx}`,
+      params
+    )
+
+    const updated = await client.query('SELECT * FROM simulations WHERE id = $1', [id])
+    const row = updated.rows[0]
+    res.json({
+      ...row,
+      scenarios: row.scenarios || [],
+      customer_impacts: row.customer_impacts || [],
+      feature_analysis: row.feature_analysis || [],
+    })
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {})
+    console.error('Update simulation error:', error)
+    res.status(500).json({ error: 'Failed to update simulation' })
+  } finally {
+    client.release()
+  }
+})
+
+// DELETE /simulations/:id — delete a simulation
+app.delete('/simulations/:id', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params
+    const result = await pool.query(
+      'DELETE FROM simulations WHERE id = $1 AND user_id = $2 RETURNING id',
+      [id, req.visitorId]
+    )
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Simulation not found' })
+    }
+    res.json({ success: true })
+  } catch (error) {
+    console.error('Delete simulation error:', error)
+    res.status(500).json({ error: 'Failed to delete simulation' })
+  }
+})
+
+// =============================================================================
+// AI INSIGHTS
+// =============================================================================
+
+// GET /insights — list all insights for the session
+app.get('/insights', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  try {
+    const result = await pool.query(
+      'SELECT * FROM ai_insights WHERE user_id = $1 ORDER BY created_at DESC',
+      [req.visitorId]
+    )
+    res.json(result.rows)
+  } catch (error) {
+    console.error('List insights error:', error)
+    res.status(500).json({ error: 'Failed to list insights' })
+  }
+})
+
+// POST /insights/generate — generate AI insights from observe_events data
+app.post('/insights/generate', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  try {
+    // Gather summary data from observe_events
+    const [featureRes, customerRes, modelRes, overallRes] = await Promise.all([
+      pool.query(
+        `SELECT feature_key,
+           COUNT(*) as event_count,
+           COALESCE(SUM(cost_amount), 0) as total_cost,
+           COALESCE(SUM(revenue_amount), 0) as total_revenue,
+           COALESCE(SUM(usage_units), 0) as total_usage
+         FROM observe_events WHERE user_id = $1 AND feature_key IS NOT NULL
+         GROUP BY feature_key ORDER BY total_cost DESC`,
+        [req.visitorId]
+      ),
+      pool.query(
+        `SELECT oe.customer_id, c.name as customer_name,
+           COALESCE(SUM(oe.cost_amount), 0) as total_cost,
+           COALESCE(SUM(oe.revenue_amount), 0) as total_revenue
+         FROM observe_events oe
+         LEFT JOIN customers c ON oe.user_id = c.user_id AND oe.customer_id = c.customer_id
+         WHERE oe.user_id = $1
+         GROUP BY oe.customer_id, c.name ORDER BY total_cost DESC LIMIT 10`,
+        [req.visitorId]
+      ),
+      pool.query(
+        `SELECT model, model_provider,
+           COUNT(*) as event_count,
+           COALESCE(SUM(cost_amount), 0) as total_cost
+         FROM observe_events WHERE user_id = $1 AND model IS NOT NULL
+         GROUP BY model, model_provider ORDER BY total_cost DESC`,
+        [req.visitorId]
+      ),
+      pool.query(
+        `SELECT
+           COUNT(*) as total_events,
+           COALESCE(SUM(cost_amount), 0) as total_cost,
+           COALESCE(SUM(revenue_amount), 0) as total_revenue
+         FROM observe_events WHERE user_id = $1`,
+        [req.visitorId]
+      ),
+    ])
+
+    if (featureRes.rows.length === 0) {
+      return res.status(400).json({ error: 'No data available to analyze. Load sample data or import your own first.' })
+    }
+
+    const overall = overallRes.rows[0]
+    const totalCost = parseFloat(overall.total_cost) || 0
+    const totalRevenue = parseFloat(overall.total_revenue) || 0
+    const overallMargin = totalRevenue > 0 ? Math.round(((totalRevenue - totalCost) / totalRevenue) * 100) : 0
+
+    // Build summary for the AI prompt
+    const featureSummary = featureRes.rows.map((r: Record<string, string>) => {
+      const cost = parseFloat(r.total_cost) || 0
+      const revenue = parseFloat(r.total_revenue) || 0
+      const margin = revenue > 0 ? Math.round(((revenue - cost) / revenue) * 100) : 0
+      return `- ${r.feature_key}: cost=$${cost.toFixed(2)}, revenue=$${revenue.toFixed(2)}, margin=${margin}%, ${r.event_count} events`
+    }).join('\n')
+
+    const customerSummary = customerRes.rows.map((r: Record<string, string>) => {
+      const cost = parseFloat(r.total_cost) || 0
+      const revenue = parseFloat(r.total_revenue) || 0
+      return `- ${r.customer_name || r.customer_id}: cost=$${cost.toFixed(2)}, revenue=$${revenue.toFixed(2)}`
+    }).join('\n')
+
+    const modelSummary = modelRes.rows.map((r: Record<string, string>) => {
+      const cost = parseFloat(r.total_cost) || 0
+      return `- ${r.model} (${r.model_provider || 'unknown'}): cost=$${cost.toFixed(2)}, ${r.event_count} calls`
+    }).join('\n')
+
+    const prompt = `You are an AI SaaS pricing analyst. Analyze this data and return exactly 3-5 actionable insights as a JSON array.
+
+Overall: ${parseInt(overall.total_events)} events, total cost $${totalCost.toFixed(2)}, total revenue $${totalRevenue.toFixed(2)}, overall margin ${overallMargin}%
+
+Features:
+${featureSummary}
+
+Top Customers:
+${customerSummary}
+
+AI Models Used:
+${modelSummary}
+
+Return a JSON array where each insight has these fields:
+- insight_type: one of "margin_alert", "pricing_opportunity", "cost_optimization", "customer_risk"
+- title: short headline (under 60 chars)
+- description: 1-2 sentence explanation with specific numbers
+- severity: one of "critical", "warning", "info", "positive"
+- feature_key: the relevant feature key if applicable, or null
+- customer_id: the relevant customer id if applicable, or null
+
+Focus on: negative/low margins, cost optimization opportunities, pricing misalignment, customer concentration risk. Be specific with numbers from the data.
+
+Return ONLY the JSON array, no markdown or explanation.`
+
+    // Check for OpenAI API key
+    const openaiKey = process.env.OPENAI_API_KEY
+    let insights: Array<{
+      insight_type: string
+      title: string
+      description: string
+      severity: string
+      feature_key?: string
+      customer_id?: string
+    }>
+    let tokensUsed = 0
+    let costUsd = 0
+
+    if (openaiKey) {
+      const openaiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${openaiKey}`,
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini',
+          messages: [{ role: 'user', content: prompt }],
+          temperature: 0.3,
+          max_tokens: 1500,
+        }),
+      })
+
+      if (!openaiResponse.ok) {
+        const errBody = await openaiResponse.text()
+        console.error('OpenAI API error:', errBody)
+        return res.status(502).json({ error: 'AI service unavailable. Check your OpenAI API key.' })
+      }
+
+      const completion = await openaiResponse.json() as {
+        choices: Array<{ message: { content: string } }>
+        usage?: { total_tokens: number }
+      }
+      const content = completion.choices[0]?.message?.content || '[]'
+      tokensUsed = completion.usage?.total_tokens || 0
+      const promptTokens = (completion.usage as Record<string, number>)?.prompt_tokens || 0
+      const completionTokens = (completion.usage as Record<string, number>)?.completion_tokens || 0
+      costUsd = promptTokens * 0.00000015 + completionTokens * 0.0000006
+
+      try {
+        const cleaned = content.replace(/^```json?\n?/i, '').replace(/\n?```$/i, '').trim()
+        let parsed = JSON.parse(cleaned)
+        // Handle wrapped responses like { "insights": [...] }
+        if (!Array.isArray(parsed) && parsed.insights && Array.isArray(parsed.insights)) {
+          parsed = parsed.insights
+        }
+        if (!Array.isArray(parsed)) {
+          throw new Error('Expected JSON array from AI')
+        }
+        insights = parsed
+      } catch {
+        console.error('Failed to parse OpenAI response:', content)
+        return res.status(502).json({ error: 'AI returned invalid response. Try again.' })
+      }
+    } else {
+      // Fallback: generate insights locally without OpenAI
+      insights = []
+
+      for (const row of featureRes.rows) {
+        const cost = parseFloat(row.total_cost) || 0
+        const revenue = parseFloat(row.total_revenue) || 0
+        const margin = revenue > 0 ? Math.round(((revenue - cost) / revenue) * 100) : 0
+
+        if (margin < 0) {
+          insights.push({
+            insight_type: 'margin_alert',
+            title: `${row.feature_key} has negative margin (${margin}%)`,
+            description: `This feature costs $${cost.toFixed(2)} but only generates $${revenue.toFixed(2)} in revenue. Consider raising prices or optimizing the underlying AI model costs.`,
+            severity: 'critical',
+            feature_key: row.feature_key,
+          })
+        } else if (margin < 20) {
+          insights.push({
+            insight_type: 'pricing_opportunity',
+            title: `${row.feature_key} has low margin (${margin}%)`,
+            description: `At ${margin}% margin, this feature is barely profitable. A price increase would bring it to a healthier 30%+ margin.`,
+            severity: 'warning',
+            feature_key: row.feature_key,
+          })
+        }
+      }
+
+      if (overallMargin < 30) {
+        insights.push({
+          insight_type: 'margin_alert',
+          title: `Overall margin is ${overallMargin}% — below healthy threshold`,
+          description: `Total costs ($${totalCost.toFixed(2)}) consume ${100 - overallMargin}% of revenue ($${totalRevenue.toFixed(2)}). Target 50%+ margin for SaaS sustainability.`,
+          severity: overallMargin < 0 ? 'critical' : 'warning',
+        })
+      } else {
+        insights.push({
+          insight_type: 'margin_alert',
+          title: `Overall margin is healthy at ${overallMargin}%`,
+          description: `Revenue ($${totalRevenue.toFixed(2)}) comfortably covers costs ($${totalCost.toFixed(2)}). Focus on maintaining this margin as you scale.`,
+          severity: 'positive',
+        })
+      }
+
+      if (modelRes.rows.length > 1) {
+        const mostExpensive = modelRes.rows[0]
+        const cheapest = modelRes.rows[modelRes.rows.length - 1]
+        if (parseFloat(mostExpensive.total_cost) > parseFloat(cheapest.total_cost) * 3) {
+          insights.push({
+            insight_type: 'cost_optimization',
+            title: `${mostExpensive.model} costs ${Math.round(parseFloat(mostExpensive.total_cost) / (parseFloat(cheapest.total_cost) || 0.01))}x more than ${cheapest.model}`,
+            description: `Consider routing simpler requests to ${cheapest.model} ($${parseFloat(cheapest.total_cost).toFixed(2)}) instead of ${mostExpensive.model} ($${parseFloat(mostExpensive.total_cost).toFixed(2)}) where quality permits.`,
+            severity: 'info',
+          })
+        }
+      }
+
+      if (customerRes.rows.length >= 2) {
+        const topCustomerRevenue = parseFloat(customerRes.rows[0].total_revenue) || 0
+        const concentration = totalRevenue > 0 ? Math.round((topCustomerRevenue / totalRevenue) * 100) : 0
+        if (concentration > 40) {
+          insights.push({
+            insight_type: 'customer_risk',
+            title: `${customerRes.rows[0].customer_name || customerRes.rows[0].customer_id} is ${concentration}% of revenue`,
+            description: `High customer concentration risk. If this customer churns, you lose $${topCustomerRevenue.toFixed(2)} (${concentration}% of total). Diversify your customer base.`,
+            severity: 'warning',
+            customer_id: customerRes.rows[0].customer_id,
+          })
+        }
+      }
+
+      insights = insights.slice(0, 5)
+    }
+
+    // Store insights
+    const storedInsights = []
+    for (const insight of insights) {
+      const result = await pool.query(
+        `INSERT INTO ai_insights (user_id, insight_type, title, description, severity, feature_key, customer_id, tokens_used, cost_usd)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+         RETURNING *`,
+        [
+          req.visitorId,
+          insight.insight_type,
+          insight.title,
+          insight.description,
+          insight.severity || 'info',
+          insight.feature_key || null,
+          insight.customer_id || null,
+          tokensUsed,
+          costUsd,
+        ]
+      )
+      storedInsights.push(result.rows[0])
+    }
+
+    // Log the generation as an observe_event
+    await pool.query(
+      `INSERT INTO observe_events (user_id, customer_id, feature_key, event_name, cost_amount, cost_unit, source, granularity)
+       VALUES ($1, 'system', 'ai_insights', 'insight_generated', $2, 'usd', 'system', 'event')`,
+      [req.visitorId, costUsd]
+    )
+
+    res.json({
+      insights: storedInsights,
+      tokens_used: tokensUsed,
+      cost_usd: costUsd,
+      source: openaiKey ? 'openai' : 'local',
+    })
+  } catch (error) {
+    console.error('Generate insights error:', error)
+    res.status(500).json({ error: 'Failed to generate insights' })
+  }
+})
+
+// DELETE /insights — clear all insights
+app.delete('/insights', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  try {
+    await pool.query('DELETE FROM ai_insights WHERE user_id = $1', [req.visitorId])
+    res.json({ success: true })
+  } catch (error) {
+    console.error('Clear insights error:', error)
+    res.status(500).json({ error: 'Failed to clear insights' })
   }
 })
 

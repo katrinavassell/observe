@@ -10,6 +10,7 @@ import {
   Layers,
   Cpu,
   Users,
+  Sparkles,
 } from 'lucide-vue-next'
 
 const route = useRoute()
@@ -44,6 +45,12 @@ const navItems = computed(() => [
     label: 'Customers',
     icon: Users,
     description: 'Customer profiles & usage',
+  },
+  {
+    path: '/insights',
+    label: 'AI Insights',
+    icon: Sparkles,
+    description: 'AI-powered margin & pricing analysis',
   },
   {
     path: '/simulations',
