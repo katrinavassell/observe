@@ -23,13 +23,11 @@ import {
 import StripeApiKeyModal from '@/components/integrations/StripeApiKeyModal.vue'
 import { useDataMode } from '@/composables/useDataMode'
 import {
-  loadSampleRevenue,
-  loadSampleCosts,
-  loadSampleUsage,
+  loadSampleData,
+  clearRevenueData,
   clearCostData,
   clearUsageData,
-  clearRevenueData,
-} from '@/lib/supabase-data'
+} from '@/lib/api'
 
 // =============================================================================
 // STATE MANAGEMENT
@@ -160,13 +158,10 @@ async function handleTrySampleData(): Promise<void> {
 async function handleUseSampleRevenue(): Promise<void> {
   isLoadingRevenue.value = true
   try {
-    await loadSampleRevenue()
+    await loadSampleData()
     await refetchDataMode()
     revenueFiles.value = { customers: true, subscriptions: true, invoices: true }
-
-    // Update the RevenueSection component to show sample files
     revenueSectionRef.value?.setSampleDataLoaded()
-
     toast.success('Sample revenue data loaded!')
   } catch (error) {
     toast.error('Failed to load sample revenue data', {
@@ -183,7 +178,7 @@ async function handleUseSampleRevenue(): Promise<void> {
 async function handleUseSampleCosts(): Promise<void> {
   isLoadingCosts.value = true
   try {
-    await loadSampleCosts()
+    await loadSampleData()
     await refetchDataMode()
     costsFile.value = { name: 'sample-costs.csv', isSample: true }
     toast.success('Sample costs data loaded!')
@@ -202,7 +197,7 @@ async function handleUseSampleCosts(): Promise<void> {
 async function handleUseSampleUsage(): Promise<void> {
   isLoadingUsage.value = true
   try {
-    await loadSampleUsage()
+    await loadSampleData()
     await refetchDataMode()
     usageFile.value = { name: 'sample-usage.csv', isSample: true }
     toast.success('Sample usage data loaded!')
@@ -301,11 +296,35 @@ async function handleStripeSync(): Promise<void> {
   isSyncing.value = true
   try {
     const { syncStripeDataEnhanced } = await import('@/api/client')
-    const { saveStripeData } = await import('@/lib/supabase-data')
+    const { uploadRevenueData } = await import('@/lib/api')
     const result = await syncStripeDataEnhanced()
 
-    // Save to Supabase
-    await saveStripeData(result)
+    // Build revenue data from Stripe sync result
+    const planMap = new Map<string, { plan_id: string; name: string; price_amount: number }>()
+    for (const product of result.products) {
+      const price = result.prices.find((p: { product_id: string; active: boolean; unit_amount: number }) => p.product_id === product.id && p.active)
+      if (price) {
+        planMap.set(product.id, { plan_id: product.id, name: product.name, price_amount: price.unit_amount || 0 })
+      }
+    }
+
+    await uploadRevenueData({
+      customers: result.customers.map((c: { id: string; name: string; email: string; segment: string }) => ({
+        customer_id: c.id,
+        name: c.name || c.email || c.id,
+        email: c.email,
+        segment: c.segment,
+      })),
+      plans: Array.from(planMap.values()),
+      subscriptions: result.subscriptions
+        .filter((s: { status: string }) => s.status === 'active' || s.status === 'trialing')
+        .map((s: { id: string; customer_id: string; items: Array<{ product_id: string }> }) => ({
+          subscription_id: s.id,
+          customer_id: s.customer_id,
+          plan_id: s.items[0]?.product_id || 'unknown',
+          is_active: true,
+        })),
+    })
 
     toast.success(`Synced ${result.summary.total_customers} customers, ${result.summary.active_subscriptions} subscriptions`)
     await refetchDataMode()

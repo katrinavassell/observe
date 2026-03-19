@@ -207,7 +207,7 @@ app.get('/data/analyzer', ensureVisitor, async (req: AuthRequest, res: Response)
         current_period_end: s.current_period_end,
         cancelled_at: s.cancelled_at,
       })),
-      usageRecords: usage.rows.map(u => ({
+      usage: usage.rows.map(u => ({
         customer_id: u.customer_id,
         metric_key: u.metric_key,
         metric_value: Number(u.metric_value),
@@ -215,7 +215,7 @@ app.get('/data/analyzer', ensureVisitor, async (req: AuthRequest, res: Response)
         period_start: u.period_start,
         period_end: u.period_end,
       })),
-      costRecords: costs.rows.map(c => ({
+      costs: costs.rows.map(c => ({
         customer_id: c.customer_id || undefined,
         cost_type: c.cost_type,
         amount: Number(c.amount),
@@ -317,6 +317,41 @@ app.delete('/data/clear', ensureVisitor, async (req: AuthRequest, res: Response)
     res.status(500).json({ error: 'Failed to clear data' })
   } finally {
     client.release()
+  }
+})
+
+app.delete('/data/clear/revenue', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  const client = await pool.connect()
+  try {
+    await client.query('BEGIN')
+    await client.query('DELETE FROM subscriptions WHERE user_id = $1', [req.visitorId])
+    await client.query('DELETE FROM customers WHERE user_id = $1', [req.visitorId])
+    await client.query('DELETE FROM plans WHERE user_id = $1', [req.visitorId])
+    await client.query('COMMIT')
+    res.json({ success: true })
+  } catch (error) {
+    await client.query('ROLLBACK')
+    res.status(500).json({ error: 'Failed to clear revenue data' })
+  } finally {
+    client.release()
+  }
+})
+
+app.delete('/data/clear/costs', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  try {
+    await pool.query('DELETE FROM cost_records WHERE user_id = $1', [req.visitorId])
+    res.json({ success: true })
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to clear cost data' })
+  }
+})
+
+app.delete('/data/clear/usage', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  try {
+    await pool.query('DELETE FROM usage_records WHERE user_id = $1', [req.visitorId])
+    res.json({ success: true })
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to clear usage data' })
   }
 })
 

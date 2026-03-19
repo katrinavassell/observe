@@ -59,6 +59,18 @@ export async function clearData(): Promise<{ success: boolean }> {
   return request('/data/clear', { method: 'DELETE' })
 }
 
+export async function clearRevenueData(): Promise<{ success: boolean }> {
+  return request('/data/clear/revenue', { method: 'DELETE' })
+}
+
+export async function clearCostData(): Promise<{ success: boolean }> {
+  return request('/data/clear/costs', { method: 'DELETE' })
+}
+
+export async function clearUsageData(): Promise<{ success: boolean }> {
+  return request('/data/clear/usage', { method: 'DELETE' })
+}
+
 export interface Customer {
   id: string
   customer_id: string
@@ -203,7 +215,7 @@ export interface AnalyzerData {
     current_period_end?: string
     cancelled_at?: string
   }>
-  usageRecords: Array<{
+  usage: Array<{
     customer_id: string
     metric_key: string
     metric_value: number
@@ -211,7 +223,7 @@ export interface AnalyzerData {
     period_start: string
     period_end: string
   }>
-  costRecords: Array<{
+  costs: Array<{
     customer_id?: string
     cost_type: string
     amount: number
