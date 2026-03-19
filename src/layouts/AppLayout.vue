@@ -1,7 +1,16 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
-import { LayoutDashboard, DollarSign, Plug, Calculator } from 'lucide-vue-next'
+import {
+  LayoutDashboard,
+  DollarSign,
+  Plug,
+  Calculator,
+  Activity,
+  Layers,
+  Cpu,
+  Users,
+} from 'lucide-vue-next'
 
 const route = useRoute()
 
@@ -10,18 +19,50 @@ const navItems = computed(() => [
     path: '/',
     label: 'Pricing',
     icon: DollarSign,
-    description: 'Margin analysis & plan health'
+    description: 'Margin analysis & plan health',
   },
   {
     path: '/simulator',
     label: 'Simulator',
     icon: Calculator,
-    description: 'What-if pricing scenarios'
+    description: 'What-if pricing scenarios',
   },
-  { path: '/data-sources', label: 'Data Sources', icon: Plug, description: 'Connect integrations or upload files' },
+  {
+    path: '/events',
+    label: 'Events',
+    icon: Activity,
+    description: 'Observed feature usage events',
+  },
+  {
+    path: '/features',
+    label: 'Features',
+    icon: Layers,
+    description: 'Feature-level cost & margin',
+  },
+  {
+    path: '/models',
+    label: 'Models',
+    icon: Cpu,
+    description: 'AI model cost breakdown',
+  },
+  {
+    path: '/customers',
+    label: 'Customers',
+    icon: Users,
+    description: 'Customer profiles & usage',
+  },
+  {
+    path: '/data-sources',
+    label: 'Data Sources',
+    icon: Plug,
+    description: 'Connect integrations or upload files',
+  },
 ])
 
-const isActive = (path: string) => route.path === path
+function isActive(path: string) {
+  if (path === '/') return route.path === '/'
+  return route.path === path || route.path.startsWith(path + '/')
+}
 </script>
 
 <template>
@@ -38,7 +79,7 @@ const isActive = (path: string) => route.path === path
         </div>
 
         <!-- Navigation -->
-        <nav class="flex-1 space-y-1 p-4">
+        <nav class="flex-1 space-y-1 overflow-y-auto p-4">
           <router-link
             v-for="item in navItems"
             :key="item.path"
@@ -58,7 +99,6 @@ const isActive = (path: string) => route.path === path
             </div>
           </router-link>
         </nav>
-
       </div>
     </aside>
 

@@ -237,6 +237,146 @@ export async function fetchAnalyzerData(): Promise<AnalyzerData | null> {
 }
 
 // =============================================================================
+// FEATURE ECONOMICS
+// =============================================================================
+
+export interface ObserveEvent {
+  id: number
+  user_id: string
+  customer_id: string | null
+  customer_name?: string
+  feature_key: string | null
+  event_name: string | null
+  timestamp: string
+  cost_amount: number | null
+  cost_unit: string | null
+  revenue_amount: number | null
+  usage_units: number | null
+  model: string | null
+  model_provider: string | null
+  source: string | null
+  granularity: string | null
+  properties: Record<string, unknown> | null
+  created_at: string
+}
+
+export interface EventsResponse {
+  events: ObserveEvent[]
+  total: number
+  limit: number
+  offset: number
+}
+
+export interface FeatureSummary {
+  feature_key: string
+  event_count: number
+  customer_count: number
+  total_cost: number
+  total_revenue: number
+  total_usage: number
+  avg_cost_per_event: number
+  avg_revenue_per_event: number
+  margin_pct: number | null
+  last_seen: string
+}
+
+export interface FeatureDetail extends FeatureSummary {
+  recent_events: ObserveEvent[]
+  by_customer: Array<{
+    customer_id: string
+    customer_name: string
+    event_count: number
+    total_cost: number
+    total_revenue: number
+  }>
+  by_model: Array<{
+    model: string
+    model_provider: string
+    event_count: number
+    total_cost: number
+    total_revenue: number
+  }>
+}
+
+export interface ModelSummary {
+  model: string
+  model_provider: string | null
+  event_count: number
+  customer_count: number
+  feature_count: number
+  total_cost: number
+  total_revenue: number
+  total_usage: number
+  avg_cost_per_event: number
+  margin_pct: number | null
+  last_seen: string
+}
+
+export interface CustomerDetail {
+  customer: {
+    customer_id: string
+    name: string
+    email: string | null
+    segment: string | null
+    created_at: string
+  }
+  subscriptions: Array<{
+    subscription_id: string
+    plan_id: string
+    plan_name: string
+    price_amount: number
+    is_active: boolean
+    mrr_override: number | null
+  }>
+  total_cost: number
+  total_revenue: number
+  margin_pct: number | null
+  recent_events: ObserveEvent[]
+  by_feature: Array<{
+    feature_key: string
+    event_count: number
+    total_cost: number
+    total_revenue: number
+    total_usage: number
+  }>
+}
+
+export interface EventsQuery {
+  limit?: number
+  offset?: number
+  feature_key?: string
+  customer_id?: string
+  model?: string
+}
+
+export async function getEvents(query: EventsQuery = {}): Promise<EventsResponse> {
+  const params = new URLSearchParams()
+  if (query.limit) params.set('limit', String(query.limit))
+  if (query.offset) params.set('offset', String(query.offset))
+  if (query.feature_key) params.set('feature_key', query.feature_key)
+  if (query.customer_id) params.set('customer_id', query.customer_id)
+  if (query.model) params.set('model', query.model)
+  const qs = params.toString()
+  return request(`/events${qs ? '?' + qs : ''}`)
+}
+
+export async function getFeatures(): Promise<FeatureSummary[]> {
+  return request('/features')
+}
+
+export async function getFeatureDetail(key: string): Promise<FeatureDetail> {
+  return request(`/features/${encodeURIComponent(key)}`)
+}
+
+export async function getModels(): Promise<ModelSummary[]> {
+  return request('/models')
+}
+
+export async function getCustomerDetail(id: string): Promise<CustomerDetail> {
+  return request(`/customers/${encodeURIComponent(id)}/detail`)
+}
+
+// =============================================================================
 // STRIPE NATIVE INTEGRATION
 // =============================================================================
 

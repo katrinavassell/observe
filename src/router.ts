@@ -3,7 +3,6 @@ import { createRouter, createWebHistory } from 'vue-router'
 const router = createRouter({
   history: createWebHistory(),
   routes: [
-    // Main app routes - Pricing Analyzer is the home page
     {
       path: '/',
       name: 'pricing',
@@ -12,6 +11,36 @@ const router = createRouter({
     {
       path: '/pricing',
       redirect: '/',
+    },
+    {
+      path: '/events',
+      name: 'events',
+      component: () => import('@/pages/EventsPage.vue'),
+    },
+    {
+      path: '/features',
+      name: 'features',
+      component: () => import('@/pages/FeaturesPage.vue'),
+    },
+    {
+      path: '/features/:key',
+      name: 'feature-detail',
+      component: () => import('@/pages/FeatureDetailPage.vue'),
+    },
+    {
+      path: '/models',
+      name: 'models',
+      component: () => import('@/pages/ModelsPage.vue'),
+    },
+    {
+      path: '/customers',
+      name: 'customers',
+      component: () => import('@/pages/CustomersPage.vue'),
+    },
+    {
+      path: '/customers/:id',
+      name: 'customer-detail',
+      component: () => import('@/pages/CustomerDetailPage.vue'),
     },
     {
       path: '/data-sources',

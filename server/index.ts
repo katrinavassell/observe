@@ -235,6 +235,7 @@ app.post('/data/sample', ensureVisitor, async (req: AuthRequest, res: Response) 
   try {
     await client.query('BEGIN')
 
+    await client.query('DELETE FROM observe_events WHERE user_id = $1', [req.visitorId])
     await client.query('DELETE FROM usage_records WHERE user_id = $1', [req.visitorId])
     await client.query('DELETE FROM cost_records WHERE user_id = $1', [req.visitorId])
     await client.query('DELETE FROM subscriptions WHERE user_id = $1', [req.visitorId])
@@ -281,6 +282,38 @@ app.post('/data/sample', ensureVisitor, async (req: AuthRequest, res: Response) 
       )
     }
 
+    // Sample observe_events — feature-level cost+revenue data
+    const sampleEvents = [
+      // api_requests feature — gpt-4o
+      { customer_id: 'cus_001', feature_key: 'api_requests', event_name: 'inference_call', ts: '2026-01-15T10:00:00Z', cost: 0.24, cost_unit: 'usd', revenue: 0.50, usage: 24, model: 'gpt-4o', provider: 'openai', source: 'sample' },
+      { customer_id: 'cus_002', feature_key: 'api_requests', event_name: 'inference_call', ts: '2026-01-15T11:30:00Z', cost: 0.08, cost_unit: 'usd', revenue: 0.20, usage: 8, model: 'gpt-4o-mini', provider: 'openai', source: 'sample' },
+      { customer_id: 'cus_003', feature_key: 'api_requests', event_name: 'inference_call', ts: '2026-01-16T09:15:00Z', cost: 0.15, cost_unit: 'usd', revenue: 0.35, usage: 15, model: 'gpt-4o', provider: 'openai', source: 'sample' },
+      { customer_id: 'cus_001', feature_key: 'api_requests', event_name: 'inference_call', ts: '2026-02-10T14:00:00Z', cost: 0.30, cost_unit: 'usd', revenue: 0.60, usage: 30, model: 'claude-3-5-sonnet', provider: 'anthropic', source: 'sample' },
+      { customer_id: 'cus_004', feature_key: 'api_requests', event_name: 'inference_call', ts: '2026-02-12T08:45:00Z', cost: 0.05, cost_unit: 'usd', revenue: 0.15, usage: 5, model: 'gpt-4o-mini', provider: 'openai', source: 'sample' },
+      // pdf_generation feature
+      { customer_id: 'cus_001', feature_key: 'pdf_generation', event_name: 'document_generated', ts: '2026-01-20T13:00:00Z', cost: 0.12, cost_unit: 'usd', revenue: 0.50, usage: 12, model: null, provider: null, source: 'sample' },
+      { customer_id: 'cus_003', feature_key: 'pdf_generation', event_name: 'document_generated', ts: '2026-01-22T15:30:00Z', cost: 0.09, cost_unit: 'usd', revenue: 0.30, usage: 9, model: null, provider: null, source: 'sample' },
+      { customer_id: 'cus_005', feature_key: 'pdf_generation', event_name: 'document_generated', ts: '2026-02-05T11:00:00Z', cost: 0.18, cost_unit: 'usd', revenue: 0.70, usage: 18, model: null, provider: null, source: 'sample' },
+      // email_send feature
+      { customer_id: 'cus_002', feature_key: 'email_send', event_name: 'email_sent', ts: '2026-01-18T16:00:00Z', cost: 0.01, cost_unit: 'usd', revenue: 0.05, usage: 100, model: null, provider: null, source: 'sample' },
+      { customer_id: 'cus_004', feature_key: 'email_send', event_name: 'email_sent', ts: '2026-02-08T09:00:00Z', cost: 0.02, cost_unit: 'usd', revenue: 0.08, usage: 200, model: null, provider: null, source: 'sample' },
+      { customer_id: 'cus_005', feature_key: 'email_send', event_name: 'email_sent', ts: '2026-02-15T17:30:00Z', cost: 0.015, cost_unit: 'usd', revenue: 0.06, usage: 150, model: null, provider: null, source: 'sample' },
+      // data_export feature
+      { customer_id: 'cus_001', feature_key: 'data_export', event_name: 'export_run', ts: '2026-01-25T10:00:00Z', cost: 0.05, cost_unit: 'usd', revenue: 0.20, usage: 5, model: null, provider: null, source: 'sample' },
+      { customer_id: 'cus_003', feature_key: 'data_export', event_name: 'export_run', ts: '2026-02-03T14:00:00Z', cost: 0.07, cost_unit: 'usd', revenue: 0.25, usage: 7, model: null, provider: null, source: 'sample' },
+      // summarization feature — claude
+      { customer_id: 'cus_001', feature_key: 'summarization', event_name: 'summary_generated', ts: '2026-01-28T11:00:00Z', cost: 0.18, cost_unit: 'usd', revenue: 0.40, usage: 18, model: 'claude-3-5-sonnet', provider: 'anthropic', source: 'sample' },
+      { customer_id: 'cus_005', feature_key: 'summarization', event_name: 'summary_generated', ts: '2026-02-14T13:00:00Z', cost: 0.22, cost_unit: 'usd', revenue: 0.45, usage: 22, model: 'claude-3-haiku', provider: 'anthropic', source: 'sample' },
+    ]
+
+    for (const ev of sampleEvents) {
+      await client.query(
+        `INSERT INTO observe_events (user_id, customer_id, feature_key, event_name, timestamp, cost_amount, cost_unit, revenue_amount, usage_units, model, model_provider, source, granularity)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'event')`,
+        [req.visitorId, ev.customer_id, ev.feature_key, ev.event_name, ev.ts, ev.cost, ev.cost_unit, ev.revenue, ev.usage, ev.model, ev.provider, ev.source]
+      )
+    }
+
     await client.query(
       'INSERT INTO user_data_status (user_id, data_mode) VALUES ($1, $2) ON CONFLICT (user_id) DO UPDATE SET data_mode = $2, updated_at = NOW()',
       [req.visitorId, 'sample']
@@ -301,6 +334,7 @@ app.delete('/data/clear', ensureVisitor, async (req: AuthRequest, res: Response)
   const client = await pool.connect()
   try {
     await client.query('BEGIN')
+    await client.query('DELETE FROM observe_events WHERE user_id = $1', [req.visitorId])
     await client.query('DELETE FROM usage_records WHERE user_id = $1', [req.visitorId])
     await client.query('DELETE FROM cost_records WHERE user_id = $1', [req.visitorId])
     await client.query('DELETE FROM subscriptions WHERE user_id = $1', [req.visitorId])
@@ -325,6 +359,7 @@ app.delete('/data/clear/revenue', ensureVisitor, async (req: AuthRequest, res: R
   const client = await pool.connect()
   try {
     await client.query('BEGIN')
+    await client.query("DELETE FROM observe_events WHERE user_id = $1 AND source = 'revenue_upload'", [req.visitorId])
     await client.query('DELETE FROM subscriptions WHERE user_id = $1', [req.visitorId])
     await client.query('DELETE FROM customers WHERE user_id = $1', [req.visitorId])
     await client.query('DELETE FROM plans WHERE user_id = $1', [req.visitorId])
@@ -339,20 +374,34 @@ app.delete('/data/clear/revenue', ensureVisitor, async (req: AuthRequest, res: R
 })
 
 app.delete('/data/clear/costs', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  const client = await pool.connect()
   try {
-    await pool.query('DELETE FROM cost_records WHERE user_id = $1', [req.visitorId])
+    await client.query('BEGIN')
+    await client.query("DELETE FROM observe_events WHERE user_id = $1 AND source = 'cost_upload'", [req.visitorId])
+    await client.query('DELETE FROM cost_records WHERE user_id = $1', [req.visitorId])
+    await client.query('COMMIT')
     res.json({ success: true })
   } catch (error) {
+    await client.query('ROLLBACK')
     res.status(500).json({ error: 'Failed to clear cost data' })
+  } finally {
+    client.release()
   }
 })
 
 app.delete('/data/clear/usage', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  const client = await pool.connect()
   try {
-    await pool.query('DELETE FROM usage_records WHERE user_id = $1', [req.visitorId])
+    await client.query('BEGIN')
+    await client.query("DELETE FROM observe_events WHERE user_id = $1 AND source = 'usage_upload'", [req.visitorId])
+    await client.query('DELETE FROM usage_records WHERE user_id = $1', [req.visitorId])
+    await client.query('COMMIT')
     res.json({ success: true })
   } catch (error) {
+    await client.query('ROLLBACK')
     res.status(500).json({ error: 'Failed to clear usage data' })
+  } finally {
+    client.release()
   }
 })
 
@@ -367,6 +416,7 @@ app.post('/data/upload/costs', ensureVisitor, async (req: AuthRequest, res: Resp
 
     await client.query('BEGIN')
     await client.query('DELETE FROM cost_records WHERE user_id = $1', [req.visitorId])
+    await client.query("DELETE FROM observe_events WHERE user_id = $1 AND source = 'cost_upload'", [req.visitorId])
 
     for (const record of records) {
       const periodStart = `${record.month}-01`
@@ -377,6 +427,13 @@ app.post('/data/upload/costs', ensureVisitor, async (req: AuthRequest, res: Resp
       await client.query(
         'INSERT INTO cost_records (user_id, customer_id, cost_type, amount, period_start, period_end) VALUES ($1, $2, $3, $4, $5, $6)',
         [req.visitorId, record.customer_id || null, record.provider || 'infrastructure', record.cost, periodStart, periodEnd.toISOString().split('T')[0]]
+      )
+
+      // Dual-write to observe_events
+      await client.query(
+        `INSERT INTO observe_events (user_id, customer_id, feature_key, event_name, timestamp, cost_amount, cost_unit, source, granularity)
+         VALUES ($1, $2, $3, $4, $5, $6, 'usd', 'cost_upload', 'monthly')`,
+        [req.visitorId, record.customer_id || null, record.provider || 'infrastructure', 'cost_recorded', new Date(`${record.month}-01`).toISOString(), record.cost]
       )
     }
 
@@ -407,6 +464,7 @@ app.post('/data/upload/usage', ensureVisitor, async (req: AuthRequest, res: Resp
 
     await client.query('BEGIN')
     await client.query('DELETE FROM usage_records WHERE user_id = $1', [req.visitorId])
+    await client.query("DELETE FROM observe_events WHERE user_id = $1 AND source = 'usage_upload'", [req.visitorId])
 
     for (const record of records) {
       const periodStart = `${record.month}-01`
@@ -414,9 +472,19 @@ app.post('/data/upload/usage', ensureVisitor, async (req: AuthRequest, res: Resp
       periodEnd.setMonth(periodEnd.getMonth() + 1)
       periodEnd.setDate(0)
 
+      const metricKey = record.metric || record.metric_key
+      const metricValue = record.value || record.metric_value
+
       await client.query(
         'INSERT INTO usage_records (user_id, customer_id, metric_key, metric_value, metric_limit, period_start, period_end) VALUES ($1, $2, $3, $4, $5, $6, $7)',
-        [req.visitorId, record.customer_id, record.metric || record.metric_key, record.value || record.metric_value, record.limit || record.metric_limit || null, periodStart, periodEnd.toISOString().split('T')[0]]
+        [req.visitorId, record.customer_id, metricKey, metricValue, record.limit || record.metric_limit || null, periodStart, periodEnd.toISOString().split('T')[0]]
+      )
+
+      // Dual-write to observe_events
+      await client.query(
+        `INSERT INTO observe_events (user_id, customer_id, feature_key, event_name, timestamp, usage_units, source, granularity)
+         VALUES ($1, $2, $3, $4, $5, $6, 'usage_upload', 'monthly')`,
+        [req.visitorId, record.customer_id, metricKey, 'usage_recorded', new Date(`${record.month}-01`).toISOString(), metricValue]
       )
     }
 
@@ -475,6 +543,18 @@ app.post('/data/upload/revenue', ensureVisitor, async (req: AuthRequest, res: Re
         await client.query(
           'INSERT INTO subscriptions (user_id, subscription_id, customer_id, plan_id, is_active, mrr_override, current_period_start, current_period_end) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
           [req.visitorId, sub.subscription_id, sub.customer_id, sub.plan_id, sub.is_active !== false, sub.mrr_override || null, sub.current_period_start || null, sub.current_period_end || null]
+        )
+      }
+    }
+
+    // Dual-write subscriptions to observe_events
+    if (Array.isArray(subscriptions)) {
+      for (const sub of subscriptions) {
+        const mrr = sub.mrr_override || 0
+        await client.query(
+          `INSERT INTO observe_events (user_id, customer_id, feature_key, event_name, timestamp, revenue_amount, source, granularity)
+           VALUES ($1, $2, $3, $4, NOW(), $5, 'revenue_upload', 'monthly')`,
+          [req.visitorId, sub.customer_id, sub.plan_id, 'subscription_recorded', mrr]
         )
       }
     }
@@ -648,6 +728,283 @@ app.post('/stripe/sync', ensureVisitor, async (req: AuthRequest, res: Response) 
     res.status(500).json({ error: error instanceof Error ? error.message : 'Stripe sync failed' })
   } finally {
     client.release()
+  }
+})
+
+// =============================================================================
+// FEATURE ECONOMICS ENDPOINTS
+// =============================================================================
+
+// GET /events — paginated list of observe_events
+app.get('/events', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit as string) || 50, 200)
+    const offset = parseInt(req.query.offset as string) || 0
+    const featureKey = req.query.feature_key as string | undefined
+    const customerId = req.query.customer_id as string | undefined
+    const model = req.query.model as string | undefined
+
+    let where = 'WHERE oe.user_id = $1'
+    const params: unknown[] = [req.visitorId]
+    let paramIdx = 2
+
+    if (featureKey) {
+      where += ` AND oe.feature_key = $${paramIdx++}`
+      params.push(featureKey)
+    }
+    if (customerId) {
+      where += ` AND oe.customer_id = $${paramIdx++}`
+      params.push(customerId)
+    }
+    if (model) {
+      where += ` AND oe.model = $${paramIdx++}`
+      params.push(model)
+    }
+
+    const eventsResult = await pool.query(
+      `SELECT oe.*, c.name as customer_name
+       FROM observe_events oe
+       LEFT JOIN customers c ON oe.user_id::uuid = c.user_id AND oe.customer_id = c.customer_id
+       ${where}
+       ORDER BY oe.timestamp DESC
+       LIMIT $${paramIdx++} OFFSET $${paramIdx}`,
+      [...params, limit, offset]
+    )
+
+    const countResult = await pool.query(
+      `SELECT COUNT(*) FROM observe_events oe ${where}`,
+      params
+    )
+
+    res.json({
+      events: eventsResult.rows,
+      total: parseInt(countResult.rows[0].count),
+      limit,
+      offset,
+    })
+  } catch (error) {
+    console.error('Get events error:', error)
+    res.status(500).json({ error: 'Failed to get events' })
+  }
+})
+
+// GET /features — aggregated stats per feature_key
+app.get('/features', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  try {
+    const result = await pool.query(
+      `SELECT
+         feature_key,
+         COUNT(*) as event_count,
+         COUNT(DISTINCT customer_id) as customer_count,
+         COALESCE(SUM(cost_amount), 0) as total_cost,
+         COALESCE(SUM(revenue_amount), 0) as total_revenue,
+         COALESCE(SUM(usage_units), 0) as total_usage,
+         COALESCE(AVG(cost_amount), 0) as avg_cost_per_event,
+         COALESCE(AVG(revenue_amount), 0) as avg_revenue_per_event,
+         MAX(timestamp) as last_seen
+       FROM observe_events
+       WHERE user_id = $1 AND feature_key IS NOT NULL
+       GROUP BY feature_key
+       ORDER BY total_cost DESC`,
+      [req.visitorId]
+    )
+
+    const features = result.rows.map(row => {
+      const cost = parseFloat(row.total_cost) || 0
+      const revenue = parseFloat(row.total_revenue) || 0
+      const margin = revenue > 0 ? Math.round(((revenue - cost) / revenue) * 100) : null
+      return {
+        feature_key: row.feature_key,
+        event_count: parseInt(row.event_count),
+        customer_count: parseInt(row.customer_count),
+        total_cost: cost,
+        total_revenue: revenue,
+        total_usage: parseFloat(row.total_usage) || 0,
+        avg_cost_per_event: parseFloat(row.avg_cost_per_event) || 0,
+        avg_revenue_per_event: parseFloat(row.avg_revenue_per_event) || 0,
+        margin_pct: margin,
+        last_seen: row.last_seen,
+      }
+    })
+
+    res.json(features)
+  } catch (error) {
+    console.error('Get features error:', error)
+    res.status(500).json({ error: 'Failed to get features' })
+  }
+})
+
+// GET /features/:key — detail for a single feature
+app.get('/features/:key', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  try {
+    const { key } = req.params
+
+    const [summaryRes, eventsRes, customerRes, modelRes] = await Promise.all([
+      pool.query(
+        `SELECT feature_key, COUNT(*) as event_count, COUNT(DISTINCT customer_id) as customer_count,
+           COALESCE(SUM(cost_amount), 0) as total_cost, COALESCE(SUM(revenue_amount), 0) as total_revenue,
+           COALESCE(SUM(usage_units), 0) as total_usage, MAX(timestamp) as last_seen
+         FROM observe_events WHERE user_id = $1 AND feature_key = $2
+         GROUP BY feature_key`,
+        [req.visitorId, key]
+      ),
+      pool.query(
+        `SELECT oe.*, c.name as customer_name FROM observe_events oe
+         LEFT JOIN customers c ON oe.user_id::uuid = c.user_id AND oe.customer_id = c.customer_id
+         WHERE oe.user_id = $1 AND oe.feature_key = $2 ORDER BY oe.timestamp DESC LIMIT 50`,
+        [req.visitorId, key]
+      ),
+      pool.query(
+        `SELECT oe.customer_id, c.name as customer_name,
+           COUNT(*) as event_count, COALESCE(SUM(oe.cost_amount), 0) as total_cost,
+           COALESCE(SUM(oe.revenue_amount), 0) as total_revenue
+         FROM observe_events oe
+         LEFT JOIN customers c ON oe.user_id::uuid = c.user_id AND oe.customer_id = c.customer_id
+         WHERE oe.user_id = $1 AND oe.feature_key = $2
+         GROUP BY oe.customer_id, c.name ORDER BY total_cost DESC`,
+        [req.visitorId, key]
+      ),
+      pool.query(
+        `SELECT model, model_provider, COUNT(*) as event_count,
+           COALESCE(SUM(cost_amount), 0) as total_cost, COALESCE(SUM(revenue_amount), 0) as total_revenue
+         FROM observe_events WHERE user_id = $1 AND feature_key = $2 AND model IS NOT NULL
+         GROUP BY model, model_provider ORDER BY total_cost DESC`,
+        [req.visitorId, key]
+      ),
+    ])
+
+    const s = summaryRes.rows[0]
+    if (!s || !s.feature_key) {
+      return res.status(404).json({ error: 'Feature not found' })
+    }
+
+    const cost = parseFloat(s.total_cost) || 0
+    const revenue = parseFloat(s.total_revenue) || 0
+    const margin = revenue > 0 ? Math.round(((revenue - cost) / revenue) * 100) : null
+
+    res.json({
+      feature_key: s.feature_key,
+      event_count: parseInt(s.event_count),
+      customer_count: parseInt(s.customer_count),
+      total_cost: cost,
+      total_revenue: revenue,
+      total_usage: parseFloat(s.total_usage) || 0,
+      margin_pct: margin,
+      last_seen: s.last_seen,
+      recent_events: eventsRes.rows,
+      by_customer: customerRes.rows.map((r: { customer_id: string; customer_name: string; event_count: string; total_cost: string; total_revenue: string }) => ({
+        customer_id: r.customer_id,
+        customer_name: r.customer_name,
+        event_count: parseInt(r.event_count),
+        total_cost: parseFloat(r.total_cost) || 0,
+        total_revenue: parseFloat(r.total_revenue) || 0,
+      })),
+      by_model: modelRes.rows.map((r: { model: string; model_provider: string; event_count: string; total_cost: string; total_revenue: string }) => ({
+        model: r.model,
+        model_provider: r.model_provider,
+        event_count: parseInt(r.event_count),
+        total_cost: parseFloat(r.total_cost) || 0,
+        total_revenue: parseFloat(r.total_revenue) || 0,
+      })),
+    })
+  } catch (error) {
+    console.error('Get feature detail error:', error)
+    res.status(500).json({ error: 'Failed to get feature detail' })
+  }
+})
+
+// GET /models — aggregated stats per model
+app.get('/models', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  try {
+    const result = await pool.query(
+      `SELECT model, model_provider, COUNT(*) as event_count,
+         COUNT(DISTINCT customer_id) as customer_count, COUNT(DISTINCT feature_key) as feature_count,
+         COALESCE(SUM(cost_amount), 0) as total_cost, COALESCE(SUM(revenue_amount), 0) as total_revenue,
+         COALESCE(SUM(usage_units), 0) as total_usage, COALESCE(AVG(cost_amount), 0) as avg_cost_per_event,
+         MAX(timestamp) as last_seen
+       FROM observe_events WHERE user_id = $1 AND model IS NOT NULL
+       GROUP BY model, model_provider ORDER BY total_cost DESC`,
+      [req.visitorId]
+    )
+
+    res.json(result.rows.map(row => {
+      const cost = parseFloat(row.total_cost) || 0
+      const revenue = parseFloat(row.total_revenue) || 0
+      return {
+        model: row.model,
+        model_provider: row.model_provider,
+        event_count: parseInt(row.event_count),
+        customer_count: parseInt(row.customer_count),
+        feature_count: parseInt(row.feature_count),
+        total_cost: cost,
+        total_revenue: revenue,
+        total_usage: parseFloat(row.total_usage) || 0,
+        avg_cost_per_event: parseFloat(row.avg_cost_per_event) || 0,
+        margin_pct: revenue > 0 ? Math.round(((revenue - cost) / revenue) * 100) : null,
+        last_seen: row.last_seen,
+      }
+    }))
+  } catch (error) {
+    console.error('Get models error:', error)
+    res.status(500).json({ error: 'Failed to get models' })
+  }
+})
+
+// GET /customers/:id/detail — enriched customer detail with events
+app.get('/customers/:id/detail', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params
+
+    const [customerRes, subRes, eventsRes, featureRes] = await Promise.all([
+      pool.query('SELECT * FROM customers WHERE user_id = $1 AND customer_id = $2', [req.visitorId, id]),
+      pool.query(
+        `SELECT s.*, p.name as plan_name, p.price_amount FROM subscriptions s
+         LEFT JOIN plans p ON s.user_id = p.user_id AND s.plan_id = p.plan_id
+         WHERE s.user_id = $1 AND s.customer_id = $2`,
+        [req.visitorId, id]
+      ),
+      pool.query(
+        `SELECT * FROM observe_events WHERE user_id = $1 AND customer_id = $2 ORDER BY timestamp DESC LIMIT 50`,
+        [req.visitorId, id]
+      ),
+      pool.query(
+        `SELECT feature_key, COUNT(*) as event_count,
+           COALESCE(SUM(cost_amount), 0) as total_cost,
+           COALESCE(SUM(revenue_amount), 0) as total_revenue,
+           COALESCE(SUM(usage_units), 0) as total_usage
+         FROM observe_events WHERE user_id = $1 AND customer_id = $2 AND feature_key IS NOT NULL
+         GROUP BY feature_key ORDER BY total_cost DESC`,
+        [req.visitorId, id]
+      ),
+    ])
+
+    if (customerRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Customer not found' })
+    }
+
+    const c = customerRes.rows[0]
+    const totalCost = featureRes.rows.reduce((sum: number, r: { total_cost: string }) => sum + (parseFloat(r.total_cost) || 0), 0)
+    const totalRevenue = featureRes.rows.reduce((sum: number, r: { total_revenue: string }) => sum + (parseFloat(r.total_revenue) || 0), 0)
+    const marginPct = totalRevenue > 0 ? Math.round(((totalRevenue - totalCost) / totalRevenue) * 100) : null
+
+    res.json({
+      customer: { customer_id: c.customer_id, name: c.name, email: c.email, segment: c.segment, created_at: c.created_at },
+      subscriptions: subRes.rows,
+      total_cost: totalCost,
+      total_revenue: totalRevenue,
+      margin_pct: marginPct,
+      recent_events: eventsRes.rows,
+      by_feature: featureRes.rows.map((r: { feature_key: string; event_count: string; total_cost: string; total_revenue: string; total_usage: string }) => ({
+        feature_key: r.feature_key,
+        event_count: parseInt(r.event_count),
+        total_cost: parseFloat(r.total_cost) || 0,
+        total_revenue: parseFloat(r.total_revenue) || 0,
+        total_usage: parseFloat(r.total_usage) || 0,
+      })),
+    })
+  } catch (error) {
+    console.error('Get customer detail error:', error)
+    res.status(500).json({ error: 'Failed to get customer detail' })
   }
 })
 
