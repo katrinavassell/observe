@@ -284,26 +284,28 @@ app.post('/data/sample', ensureVisitor, async (req: AuthRequest, res: Response) 
 
     // Sample observe_events — feature-level cost+revenue data
     const sampleEvents = [
-      // api_requests feature — gpt-4o
-      { customer_id: 'cus_001', feature_key: 'api_requests', event_name: 'inference_call', ts: '2026-01-15T10:00:00Z', cost: 0.24, cost_unit: 'usd', revenue: 0.50, usage: 24, model: 'gpt-4o', provider: 'openai', source: 'sample' },
-      { customer_id: 'cus_002', feature_key: 'api_requests', event_name: 'inference_call', ts: '2026-01-15T11:30:00Z', cost: 0.08, cost_unit: 'usd', revenue: 0.20, usage: 8, model: 'gpt-4o-mini', provider: 'openai', source: 'sample' },
-      { customer_id: 'cus_003', feature_key: 'api_requests', event_name: 'inference_call', ts: '2026-01-16T09:15:00Z', cost: 0.15, cost_unit: 'usd', revenue: 0.35, usage: 15, model: 'gpt-4o', provider: 'openai', source: 'sample' },
-      { customer_id: 'cus_001', feature_key: 'api_requests', event_name: 'inference_call', ts: '2026-02-10T14:00:00Z', cost: 0.30, cost_unit: 'usd', revenue: 0.60, usage: 30, model: 'claude-3-5-sonnet', provider: 'anthropic', source: 'sample' },
-      { customer_id: 'cus_004', feature_key: 'api_requests', event_name: 'inference_call', ts: '2026-02-12T08:45:00Z', cost: 0.05, cost_unit: 'usd', revenue: 0.15, usage: 5, model: 'gpt-4o-mini', provider: 'openai', source: 'sample' },
-      // pdf_generation feature
-      { customer_id: 'cus_001', feature_key: 'pdf_generation', event_name: 'document_generated', ts: '2026-01-20T13:00:00Z', cost: 0.12, cost_unit: 'usd', revenue: 0.50, usage: 12, model: null, provider: null, source: 'sample' },
-      { customer_id: 'cus_003', feature_key: 'pdf_generation', event_name: 'document_generated', ts: '2026-01-22T15:30:00Z', cost: 0.09, cost_unit: 'usd', revenue: 0.30, usage: 9, model: null, provider: null, source: 'sample' },
-      { customer_id: 'cus_005', feature_key: 'pdf_generation', event_name: 'document_generated', ts: '2026-02-05T11:00:00Z', cost: 0.18, cost_unit: 'usd', revenue: 0.70, usage: 18, model: null, provider: null, source: 'sample' },
+      // ai_summarization feature — claude + gpt
+      { customer_id: 'cus_001', feature_key: 'ai_summarization', event_name: 'summary_generated', ts: '2026-01-15T10:00:00Z', cost: 0.24, cost_unit: 'usd', revenue: 0.50, usage: 24, model: 'claude-3-5-sonnet', provider: 'anthropic', source: 'sample' },
+      { customer_id: 'cus_002', feature_key: 'ai_summarization', event_name: 'summary_generated', ts: '2026-01-18T11:30:00Z', cost: 0.08, cost_unit: 'usd', revenue: 0.20, usage: 8, model: 'gpt-4o', provider: 'openai', source: 'sample' },
+      { customer_id: 'cus_003', feature_key: 'ai_summarization', event_name: 'summary_generated', ts: '2026-01-22T09:15:00Z', cost: 0.15, cost_unit: 'usd', revenue: 0.35, usage: 15, model: 'claude-3-5-sonnet', provider: 'anthropic', source: 'sample' },
+      { customer_id: 'cus_001', feature_key: 'ai_summarization', event_name: 'summary_generated', ts: '2026-02-10T14:00:00Z', cost: 0.30, cost_unit: 'usd', revenue: 0.60, usage: 30, model: 'gpt-4o', provider: 'openai', source: 'sample' },
+      { customer_id: 'cus_004', feature_key: 'ai_summarization', event_name: 'summary_generated', ts: '2026-02-12T08:45:00Z', cost: 0.05, cost_unit: 'usd', revenue: 0.15, usage: 5, model: 'claude-3-haiku', provider: 'anthropic', source: 'sample' },
+      // image_generation feature — dall-e-3 + stable-diffusion
+      { customer_id: 'cus_001', feature_key: 'image_generation', event_name: 'image_generated', ts: '2026-01-20T13:00:00Z', cost: 0.04, cost_unit: 'usd', revenue: 0.25, usage: 1, model: 'dall-e-3', provider: 'openai', source: 'sample' },
+      { customer_id: 'cus_003', feature_key: 'image_generation', event_name: 'image_generated', ts: '2026-01-22T15:30:00Z', cost: 0.04, cost_unit: 'usd', revenue: 0.25, usage: 1, model: 'dall-e-3', provider: 'openai', source: 'sample' },
+      { customer_id: 'cus_005', feature_key: 'image_generation', event_name: 'image_generated', ts: '2026-02-05T11:00:00Z', cost: 0.02, cost_unit: 'usd', revenue: 0.20, usage: 1, model: 'stable-diffusion-xl', provider: 'stability', source: 'sample' },
+      { customer_id: 'cus_002', feature_key: 'image_generation', event_name: 'image_generated', ts: '2026-02-08T09:00:00Z', cost: 0.04, cost_unit: 'usd', revenue: 0.25, usage: 1, model: 'dall-e-3', provider: 'openai', source: 'sample' },
+      // search feature — embeddings
+      { customer_id: 'cus_001', feature_key: 'search', event_name: 'search_query', ts: '2026-01-25T10:00:00Z', cost: 0.002, cost_unit: 'usd', revenue: 0.01, usage: 100, model: 'text-embedding-3-small', provider: 'openai', source: 'sample' },
+      { customer_id: 'cus_002', feature_key: 'search', event_name: 'search_query', ts: '2026-01-28T14:00:00Z', cost: 0.003, cost_unit: 'usd', revenue: 0.01, usage: 150, model: 'text-embedding-3-small', provider: 'openai', source: 'sample' },
+      { customer_id: 'cus_003', feature_key: 'search', event_name: 'search_query', ts: '2026-02-03T14:00:00Z', cost: 0.001, cost_unit: 'usd', revenue: 0.005, usage: 50, model: 'text-embedding-3-small', provider: 'openai', source: 'sample' },
+      { customer_id: 'cus_004', feature_key: 'search', event_name: 'search_query', ts: '2026-02-11T09:30:00Z', cost: 0.004, cost_unit: 'usd', revenue: 0.02, usage: 200, model: 'text-embedding-ada-002', provider: 'openai', source: 'sample' },
+      // pdf_generation feature (no model — deterministic)
+      { customer_id: 'cus_001', feature_key: 'pdf_generation', event_name: 'document_generated', ts: '2026-01-19T13:00:00Z', cost: 0.12, cost_unit: 'usd', revenue: 0.50, usage: 12, model: null, provider: null, source: 'sample' },
+      { customer_id: 'cus_005', feature_key: 'pdf_generation', event_name: 'document_generated', ts: '2026-02-07T11:00:00Z', cost: 0.18, cost_unit: 'usd', revenue: 0.70, usage: 18, model: null, provider: null, source: 'sample' },
       // email_send feature
       { customer_id: 'cus_002', feature_key: 'email_send', event_name: 'email_sent', ts: '2026-01-18T16:00:00Z', cost: 0.01, cost_unit: 'usd', revenue: 0.05, usage: 100, model: null, provider: null, source: 'sample' },
-      { customer_id: 'cus_004', feature_key: 'email_send', event_name: 'email_sent', ts: '2026-02-08T09:00:00Z', cost: 0.02, cost_unit: 'usd', revenue: 0.08, usage: 200, model: null, provider: null, source: 'sample' },
-      { customer_id: 'cus_005', feature_key: 'email_send', event_name: 'email_sent', ts: '2026-02-15T17:30:00Z', cost: 0.015, cost_unit: 'usd', revenue: 0.06, usage: 150, model: null, provider: null, source: 'sample' },
-      // data_export feature
-      { customer_id: 'cus_001', feature_key: 'data_export', event_name: 'export_run', ts: '2026-01-25T10:00:00Z', cost: 0.05, cost_unit: 'usd', revenue: 0.20, usage: 5, model: null, provider: null, source: 'sample' },
-      { customer_id: 'cus_003', feature_key: 'data_export', event_name: 'export_run', ts: '2026-02-03T14:00:00Z', cost: 0.07, cost_unit: 'usd', revenue: 0.25, usage: 7, model: null, provider: null, source: 'sample' },
-      // summarization feature — claude
-      { customer_id: 'cus_001', feature_key: 'summarization', event_name: 'summary_generated', ts: '2026-01-28T11:00:00Z', cost: 0.18, cost_unit: 'usd', revenue: 0.40, usage: 18, model: 'claude-3-5-sonnet', provider: 'anthropic', source: 'sample' },
-      { customer_id: 'cus_005', feature_key: 'summarization', event_name: 'summary_generated', ts: '2026-02-14T13:00:00Z', cost: 0.22, cost_unit: 'usd', revenue: 0.45, usage: 22, model: 'claude-3-haiku', provider: 'anthropic', source: 'sample' },
+      { customer_id: 'cus_004', feature_key: 'email_send', event_name: 'email_sent', ts: '2026-02-15T17:30:00Z', cost: 0.015, cost_unit: 'usd', revenue: 0.06, usage: 150, model: null, provider: null, source: 'sample' },
     ]
 
     for (const ev of sampleEvents) {
@@ -359,7 +361,7 @@ app.delete('/data/clear/revenue', ensureVisitor, async (req: AuthRequest, res: R
   const client = await pool.connect()
   try {
     await client.query('BEGIN')
-    await client.query("DELETE FROM observe_events WHERE user_id = $1 AND source = 'revenue_upload'", [req.visitorId])
+    await client.query("DELETE FROM observe_events WHERE user_id = $1 AND event_name = 'revenue'", [req.visitorId])
     await client.query('DELETE FROM subscriptions WHERE user_id = $1', [req.visitorId])
     await client.query('DELETE FROM customers WHERE user_id = $1', [req.visitorId])
     await client.query('DELETE FROM plans WHERE user_id = $1', [req.visitorId])
@@ -377,7 +379,7 @@ app.delete('/data/clear/costs', ensureVisitor, async (req: AuthRequest, res: Res
   const client = await pool.connect()
   try {
     await client.query('BEGIN')
-    await client.query("DELETE FROM observe_events WHERE user_id = $1 AND source = 'cost_upload'", [req.visitorId])
+    await client.query("DELETE FROM observe_events WHERE user_id = $1 AND event_name = 'cost'", [req.visitorId])
     await client.query('DELETE FROM cost_records WHERE user_id = $1', [req.visitorId])
     await client.query('COMMIT')
     res.json({ success: true })
@@ -393,7 +395,7 @@ app.delete('/data/clear/usage', ensureVisitor, async (req: AuthRequest, res: Res
   const client = await pool.connect()
   try {
     await client.query('BEGIN')
-    await client.query("DELETE FROM observe_events WHERE user_id = $1 AND source = 'usage_upload'", [req.visitorId])
+    await client.query("DELETE FROM observe_events WHERE user_id = $1 AND event_name = 'usage'", [req.visitorId])
     await client.query('DELETE FROM usage_records WHERE user_id = $1', [req.visitorId])
     await client.query('COMMIT')
     res.json({ success: true })
@@ -416,7 +418,7 @@ app.post('/data/upload/costs', ensureVisitor, async (req: AuthRequest, res: Resp
 
     await client.query('BEGIN')
     await client.query('DELETE FROM cost_records WHERE user_id = $1', [req.visitorId])
-    await client.query("DELETE FROM observe_events WHERE user_id = $1 AND source = 'cost_upload'", [req.visitorId])
+    await client.query("DELETE FROM observe_events WHERE user_id = $1 AND event_name = 'cost'", [req.visitorId])
 
     for (const record of records) {
       const periodStart = `${record.month}-01`
@@ -432,8 +434,8 @@ app.post('/data/upload/costs', ensureVisitor, async (req: AuthRequest, res: Resp
       // Dual-write to observe_events
       await client.query(
         `INSERT INTO observe_events (user_id, customer_id, feature_key, event_name, timestamp, cost_amount, cost_unit, source, granularity)
-         VALUES ($1, $2, $3, $4, $5, $6, 'usd', 'cost_upload', 'monthly')`,
-        [req.visitorId, record.customer_id || 'unknown', record.provider || 'infrastructure', 'cost_recorded', new Date(`${record.month}-01`).toISOString(), record.cost]
+         VALUES ($1, $2, $3, 'cost', $4, $5, 'usd', 'csv', 'monthly_aggregate')`,
+        [req.visitorId, record.customer_id || '_aggregate', record.provider || 'infrastructure', new Date(`${record.month}-01`).toISOString(), record.cost]
       )
     }
 
@@ -464,7 +466,7 @@ app.post('/data/upload/usage', ensureVisitor, async (req: AuthRequest, res: Resp
 
     await client.query('BEGIN')
     await client.query('DELETE FROM usage_records WHERE user_id = $1', [req.visitorId])
-    await client.query("DELETE FROM observe_events WHERE user_id = $1 AND source = 'usage_upload'", [req.visitorId])
+    await client.query("DELETE FROM observe_events WHERE user_id = $1 AND event_name = 'usage'", [req.visitorId])
 
     for (const record of records) {
       const periodStart = `${record.month}-01`
@@ -483,8 +485,8 @@ app.post('/data/upload/usage', ensureVisitor, async (req: AuthRequest, res: Resp
       // Dual-write to observe_events
       await client.query(
         `INSERT INTO observe_events (user_id, customer_id, feature_key, event_name, timestamp, usage_units, source, granularity)
-         VALUES ($1, $2, $3, $4, $5, $6, 'usage_upload', 'monthly')`,
-        [req.visitorId, record.customer_id, metricKey, 'usage_recorded', new Date(`${record.month}-01`).toISOString(), metricValue]
+         VALUES ($1, $2, $3, 'usage', $4, $5, 'csv', 'monthly_aggregate')`,
+        [req.visitorId, record.customer_id || '_aggregate', metricKey, new Date(`${record.month}-01`).toISOString(), metricValue]
       )
     }
 
@@ -516,7 +518,7 @@ app.post('/data/upload/revenue', ensureVisitor, async (req: AuthRequest, res: Re
     await client.query('DELETE FROM subscriptions WHERE user_id = $1', [req.visitorId])
     await client.query('DELETE FROM customers WHERE user_id = $1', [req.visitorId])
     await client.query('DELETE FROM plans WHERE user_id = $1', [req.visitorId])
-    await client.query("DELETE FROM observe_events WHERE user_id = $1 AND source = 'revenue_upload'", [req.visitorId])
+    await client.query("DELETE FROM observe_events WHERE user_id = $1 AND event_name = 'revenue'", [req.visitorId])
 
     // Insert plans
     if (Array.isArray(plans)) {
@@ -554,8 +556,8 @@ app.post('/data/upload/revenue', ensureVisitor, async (req: AuthRequest, res: Re
         const mrr = sub.mrr_override || 0
         await client.query(
           `INSERT INTO observe_events (user_id, customer_id, feature_key, event_name, timestamp, revenue_amount, source, granularity)
-           VALUES ($1, $2, $3, $4, NOW(), $5, 'revenue_upload', 'monthly')`,
-          [req.visitorId, sub.customer_id, sub.plan_id, 'subscription_recorded', mrr]
+           VALUES ($1, $2, 'subscription', 'revenue', NOW(), $3, 'csv', 'monthly_aggregate')`,
+          [req.visitorId, sub.customer_id, mrr]
         )
       }
     }
@@ -666,7 +668,7 @@ app.post('/stripe/sync', ensureVisitor, async (req: AuthRequest, res: Response) 
     await client.query('DELETE FROM subscriptions WHERE user_id = $1', [req.visitorId])
     await client.query('DELETE FROM customers WHERE user_id = $1', [req.visitorId])
     await client.query('DELETE FROM plans WHERE user_id = $1', [req.visitorId])
-    await client.query("DELETE FROM observe_events WHERE user_id = $1 AND source = 'stripe_sync'", [req.visitorId])
+    await client.query("DELETE FROM observe_events WHERE user_id = $1 AND source = 'stripe'", [req.visitorId])
 
     // Insert plans (from Stripe products + prices)
     const planIds = new Set<string>()
@@ -708,8 +710,8 @@ app.post('/stripe/sync', ensureVisitor, async (req: AuthRequest, res: Response) 
       )
       await client.query(
         `INSERT INTO observe_events (user_id, customer_id, feature_key, event_name, timestamp, revenue_amount, source, granularity)
-         VALUES ($1, $2, $3, $4, NOW(), $5, 'stripe_sync', 'monthly')`,
-        [req.visitorId, sub.customer as string, priceId, 'subscription_synced', mrr]
+         VALUES ($1, $2, 'subscription', 'revenue', NOW(), $3, 'stripe', 'monthly_aggregate')`,
+        [req.visitorId, sub.customer as string, mrr]
       )
       syncedSubs++
     }

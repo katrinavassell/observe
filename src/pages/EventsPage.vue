@@ -19,10 +19,8 @@ const PAGE_SIZE = 50
 
 const SOURCES = [
   { value: 'sample', label: 'Sample Data' },
-  { value: 'cost_upload', label: 'Cost Upload' },
-  { value: 'usage_upload', label: 'Usage Upload' },
-  { value: 'revenue_upload', label: 'Revenue Upload' },
-  { value: 'stripe_sync', label: 'Stripe Sync' },
+  { value: 'csv', label: 'CSV Upload' },
+  { value: 'stripe', label: 'Stripe Sync' },
 ]
 
 const query = computed(() => ({
