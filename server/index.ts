@@ -744,6 +744,15 @@ app.post('/stripe/sync', ensureVisitor, async (req: AuthRequest, res: Response) 
 // FEATURE ECONOMICS ENDPOINTS
 // =============================================================================
 
+function coerceEventRow(row: Record<string, unknown>) {
+  return {
+    ...row,
+    cost_amount: row.cost_amount != null ? parseFloat(row.cost_amount as string) : null,
+    revenue_amount: row.revenue_amount != null ? parseFloat(row.revenue_amount as string) : null,
+    usage_units: row.usage_units != null ? parseFloat(row.usage_units as string) : null,
+  }
+}
+
 // GET /events — paginated list of observe_events
 app.get('/events', ensureVisitor, async (req: AuthRequest, res: Response) => {
   try {
@@ -801,7 +810,7 @@ app.get('/events', ensureVisitor, async (req: AuthRequest, res: Response) => {
     )
 
     res.json({
-      events: eventsResult.rows,
+      events: eventsResult.rows.map(coerceEventRow),
       total: parseInt(countResult.rows[0].count),
       limit,
       offset,
@@ -1023,7 +1032,7 @@ app.get('/features/:key', ensureVisitor, async (req: AuthRequest, res: Response)
       total_usage: parseFloat(s.total_usage) || 0,
       margin_pct: margin,
       last_seen: s.last_seen,
-      recent_events: eventsRes.rows,
+      recent_events: eventsRes.rows.map(coerceEventRow),
       by_customer: customerRes.rows.map((r: { customer_id: string; customer_name: string; event_count: string; total_cost: string; total_revenue: string }) => ({
         customer_id: r.customer_id,
         customer_name: r.customer_name,
@@ -1132,7 +1141,7 @@ app.get('/customers/:id', ensureVisitor, async (req: AuthRequest, res: Response)
       total_cost: totalCost,
       total_revenue: totalRevenue,
       margin_pct: marginPct,
-      recent_events: eventsRes.rows,
+      recent_events: eventsRes.rows.map(coerceEventRow),
       by_feature: featureRes.rows.map((r: { feature_key: string; event_count: string; total_cost: string; total_revenue: string; total_usage: string }) => ({
         feature_key: r.feature_key,
         event_count: parseInt(r.event_count),
