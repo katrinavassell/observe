@@ -433,7 +433,7 @@ app.post('/data/upload/costs', ensureVisitor, async (req: AuthRequest, res: Resp
       await client.query(
         `INSERT INTO observe_events (user_id, customer_id, feature_key, event_name, timestamp, cost_amount, cost_unit, source, granularity)
          VALUES ($1, $2, $3, $4, $5, $6, 'usd', 'cost_upload', 'monthly')`,
-        [req.visitorId, record.customer_id || null, record.provider || 'infrastructure', 'cost_recorded', new Date(`${record.month}-01`).toISOString(), record.cost]
+        [req.visitorId, record.customer_id || 'unknown', record.provider || 'infrastructure', 'cost_recorded', new Date(`${record.month}-01`).toISOString(), record.cost]
       )
     }
 

@@ -18,7 +18,7 @@ const currentPage = ref(0)
 const PAGE_SIZE = 50
 
 const SOURCES = [
-  { value: 'sample_data', label: 'Sample Data' },
+  { value: 'sample', label: 'Sample Data' },
   { value: 'cost_upload', label: 'Cost Upload' },
   { value: 'usage_upload', label: 'Usage Upload' },
   { value: 'revenue_upload', label: 'Revenue Upload' },
