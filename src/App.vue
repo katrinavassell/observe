@@ -1,16 +1,13 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import { RouterView, useRoute } from 'vue-router'
+import { RouterView } from 'vue-router'
 import { Toaster } from 'vue-sonner'
 import { WifiOff } from 'lucide-vue-next'
 import AppLayout from '@/layouts/AppLayout.vue'
 import { useOnline } from '@/composables/useOnline'
+import { useAuth } from '@/composables/useAuth'
 
-const route = useRoute()
 const { isOnline } = useOnline()
-
-// Skip layout for auth pages (login, etc.)
-const skipLayout = computed(() => route.meta.requiresAuth === false)
+const { isLoading } = useAuth()
 </script>
 
 <template>
@@ -29,10 +26,12 @@ const skipLayout = computed(() => route.meta.requiresAuth === false)
     richColors
   />
 
-  <!-- Conditional layout -->
-  <template v-if="skipLayout">
-    <RouterView />
-  </template>
+  <!-- Loading state while session initializes -->
+  <div v-if="isLoading" class="flex items-center justify-center min-h-screen">
+    <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+  </div>
+
+  <!-- Main app -->
   <AppLayout v-else>
     <RouterView />
   </AppLayout>

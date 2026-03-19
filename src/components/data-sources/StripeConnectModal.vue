@@ -1,15 +1,5 @@
 <script setup lang="ts">
-/**
- * StripeConnectModal - Modal for connecting Stripe via API key
- *
- * Handles:
- * - API key input and validation
- * - Test/live mode detection
- * - Connection confirmation
- * - Sync initiation
- */
-
-import { ref, computed, watch } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import {
   DialogRoot,
   DialogPortal,
@@ -19,15 +9,9 @@ import {
   DialogDescription,
   DialogClose,
 } from 'radix-vue'
-import { X, Key, AlertCircle, CheckCircle2, Loader2, ExternalLink } from 'lucide-vue-next'
-import { Button, Input, Badge } from '@/components/ui'
-import Alert from '@/components/ui/alert.vue'
+import { X, CheckCircle2, Loader2, Zap } from 'lucide-vue-next'
+import { Button, Badge } from '@/components/ui'
 import { useStripeConnection } from '@/composables/useStripeConnection'
-import { detectKeyMode } from '@/lib/stripe-api'
-
-// =============================================================================
-// PROPS & EMITS
-// =============================================================================
 
 const props = defineProps<{
   open: boolean
@@ -39,82 +23,32 @@ const emit = defineEmits<{
   'start-sync': []
 }>()
 
-// =============================================================================
-// STATE
-// =============================================================================
+const { isConnected, accountName, checkStatus, isCheckingStatus, disconnect } = useStripeConnection()
 
-const {
-  isValidating,
-  validation,
-  validateApiKey,
-  disconnect,
-} = useStripeConnection()
+const localChecked = ref(false)
 
-const apiKeyInput = ref('')
-const showKey = ref(false)
-const hasAttemptedValidation = ref(false)
-
-// =============================================================================
-// COMPUTED
-// =============================================================================
-
-const keyMode = computed(() => {
-  if (!apiKeyInput.value) return null
-  return detectKeyMode(apiKeyInput.value)
-})
-
-const isValidKeyFormat = computed(() => {
-  return keyMode.value !== null
-})
-
-const canConnect = computed(() => {
-  return isValidKeyFormat.value && !isValidating.value
-})
-
-const isConnected = computed(() => {
-  return validation.value?.isValid === true
-})
-
-// =============================================================================
-// HANDLERS
-// =============================================================================
-
-async function handleValidate(): Promise<void> {
-  if (!canConnect.value) return
-
-  hasAttemptedValidation.value = true
-  await validateApiKey(apiKeyInput.value)
-
-  if (validation.value?.isValid) {
-    emit('connected', validation.value.accountName || 'Unknown Account')
+onMounted(async () => {
+  if (!localChecked.value) {
+    localChecked.value = true
+    await checkStatus()
   }
-}
+})
 
-function handleStartSync(): void {
+const displayName = computed(() => accountName.value || 'Your Stripe Account')
+
+function handleStartSync() {
   emit('start-sync')
   emit('update:open', false)
 }
 
-function handleClose(): void {
+function handleClose() {
   emit('update:open', false)
 }
 
-function handleDisconnect(): void {
+function handleDisconnect() {
   disconnect()
-  apiKeyInput.value = ''
-  hasAttemptedValidation.value = false
+  emit('update:open', false)
 }
-
-// Reset state when modal opens
-watch(() => props.open, (isOpen) => {
-  if (isOpen) {
-    // Don't reset if already connected
-    if (!isConnected.value) {
-      apiKeyInput.value = ''
-      hasAttemptedValidation.value = false
-    }
-  }
-})
 </script>
 
 <template>
@@ -135,11 +69,9 @@ watch(() => props.open, (isOpen) => {
               </svg>
             </div>
             <div>
-              <DialogTitle class="text-lg font-semibold">
-                Connect Stripe
-              </DialogTitle>
+              <DialogTitle class="text-lg font-semibold">Stripe Integration</DialogTitle>
               <DialogDescription class="text-sm text-muted-foreground">
-                Import customers, subscriptions, and invoices
+                Import customers, subscriptions, and pricing data
               </DialogDescription>
             </div>
           </div>
@@ -152,41 +84,37 @@ watch(() => props.open, (isOpen) => {
           </DialogClose>
         </div>
 
-        <!-- Connected State -->
-        <template v-if="isConnected">
-          <Alert class="border-green-500/30 bg-green-500/5">
-            <CheckCircle2 class="h-4 w-4 text-green-500" />
-            <div class="ml-2">
-              <p class="text-sm font-medium">Connected to Stripe</p>
-              <p class="text-sm text-muted-foreground">
-                {{ validation?.accountName }}
-                <Badge variant="outline" class="ml-2">
-                  {{ validation?.mode === 'test' ? 'Test Mode' : 'Live Mode' }}
-                </Badge>
-              </p>
-            </div>
-          </Alert>
+        <!-- Checking state -->
+        <div v-if="isCheckingStatus" class="py-6 flex flex-col items-center gap-3">
+          <Loader2 class="h-6 w-6 animate-spin text-muted-foreground" />
+          <p class="text-sm text-muted-foreground">Checking connection...</p>
+        </div>
 
-          <div class="space-y-3">
-            <p class="text-sm text-muted-foreground">
-              Ready to import your Stripe data. This will fetch:
-            </p>
+        <!-- Connected state -->
+        <template v-else-if="isConnected">
+          <div class="rounded-lg border border-green-500/30 bg-green-500/5 p-3 flex items-start gap-3">
+            <CheckCircle2 class="h-5 w-5 text-green-500 mt-0.5 shrink-0" />
+            <div>
+              <p class="text-sm font-medium">Connected to Stripe</p>
+              <p class="text-sm text-muted-foreground">{{ displayName }}</p>
+              <Badge variant="outline" class="mt-1">Sandbox mode</Badge>
+            </div>
+          </div>
+
+          <div class="space-y-2">
+            <p class="text-sm text-muted-foreground">Importing will fetch:</p>
             <ul class="text-sm space-y-1 text-muted-foreground">
               <li class="flex items-center gap-2">
-                <CheckCircle2 class="h-4 w-4 text-green-500" />
+                <CheckCircle2 class="h-4 w-4 text-green-500 shrink-0" />
                 Customers and their metadata
               </li>
               <li class="flex items-center gap-2">
-                <CheckCircle2 class="h-4 w-4 text-green-500" />
+                <CheckCircle2 class="h-4 w-4 text-green-500 shrink-0" />
                 Active and canceled subscriptions
               </li>
               <li class="flex items-center gap-2">
-                <CheckCircle2 class="h-4 w-4 text-green-500" />
-                Invoice history and payment status
-              </li>
-              <li class="flex items-center gap-2">
-                <CheckCircle2 class="h-4 w-4 text-green-500" />
-                Usage data from metered billing
+                <CheckCircle2 class="h-4 w-4 text-green-500 shrink-0" />
+                Products and pricing plans
               </li>
             </ul>
           </div>
@@ -196,99 +124,33 @@ watch(() => props.open, (isOpen) => {
               Disconnect
             </Button>
             <Button class="flex-1" @click="handleStartSync">
-              Start Import
+              <Zap class="h-4 w-4 mr-2" />
+              Import Data
             </Button>
           </div>
         </template>
 
-        <!-- Not Connected State -->
+        <!-- Not connected state -->
         <template v-else>
-          <!-- API Key Input -->
-          <div class="space-y-3">
-            <div>
-              <label class="text-sm font-medium mb-1.5 block">
-                Secret API Key
-              </label>
-              <div class="relative">
-                <Key class="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  v-model="apiKeyInput"
-                  :type="showKey ? 'text' : 'password'"
-                  placeholder="sk_test_... or sk_live_..."
-                  class="pl-9 pr-20 font-mono text-sm"
-                  :disabled="isValidating"
-                  @keyup.enter="handleValidate"
-                />
-                <button
-                  type="button"
-                  class="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground hover:text-foreground"
-                  @click="showKey = !showKey"
-                >
-                  {{ showKey ? 'Hide' : 'Show' }}
-                </button>
-              </div>
-            </div>
-
-            <!-- Key Mode Badge -->
-            <div v-if="apiKeyInput" class="flex items-center gap-2">
-              <Badge
-                v-if="keyMode"
-                :variant="keyMode === 'test' ? 'secondary' : 'default'"
-                :class="keyMode === 'live' ? 'bg-green-500 hover:bg-green-600' : ''"
-              >
-                {{ keyMode === 'test' ? 'Test Mode' : 'Live Mode' }}
-              </Badge>
-              <span v-else class="text-sm text-destructive flex items-center gap-1">
-                <AlertCircle class="h-3.5 w-3.5" />
-                Invalid key format
-              </span>
-            </div>
-
-            <!-- Validation Error -->
-            <Alert v-if="hasAttemptedValidation && validation && !validation.isValid" variant="destructive">
-              <AlertCircle class="h-4 w-4" />
-              <div class="ml-2">
-                <p class="text-sm font-medium">Connection failed</p>
-                <p class="text-sm">{{ validation.error }}</p>
-              </div>
-            </Alert>
-
-            <!-- Help Text -->
-            <p class="text-xs text-muted-foreground">
-              Find your API keys in your
-              <a
-                href="https://dashboard.stripe.com/apikeys"
-                target="_blank"
-                rel="noopener noreferrer"
-                class="text-primary hover:underline inline-flex items-center gap-0.5"
-              >
-                Stripe Dashboard
-                <ExternalLink class="h-3 w-3" />
-              </a>
-            </p>
-          </div>
-
-          <!-- Security Note -->
-          <div class="rounded-lg bg-muted/50 p-3 text-xs text-muted-foreground">
-            <p class="font-medium text-foreground mb-1">Security Note</p>
+          <div class="rounded-lg bg-muted/50 p-4 text-sm text-muted-foreground space-y-2">
+            <p class="font-medium text-foreground">Native Stripe Integration</p>
             <p>
-              Your API key is used only to fetch data and is never stored on our servers.
-              We recommend using a restricted API key with read-only access.
+              This app uses a secure native Stripe connection — no API key required.
+              Your Stripe account is connected through the Replit integration.
             </p>
           </div>
 
-          <!-- Actions -->
+          <div class="rounded-lg border border-destructive/20 bg-destructive/5 p-3 text-sm text-destructive">
+            Stripe connection not found. Please ensure the Stripe integration is set up in the project settings.
+          </div>
+
           <div class="flex gap-2 pt-2">
             <Button variant="outline" class="flex-1" @click="handleClose">
-              Cancel
+              Close
             </Button>
-            <Button
-              class="flex-1"
-              :disabled="!canConnect"
-              @click="handleValidate"
-            >
-              <Loader2 v-if="isValidating" class="h-4 w-4 mr-2 animate-spin" />
-              {{ isValidating ? 'Connecting...' : 'Connect' }}
+            <Button class="flex-1" @click="checkStatus">
+              <Loader2 v-if="isCheckingStatus" class="h-4 w-4 mr-2 animate-spin" />
+              Retry
             </Button>
           </div>
         </template>

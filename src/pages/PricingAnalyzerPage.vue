@@ -18,7 +18,7 @@ import {
 } from '@/components/ui'
 import { RevenueFlowChart, MarginOverviewCard } from '@/components/pricing'
 import { analyzeData, type AnalysisResult } from '@/lib/pricing-analyzer'
-import { fetchAnalyzerData } from '@/lib/supabase-data'
+import * as api from '@/lib/api'
 import { useDataMode } from '@/composables/useDataMode'
 import { toast } from 'vue-sonner'
 
@@ -92,7 +92,7 @@ async function loadData() {
   isLoading.value = true
 
   try {
-    const data = await fetchAnalyzerData()
+    const data = await api.fetchAnalyzerData()
     if (data) {
       analysisResult.value = analyzeData(data)
     } else {

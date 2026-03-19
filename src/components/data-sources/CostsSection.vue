@@ -9,7 +9,7 @@
  * - Template downloads
  */
 
-import { ref, onMounted } from 'vue'
+import { ref } from 'vue'
 import { toast } from 'vue-sonner'
 import Papa from 'papaparse'
 import {
@@ -20,7 +20,7 @@ import {
   X,
 } from 'lucide-vue-next'
 import { Card, CardContent, Button } from '@/components/ui'
-import { uploadCostData, type CostRecord } from '@/lib/supabase-data'
+import * as api from '@/lib/api'
 import {
   validateFileSize,
   validateCsvExtension,
@@ -28,7 +28,6 @@ import {
 } from '@/lib/validation'
 import AnthropicApiKeyModal from '@/components/integrations/AnthropicApiKeyModal.vue'
 import OpenAIApiKeyModal from '@/components/integrations/OpenAIApiKeyModal.vue'
-import { getOpenAIStatus, getAnthropicStatus } from '@/api/client'
 
 const props = defineProps<{
   /** Current file info if any */
@@ -133,7 +132,7 @@ async function processFile(file: File): Promise<void> {
         cost: parseFloat(String(r.cost)) || 0,
       }))
 
-    const result = await uploadCostData(records)
+    const result = await api.uploadCostData(records)
     emit('fileUploaded', { name: file.name, isSample: false })
 
     // Show success with validation summary
@@ -190,19 +189,7 @@ function handleAnthropicConnected(): void {
   isAnthropicConnected.value = true
 }
 
-// Fetch integration status on mount
-onMounted(async () => {
-  try {
-    const [openaiStatus, anthropicStatus] = await Promise.all([
-      getOpenAIStatus(),
-      getAnthropicStatus(),
-    ])
-    isOpenAIConnected.value = openaiStatus.connected
-    isAnthropicConnected.value = anthropicStatus.connected
-  } catch {
-    // Silently fail - integrations will just show as not connected
-  }
-})
+// AI integrations default to not connected until explicitly set up
 </script>
 
 <template>

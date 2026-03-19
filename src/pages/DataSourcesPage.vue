@@ -12,7 +12,6 @@
 import { ref, watch, onMounted, onUnmounted } from 'vue'
 import { toast } from 'vue-sonner'
 import { TrendingUp } from 'lucide-vue-next'
-import { getStripeStatus, disconnectStripe } from '@/api/client'
 import { Card, CardContent, Button } from '@/components/ui'
 import {
   RevenueSection,
@@ -23,14 +22,11 @@ import {
 import StripeApiKeyModal from '@/components/integrations/StripeApiKeyModal.vue'
 import { useDataMode } from '@/composables/useDataMode'
 import {
-  loadSampleData as loadSampleDataToSupabase,
-  loadSampleRevenue,
-  loadSampleCosts,
-  loadSampleUsage,
+  loadSampleData,
+  clearRevenueData,
   clearCostData,
   clearUsageData,
-  clearRevenueData,
-} from '@/lib/supabase-data'
+} from '@/lib/api'
 
 // =============================================================================
 // STATE MANAGEMENT
@@ -43,6 +39,7 @@ const {
   hasCosts,
   hasUsage,
   lastSyncAt,
+  switchToSampleData,
 } = useDataMode()
 
 // Sync cadence constants (best practices for billing data)
@@ -88,27 +85,12 @@ const revenueSectionRef = ref<InstanceType<typeof RevenueSection> | null>(null)
 
 onMounted(async () => {
   try {
+    const { getStripeStatus } = await import('@/lib/api')
     const status = await getStripeStatus()
-    if (status.connected) {
-      isStripeConnected.value = true
-      stripeAccountName.value = status.account_name || ''
-
-      // Auto-sync if data is stale (older than 1 hour)
-      if (isDataStale()) {
-        toast.info('Refreshing Stripe data...')
-        await handleStripeSync()
-      }
-
-      // Set up background sync (every 4 hours)
-      syncIntervalId = setInterval(async () => {
-        if (isStripeConnected.value && !isSyncing.value) {
-          console.log('[Stripe] Background sync triggered')
-          await handleStripeSync()
-        }
-      }, SYNC_INTERVAL_MS)
-    }
+    isStripeConnected.value = status.connected
+    stripeAccountName.value = status.account_name || ''
   } catch {
-    // Silently fail - user just hasn't connected Stripe yet
+    isStripeConnected.value = false
   }
 })
 
@@ -131,7 +113,7 @@ onUnmounted(() => {
 async function handleTrySampleData(): Promise<void> {
   isLoadingSample.value = true
   try {
-    await loadSampleDataToSupabase()
+    await switchToSampleData()
     await refetchDataMode()
 
     // Update file indicators
@@ -160,13 +142,10 @@ async function handleTrySampleData(): Promise<void> {
 async function handleUseSampleRevenue(): Promise<void> {
   isLoadingRevenue.value = true
   try {
-    await loadSampleRevenue()
+    await loadSampleData()
     await refetchDataMode()
     revenueFiles.value = { customers: true, subscriptions: true, invoices: true }
-
-    // Update the RevenueSection component to show sample files
     revenueSectionRef.value?.setSampleDataLoaded()
-
     toast.success('Sample revenue data loaded!')
   } catch (error) {
     toast.error('Failed to load sample revenue data', {
@@ -183,7 +162,7 @@ async function handleUseSampleRevenue(): Promise<void> {
 async function handleUseSampleCosts(): Promise<void> {
   isLoadingCosts.value = true
   try {
-    await loadSampleCosts()
+    await loadSampleData()
     await refetchDataMode()
     costsFile.value = { name: 'sample-costs.csv', isSample: true }
     toast.success('Sample costs data loaded!')
@@ -202,7 +181,7 @@ async function handleUseSampleCosts(): Promise<void> {
 async function handleUseSampleUsage(): Promise<void> {
   isLoadingUsage.value = true
   try {
-    await loadSampleUsage()
+    await loadSampleData()
     await refetchDataMode()
     usageFile.value = { name: 'sample-usage.csv', isSample: true }
     toast.success('Sample usage data loaded!')
@@ -296,19 +275,18 @@ async function handleStripeConnected(accountName: string): Promise<void> {
 }
 
 async function handleStripeSync(): Promise<void> {
-  if (isSyncing.value) return // Prevent duplicate syncs
+  if (isSyncing.value) return
 
   isSyncing.value = true
   try {
-    const { syncStripeDataEnhanced } = await import('@/api/client')
-    const { saveStripeData } = await import('@/lib/supabase-data')
-    const result = await syncStripeDataEnhanced()
+    const { syncStripeData } = await import('@/lib/api')
+    const result = await syncStripeData()
 
-    // Save to Supabase
-    await saveStripeData(result)
-
-    toast.success(`Synced ${result.summary.total_customers} customers, ${result.summary.active_subscriptions} subscriptions`)
-    await refetchDataMode()
+    if (result.success) {
+      toast.success(`Synced ${result.synced.customers} customers, ${result.synced.subscriptions} subscriptions`)
+      revenueFiles.value = { customers: true, subscriptions: true, invoices: false }
+      await refetchDataMode()
+    }
   } catch (error) {
     toast.error('Sync failed', {
       description: error instanceof Error ? error.message : 'Please try again',
@@ -320,9 +298,6 @@ async function handleStripeSync(): Promise<void> {
 
 async function handleStripeDisconnect(): Promise<void> {
   try {
-    // Call backend to disconnect and clear synced data
-    await disconnectStripe(true)
-
     // Clear local state
     isStripeConnected.value = false
     stripeAccountName.value = ''

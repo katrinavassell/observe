@@ -22,7 +22,7 @@ import {
 } from 'lucide-vue-next'
 import { Card, CardContent } from '@/components/ui'
 import Alert from '@/components/ui/alert.vue'
-import { uploadUsageData, type UsageRecord } from '@/lib/supabase-data'
+import * as api from '@/lib/api'
 import {
   validateFileSize,
   validateCsvExtension,
@@ -138,7 +138,7 @@ async function processFile(file: File): Promise<void> {
         limit: r.limit ? parseFloat(String(r.limit)) : undefined,
       }))
 
-    const result = await uploadUsageData(records)
+    const result = await api.uploadUsageData(records)
     emit('fileUploaded', { name: file.name, isSample: false })
 
     // Show success with validation summary
