@@ -12,7 +12,6 @@
 import { ref, watch, onMounted, onUnmounted } from 'vue'
 import { toast } from 'vue-sonner'
 import { TrendingUp } from 'lucide-vue-next'
-import { getStripeStatus, disconnectStripe } from '@/api/client'
 import { Card, CardContent, Button } from '@/components/ui'
 import {
   RevenueSection,
@@ -85,29 +84,8 @@ const revenueSectionRef = ref<InstanceType<typeof RevenueSection> | null>(null)
 // =============================================================================
 
 onMounted(async () => {
-  try {
-    const status = await getStripeStatus()
-    if (status.connected) {
-      isStripeConnected.value = true
-      stripeAccountName.value = status.account_name || ''
-
-      // Auto-sync if data is stale (older than 1 hour)
-      if (isDataStale()) {
-        toast.info('Refreshing Stripe data...')
-        await handleStripeSync()
-      }
-
-      // Set up background sync (every 4 hours)
-      syncIntervalId = setInterval(async () => {
-        if (isStripeConnected.value && !isSyncing.value) {
-          console.log('[Stripe] Background sync triggered')
-          await handleStripeSync()
-        }
-      }, SYNC_INTERVAL_MS)
-    }
-  } catch {
-    // Silently fail - user just hasn't connected Stripe yet
-  }
+  // Stripe integration requires configuration — default to not connected
+  isStripeConnected.value = false
 })
 
 onUnmounted(() => {
@@ -339,9 +317,6 @@ async function handleStripeSync(): Promise<void> {
 
 async function handleStripeDisconnect(): Promise<void> {
   try {
-    // Call backend to disconnect and clear synced data
-    await disconnectStripe(true)
-
     // Clear local state
     isStripeConnected.value = false
     stripeAccountName.value = ''

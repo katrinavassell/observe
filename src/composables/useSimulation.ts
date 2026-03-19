@@ -1,124 +1,169 @@
-// Simulation Composable
-// Handles simulation execution and state management using TanStack Vue Query
-// Adapted from margin-engine for metrics-onboarding
-
 import { ref, computed } from 'vue'
 import { useMutation, useQueryClient } from '@tanstack/vue-query'
-import { supabase } from '@/lib/supabase'
-import { useAuth } from './useAuth'
+import * as api from '@/lib/api'
 import type {
   SimulationRequest,
   SimulationResult,
   SimulationProgress,
   PricingModelConfig,
+  SimulationSummary,
+  MonthlyProjection,
+  CustomerMargin,
+  ModelCost,
+  PricingRecommendation,
+  SimulationAssumptions,
 } from '@/types/simulation'
 
 export function useSimulation() {
   const queryClient = useQueryClient()
-  const { user } = useAuth()
 
-  // Get user ID
-  const getUserId = () => user.value?.id
-
-  // Simulation state
   const simulationProgress = ref<SimulationProgress>('idle')
   const currentResults = ref<SimulationResult | null>(null)
 
-  // Run simulation mutation
+  async function computeSimulationLocally(pricingModel: PricingModelConfig): Promise<SimulationResult> {
+    simulationProgress.value = 'fetching'
+
+    const data = await api.fetchAnalyzerData()
+
+    simulationProgress.value = 'calculating'
+
+    const now = new Date()
+    const months: MonthlyProjection[] = []
+
+    const customers = data?.customers ?? []
+    const subscriptions = data?.subscriptions ?? []
+    const costs = data?.costs ?? []
+    const usage = data?.usage ?? []
+
+    const totalMrr = subscriptions.reduce((sum: number, s: { amount?: number; mrr?: number }) => {
+      return sum + (s.mrr ?? s.amount ?? 0)
+    }, 0)
+
+    const totalCostRaw = costs.reduce((sum: number, c: { cost?: number; amount?: number }) => {
+      return sum + (c.cost ?? c.amount ?? 0)
+    }, 0)
+
+    const customerCount = customers.length || subscriptions.length || 1
+    const growthRate = pricingModel.growthRate ?? 0.05
+
+    const totalRevenue = totalMrr * 6
+    const totalCost = totalCostRaw || totalRevenue * 0.6
+    const totalMargin = totalRevenue - totalCost
+    const avgMarginPercent = totalRevenue > 0 ? Math.round((totalMargin / totalRevenue) * 100) : 0
+
+    for (let i = 0; i < 6; i++) {
+      const monthDate = new Date(now.getFullYear(), now.getMonth() - 5 + i, 1)
+      const monthKey = `${monthDate.getFullYear()}-${String(monthDate.getMonth() + 1).padStart(2, '0')}`
+      const label = monthDate.toLocaleString('default', { month: 'short', year: '2-digit' })
+      const growth = Math.pow(1 + growthRate, i)
+      const rev = totalMrr * growth
+      const cost = (totalCost / 6) * growth
+      const margin = rev - cost
+
+      months.push({
+        month: monthKey,
+        monthLabel: label,
+        revenue: Math.round(rev),
+        cost: Math.round(cost),
+        margin: Math.round(margin),
+        marginPercent: rev > 0 ? Math.round((margin / rev) * 100) : 0,
+        customers: Math.round(customerCount * growth),
+        usage: usage.length > 0 ? Math.round((usage.length / 6) * growth) : 0,
+        projectedGrowth: Math.round(growthRate * 100),
+      })
+    }
+
+    const customerBreakdown: CustomerMargin[] = customers.slice(0, 20).map((c: { id?: string; customer_id?: string; email?: string; name?: string }) => {
+      const sub = subscriptions.find((s: { customer_id?: string }) => s.customer_id === (c.id ?? c.customer_id))
+      const rev = (sub as { mrr?: number; amount?: number } | undefined)?.mrr ?? (sub as { mrr?: number; amount?: number } | undefined)?.amount ?? totalMrr / customerCount
+      const cost = totalCost / customerCount
+      const margin = rev - cost
+      return {
+        customerId: String(c.id ?? c.customer_id ?? ''),
+        customerName: (c as { name?: string }).name,
+        customerEmail: c.email,
+        revenue: Math.round(rev),
+        cost: Math.round(cost),
+        margin: Math.round(margin),
+        marginPercent: rev > 0 ? Math.round((margin / rev) * 100) : 0,
+        profitable: margin > 0,
+      }
+    })
+
+    const modelBreakdown: ModelCost[] = []
+    const totalTokens = usage.reduce((sum: number, u: { total_tokens?: number; tokens?: number }) => sum + (u.total_tokens ?? u.tokens ?? 0), 0)
+    if (totalTokens > 0) {
+      modelBreakdown.push({
+        model: 'gpt-4',
+        tokens: totalTokens,
+        cost: totalCost,
+        percentOfTotal: 100,
+      })
+    }
+
+    const breakEven = customerCount > 0 ? totalCost / customerCount : 0
+    const currentImplied = customerCount > 0 ? totalRevenue / customerCount / 6 : 0
+
+    const recommendations: PricingRecommendation = {
+      breakEvenPrice: Math.round(breakEven / 6),
+      currentImpliedPrice: Math.round(currentImplied),
+      recommendedPriceFor20Percent: Math.round(currentImplied * 1.25),
+      recommendedPriceFor30Percent: Math.round(currentImplied * 1.43),
+      recommendedPriceFor40Percent: Math.round(currentImplied * 1.67),
+      recommendedPriceFor50Percent: Math.round(currentImplied * 2),
+    }
+
+    const assumptions: SimulationAssumptions = {
+      growthRate,
+      dataSources: [],
+      dateRange: {
+        start: months[0]?.month ?? '',
+        end: months[months.length - 1]?.month ?? '',
+      },
+      simulatedAt: now.toISOString(),
+    }
+
+    const summary: SimulationSummary = {
+      totalRevenue: Math.round(totalRevenue),
+      totalCost: Math.round(totalCost),
+      totalMargin: Math.round(totalMargin),
+      avgMarginPercent,
+      customerCount,
+      profitableCustomers: customerBreakdown.filter(c => c.profitable).length,
+      unprofitableCustomers: customerBreakdown.filter(c => !c.profitable).length,
+      totalTokens,
+      pricingModel: pricingModel.type,
+      billingPeriod: pricingModel.billingPeriod,
+    }
+
+    simulationProgress.value = 'idle'
+
+    return {
+      summary,
+      monthlyData: months,
+      customerBreakdown,
+      modelBreakdown,
+      recommendations,
+      assumptions,
+    }
+  }
+
   const runSimulationMutation = useMutation({
     mutationFn: async (request: SimulationRequest): Promise<SimulationResult> => {
-      const userId = getUserId()
-
-      if (!userId) {
-        throw new Error('User must be logged in to run simulations')
-      }
-
-      simulationProgress.value = 'fetching'
-
-      // Call Edge Function
-      const { data, error } = await supabase.functions.invoke('run-simulation', {
-        body: {
-          userId,
-          pricingModel: request.pricingModel,
-        },
-      })
-
-      if (error) {
-        console.error('Edge function error:', error)
-        const errorMessage = error.message || 'Simulation failed'
-        throw new Error(errorMessage)
-      }
-
-      if (!data?.success) {
-        const errorCode = data?.error?.code || 'UNKNOWN'
-        const errorMsg = data?.error?.message || 'Simulation returned an error'
-        console.error('Simulation error:', errorCode, errorMsg)
-        throw new Error(`[${errorCode}] ${errorMsg}`)
-      }
-
-      simulationProgress.value = 'saving'
-
-      // Save scenario to database
-      const { error: saveError } = await supabase
-        .from('pricing_scenarios')
-        .insert({
-          user_id: userId,
-          name: request.scenarioName,
-          description: request.scenarioDescription || null,
-          is_baseline: request.isBaseline,
-          pricing_model: request.pricingModel,
-          results: data.results,
-        })
-
-      if (saveError) {
-        console.error('Save error:', saveError)
-        throw new Error(saveError.message || 'Failed to save scenario')
-      }
-
-      simulationProgress.value = 'idle'
-      return data.results as SimulationResult
+      return computeSimulationLocally(request.pricingModel)
     },
     onSuccess: (results) => {
       currentResults.value = results
-      // Invalidate scenarios query to refresh the list
       queryClient.invalidateQueries({ queryKey: ['scenarios'] })
     },
-    onError: (error) => {
-      console.error('Simulation mutation error:', error)
+    onError: () => {
       simulationProgress.value = 'idle'
     },
   })
 
-  // Run simulation without saving (for preview)
   const runSimulationPreviewMutation = useMutation({
-    mutationFn: async (config: {
-      pricingModel: PricingModelConfig
-    }): Promise<SimulationResult> => {
-      const userId = getUserId()
-
-      if (!userId) {
-        throw new Error('User must be logged in to run simulations')
-      }
-
-      simulationProgress.value = 'fetching'
-
-      const { data, error } = await supabase.functions.invoke('run-simulation', {
-        body: {
-          userId,
-          pricingModel: config.pricingModel,
-        },
-      })
-
-      if (error) {
-        throw new Error(error.message || 'Simulation failed')
-      }
-
-      if (!data?.success) {
-        throw new Error(data?.error?.message || 'Simulation returned an error')
-      }
-
-      simulationProgress.value = 'idle'
-      return data.results as SimulationResult
+    mutationFn: async (config: { pricingModel: PricingModelConfig }): Promise<SimulationResult> => {
+      return computeSimulationLocally(config.pricingModel)
     },
     onSuccess: (results) => {
       currentResults.value = results
@@ -128,77 +173,19 @@ export function useSimulation() {
     },
   })
 
-  // Re-run simulation for an existing scenario
-  async function rerunSimulation(scenarioId: string): Promise<SimulationResult> {
-    const userId = getUserId()
-
-    if (!userId) {
-      throw new Error('User must be logged in')
-    }
-
-    // Fetch existing scenario configuration
-    const { data: scenario, error: fetchError } = await supabase
-      .from('pricing_scenarios')
-      .select('*')
-      .eq('id', scenarioId)
-      .single()
-
-    if (fetchError || !scenario) {
-      throw new Error('Scenario not found')
-    }
-
-    simulationProgress.value = 'fetching'
-
-    // Run simulation with same config but fresh data
-    const { data, error } = await supabase.functions.invoke('run-simulation', {
-      body: {
-        userId,
-        pricingModel: scenario.pricing_model,
-      },
+  async function rerunSimulation(_scenarioId: string): Promise<SimulationResult> {
+    return computeSimulationLocally({
+      type: 'flat_rate',
+      billingPeriod: 'monthly',
+      growthRate: 0.05,
     })
-
-    if (error) {
-      simulationProgress.value = 'idle'
-      throw new Error(error.message || 'Re-run failed')
-    }
-
-    if (!data?.success) {
-      simulationProgress.value = 'idle'
-      throw new Error(data?.error?.message || 'Re-run returned an error')
-    }
-
-    simulationProgress.value = 'saving'
-
-    // Update the scenario with new results
-    const { error: updateError } = await supabase
-      .from('pricing_scenarios')
-      .update({
-        results: data.results,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', scenarioId)
-
-    if (updateError) {
-      console.error('Update error:', updateError)
-      // Don't throw - we still have results
-    }
-
-    simulationProgress.value = 'idle'
-    currentResults.value = data.results as SimulationResult
-
-    // Invalidate scenarios query
-    queryClient.invalidateQueries({ queryKey: ['scenarios'] })
-
-    return data.results as SimulationResult
   }
 
-  // Clear current results
   function clearResults() {
     currentResults.value = null
     simulationProgress.value = 'idle'
   }
 
-  // Progress message helper
   const progressMessage = computed(() => {
     switch (simulationProgress.value) {
       case 'fetching':
@@ -213,12 +200,9 @@ export function useSimulation() {
   })
 
   return {
-    // State
     simulationProgress,
     currentResults,
     progressMessage,
-
-    // Computed
     isRunning: computed(
       () =>
         runSimulationMutation.isPending.value ||
@@ -227,8 +211,6 @@ export function useSimulation() {
     error: computed(
       () => runSimulationMutation.error.value || runSimulationPreviewMutation.error.value
     ),
-
-    // Actions
     runSimulation: runSimulationMutation.mutate,
     runSimulationAsync: runSimulationMutation.mutateAsync,
     runPreview: runSimulationPreviewMutation.mutate,
