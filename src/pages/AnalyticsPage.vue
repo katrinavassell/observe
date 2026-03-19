@@ -214,9 +214,11 @@ function retry() {
 <template>
   <div>
     <!-- Page header -->
-    <div class="mb-8">
-      <h1 class="text-2xl font-semibold tracking-tight">Analytics</h1>
-      <p class="text-muted-foreground mt-1">Overview of revenue and margins</p>
+    <div class="flex items-center justify-between mb-6">
+      <div>
+        <h1 class="text-2xl font-semibold text-foreground">Analytics</h1>
+        <p class="text-muted-foreground mt-1">Overview of revenue and margins</p>
+      </div>
     </div>
 
     <!-- Error state -->
@@ -234,7 +236,7 @@ function retry() {
     <!-- Loading state -->
     <div v-else-if="isLoading">
       <!-- Skeleton summary cards -->
-      <div class="grid grid-cols-4 gap-4 mb-8">
+      <div class="grid grid-cols-4 gap-4 mb-6">
         <Card v-for="i in 4" :key="i" class="p-6">
           <Skeleton class="h-4 w-24 mb-2" />
           <Skeleton class="h-8 w-20" />
@@ -254,7 +256,7 @@ function retry() {
     <!-- Data loaded -->
     <template v-else>
       <!-- 1. Summary cards -->
-      <div class="grid grid-cols-4 gap-4 mb-8">
+      <div class="grid grid-cols-4 gap-4 mb-6">
         <Card class="p-6">
           <div class="text-sm font-medium text-muted-foreground">Total MRR</div>
           <div v-if="summary?.mrr != null" class="text-3xl font-semibold tabular-nums mt-1">
