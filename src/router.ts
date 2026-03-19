@@ -48,9 +48,24 @@ const router = createRouter({
       component: () => import('@/pages/DataSourcesPage.vue'),
     },
     {
+      path: '/insights',
+      name: 'insights',
+      component: () => import('@/pages/InsightsPage.vue'),
+    },
+    {
       path: '/simulations',
       name: 'simulations',
       component: () => import('@/pages/SimulationsPage.vue'),
+    },
+    {
+      path: '/simulations/new',
+      name: 'simulation-new',
+      component: () => import('@/pages/SimulationNewPage.vue'),
+    },
+    {
+      path: '/simulations/:id',
+      name: 'simulation-detail',
+      component: () => import('@/pages/SimulationDetailPage.vue'),
     },
     {
       path: '/simulator',

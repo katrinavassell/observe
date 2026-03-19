@@ -1,38 +1,43 @@
 # Architecture Overview
 
-This document describes the technical architecture of the Tanso metrics dashboard.
+Technical architecture of Observe — feature-level economics and pricing simulation for AI SaaS companies.
 
 ## System Overview
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│                           Frontend (Vue 3)                          │
+│                         Frontend (Vue 3 SPA)                        │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐              │
 │  │    Pages     │  │  Components  │  │  Composables │              │
 │  │ (Router)     │  │  (UI/Charts) │  │  (State)     │              │
 │  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘              │
-│         │                 │                 │                       │
 │         └─────────────────┼─────────────────┘                       │
 │                           │                                         │
 │  ┌────────────────────────┴────────────────────────────────────┐   │
 │  │                     lib/ (Business Logic)                    │   │
-│  │  pricing-analyzer.ts │ stripe-import.ts │ supabase-data.ts   │   │
+│  │  pricing-analyzer.ts │ api.ts (HTTP client)                  │   │
 │  └────────────────────────┬────────────────────────────────────┘   │
 └───────────────────────────┼─────────────────────────────────────────┘
-                            │
+                            │ /api/* (Vite proxy)
                             ▼
 ┌─────────────────────────────────────────────────────────────────────┐
-│                        Supabase Platform                            │
+│                     Express Backend (port 3001)                     │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐              │
-│  │     Auth     │  │   Database   │  │ Edge Functions│              │
-│  │ (Magic Link) │  │ (PostgreSQL) │  │   (Deno)     │              │
+│  │   Sessions   │  │  Data CRUD   │  │   Stripe     │              │
+│  │  (pg-simple) │  │  (pg Pool)   │  │  (Replit)    │              │
 │  └──────────────┘  └──────────────┘  └──────┬───────┘              │
 └─────────────────────────────────────────────┼───────────────────────┘
-                                              │
-                                              ▼
-                                    ┌──────────────────┐
-                                    │    Stripe API    │
-                                    └──────────────────┘
+                            │                 │
+                            ▼                 ▼
+                  ┌──────────────┐   ┌──────────────┐
+                  │  PostgreSQL  │   │  Stripe API  │
+                  │  (Replit)    │   └──────────────┘
+                  └──────────────┘
+                            │
+                            ▼ (Phase 3)
+                  ┌──────────────┐
+                  │  OpenAI API  │
+                  └──────────────┘
 ```
 
 ---
@@ -42,61 +47,75 @@ This document describes the technical architecture of the Tanso metrics dashboar
 ### 1. Data Import Flow
 
 ```
-User Input (CSV or Stripe API)
+User Input (CSV, Stripe, or Sample Data)
          │
          ▼
 ┌─────────────────────────────┐
-│  Parsing & Validation       │
-│  - stripe-import.ts (CSV)   │
-│  - stripe-sync-enhanced     │
-│    (API via Edge Function)  │
+│  Express Backend             │
+│  - Parse & validate          │
+│  - Write to legacy tables    │
+│    (plans, customers, etc.)  │
+│  - Dual-write to             │
+│    observe_events            │
 └─────────────┬───────────────┘
               │
               ▼
 ┌─────────────────────────────┐
-│  Transform & Normalize      │
-│  - Calculate MRR            │
-│  - Detect customer segment  │
-│  - Map relationships        │
-└─────────────┬───────────────┘
-              │
-              ▼
-┌─────────────────────────────┐
-│  Supabase Database          │
-│  - customers, plans         │
-│  - subscriptions, invoices  │
-│  - usage_records, costs     │
+│  PostgreSQL                  │
+│  - observe_events (unified)  │
+│  - plans, customers, etc.    │
+│    (legacy, for analyzer)    │
 └─────────────────────────────┘
 ```
 
-### 2. Analytics Flow
+### 2. Feature Economics Flow
 
 ```
-Database Query
+Frontend requests /api/events/by-feature
          │
          ▼
 ┌─────────────────────────────┐
-│  supabase-data.ts           │
-│  - loadCustomers()          │
-│  - loadSubscriptions()      │
-│  - loadUsageRecords()       │
+│  Express Backend             │
+│  - Query observe_events      │
+│  - GROUP BY feature_key      │
+│  - SUM cost, revenue, usage  │
+│  - Calculate margin %        │
 └─────────────┬───────────────┘
               │
               ▼
 ┌─────────────────────────────┐
-│  pricing-analyzer.ts        │
-│  - calculateMRR()           │
-│  - calculatePlanHealth()    │
-│  - analyzeMRRMovement()     │
-│  - detectNegativeMargin()   │
+│  Vue Components              │
+│  - FeaturesPage.vue          │
+│  - ModelsPage.vue            │
+│  - CustomersPage.vue         │
+└─────────────────────────────┘
+```
+
+### 3. Pricing Analyzer Flow (Existing)
+
+```
+Frontend requests /api/data/analyzer
+         │
+         ▼
+┌─────────────────────────────┐
+│  Express Backend             │
+│  - Query legacy tables       │
+│  - Return raw data           │
 └─────────────┬───────────────┘
               │
               ▼
 ┌─────────────────────────────┐
-│  Vue Components             │
-│  - PricingPage.vue          │
-│  - MrrChart.vue             │
-│  - CohortChart.vue          │
+│  pricing-analyzer.ts         │
+│  (client-side calculation)   │
+│  - calculateMRR()            │
+│  - calculatePlanHealth()     │
+│  - analyzeMRRMovement()      │
+│  - detectNegativeMargin()    │
+└─────────────┬───────────────┘
+              │
+              ▼
+┌─────────────────────────────┐
+│  PricingAnalyzerPage.vue     │
 └─────────────────────────────┘
 ```
 
@@ -108,216 +127,161 @@ Database Query
 
 | Technology | Purpose |
 |------------|---------|
-| Vue 3 | UI framework with Composition API |
+| Vue 3 | UI framework (Composition API) |
 | TypeScript | Type safety |
-| Vite | Build tool and dev server |
+| Vite | Build tool + dev server + API proxy |
 | Tailwind CSS | Utility-first styling |
-| Radix Vue | Accessible UI primitives |
-| Chart.js | Data visualization |
-| TanStack Query | Server state management |
+| Radix Vue + shadcn-vue | Accessible UI primitives |
+| Chart.js + vue-chartjs | Data visualization |
+| TanStack Vue Query | Server state + caching |
 | Vue Router | Client-side routing |
+| Lucide Vue | Icons |
+| Vue Sonner | Toast notifications |
+| Zod | Validation |
 
 ### Directory Structure
 
 ```
 src/
-├── pages/              # Route components
+├── pages/                  # Route components
+│   ├── PricingAnalyzerPage.vue   # Existing: MRR, margins, cohorts
+│   ├── DataSourcesPage.vue       # Existing: CSV + Stripe import
+│   ├── SimulatorPage.vue         # Existing: basic simulator (to be replaced)
+│   ├── EventsPage.vue            # New: event stream
+│   ├── FeaturesPage.vue          # New: feature economics
+│   ├── FeatureDetailPage.vue     # New: single feature detail
+│   ├── ModelsPage.vue            # New: AI model costs
+│   ├── CustomersPage.vue         # New: customer margins
+│   ├── CustomerDetailPage.vue    # New: single customer detail
+│   ├── SimulationsPage.vue       # New: simulation list + opportunities
+│   ├── SimulationNewPage.vue     # New: 3-step wizard
+│   └── SimulationDetailPage.vue  # New: results + impact + rollout
 ├── components/
-│   ├── ui/             # Reusable UI (buttons, cards, inputs)
-│   ├── charts/         # Data visualization
-│   ├── data-sources/   # Import workflows
-│   └── simulation/     # Pricing simulations
-├── composables/        # Shared reactive state
-├── lib/                # Business logic
-└── types/              # TypeScript definitions
+│   ├── ui/                 # Reusable UI (shadcn-vue)
+│   ├── charts/             # Data visualization
+│   ├── data-sources/       # Import workflows
+│   ├── pricing/            # Pricing analyzer components
+│   ├── simulation/         # Legacy simulator (to be replaced)
+│   ├── simulations/        # New: ported simulator components
+│   └── shared/             # MarginBadge, TrendIndicator, etc.
+├── composables/            # Shared reactive state
+│   ├── useAuth.ts          # Session management
+│   ├── useDataMode.ts      # Data mode tracking
+│   ├── useStripeConnection.ts  # Stripe sync
+│   ├── useSimulation.ts    # Legacy simulator
+│   └── useSimulationState.ts   # New: ported simulation engine
+├── lib/
+│   ├── api.ts              # HTTP client for Express backend
+│   ├── pricing-analyzer.ts # Client-side metrics calculation
+│   ├── utils.ts            # Shared utilities
+│   └── simulation-seed.ts  # New: sample data for simulator
+└── types/
+    ├── index.ts            # Shared types
+    └── simulation.ts       # Simulation types (ported from tansoflow)
 ```
 
 ### Key Composables
 
 | Composable | Purpose |
 |------------|---------|
-| `useAuth` | Authentication state & session management |
+| `useAuth` | Anonymous session init via `/api/session/init` |
 | `useDataMode` | Track data mode (none/sample/user) |
-| `useStripeConnection` | Stripe API key validation & sync |
-| `useSimulation` | Pricing scenario execution |
+| `useStripeConnection` | Stripe status check + sync trigger |
+| `useSimulationState` | New: full simulation engine (segments, scenarios, impact) |
 
 ---
 
 ## Backend Architecture
 
-### Supabase Services
+### Express Server (`server/index.ts`)
 
-| Service | Usage |
-|---------|-------|
-| **Auth** | Passwordless magic link authentication |
-| **Database** | PostgreSQL with Row Level Security |
-| **Edge Functions** | Deno runtime for Stripe API calls |
-| **Realtime** | (Available, not currently used) |
+Single Express app on port 3001, proxied by Vite at `/api/*`.
 
-### Edge Functions
+| Middleware | Purpose |
+|-----------|---------|
+| `express-session` + `connect-pg-simple` | Anonymous visitor sessions stored in PostgreSQL |
+| `ensureVisitor` | Creates visitor ID if not in session, ensures `user_data_status` row exists |
+| `express.json()` | JSON body parsing |
 
-| Function | Purpose |
-|----------|---------|
-| `stripe-connect` | Validate & store Stripe API key |
-| `stripe-sync-enhanced` | Fetch all Stripe data |
-| `run-simulation` | Execute pricing scenarios |
+### Authentication Model
 
-### Why Edge Functions?
-
-Stripe API calls must be made server-side because:
-1. **CORS restrictions** - Browser cannot call api.stripe.com directly
-2. **API key security** - Secret keys cannot be exposed to client
-3. **Rate limiting** - Server-side handling with exponential backoff
-
----
-
-## Key Modules
-
-### pricing-analyzer.ts
-
-The core metrics calculation engine (~1000 lines).
-
-**Key Functions:**
-
-```typescript
-// Revenue metrics
-calculateMRR(subscriptions)           // Monthly Recurring Revenue
-calculateARR(subscriptions)           // Annual Recurring Revenue
-calculateARPU(subscriptions, count)   // Average Revenue Per User
-
-// Retention metrics
-calculateNRR(current, baseline)       // Net Revenue Retention
-calculateChurnRate(churned, total)    // Customer churn percentage
-
-// Health scoring
-calculatePlanHealth(plan)             // 0-100 health score
-detectNegativeMarginCustomers(data)   // Find unprofitable customers
-
-// Movement analysis
-analyzeMRRMovement(current, previous) // New/expansion/contraction/churn
-calculateCohortRetention(cohorts)     // Cohort analysis curves
-```
-
-### stripe-import.ts
-
-CSV parsing and reconciliation.
-
-**Key Functions:**
-
-```typescript
-parseStripeCSV(file)          // Parse uploaded CSV
-detectFileType(headers)       // customers/subscriptions/invoices
-reconcileData(uploaded, db)   // Find matches and orphans
-calculateMRRFromCSV(data)     // Derive MRR from invoice data
-```
-
-### supabase-data.ts
-
-Database operations layer.
-
-**Key Functions:**
-
-```typescript
-loadCustomers(userId)         // Fetch customers from DB
-loadSubscriptions(userId)     // Fetch subscriptions with joins
-saveCustomers(customers)      // Upsert customer records
-loadSampleData(userId)        // Insert demo dataset
-clearUserData(userId)         // Delete all user data
-```
-
-### stripe-api/client.ts
-
-Stripe API communication (used in Edge Functions).
-
-**Key Features:**
-- Paginated fetching with async generators
-- Exponential backoff for rate limits
-- Error categorization (auth, rate limit, server)
-
----
-
-## Authentication Flow
+No login required. Anonymous sessions:
 
 ```
-1. User enters email on LoginPage
+1. First request → session cookie created
          │
          ▼
-2. Supabase sends magic link email
+2. ensureVisitor middleware → generates visitorId (UUID)
          │
          ▼
-3. User clicks link → redirected with token
+3. visitorId stored in session → persisted in sessions table
          │
          ▼
-4. supabase.auth.getSession() validates token
-         │
-         ▼
-5. Router guard checks auth.uid()
-         │
-         ▼
-6. All DB queries scoped by user_id (RLS)
+4. All DB queries filter by user_id = visitorId
 ```
 
----
+### Data Isolation
 
-## Data Modes
-
-The app supports three data modes:
-
-| Mode | Description |
-|------|-------------|
-| `none` | No data loaded, shows onboarding |
-| `sample` | Demo dataset for exploration |
-| `user` | User's own imported data |
-
-Mode is tracked in `user_data_status` table and cached in `useDataMode` composable.
-
----
-
-## Security Model
-
-### Row Level Security (RLS)
-
-All database tables enforce user isolation:
-
+All queries are scoped by `user_id`:
 ```sql
-CREATE POLICY "Users can view own data" ON customers
-  FOR SELECT USING (auth.uid() = user_id);
+SELECT * FROM observe_events WHERE user_id = $1
 ```
 
-### API Key Storage
+This is enforced at the application level in `ensureVisitor` middleware, not via PostgreSQL RLS.
 
-Stripe API keys are:
-1. Validated before storage
-2. Encrypted using `encryptApiKey()`
-3. Stored in `stripe_integrations.encrypted_api_key`
-4. Decrypted only in Edge Functions
+### Stripe Integration
 
-### Authentication
-
-- JWT tokens validated on every request
-- Edge Functions extract user from `Authorization` header
-- No sensitive data stored in client
+Uses Replit's native Stripe connector (`@replit/connectors-sdk`):
+- No API key storage needed
+- `getUncachableStripeClient()` returns a configured Stripe client
+- Syncs customers, subscriptions, plans, prices
 
 ---
 
-## Performance Considerations
+## Database
+
+PostgreSQL hosted by Replit. Tables created at startup with `CREATE TABLE IF NOT EXISTS`.
+
+### Legacy Tables (existing, kept for pricing analyzer)
+`plans`, `customers`, `subscriptions`, `usage_records`, `cost_records`, `user_data_status`, `sessions`
+
+### New Tables (Observe)
+- `observe_events` — unified event store for all data
+- `simulations` — pricing simulation definitions + results
+- `ai_insights` — AI-generated insight records
+
+See [DATABASE.md](./DATABASE.md) for full schema reference.
+
+---
+
+## Deployment
+
+### Replit Configuration (`.replit`)
+
+```
+Frontend: Vite on port 5000 (external port 80)
+Backend:  Express on port 3001
+Database: PostgreSQL (Replit native)
+```
+
+### Build & Deploy
+- **Dev:** `npm run dev` → runs backend + frontend concurrently
+- **Build:** `npm run build` → `vue-tsc && vite build`
+- **Deploy:** Replit autoscale → backend serves API, Vite preview serves static files
+
+---
+
+## Performance
 
 ### Database Indexes
-
-Strategic indexes on frequently queried columns:
-- `user_id` on all tables
-- `(user_id, customer_id)` for joins
-- `(user_id, period_start, period_end)` for date ranges
+- `observe_events`: indexed on `(user_id, timestamp)`, `(user_id, feature_key)`, `(user_id, customer_id)`, `(user_id, model)`
+- Legacy tables: indexed on `user_id` and relevant lookup columns
 
 ### Client-Side Caching
-
-TanStack Query provides:
+TanStack Vue Query provides:
 - Automatic request deduplication
 - Background refetching
 - Stale-while-revalidate pattern
 
-### Edge Function Optimization
-
-- Parallel data fetching with `Promise.all()`
-- Pagination for large datasets
-- Partial success handling (continue on errors)
+### Pagination
+All list endpoints support `limit` and `offset` for large datasets.
