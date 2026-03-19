@@ -1,22 +1,24 @@
 <script setup lang="ts">
-import { computed, ref, onMounted, watch } from 'vue'
+import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useQuery } from '@tanstack/vue-query'
 import { getFeatureDetail } from '@/lib/api'
 import { ArrowLeft, ChevronRight } from 'lucide-vue-next'
 import MarginBadge from '@/components/shared/MarginBadge.vue'
-import { Bar } from 'vue-chartjs'
+import { Bar, Line } from 'vue-chartjs'
 import {
   Chart as ChartJS,
   CategoryScale,
   LinearScale,
   BarElement,
+  LineElement,
+  PointElement,
   Title,
   Tooltip,
   Legend,
 } from 'chart.js'
 
-ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend)
+ChartJS.register(CategoryScale, LinearScale, BarElement, LineElement, PointElement, Title, Tooltip, Legend)
 
 const route = useRoute()
 const router = useRouter()
@@ -59,6 +61,43 @@ const chartOptions = {
   },
   scales: {
     x: { beginAtZero: true },
+  },
+}
+
+const timeseriesChartData = computed(() => {
+  if (!feature.value || feature.value.timeseries.length === 0) return null
+  const months = feature.value.timeseries
+  return {
+    labels: months.map(m => new Date(m.month).toLocaleDateString(undefined, { year: 'numeric', month: 'short' })),
+    datasets: [
+      {
+        label: 'Cost',
+        data: months.map(m => m.total_cost),
+        borderColor: 'rgba(239, 68, 68, 0.9)',
+        backgroundColor: 'rgba(239, 68, 68, 0.15)',
+        tension: 0.3,
+        fill: true,
+      },
+      {
+        label: 'Revenue',
+        data: months.map(m => m.total_revenue),
+        borderColor: 'rgba(34, 197, 94, 0.9)',
+        backgroundColor: 'rgba(34, 197, 94, 0.15)',
+        tension: 0.3,
+        fill: true,
+      },
+    ],
+  }
+})
+
+const timeseriesOptions = {
+  responsive: true,
+  maintainAspectRatio: false,
+  plugins: {
+    legend: { position: 'top' as const },
+  },
+  scales: {
+    y: { beginAtZero: true },
   },
 }
 
@@ -120,6 +159,14 @@ function marginForEvent(cost: number | null, revenue: number | null): number | n
         <div class="rounded-lg border bg-card p-4">
           <div class="text-xs text-muted-foreground mb-1">Customers</div>
           <div class="text-2xl font-semibold">{{ feature.customer_count }}</div>
+        </div>
+      </div>
+
+      <!-- Chart: Monthly Timeseries -->
+      <div v-if="timeseriesChartData" class="rounded-lg border bg-card p-4">
+        <div class="text-sm font-medium mb-4">Cost vs Revenue Over Time</div>
+        <div style="height: 220px;">
+          <Line :data="timeseriesChartData" :options="timeseriesOptions" />
         </div>
       </div>
 

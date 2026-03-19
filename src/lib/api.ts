@@ -296,6 +296,13 @@ export interface FeatureDetail extends FeatureSummary {
     total_cost: number
     total_revenue: number
   }>
+  timeseries: Array<{
+    month: string
+    event_count: number
+    total_cost: number
+    total_revenue: number
+    total_usage: number
+  }>
 }
 
 export interface ModelSummary {
@@ -371,6 +378,7 @@ export interface EventsByFeature {
   event_count: number
   total_cost: number
   total_revenue: number
+  total_usage: number
   margin_pct: number | null
   last_seen: string
 }
@@ -399,6 +407,7 @@ export interface EventsByModel {
   event_count: number
   total_cost: number
   total_revenue: number
+  total_usage: number
   margin_pct: number | null
   last_seen: string
 }

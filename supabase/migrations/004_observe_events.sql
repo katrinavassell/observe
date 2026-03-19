@@ -6,18 +6,18 @@ CREATE TABLE IF NOT EXISTS observe_events (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id TEXT NOT NULL,
   customer_id TEXT NOT NULL DEFAULT 'unknown',
-  feature_key TEXT,
-  event_name TEXT,
+  feature_key TEXT NOT NULL DEFAULT 'unknown',
+  event_name TEXT NOT NULL DEFAULT 'usage',
   timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  cost_amount NUMERIC(12, 4),
-  cost_unit TEXT,
-  revenue_amount NUMERIC(12, 4),
-  usage_units NUMERIC(12, 4),
+  cost_amount NUMERIC(12, 4) NOT NULL DEFAULT 0,
+  cost_unit TEXT DEFAULT 'usd',
+  revenue_amount NUMERIC(12, 4) NOT NULL DEFAULT 0,
+  usage_units NUMERIC(12, 4) NOT NULL DEFAULT 0,
   model TEXT,
   model_provider TEXT,
-  source TEXT,
-  granularity TEXT,
-  properties JSONB,
+  source TEXT NOT NULL DEFAULT 'csv',
+  granularity TEXT NOT NULL DEFAULT 'monthly_aggregate',
+  properties JSONB DEFAULT '{}',
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -25,5 +25,5 @@ CREATE TABLE IF NOT EXISTS observe_events (
 CREATE INDEX IF NOT EXISTS idx_observe_events_user_ts ON observe_events (user_id, timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_observe_events_user_feature ON observe_events (user_id, feature_key);
 CREATE INDEX IF NOT EXISTS idx_observe_events_user_customer ON observe_events (user_id, customer_id);
-CREATE INDEX IF NOT EXISTS idx_observe_events_user_model ON observe_events (user_id, model);
+CREATE INDEX IF NOT EXISTS idx_observe_events_user_model ON observe_events (user_id, model) WHERE model IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_observe_events_user_source ON observe_events (user_id, source);
