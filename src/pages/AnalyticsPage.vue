@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, reactive } from 'vue'
-import { useQuery } from '@tanstack/vue-query'
+import { useQuery, useQueryClient } from '@tanstack/vue-query'
 import { useRouter } from 'vue-router'
 import {
   getMetricsSummary,
@@ -20,6 +20,7 @@ import {
 } from '@/components/ui'
 
 const router = useRouter()
+const queryClient = useQueryClient()
 
 // ---------------------------------------------------------------------------
 // Data fetching — all 4 queries in parallel
@@ -55,7 +56,6 @@ const {
   data: customerData,
   isLoading: customersLoading,
   isError: customersError,
-  refetch: refetchAll,
 } = useQuery({
   queryKey: ['events-by-customer'],
   queryFn: getEventsByCustomer,
@@ -204,7 +204,10 @@ function computeMargin(revenue: number, cost: number): number | null {
 }
 
 function retry() {
-  refetchAll()
+  queryClient.invalidateQueries({ queryKey: ['metrics-summary'] })
+  queryClient.invalidateQueries({ queryKey: ['events-by-feature'] })
+  queryClient.invalidateQueries({ queryKey: ['events-by-model'] })
+  queryClient.invalidateQueries({ queryKey: ['events-by-customer'] })
 }
 </script>
 
@@ -212,7 +215,7 @@ function retry() {
   <div>
     <!-- Page header -->
     <div class="mb-8">
-      <h1 class="text-3xl font-semibold tracking-tight">Analytics</h1>
+      <h1 class="text-2xl font-semibold tracking-tight">Analytics</h1>
       <p class="text-muted-foreground mt-1">Overview of revenue and margins</p>
     </div>
 
