@@ -34,6 +34,8 @@ const props = defineProps<{
   file: { name: string; isSample: boolean } | null
   /** Whether sample data is being loaded */
   isLoadingSample?: boolean
+  /** If true, hides upload/clear controls (viewer mode) */
+  readonly?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -263,6 +265,7 @@ function handleAnthropicConnected(): void {
 
         <!-- Hidden file input -->
         <input
+          v-if="!props.readonly"
           ref="fileInput"
           type="file"
           accept=".csv"
@@ -270,9 +273,9 @@ function handleAnthropicConnected(): void {
           @change="handleFileSelect"
         />
 
-        <!-- Drop zone - only show when no file -->
+        <!-- Drop zone - only show when no file and not readonly -->
         <div
-          v-if="!file"
+          v-if="!file && !props.readonly"
           :class="[
             'border-2 border-dashed rounded-lg p-5 transition-colors',
             isDragging
@@ -302,6 +305,7 @@ function handleAnthropicConnected(): void {
               <span>{{ file.name }}</span>
             </div>
             <button
+              v-if="!props.readonly"
               type="button"
               class="p-0.5 rounded hover:bg-muted transition-colors"
               @click="emit('fileCleared')"
@@ -311,7 +315,7 @@ function handleAnthropicConnected(): void {
           </div>
         </div>
 
-        <div class="flex items-center justify-center gap-4">
+        <div v-if="!props.readonly" class="flex items-center justify-center gap-4">
           <button
             type="button"
             class="text-xs text-primary hover:underline flex items-center gap-1"

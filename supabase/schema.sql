@@ -262,3 +262,35 @@ BEGIN
   UPDATE user_data_status SET data_mode = 'none' WHERE user_id = auth.uid();
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- =============================================================================
+-- TEAM / ORGANIZATION TABLES (managed by Express backend, not Supabase)
+-- =============================================================================
+
+-- Organizations (one per workspace)
+CREATE TABLE IF NOT EXISTS organizations (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name TEXT NOT NULL DEFAULT 'My Team',
+  owner_visitor_id TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Organization members (both active and pending invites)
+CREATE TABLE IF NOT EXISTS organization_members (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  org_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  visitor_id TEXT,
+  invited_email TEXT,
+  invite_token TEXT UNIQUE,
+  role TEXT NOT NULL DEFAULT 'viewer' CHECK (role IN ('admin', 'viewer')),
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'active')),
+  joined_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Visitor-to-org mapping (for data isolation)
+CREATE TABLE IF NOT EXISTS visitor_org_map (
+  visitor_id TEXT PRIMARY KEY,
+  org_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);

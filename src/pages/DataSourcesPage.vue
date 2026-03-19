@@ -11,7 +11,7 @@
 
 import { ref, watch, onMounted, onUnmounted } from 'vue'
 import { toast } from 'vue-sonner'
-import { TrendingUp, FlaskConical } from 'lucide-vue-next'
+import { TrendingUp, FlaskConical, Eye } from 'lucide-vue-next'
 import { Card, CardContent, Button } from '@/components/ui'
 import {
   RevenueSection,
@@ -22,12 +22,15 @@ import {
 import StripeApiKeyModal from '@/components/integrations/StripeApiKeyModal.vue'
 import { useDataMode } from '@/composables/useDataMode'
 import { useDemoMode } from '@/composables/useDemoMode'
+import { useTeam } from '@/composables/useTeam'
 import {
   loadSampleData,
   clearRevenueData,
   clearCostData,
   clearUsageData,
 } from '@/lib/api'
+
+const { isViewer } = useTeam()
 
 // =============================================================================
 // STATE MANAGEMENT
@@ -373,8 +376,16 @@ watch(
       </p>
     </div>
 
-    <!-- Demo Mode Notice (when already in demo) -->
-    <Card v-if="isDemoMode" class="border-amber-400/50 bg-amber-50 dark:bg-amber-950/20">
+    <!-- Viewer notice -->
+    <div v-if="isViewer" class="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-800 p-4 text-sm text-amber-800 dark:text-amber-300">
+      <Eye class="h-4 w-4 mt-0.5 shrink-0" />
+      <div>
+        <strong>Viewer access</strong> — You can see your team's data but cannot upload, modify, or clear data. Contact your team admin to make changes.
+      </div>
+    </div>
+
+    <!-- Demo Mode Notice (when already in demo, admin only) -->
+    <Card v-if="isDemoMode && !isViewer" class="border-amber-400/50 bg-amber-50 dark:bg-amber-950/20">
       <CardContent class="p-6">
         <div class="flex items-center gap-2 mb-2">
           <FlaskConical class="h-5 w-5 text-amber-600" />
@@ -387,8 +398,8 @@ watch(
       </CardContent>
     </Card>
 
-    <!-- Try Demo Hero (only when not in demo mode) -->
-    <Card v-else class="border-primary/30 bg-gradient-to-br from-primary/5 to-primary/10">
+    <!-- Try Demo Hero (only when not in demo mode and not viewer) -->
+    <Card v-if="!isDemoMode && !isViewer" class="border-primary/30 bg-gradient-to-br from-primary/5 to-primary/10">
       <CardContent class="p-6">
         <div class="flex items-center gap-2 mb-3">
           <FlaskConical class="h-5 w-5 text-primary" />
@@ -415,8 +426,8 @@ watch(
       </CardContent>
     </Card>
 
-    <!-- Divider (hidden in demo mode) -->
-    <div v-if="!isDemoMode" class="relative">
+    <!-- Divider (hidden in demo mode and for viewers) -->
+    <div v-if="!isDemoMode && !isViewer" class="relative">
       <div class="absolute inset-0 flex items-center">
         <div class="w-full border-t"></div>
       </div>
@@ -433,6 +444,7 @@ watch(
       :is-stripe-connected="isStripeConnected"
       :stripe-account-name="stripeAccountName"
       :is-syncing="isSyncing"
+      :readonly="isViewer"
       @use-sample="handleUseSampleRevenue"
       @connect-stripe="handleStripeConnect"
       @sync-stripe="handleStripeSync"
@@ -446,6 +458,7 @@ watch(
       v-if="!isDemoMode"
       :file="costsFile"
       :is-loading-sample="isLoadingCosts"
+      :readonly="isViewer"
       @file-uploaded="handleCostsFileUploaded"
       @file-cleared="handleCostsFileCleared"
       @use-sample="handleUseSampleCosts"
@@ -456,6 +469,7 @@ watch(
       v-if="!isDemoMode"
       :file="usageFile"
       :is-loading-sample="isLoadingUsage"
+      :readonly="isViewer"
       @file-uploaded="handleUsageFileUploaded"
       @file-cleared="handleUsageFileCleared"
       @use-sample="handleUseSampleUsage"

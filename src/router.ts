@@ -78,6 +78,17 @@ const router = createRouter({
       path: '/login',
       redirect: '/',
     },
+    {
+      path: '/team',
+      name: 'team',
+      component: () => import('@/pages/TeamSettingsPage.vue'),
+    },
+    {
+      path: '/join/:token',
+      name: 'join-team',
+      component: () => import('@/pages/JoinTeamPage.vue'),
+      meta: { noLayout: true },
+    },
   ],
 })
 

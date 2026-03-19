@@ -46,6 +46,8 @@ const props = defineProps<{
   stripeAccountName?: string
   /** Whether Stripe sync is in progress */
   isSyncing?: boolean
+  /** If true, hides upload/edit controls (viewer mode) */
+  readonly?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -391,9 +393,9 @@ function downloadFile(content: string, filename: string): void {
           @change="handleFileSelect"
         />
 
-        <!-- Stripe CSV Dropzone - only show when < 3 files and not connected via API -->
+        <!-- Stripe CSV Dropzone - only show when < 3 files and not connected via API and not readonly -->
         <div
-          v-if="stripeFileCount < 3 && !isConnected"
+          v-if="stripeFileCount < 3 && !isConnected && !props.readonly"
           :class="[
             'border-2 border-dashed rounded-lg p-5 transition-colors',
             isDragging
@@ -577,8 +579,8 @@ function downloadFile(content: string, filename: string): void {
           </div>
         </div>
 
-        <!-- Action links (only when not connected) -->
-        <div v-if="!isConnected" class="flex items-center justify-center gap-4">
+        <!-- Action links (only when not connected and not readonly) -->
+        <div v-if="!isConnected && !props.readonly" class="flex items-center justify-center gap-4">
           <button
             type="button"
             class="text-xs text-primary hover:underline flex items-center gap-1"

@@ -79,7 +79,35 @@ Uses Replit's built-in PostgreSQL with the following tables:
 - `src/components/shared/MarginBadge.vue` - Color-coded margin percentage badge
 - `src/components/shared/TrendIndicator.vue` - Up/down/stable trend arrow with value
 
+## Team / Organization System
+- Organizations table: id, name, owner_visitor_id, created_at
+- organization_members table: id, org_id, visitor_id, invited_email, invite_token, role (admin/viewer), status (pending/active), joined_at
+- visitor_org_map table: maps each visitor_id to their org_id for data isolation
+- Data isolation: When a visitor is in an org, all data queries use the org owner's visitor_id (effectiveUserId)
+- Roles: Admin has full access; Viewer is read-only (cannot upload/clear data or manage team)
+- Invite flow: Admin generates a shareable invite link → invitee visits /join/:token → accepts → gets mapped to the org
+
+## Team API Endpoints
+- GET /api/team - Get org info, members list, and current user's role
+- PATCH /api/team/name - Rename the team (admin only)
+- POST /api/team/invite - Generate invite link with role (admin only)
+- GET /api/team/invite/:token - Get invite info (public)
+- POST /api/team/join/:token - Accept invite and join org
+- PATCH /api/team/members/:id - Change member role (admin only)
+- DELETE /api/team/members/:id - Remove member (admin only)
+- GET /api/team/my-role - Get current user's role
+
 ## Recent Changes
+- 2026-03-19: Added team accounts with Admin/Viewer roles and invite links
+  - Created organizations, organization_members, visitor_org_map DB tables
+  - Added team management API routes to Express backend
+  - Updated ensureVisitor to resolve effectiveUserId (org owner's ID) for data sharing
+  - Added requireAdmin middleware for write operations
+  - Created TeamSettingsPage with member list, invite form, role management
+  - Created JoinTeamPage for invite acceptance flow (/join/:token)
+  - Added Team Settings to sidebar navigation
+  - Added viewer role banners and disabled upload controls for Viewer role users
+  - Added readonly prop to RevenueSection, CostsSection, UsageSection
 - 2026-03-19: Feature Economics Dashboard (Task #1)
   - Added observe_events table with 5 indexes for feature-level cost/revenue tracking
   - Dual-write from all upload endpoints (costs, usage, revenue) and sample data

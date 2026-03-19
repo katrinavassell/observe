@@ -1,13 +1,16 @@
 <script setup lang="ts">
-import { RouterView } from 'vue-router'
+import { RouterView, useRoute } from 'vue-router'
 import { Toaster } from 'vue-sonner'
 import { WifiOff } from 'lucide-vue-next'
+import { computed } from 'vue'
 import AppLayout from '@/layouts/AppLayout.vue'
 import { useOnline } from '@/composables/useOnline'
 import { useAuth } from '@/composables/useAuth'
 
 const { isOnline } = useOnline()
 const { isLoading } = useAuth()
+const route = useRoute()
+const noLayout = computed(() => !!route.meta?.noLayout)
 </script>
 
 <template>
@@ -31,7 +34,10 @@ const { isLoading } = useAuth()
     <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
   </div>
 
-  <!-- Main app -->
+  <!-- Pages without the sidebar layout (e.g. invite acceptance) -->
+  <RouterView v-else-if="noLayout" />
+
+  <!-- Main app with sidebar -->
   <AppLayout v-else>
     <RouterView />
   </AppLayout>
