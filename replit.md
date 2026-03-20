@@ -97,7 +97,24 @@ Uses Replit's built-in PostgreSQL with the following tables:
 - DELETE /api/team/members/:id - Remove member (admin only)
 - GET /api/team/my-role - Get current user's role
 
+## Simulation API Endpoints
+- GET /api/simulations - List all simulations for user
+- GET /api/simulations/opportunities - Get pricing opportunities based on feature data
+- GET /api/simulations/:id - Get simulation detail
+- POST /api/simulations - Create new simulation (admin only)
+- PUT /api/simulations/:id - Update simulation / run simulation engine (admin only)
+- DELETE /api/simulations/:id - Delete simulation (admin only)
+
 ## Recent Changes
+- 2026-03-20: Pricing Simulator (Task #2)
+  - Created simulations table with indexes at server startup
+  - Added CRUD + simulation engine endpoints (run calculates projections from observe_events)
+  - Added API client functions (listSimulations, getSimulation, createSimulation, updateSimulation, deleteSimulation, getOpportunities)
+  - SimulationsPage, SimulationNewPage (3-step wizard), SimulationDetailPage all functional
+- 2026-03-20: UI/UX polish for Features and Events pages
+  - Redesigned FeaturesPage with clean list layout and horizontal bar charts
+  - Redesigned EventsPage with inline filters and polished data table
+  - Fixed Radix Select empty-value bug in EventsPage
 - 2026-03-19: Added team accounts with Admin/Viewer roles and invite links
   - Created organizations, organization_members, visitor_org_map DB tables
   - Added team management API routes to Express backend

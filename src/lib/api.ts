@@ -1,3 +1,5 @@
+import type { Simulation, PricingOpportunity } from '@/types/simulation'
+
 const API_BASE = '/api'
 
 async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
@@ -538,4 +540,43 @@ export async function removeMember(memberId: string): Promise<{ success: boolean
 
 export async function getMyRole(): Promise<{ role: 'admin' | 'viewer'; org_id: string }> {
   return request('/team/my-role')
+}
+
+// =============================================================================
+// Simulations
+// =============================================================================
+
+export async function listSimulations(): Promise<Simulation[]> {
+  return request('/simulations')
+}
+
+export async function getSimulation(id: string): Promise<Simulation> {
+  return request(`/simulations/${id}`)
+}
+
+export async function createSimulation(data: {
+  name: string
+  scenarios?: unknown[]
+  time_range?: { start: string; end: string }
+  segment_name?: string
+}): Promise<Simulation> {
+  return request('/simulations', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })
+}
+
+export async function updateSimulation(id: string, data: Record<string, unknown>): Promise<Simulation> {
+  return request(`/simulations/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  })
+}
+
+export async function deleteSimulation(id: string): Promise<{ success: boolean }> {
+  return request(`/simulations/${id}`, { method: 'DELETE' })
+}
+
+export async function getOpportunities(): Promise<PricingOpportunity[]> {
+  return request('/simulations/opportunities')
 }

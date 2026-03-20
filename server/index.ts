@@ -938,7 +938,32 @@ async function startServer() {
   try {
     await pool.query('SELECT 1')
     console.log('Database connection verified')
-    
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS simulations (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'draft',
+        segment_name TEXT,
+        time_range JSONB,
+        scenarios JSONB NOT NULL DEFAULT '[]',
+        summary_table JSONB,
+        customer_impacts JSONB NOT NULL DEFAULT '[]',
+        feature_analysis JSONB NOT NULL DEFAULT '[]',
+        margin_impact JSONB,
+        confidence_score NUMERIC,
+        key_insight TEXT,
+        winning_scenario_id TEXT,
+        rolled_out_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `)
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_simulations_user_id ON simulations(user_id)`)
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_simulations_status ON simulations(status)`)
+    console.log('Simulations table ready')
+
     app.listen(PORT, '127.0.0.1', () => {
       console.log(`Backend server running on http://127.0.0.1:${PORT}`)
     })
@@ -1477,6 +1502,322 @@ app.get('/customers/:id', ensureVisitor, async (req: AuthRequest, res: Response)
   } catch (error) {
     console.error('Get customer detail error:', error)
     res.status(500).json({ error: 'Failed to get customer detail' })
+  }
+})
+
+// =============================================================================
+// SIMULATIONS
+// =============================================================================
+
+app.get('/simulations', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  try {
+    const result = await pool.query(
+      'SELECT * FROM simulations WHERE user_id = $1 ORDER BY updated_at DESC',
+      [req.effectiveUserId!]
+    )
+    res.json(result.rows)
+  } catch (error) {
+    console.error('List simulations error:', error)
+    res.status(500).json({ error: 'Failed to list simulations' })
+  }
+})
+
+app.get('/simulations/opportunities', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  try {
+    const featuresRes = await pool.query(`
+      SELECT feature_key,
+        SUM(cost_amount) AS total_cost,
+        SUM(revenue_amount) AS total_revenue,
+        COUNT(*) AS event_count,
+        COUNT(DISTINCT customer_id) AS customer_count
+      FROM observe_events
+      WHERE user_id = $1
+      GROUP BY feature_key
+    `, [req.effectiveUserId!])
+
+    const opportunities: Array<{
+      id: string; title: string; description: string;
+      severity: string; suggested_action: string;
+      feature_key?: string; estimated_impact?: string
+    }> = []
+
+    for (const f of featuresRes.rows) {
+      const cost = parseFloat(f.total_cost) || 0
+      const rev = parseFloat(f.total_revenue) || 0
+      const margin = rev > 0 ? ((rev - cost) / rev) * 100 : 0
+
+      if (margin < 0) {
+        opportunities.push({
+          id: `opp-neg-${f.feature_key}`,
+          title: `${f.feature_key} is losing money`,
+          description: `This feature has a negative margin of ${margin.toFixed(0)}%. Consider raising prices or reducing costs.`,
+          severity: 'critical',
+          suggested_action: 'Increase price or optimize costs',
+          feature_key: f.feature_key,
+          estimated_impact: `$${Math.abs(rev - cost).toFixed(2)} potential savings`,
+        })
+      } else if (margin < 30 && rev > 0) {
+        opportunities.push({
+          id: `opp-low-${f.feature_key}`,
+          title: `${f.feature_key} has thin margins`,
+          description: `Margin is only ${margin.toFixed(0)}%. A small price increase could improve profitability.`,
+          severity: 'warning',
+          suggested_action: 'Consider a 10-20% price increase',
+          feature_key: f.feature_key,
+          estimated_impact: `${(30 - margin).toFixed(0)}pp margin improvement possible`,
+        })
+      } else if (margin > 85 && parseInt(f.customer_count) < 3) {
+        opportunities.push({
+          id: `opp-growth-${f.feature_key}`,
+          title: `${f.feature_key} has growth potential`,
+          description: `High margin (${margin.toFixed(0)}%) but only ${f.customer_count} customers. Consider competitive pricing to grow adoption.`,
+          severity: 'info',
+          suggested_action: 'Lower price slightly to attract more customers',
+          feature_key: f.feature_key,
+        })
+      }
+    }
+
+    res.json(opportunities)
+  } catch (error) {
+    console.error('Get opportunities error:', error)
+    res.status(500).json({ error: 'Failed to get opportunities' })
+  }
+})
+
+app.get('/simulations/:id', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  try {
+    const result = await pool.query(
+      'SELECT * FROM simulations WHERE id = $1 AND user_id = $2',
+      [req.params.id, req.effectiveUserId!]
+    )
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Simulation not found' })
+    }
+    res.json(result.rows[0])
+  } catch (error) {
+    console.error('Get simulation error:', error)
+    res.status(500).json({ error: 'Failed to get simulation' })
+  }
+})
+
+app.post('/simulations', ensureVisitor, requireAdmin, async (req: AuthRequest, res: Response) => {
+  try {
+    const { name, scenarios, time_range, segment_name } = req.body
+    if (!name) return res.status(400).json({ error: 'Name is required' })
+
+    const result = await pool.query(
+      `INSERT INTO simulations (user_id, name, status, segment_name, time_range, scenarios)
+       VALUES ($1, $2, 'draft', $3, $4, $5)
+       RETURNING *`,
+      [req.effectiveUserId!, name, segment_name || null, time_range ? JSON.stringify(time_range) : null, JSON.stringify(scenarios || [])]
+    )
+    res.json(result.rows[0])
+  } catch (error) {
+    console.error('Create simulation error:', error)
+    res.status(500).json({ error: 'Failed to create simulation' })
+  }
+})
+
+app.put('/simulations/:id', ensureVisitor, requireAdmin, async (req: AuthRequest, res: Response) => {
+  try {
+    const simRes = await pool.query(
+      'SELECT * FROM simulations WHERE id = $1 AND user_id = $2',
+      [req.params.id, req.effectiveUserId!]
+    )
+    if (simRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Simulation not found' })
+    }
+    const sim = simRes.rows[0]
+    const updates = req.body
+
+    if (updates.status === 'running' && sim.status === 'draft') {
+      const scenarios = updates.scenarios || sim.scenarios || []
+      const featureRes = await pool.query(`
+        SELECT feature_key,
+          SUM(cost_amount) AS total_cost,
+          SUM(revenue_amount) AS total_revenue,
+          COUNT(*) AS event_count,
+          COUNT(DISTINCT customer_id) AS customer_count
+        FROM observe_events
+        WHERE user_id = $1
+        GROUP BY feature_key
+      `, [req.effectiveUserId!])
+
+      const featureData: Record<string, { cost: number; revenue: number; events: number; customers: number }> = {}
+      for (const r of featureRes.rows) {
+        featureData[r.feature_key] = {
+          cost: parseFloat(r.total_cost) || 0,
+          revenue: parseFloat(r.total_revenue) || 0,
+          events: parseInt(r.event_count) || 0,
+          customers: parseInt(r.customer_count) || 0,
+        }
+      }
+
+      const customerRes = await pool.query(`
+        SELECT oe.customer_id, c.name AS customer_name, c.segment,
+          SUM(oe.cost_amount) AS total_cost,
+          SUM(oe.revenue_amount) AS total_revenue
+        FROM observe_events oe
+        LEFT JOIN customers c ON oe.user_id::uuid = c.user_id AND oe.customer_id = c.customer_id
+        WHERE oe.user_id = $1 AND oe.customer_id != '_aggregate'
+        GROUP BY oe.customer_id, c.name, c.segment
+      `, [req.effectiveUserId!])
+
+      for (const sc of scenarios) {
+        let projectedRevenue = 0
+        let projectedCost = 0
+        for (const change of (sc.changes || [])) {
+          const fd = featureData[change.feature_key]
+          if (!fd) continue
+          let newRevenue = fd.revenue
+          switch (change.change_type) {
+            case 'percentage_increase': newRevenue = fd.revenue * (1 + change.change_value / 100); break
+            case 'percentage_decrease': newRevenue = fd.revenue * (1 - change.change_value / 100); break
+            case 'flat_increase': newRevenue = fd.revenue + change.change_value * fd.events; break
+            case 'flat_decrease': newRevenue = fd.revenue - change.change_value * fd.events; break
+            case 'new_price': newRevenue = change.change_value * fd.events; break
+          }
+          projectedRevenue += newRevenue
+          projectedCost += fd.cost
+        }
+        sc.projected_revenue = projectedRevenue
+        sc.projected_cost = projectedCost
+        sc.projected_margin_pct = projectedRevenue > 0
+          ? Math.round(((projectedRevenue - projectedCost) / projectedRevenue) * 100)
+          : 0
+      }
+
+      const featureAnalysis = Object.entries(featureData).map(([key, fd]) => {
+        let bestProjectedRev = fd.revenue
+        for (const sc of scenarios) {
+          for (const ch of (sc.changes || [])) {
+            if (ch.feature_key !== key) continue
+            let nr = fd.revenue
+            switch (ch.change_type) {
+              case 'percentage_increase': nr = fd.revenue * (1 + ch.change_value / 100); break
+              case 'percentage_decrease': nr = fd.revenue * (1 - ch.change_value / 100); break
+              case 'flat_increase': nr = fd.revenue + ch.change_value * fd.events; break
+              case 'flat_decrease': nr = fd.revenue - ch.change_value * fd.events; break
+              case 'new_price': nr = ch.change_value * fd.events; break
+            }
+            if (nr > bestProjectedRev) bestProjectedRev = nr
+          }
+        }
+        const currentMargin = fd.revenue > 0 ? ((fd.revenue - fd.cost) / fd.revenue) * 100 : 0
+        const projectedMargin = bestProjectedRev > 0 ? ((bestProjectedRev - fd.cost) / bestProjectedRev) * 100 : 0
+        return {
+          feature_key: key,
+          current_cost: fd.cost,
+          current_revenue: fd.revenue,
+          current_margin_pct: Math.round(currentMargin),
+          projected_revenue: bestProjectedRev,
+          projected_margin_pct: Math.round(projectedMargin),
+          margin_delta_pct: Math.round(projectedMargin - currentMargin),
+        }
+      })
+
+      const customerImpacts = customerRes.rows.map((cr: { customer_id: string; customer_name: string; segment: string; total_cost: string; total_revenue: string }) => {
+        const currentRev = parseFloat(cr.total_revenue) || 0
+        const revDelta = currentRev * 0.1
+        const projectedRev = currentRev + revDelta
+        const deltaPct = currentRev > 0 ? (revDelta / currentRev) * 100 : 0
+        return {
+          customer_id: cr.customer_id,
+          customer_name: cr.customer_name || cr.customer_id,
+          current_revenue: currentRev,
+          projected_revenue: projectedRev,
+          revenue_delta: revDelta,
+          revenue_delta_pct: Math.round(deltaPct),
+          churn_risk: deltaPct > 20 ? 'high' : deltaPct > 10 ? 'medium' : 'low' as 'low' | 'medium' | 'high',
+          segment: cr.segment,
+        }
+      })
+
+      const totalCurrentRev = Object.values(featureData).reduce((s, f) => s + f.revenue, 0)
+      const totalCost = Object.values(featureData).reduce((s, f) => s + f.cost, 0)
+      const bestScenario = scenarios.reduce((best: { projected_revenue?: number; id?: string } | null, sc: { projected_revenue?: number; id?: string }) =>
+        !best || (sc.projected_revenue || 0) > (best.projected_revenue || 0) ? sc : best, null as { projected_revenue?: number; id?: string } | null)
+      const totalProjectedRev = bestScenario?.projected_revenue || totalCurrentRev
+      const currentMarginPct = totalCurrentRev > 0 ? ((totalCurrentRev - totalCost) / totalCurrentRev) * 100 : 0
+      const projectedMarginPct = totalProjectedRev > 0 ? ((totalProjectedRev - totalCost) / totalProjectedRev) * 100 : 0
+
+      const marginImpact = {
+        current_margin_pct: Math.round(currentMarginPct),
+        projected_margin_pct: Math.round(projectedMarginPct),
+        margin_delta_pct: Math.round(projectedMarginPct - currentMarginPct),
+        total_current_revenue: totalCurrentRev,
+        total_projected_revenue: totalProjectedRev,
+        total_cost: totalCost,
+        customers_affected: customerImpacts.length,
+        high_churn_risk_count: customerImpacts.filter((c: { churn_risk: string }) => c.churn_risk === 'high').length,
+      }
+
+      const confidenceScore = Math.min(95, 50 + Object.keys(featureData).length * 5 + customerImpacts.length * 2)
+      const keyInsight = bestScenario
+        ? `Best scenario projects ${projectedMarginPct.toFixed(0)}% margin (${projectedMarginPct > currentMarginPct ? '+' : ''}${(projectedMarginPct - currentMarginPct).toFixed(0)}pp) with $${totalProjectedRev.toFixed(2)} revenue.`
+        : 'Not enough data to generate insights.'
+
+      const updateRes = await pool.query(
+        `UPDATE simulations SET status = 'completed', scenarios = $1, feature_analysis = $2,
+         customer_impacts = $3, margin_impact = $4, confidence_score = $5,
+         key_insight = $6, winning_scenario_id = $7, updated_at = NOW()
+         WHERE id = $8 AND user_id = $9 RETURNING *`,
+        [
+          JSON.stringify(scenarios), JSON.stringify(featureAnalysis),
+          JSON.stringify(customerImpacts), JSON.stringify(marginImpact),
+          confidenceScore, keyInsight, bestScenario?.id || null,
+          req.params.id, req.effectiveUserId!
+        ]
+      )
+      return res.json(updateRes.rows[0])
+    }
+
+    if (updates.status === 'rolled_out') {
+      const updateRes = await pool.query(
+        `UPDATE simulations SET status = 'rolled_out', rolled_out_at = NOW(), updated_at = NOW()
+         WHERE id = $1 AND user_id = $2 RETURNING *`,
+        [req.params.id, req.effectiveUserId!]
+      )
+      return res.json(updateRes.rows[0])
+    }
+
+    const fields: string[] = []
+    const values: unknown[] = []
+    let paramIdx = 1
+
+    if (updates.name !== undefined) { fields.push(`name = $${paramIdx++}`); values.push(updates.name) }
+    if (updates.scenarios !== undefined) { fields.push(`scenarios = $${paramIdx++}`); values.push(JSON.stringify(updates.scenarios)) }
+    if (updates.segment_name !== undefined) { fields.push(`segment_name = $${paramIdx++}`); values.push(updates.segment_name) }
+    if (updates.time_range !== undefined) { fields.push(`time_range = $${paramIdx++}`); values.push(JSON.stringify(updates.time_range)) }
+    fields.push(`updated_at = NOW()`)
+
+    values.push(req.params.id)
+    values.push(req.effectiveUserId!)
+
+    const updateRes = await pool.query(
+      `UPDATE simulations SET ${fields.join(', ')} WHERE id = $${paramIdx++} AND user_id = $${paramIdx} RETURNING *`,
+      values
+    )
+    if (updateRes.rows.length === 0) return res.status(404).json({ error: 'Simulation not found' })
+    res.json(updateRes.rows[0])
+  } catch (error) {
+    console.error('Update simulation error:', error)
+    res.status(500).json({ error: 'Failed to update simulation' })
+  }
+})
+
+app.delete('/simulations/:id', ensureVisitor, requireAdmin, async (req: AuthRequest, res: Response) => {
+  try {
+    const result = await pool.query(
+      'DELETE FROM simulations WHERE id = $1 AND user_id = $2',
+      [req.params.id, req.effectiveUserId!]
+    )
+    if (result.rowCount === 0) return res.status(404).json({ error: 'Simulation not found' })
+    res.json({ success: true })
+  } catch (error) {
+    console.error('Delete simulation error:', error)
+    res.status(500).json({ error: 'Failed to delete simulation' })
   }
 })
 
