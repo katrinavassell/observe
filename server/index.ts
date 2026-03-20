@@ -50,7 +50,7 @@ app.use(session({
   resave: false,
   saveUninitialized: true,
   cookie: {
-    secure: process.env.NODE_ENV === 'production',
+    secure: process.env.NODE_ENV === 'production' || !!process.env.REPL_ID,
     httpOnly: true,
     sameSite: 'lax',
     maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days for anonymous users
@@ -1282,9 +1282,8 @@ async function startServer() {
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_tanso_customers_visitor ON tanso_customers(visitor_id)`)
     console.log('All application tables ready')
 
-    const host = isProduction ? '0.0.0.0' : '127.0.0.1'
-    app.listen(PORT, host, () => {
-      console.log(`Backend server running on http://${host}:${PORT}`)
+    app.listen(PORT, '0.0.0.0', () => {
+      console.log(`Backend server running on http://0.0.0.0:${PORT}`)
     })
   } catch (error) {
     console.error('Failed to connect to database:', error)
