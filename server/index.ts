@@ -344,6 +344,80 @@ app.post('/data/sample', ensureVisitor, requireAdmin, async (req: AuthRequest, r
       )
     }
 
+    await client.query('DELETE FROM simulations WHERE user_id = $1', [req.effectiveUserId!])
+
+    const sampleSimulations = [
+      {
+        name: 'API Pricing Optimization',
+        status: 'completed',
+        segment_name: 'All Segments',
+        scenarios: [
+          { id: 'sc-001a', name: 'Conservative (+10%)', description: 'Moderate price increase across AI features', changes: [{ feature_key: 'ai_summarization', change_type: 'percentage_increase', change_value: 10 }, { feature_key: 'image_generation', change_type: 'percentage_increase', change_value: 10 }], projected_revenue: 3.08, projected_cost: 1.29, projected_margin_pct: 58 },
+          { id: 'sc-001b', name: 'Aggressive (+25%)', description: 'Larger price increase to improve margins', changes: [{ feature_key: 'ai_summarization', change_type: 'percentage_increase', change_value: 25 }, { feature_key: 'image_generation', change_type: 'percentage_increase', change_value: 25 }], projected_revenue: 3.50, projected_cost: 1.29, projected_margin_pct: 63 },
+        ],
+        feature_analysis: [
+          { feature_key: 'ai_summarization', current_cost: 0.82, current_revenue: 1.80, current_margin_pct: 54, projected_revenue: 2.25, projected_margin_pct: 64, margin_delta_pct: 10 },
+          { feature_key: 'image_generation', current_cost: 0.14, current_revenue: 0.95, current_margin_pct: 85, projected_revenue: 1.19, projected_margin_pct: 88, margin_delta_pct: 3 },
+        ],
+        customer_impacts: [
+          { customer_id: 'cus_001', customer_name: 'Acme Corp', current_revenue: 1.10, projected_revenue: 1.38, revenue_delta: 0.28, revenue_delta_pct: 25, churn_risk: 'low', segment: 'Enterprise' },
+          { customer_id: 'cus_002', customer_name: 'TechStart Inc', current_revenue: 0.45, projected_revenue: 0.56, revenue_delta: 0.11, revenue_delta_pct: 25, churn_risk: 'medium', segment: 'SMB' },
+          { customer_id: 'cus_004', customer_name: 'Startup Labs', current_revenue: 0.15, projected_revenue: 0.19, revenue_delta: 0.04, revenue_delta_pct: 25, churn_risk: 'high', segment: 'SMB' },
+        ],
+        margin_impact: { current_margin_pct: 54, projected_margin_pct: 63, margin_delta_pct: 9, total_current_revenue: 2.80, total_projected_revenue: 3.50, total_cost: 1.29, customers_affected: 3, high_churn_risk_count: 1 },
+        confidence_score: 78,
+        key_insight: 'A 25% price increase on AI features would improve overall margin from 54% to 63%, with only 1 customer at high churn risk.',
+        winning_scenario_id: 'sc-001b',
+      },
+      {
+        name: 'Enterprise Tier Restructure',
+        status: 'completed',
+        segment_name: 'Enterprise',
+        scenarios: [
+          { id: 'sc-002a', name: 'Bundle AI features', description: 'Include AI summarization in enterprise tier at flat rate', changes: [{ feature_key: 'ai_summarization', change_type: 'new_price', change_value: 0.40 }], projected_revenue: 2.60, projected_cost: 1.29, projected_margin_pct: 50 },
+          { id: 'sc-002b', name: 'Premium image tier', description: 'Increase image generation pricing for enterprise', changes: [{ feature_key: 'image_generation', change_type: 'percentage_increase', change_value: 40 }], projected_revenue: 3.18, projected_cost: 1.29, projected_margin_pct: 59 },
+        ],
+        feature_analysis: [
+          { feature_key: 'ai_summarization', current_cost: 0.82, current_revenue: 1.80, current_margin_pct: 54, projected_revenue: 2.07, projected_margin_pct: 60, margin_delta_pct: 6 },
+          { feature_key: 'image_generation', current_cost: 0.14, current_revenue: 0.95, current_margin_pct: 85, projected_revenue: 1.33, projected_margin_pct: 89, margin_delta_pct: 4 },
+        ],
+        customer_impacts: [
+          { customer_id: 'cus_001', customer_name: 'Acme Corp', current_revenue: 1.10, projected_revenue: 1.32, revenue_delta: 0.22, revenue_delta_pct: 20, churn_risk: 'low', segment: 'Enterprise' },
+          { customer_id: 'cus_005', customer_name: 'Enterprise Co', current_revenue: 0.20, projected_revenue: 0.28, revenue_delta: 0.08, revenue_delta_pct: 40, churn_risk: 'medium', segment: 'Enterprise' },
+        ],
+        margin_impact: { current_margin_pct: 54, projected_margin_pct: 59, margin_delta_pct: 5, total_current_revenue: 2.80, total_projected_revenue: 3.18, total_cost: 1.29, customers_affected: 2, high_churn_risk_count: 0 },
+        confidence_score: 65,
+        key_insight: 'Restructuring enterprise pricing with a premium image tier yields +5% margin improvement with no high churn risk customers.',
+        winning_scenario_id: 'sc-002b',
+      },
+      {
+        name: 'Usage-Based Pricing Test',
+        status: 'draft',
+        scenarios: [
+          { id: 'sc-003a', name: 'Per-token pricing', description: 'Charge per 1000 tokens across all AI features', changes: [{ feature_key: 'ai_summarization', change_type: 'new_price', change_value: 0.03 }, { feature_key: 'search', change_type: 'new_price', change_value: 0.005 }] },
+        ],
+        feature_analysis: [],
+        customer_impacts: [],
+        margin_impact: null,
+        confidence_score: null,
+        key_insight: null,
+        winning_scenario_id: null,
+      },
+    ]
+
+    for (const sim of sampleSimulations) {
+      await client.query(
+        `INSERT INTO simulations (user_id, name, status, segment_name, scenarios, feature_analysis, customer_impacts, margin_impact, confidence_score, key_insight, winning_scenario_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+        [
+          req.effectiveUserId!, sim.name, sim.status, sim.segment_name || null,
+          JSON.stringify(sim.scenarios), JSON.stringify(sim.feature_analysis),
+          JSON.stringify(sim.customer_impacts), sim.margin_impact ? JSON.stringify(sim.margin_impact) : null,
+          sim.confidence_score, sim.key_insight, sim.winning_scenario_id,
+        ]
+      )
+    }
+
     await client.query(
       'INSERT INTO user_data_status (user_id, data_mode) VALUES ($1, $2) ON CONFLICT (user_id) DO UPDATE SET data_mode = $2, updated_at = NOW()',
       [req.effectiveUserId!, 'sample']
@@ -364,6 +438,7 @@ app.delete('/data/clear', ensureVisitor, requireAdmin, async (req: AuthRequest, 
   const client = await pool.connect()
   try {
     await client.query('BEGIN')
+    await client.query('DELETE FROM simulations WHERE user_id = $1', [req.effectiveUserId!])
     await client.query('DELETE FROM observe_events WHERE user_id = $1', [req.effectiveUserId!])
     await client.query('DELETE FROM usage_records WHERE user_id = $1', [req.effectiveUserId!])
     await client.query('DELETE FROM cost_records WHERE user_id = $1', [req.effectiveUserId!])
@@ -962,6 +1037,7 @@ async function startServer() {
     `)
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_simulations_user_id ON simulations(user_id)`)
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_simulations_status ON simulations(status)`)
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_simulations_user_created ON simulations(user_id, created_at DESC)`)
     console.log('Simulations table ready')
 
     app.listen(PORT, '127.0.0.1', () => {
