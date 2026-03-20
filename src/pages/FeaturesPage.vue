@@ -3,8 +3,8 @@ import { computed } from 'vue'
 import { useQuery } from '@tanstack/vue-query'
 import { useRouter } from 'vue-router'
 import { getFeatures } from '@/lib/api'
-import { Layers, TrendingDown, TrendingUp, Minus, ChevronRight } from 'lucide-vue-next'
-import MarginBadge from '@/components/shared/MarginBadge.vue'
+import { Layers } from 'lucide-vue-next'
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui'
 
 const router = useRouter()
 
@@ -14,9 +14,12 @@ const { data: features, isLoading, isError } = useQuery({
 })
 
 function formatCurrency(val: number) {
+  if (val === 0) return '$0.00'
   if (val >= 1000) return `$${(val / 1000).toFixed(1)}k`
-  if (val >= 1) return `$${val.toFixed(2)}`
-  return `$${val.toFixed(4)}`
+  if (val >= 0.01) return `$${val.toFixed(2)}`
+  const formatted = val.toFixed(4)
+  const trimmed = formatted.replace(/0+$/, '')
+  return `$${trimmed.endsWith('.') ? trimmed + '00' : trimmed}`
 }
 
 function marginBand(margin: number | null): 'negative' | 'low' | 'profitable' | 'high' | 'unknown' {
@@ -28,25 +31,45 @@ function marginBand(margin: number | null): 'negative' | 'low' | 'profitable' | 
 }
 
 const bandConfig = {
-  negative: { label: 'Negative', bg: 'bg-red-50 border-red-200', header: 'bg-red-100 text-red-700', icon: TrendingDown, iconClass: 'text-red-600' },
-  low: { label: 'Low (0–30%)', bg: 'bg-yellow-50 border-yellow-200', header: 'bg-yellow-100 text-yellow-700', icon: Minus, iconClass: 'text-yellow-600' },
-  profitable: { label: 'Profitable (30–70%)', bg: 'bg-green-50 border-green-200', header: 'bg-green-100 text-green-700', icon: TrendingUp, iconClass: 'text-green-600' },
-  high: { label: 'High Margin (70%+)', bg: 'bg-emerald-50 border-emerald-200', header: 'bg-emerald-100 text-emerald-700', icon: TrendingUp, iconClass: 'text-emerald-600' },
-  unknown: { label: 'No Data', bg: 'bg-muted/30 border-border', header: 'bg-muted text-muted-foreground', icon: Minus, iconClass: 'text-muted-foreground' },
+  high: { label: 'High Margin (70%+)' },
+  profitable: { label: 'Profitable (30–70%)' },
+  low: { label: 'Low Margin (0–30%)' },
+  negative: { label: 'Negative Margin' },
+  unknown: { label: 'No Data' },
 }
+
+const orderedBands = ['high', 'profitable', 'low', 'negative', 'unknown'] as const
 
 const featuresByBand = computed(() => {
   if (!features.value) return {}
   const result: Record<string, typeof features.value> = {
-    negative: [], low: [], profitable: [], high: [], unknown: [],
+    high: [], profitable: [], low: [], negative: [], unknown: [],
   }
   for (const f of features.value) {
     result[marginBand(f.margin_pct)].push(f)
   }
+  for (const band of orderedBands) {
+    result[band].sort((a, b) => b.total_revenue - a.total_revenue)
+  }
   return result
 })
 
-const orderedBands = ['negative', 'low', 'profitable', 'high', 'unknown'] as const
+const maxRevenue = computed(() => {
+  if (!features.value || features.value.length === 0) return 1
+  return Math.max(...features.value.map(f => f.total_revenue), 0.01)
+})
+
+function formatMargin(margin: number | null) {
+  if (margin === null) return '—'
+  return `${margin.toFixed(0)}%`
+}
+
+function marginColor(margin: number | null) {
+  if (margin === null) return 'text-muted-foreground'
+  if (margin < 0) return 'text-destructive'
+  if (margin < 30) return 'text-warning'
+  return 'text-success'
+}
 
 function goToDetail(key: string) {
   router.push(`/features/${key}`)
@@ -62,21 +85,21 @@ function goToDetail(key: string) {
 
     <!-- Summary strip -->
     <div v-if="features && features.length > 0" class="grid grid-cols-2 sm:grid-cols-4 gap-4">
-      <div class="rounded-lg border bg-card p-4">
+      <div class="rounded-lg border bg-card p-4 shadow-sm">
         <div class="text-xs text-muted-foreground mb-1">Total Features</div>
-        <div class="text-2xl font-semibold">{{ features.length }}</div>
+        <div class="text-2xl font-semibold tabular-nums">{{ features.length }}</div>
       </div>
-      <div class="rounded-lg border bg-card p-4">
+      <div class="rounded-lg border bg-card p-4 shadow-sm">
         <div class="text-xs text-muted-foreground mb-1">Total Cost</div>
-        <div class="text-2xl font-semibold">{{ formatCurrency(features.reduce((s, f) => s + f.total_cost, 0)) }}</div>
+        <div class="text-2xl font-semibold tabular-nums">{{ formatCurrency(features.reduce((s, f) => s + f.total_cost, 0)) }}</div>
       </div>
-      <div class="rounded-lg border bg-card p-4">
+      <div class="rounded-lg border bg-card p-4 shadow-sm">
         <div class="text-xs text-muted-foreground mb-1">Total Revenue</div>
-        <div class="text-2xl font-semibold">{{ formatCurrency(features.reduce((s, f) => s + f.total_revenue, 0)) }}</div>
+        <div class="text-2xl font-semibold tabular-nums">{{ formatCurrency(features.reduce((s, f) => s + f.total_revenue, 0)) }}</div>
       </div>
-      <div class="rounded-lg border bg-card p-4">
+      <div class="rounded-lg border bg-card p-4 shadow-sm">
         <div class="text-xs text-muted-foreground mb-1">Negative Margin</div>
-        <div class="text-2xl font-semibold text-red-600">
+        <div class="text-2xl font-semibold text-destructive tabular-nums">
           {{ features.filter(f => f.margin_pct !== null && f.margin_pct < 0).length }}
         </div>
       </div>
@@ -90,53 +113,54 @@ function goToDetail(key: string) {
       No feature data yet. Load sample data to see feature economics.
     </div>
 
-    <!-- Card grid grouped by margin band -->
-    <template v-else>
-      <template v-for="band in orderedBands" :key="band">
-        <div v-if="featuresByBand[band] && featuresByBand[band].length > 0">
-          <!-- Band header -->
-          <div class="flex items-center gap-2 mb-3">
-            <component :is="bandConfig[band].icon" :class="['h-4 w-4', bandConfig[band].iconClass]" />
-            <span class="text-sm font-medium text-foreground">{{ bandConfig[band].label }}</span>
-            <span class="text-xs text-muted-foreground">({{ featuresByBand[band].length }})</span>
-          </div>
-
-          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
-            <div
-              v-for="f in featuresByBand[band]"
-              :key="f.feature_key"
-              :class="['rounded-lg border p-4 cursor-pointer hover:shadow-sm transition-shadow', bandConfig[band].bg]"
-              @click="goToDetail(f.feature_key)"
-            >
-              <!-- Card header -->
-              <div class="flex items-start justify-between mb-3">
-                <span class="font-mono text-sm font-semibold bg-white/60 px-2 py-0.5 rounded border border-black/5 truncate max-w-[180px]">
-                  {{ f.feature_key }}
-                </span>
-                <MarginBadge :margin="f.margin_pct" />
-              </div>
-
-              <!-- Cost / Revenue row -->
-              <div class="grid grid-cols-2 gap-2 mb-3">
-                <div>
-                  <div class="text-[11px] text-muted-foreground">Cost</div>
-                  <div class="text-base font-semibold">{{ formatCurrency(f.total_cost) }}</div>
+    <!-- Feature List by Band -->
+    <Card v-else>
+      <CardHeader>
+        <CardTitle class="text-base">Revenue by Feature</CardTitle>
+      </CardHeader>
+      <CardContent class="space-y-8 pb-6">
+        <template v-for="band in orderedBands" :key="band">
+          <div v-if="featuresByBand[band] && featuresByBand[band].length > 0">
+            <h3 class="text-sm font-semibold text-muted-foreground mb-3 px-1">
+              {{ bandConfig[band].label }}
+            </h3>
+            <div class="space-y-1">
+              <div
+                v-for="f in featuresByBand[band]"
+                :key="f.feature_key"
+                class="flex items-center gap-4 hover:bg-muted/50 transition-colors rounded-md px-2 py-2.5 cursor-pointer -mx-2"
+                @click="goToDetail(f.feature_key)"
+              >
+                <div class="w-32 sm:w-48 font-medium text-sm truncate">{{ f.feature_key }}</div>
+                
+                <div class="flex-1 h-3 bg-muted rounded-full overflow-hidden hidden sm:block">
+                  <div
+                    class="h-full bg-foreground rounded-full"
+                    :style="{ width: `${(f.total_revenue / maxRevenue) * 100}%` }"
+                  />
                 </div>
-                <div>
-                  <div class="text-[11px] text-muted-foreground">Revenue</div>
-                  <div class="text-base font-semibold">{{ formatCurrency(f.total_revenue) }}</div>
+                
+                <div class="flex items-center gap-4 sm:gap-8 justify-end ml-auto">
+                  <div class="text-right w-16 sm:w-20">
+                    <div class="text-sm font-semibold tabular-nums">{{ formatCurrency(f.total_revenue) }}</div>
+                    <div class="text-[10px] sm:text-xs text-muted-foreground">Revenue</div>
+                  </div>
+                  <div class="text-right w-16 sm:w-20">
+                    <div class="text-sm font-semibold tabular-nums">{{ formatCurrency(f.total_cost) }}</div>
+                    <div class="text-[10px] sm:text-xs text-muted-foreground">Cost</div>
+                  </div>
+                  <div class="text-right w-12 sm:w-16">
+                    <div :class="['text-sm font-semibold tabular-nums', marginColor(f.margin_pct)]">
+                      {{ formatMargin(f.margin_pct) }}
+                    </div>
+                    <div class="text-[10px] sm:text-xs text-muted-foreground">Margin</div>
+                  </div>
                 </div>
-              </div>
-
-              <!-- Footer stats -->
-              <div class="flex items-center justify-between text-xs text-muted-foreground">
-                <span>{{ f.event_count.toLocaleString() }} events · {{ f.customer_count }} customers</span>
-                <ChevronRight class="h-3.5 w-3.5 shrink-0" />
               </div>
             </div>
           </div>
-        </div>
-      </template>
-    </template>
+        </template>
+      </CardContent>
+    </Card>
   </div>
 </template>
