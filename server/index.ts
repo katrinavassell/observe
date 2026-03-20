@@ -2082,7 +2082,7 @@ app.get('/referral/stats', ensureVisitor, async (req: AuthRequest, res: Response
 })
 
 const distPath = path.resolve(__dirname, '..', 'dist')
-if (isProduction && fs.existsSync(distPath)) {
+if (fs.existsSync(distPath)) {
   app.use(express.static(distPath))
   app.get('/{*splat}', (_req: Request, res: Response) => {
     res.sendFile(path.join(distPath, 'index.html'))

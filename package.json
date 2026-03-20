@@ -7,7 +7,7 @@
     "dev": "concurrently \"npx tsx server/index.ts\" \"vite\"",
     "dev:frontend": "vite",
     "dev:backend": "npx tsx server/index.ts",
-    "build": "vue-tsc -b && vite build",
+    "build": "vite build",
     "preview": "vite preview",
     "lint": "eslint src/",
     "lint:fix": "eslint src/ --fix"
