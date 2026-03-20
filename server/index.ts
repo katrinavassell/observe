@@ -956,6 +956,24 @@ async function startServer() {
       )
     `)
 
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS simulations (
+        id SERIAL PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        scenarios JSONB DEFAULT '[]',
+        time_range JSONB DEFAULT '{}',
+        results JSONB,
+        status TEXT DEFAULT 'draft',
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `)
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_simulations_user_created
+      ON simulations (user_id, created_at DESC)
+    `)
+
     app.listen(PORT, '0.0.0.0', () => {
       console.log(`Backend server running on http://0.0.0.0:${PORT}`)
     })
