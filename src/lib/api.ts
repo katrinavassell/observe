@@ -30,6 +30,7 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
 
 export interface SessionResponse {
   visitorId: string
+  account: Account | null
 }
 
 export async function initSession(): Promise<SessionResponse> {
@@ -683,4 +684,32 @@ export async function tansoSubscribe(planId: string): Promise<{ success: boolean
 
 export async function tansoCheckFeature(featureKey: string): Promise<TansoEntitlementCheck> {
   return request(`/tanso/check/${featureKey}`)
+}
+
+export interface Account {
+  id: number
+  email: string
+  name: string | null
+}
+
+export async function signup(email: string, password: string, name?: string): Promise<{ account: Account }> {
+  return request('/auth/signup', {
+    method: 'POST',
+    body: JSON.stringify({ email, password, name }),
+  })
+}
+
+export async function login(email: string, password: string): Promise<{ account: Account }> {
+  return request('/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({ email, password }),
+  })
+}
+
+export async function logout(): Promise<{ success: boolean }> {
+  return request('/auth/logout', { method: 'POST' })
+}
+
+export async function getMe(): Promise<{ account: Account | null }> {
+  return request('/auth/me')
 }

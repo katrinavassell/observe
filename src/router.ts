@@ -101,7 +101,15 @@ const router = createRouter({
     },
     {
       path: '/login',
-      redirect: '/',
+      name: 'login',
+      component: () => import('@/pages/LoginPage.vue'),
+      meta: { noLayout: true },
+    },
+    {
+      path: '/signup',
+      name: 'signup',
+      component: () => import('@/pages/LoginPage.vue'),
+      meta: { noLayout: true },
     },
     {
       path: '/plans',

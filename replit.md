@@ -27,7 +27,7 @@ Tanso is a Vue.js 3 pricing analytics dashboard application for SaaS businesses.
 
 ## Database
 Uses Replit's built-in PostgreSQL with the following tables:
-- users - User accounts with email/password
+- accounts - User accounts with email/password (bcryptjs hashed), linked to visitor_id
 - sessions - Session management
 - customers - Customer data
 - subscriptions - Subscription records
@@ -47,7 +47,11 @@ Uses Replit's built-in PostgreSQL with the following tables:
 - Frontend uses Vite proxy to route /api/* to backend
 
 ## API Endpoints
-- GET /api/session/init - Initialize anonymous session
+- GET /api/session/init - Initialize anonymous session (also returns account info if logged in)
+- POST /api/auth/signup - Create account with email/password/name
+- POST /api/auth/login - Sign in with email/password
+- POST /api/auth/logout - Sign out and destroy session
+- GET /api/auth/me - Get current account info
 - GET /api/data/status - Get data status
 - GET /api/data/analyzer - Get all data for pricing analyzer
 - POST /api/data/sample - Load sample data
@@ -76,6 +80,8 @@ Uses Replit's built-in PostgreSQL with the following tables:
 - `/models` - AI model cost breakdown
 - `/customers` - Customer list with search and segment filter
 - `/customers/:id` - Customer detail with feature usage and events
+- `/login` - Sign in page (also toggle to sign up mode)
+- `/signup` - Sign up page (create account form)
 - `/data-sources` - Connect integrations or upload CSV files
 - `/referrals` - Referral program with invite links and credit tracking
 
@@ -126,6 +132,15 @@ Uses Replit's built-in PostgreSQL with the following tables:
 - Configured in `.replit` [postMerge] section
 
 ## Recent Changes
+- 2026-03-20: Login/Signup authentication
+  - Added `accounts` table with email, password_hash (bcryptjs), name, visitor_id
+  - Added auth API endpoints: signup, login, logout, me
+  - Session stores accountId/accountEmail when logged in
+  - Login links account to existing visitor session data
+  - Updated LoginPage.vue with sign-in/sign-up toggle and name field
+  - Added /login and /signup routes (noLayout pages)
+  - Sidebar shows "Sign In" link when not logged in, account info + sign out when logged in
+  - "Continue without an account" option preserved for anonymous usage
 - 2026-03-20: Tanso monetization integration
   - Created `server/tanso-client.ts` — HTTP wrapper for Tanso MCP endpoint
   - Added `tanso_customers` table, helper functions (getOrCreateTansoCustomer, checkTansoEntitlement, trackTansoUsage)

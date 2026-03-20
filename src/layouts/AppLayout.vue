@@ -16,13 +16,17 @@ import {
   X,
   Settings,
   Eye,
+  LogIn,
+  LogOut,
 } from 'lucide-vue-next'
 import { useDemoMode } from '@/composables/useDemoMode'
 import { useTeam } from '@/composables/useTeam'
+import { useAuth } from '@/composables/useAuth'
 
 const route = useRoute()
 const { isDemoMode, exitDemoMode, isLoadingDemo } = useDemoMode()
 const { myRole, isViewer, fetchTeamInfo } = useTeam()
+const { account, isLoggedIn, logout } = useAuth()
 
 onMounted(() => {
   fetchTeamInfo()
@@ -137,7 +141,7 @@ function isActive(path: string) {
           </div>
         </nav>
 
-        <!-- Bottom section: Team Settings -->
+        <!-- Bottom section: Account & Team Settings -->
         <div class="border-t p-4 space-y-1">
           <!-- Role badge for viewers -->
           <div v-if="isViewer" class="flex items-center gap-2 px-3 py-1.5 text-xs text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 rounded-lg mb-1">
@@ -157,6 +161,37 @@ function isActive(path: string) {
             <div class="min-w-0">
               <div class="text-sm font-medium">Team Settings</div>
               <div class="text-[10px] opacity-60">{{ myRole === 'admin' ? 'Manage team & invites' : 'View team members' }}</div>
+            </div>
+          </router-link>
+
+          <!-- Account section -->
+          <div v-if="isLoggedIn && account" class="flex items-center justify-between rounded-lg px-3 py-2.5">
+            <div class="min-w-0 flex-1">
+              <div class="text-sm font-medium truncate">{{ account.name || account.email }}</div>
+              <div v-if="account.name" class="text-[10px] opacity-60 truncate">{{ account.email }}</div>
+            </div>
+            <button
+              @click="logout"
+              class="ml-2 p-1.5 rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
+              title="Sign out"
+            >
+              <LogOut class="h-4 w-4" />
+            </button>
+          </div>
+          <router-link
+            v-else
+            to="/login"
+            :class="[
+              'flex items-center gap-3 rounded-lg px-3 py-2.5 transition-colors',
+              isActive('/login')
+                ? 'bg-accent text-accent-foreground'
+                : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+            ]"
+          >
+            <LogIn class="h-4 w-4 shrink-0" />
+            <div class="min-w-0">
+              <div class="text-sm font-medium">Sign In</div>
+              <div class="text-[10px] opacity-60">Create an account or log in</div>
             </div>
           </router-link>
         </div>
