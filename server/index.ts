@@ -3,10 +3,16 @@ import session from 'express-session'
 import pgSession from 'connect-pg-simple'
 import { Pool } from 'pg'
 import crypto from 'crypto'
+import path from 'path'
+import { fileURLToPath } from 'url'
+import fs from 'fs'
 import { getUncachableStripeClient } from './stripe-client'
 
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
+
 const app = express()
-const PORT = 3001
+const PORT = Number(process.env.PORT) || 3001
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -2098,5 +2104,13 @@ app.delete('/insights', ensureVisitor, async (req: AuthRequest, res: Response) =
     res.status(500).json({ error: 'Failed to clear insights' })
   }
 })
+
+const distPath = path.resolve(__dirname, '..', 'dist')
+if (fs.existsSync(distPath)) {
+  app.use(express.static(distPath))
+  app.get('/{*splat}', (_req: Request, res: Response) => {
+    res.sendFile(path.join(distPath, 'index.html'))
+  })
+}
 
 startServer()
