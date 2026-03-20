@@ -8,6 +8,17 @@ import { fileURLToPath } from 'url'
 import fs from 'fs'
 import bcrypt from 'bcryptjs'
 import { getUncachableStripeClient } from './stripe-client'
+import {
+  tansoListPlans,
+  tansoListFeatures,
+  tansoGetCustomer,
+  tansoCreateCustomer,
+  tansoCheckEntitlement,
+  tansoListCustomerEntitlements,
+  tansoIngestEvent,
+  tansoCreateSubscription,
+  isTansoConfigured,
+} from './tanso-client'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -670,6 +681,8 @@ app.delete('/data/clear/usage', ensureVisitor, async (req: AuthRequest, res: Res
 
 // Upload cost records
 app.post('/data/upload/costs', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  const access = await checkTansoFeatureAccess(req.visitorId!, 'csv_upload')
+  if (!access.allowed) return res.status(403).json({ error: access.reason || 'Upload limit reached. Upgrade your plan.' })
   const client = await pool.connect()
   try {
     const { records } = req.body
@@ -725,6 +738,7 @@ app.post('/data/upload/costs', ensureVisitor, async (req: AuthRequest, res: Resp
     )
 
     await client.query('COMMIT')
+    trackTansoUsage(req.visitorId!, 'csv_upload', 'csv_upload_costs')
     res.json({ success: true, count: records.length })
   } catch (error) {
     await client.query('ROLLBACK')
@@ -737,6 +751,8 @@ app.post('/data/upload/costs', ensureVisitor, async (req: AuthRequest, res: Resp
 
 // Upload usage records
 app.post('/data/upload/usage', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  const access = await checkTansoFeatureAccess(req.visitorId!, 'csv_upload')
+  if (!access.allowed) return res.status(403).json({ error: access.reason || 'Upload limit reached. Upgrade your plan.' })
   const client = await pool.connect()
   try {
     const { records } = req.body
@@ -794,6 +810,7 @@ app.post('/data/upload/usage', ensureVisitor, async (req: AuthRequest, res: Resp
     )
 
     await client.query('COMMIT')
+    trackTansoUsage(req.visitorId!, 'csv_upload', 'csv_upload_usage')
     res.json({ success: true, count: records.length })
   } catch (error) {
     await client.query('ROLLBACK')
@@ -806,6 +823,8 @@ app.post('/data/upload/usage', ensureVisitor, async (req: AuthRequest, res: Resp
 
 // Upload revenue data (customers, plans, subscriptions)
 app.post('/data/upload/revenue', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  const access = await checkTansoFeatureAccess(req.visitorId!, 'csv_upload')
+  if (!access.allowed) return res.status(403).json({ error: access.reason || 'Upload limit reached. Upgrade your plan.' })
   const client = await pool.connect()
   try {
     const { customers, plans, subscriptions } = req.body
@@ -867,6 +886,7 @@ app.post('/data/upload/revenue', ensureVisitor, async (req: AuthRequest, res: Re
     )
 
     await client.query('COMMIT')
+    trackTansoUsage(req.visitorId!, 'csv_upload', 'csv_upload_revenue')
     res.json({ 
       success: true, 
       counts: {
@@ -923,6 +943,16 @@ async function startServer() {
         visitor_id TEXT UNIQUE,
         created_at TIMESTAMPTZ DEFAULT NOW(),
         updated_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `)
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS tanso_customers (
+        id SERIAL PRIMARY KEY,
+        visitor_id TEXT UNIQUE NOT NULL,
+        tanso_customer_id TEXT,
+        email TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW()
       )
     `)
 
@@ -1589,6 +1619,8 @@ app.get('/simulations', ensureVisitor, async (req: AuthRequest, res: Response) =
 
 // POST /simulations — create a new simulation
 app.post('/simulations', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  const access = await checkTansoFeatureAccess(req.visitorId!, 'simulation_run')
+  if (!access.allowed) return res.status(403).json({ error: access.reason || 'Simulation limit reached. Upgrade your plan.' })
   try {
     const { name, scenarios, time_range } = req.body
     if (!name) {
@@ -2251,6 +2283,152 @@ app.delete('/insights', ensureVisitor, async (req: AuthRequest, res: Response) =
   } catch (error) {
     console.error('Clear insights error:', error)
     res.status(500).json({ error: 'Failed to clear insights' })
+  }
+})
+
+// =============================================================================
+// TANSO MONETIZATION
+// =============================================================================
+
+async function getOrCreateTansoCustomer(visitorId: string, email?: string): Promise<string | null> {
+  if (!isTansoConfigured()) return null
+  try {
+    const existing = await pool.query('SELECT tanso_customer_id FROM tanso_customers WHERE visitor_id = $1', [visitorId])
+    if (existing.rows[0]?.tanso_customer_id) return existing.rows[0].tanso_customer_id
+
+    try {
+      const customer = await tansoGetCustomer(visitorId)
+      if (customer?.id) {
+        await pool.query(
+          'INSERT INTO tanso_customers (visitor_id, tanso_customer_id, email) VALUES ($1, $2, $3) ON CONFLICT (visitor_id) DO UPDATE SET tanso_customer_id = $2',
+          [visitorId, customer.id, email || null]
+        )
+        return customer.id
+      }
+    } catch {}
+
+    const created = await tansoCreateCustomer(visitorId, email || `${visitorId}@anonymous.tanso`, undefined)
+    const tansoId = created?.id || created?.customer?.id || null
+    if (tansoId) {
+      await pool.query(
+        'INSERT INTO tanso_customers (visitor_id, tanso_customer_id, email) VALUES ($1, $2, $3) ON CONFLICT (visitor_id) DO UPDATE SET tanso_customer_id = $2',
+        [visitorId, tansoId, email || null]
+      )
+    }
+    return tansoId
+  } catch (err) {
+    console.error('Tanso customer lookup/create error:', err)
+    return null
+  }
+}
+
+async function checkTansoFeatureAccess(visitorId: string, featureKey: string): Promise<{ allowed: boolean; reason?: string; usage?: any }> {
+  if (!isTansoConfigured()) return { allowed: true }
+  try {
+    const tansoId = await getOrCreateTansoCustomer(visitorId)
+    if (!tansoId) return { allowed: true }
+    const result = await tansoCheckEntitlement(visitorId, featureKey)
+    return {
+      allowed: result?.allowed !== false,
+      reason: result?.reason,
+      usage: result?.usage,
+    }
+  } catch (err) {
+    console.error('Tanso entitlement check error:', err)
+    return { allowed: true }
+  }
+}
+
+async function trackTansoUsage(visitorId: string, featureKey: string, eventName: string) {
+  if (!isTansoConfigured()) return
+  try {
+    await tansoIngestEvent({
+      eventIdempotencyKey: `${visitorId}-${featureKey}-${Date.now()}`,
+      eventName,
+      occurredAt: new Date().toISOString(),
+      customerReferenceId: visitorId,
+      featureKey,
+    })
+  } catch (err) {
+    console.error('Tanso usage tracking error:', err)
+  }
+}
+
+app.get('/tanso/plans', ensureVisitor, async (_req: AuthRequest, res: Response) => {
+  try {
+    if (!isTansoConfigured()) return res.json({ plans: [], configured: false })
+    const plans = await tansoListPlans()
+    res.json({ plans: Array.isArray(plans) ? plans : plans?.plans || [], configured: true })
+  } catch (err) {
+    console.error('Tanso list plans error:', err)
+    res.json({ plans: [], configured: false })
+  }
+})
+
+app.get('/tanso/features', ensureVisitor, async (_req: AuthRequest, res: Response) => {
+  try {
+    if (!isTansoConfigured()) return res.json({ features: [], configured: false })
+    const features = await tansoListFeatures()
+    res.json({ features: Array.isArray(features) ? features : features?.features || [], configured: true })
+  } catch (err) {
+    console.error('Tanso list features error:', err)
+    res.json({ features: [], configured: false })
+  }
+})
+
+app.get('/tanso/entitlements', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!isTansoConfigured()) return res.json({ entitlements: [], configured: false })
+    const visitorId = req.visitorId!
+    await getOrCreateTansoCustomer(visitorId)
+    const entitlements = await tansoListCustomerEntitlements(visitorId)
+    res.json({
+      entitlements: Array.isArray(entitlements) ? entitlements : entitlements?.entitlements || [],
+      configured: true,
+    })
+  } catch (err) {
+    console.error('Tanso entitlements error:', err)
+    res.json({ entitlements: [], configured: false })
+  }
+})
+
+app.get('/tanso/subscription', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!isTansoConfigured()) return res.json({ customer: null, configured: false })
+    const visitorId = req.visitorId!
+    await getOrCreateTansoCustomer(visitorId)
+    const customer = await tansoGetCustomer(visitorId)
+    res.json({ customer, configured: true })
+  } catch (err) {
+    console.error('Tanso subscription error:', err)
+    res.json({ customer: null, configured: false })
+  }
+})
+
+app.post('/tanso/subscribe', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!isTansoConfigured()) return res.status(503).json({ error: 'Billing not configured' })
+    const visitorId = req.visitorId!
+    const { planId } = req.body
+    if (!planId) return res.status(400).json({ error: 'planId is required' })
+    await getOrCreateTansoCustomer(visitorId)
+    const result = await tansoCreateSubscription(visitorId, planId)
+    res.json({ success: true, subscription: result })
+  } catch (err) {
+    console.error('Tanso subscribe error:', err)
+    res.status(500).json({ error: 'Failed to create subscription' })
+  }
+})
+
+app.get('/tanso/check/:featureKey', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  try {
+    const visitorId = req.visitorId!
+    const { featureKey } = req.params
+    const result = await checkTansoFeatureAccess(visitorId, featureKey)
+    res.json(result)
+  } catch (err) {
+    console.error('Tanso check error:', err)
+    res.json({ allowed: true })
   }
 })
 
