@@ -431,8 +431,8 @@ watch(
       <div class="absolute inset-0 flex items-center">
         <div class="w-full border-t"></div>
       </div>
-      <div class="relative flex justify-center text-xs uppercase">
-        <span class="bg-background px-3 text-muted-foreground">or connect your own</span>
+      <div class="relative flex justify-center text-xs">
+        <span class="bg-background px-3 text-muted-foreground">Or connect your own</span>
       </div>
     </div>
 

@@ -170,14 +170,16 @@ function goToCustomer(id: string) { router.push(`/customers/${id}`) }
         <Input
           v-model="dateFrom"
           type="date"
-          class="w-[140px] text-muted-foreground"
+          class="h-9 w-[150px] shadow-sm"
+          :class="{ 'text-muted-foreground': !dateFrom }"
           @update:model-value="resetPage"
         />
         <span class="text-muted-foreground text-sm">to</span>
         <Input
           v-model="dateTo"
           type="date"
-          class="w-[140px] text-muted-foreground"
+          class="h-9 w-[150px] shadow-sm"
+          :class="{ 'text-muted-foreground': !dateTo }"
           @update:model-value="resetPage"
         />
       </div>

@@ -20,7 +20,7 @@ import {
   X,
   Info,
 } from 'lucide-vue-next'
-import { Card, CardContent } from '@/components/ui'
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui'
 import Alert from '@/components/ui/alert.vue'
 import * as api from '@/lib/api'
 import {
@@ -184,13 +184,15 @@ function downloadTemplate(): void {
 
 <template>
   <section>
-    <div class="flex items-center gap-2 mb-4">
-      <BarChart3 class="h-5 w-5 text-muted-foreground" />
-      <h2 class="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Usage</h2>
-    </div>
-
     <Card>
-      <CardContent class="p-5 space-y-4">
+      <CardHeader class="pb-3">
+        <CardTitle class="text-base flex items-center gap-2">
+          <BarChart3 class="h-4 w-4" />
+          Usage
+        </CardTitle>
+        <CardDescription>Upload feature and API usage data</CardDescription>
+      </CardHeader>
+      <CardContent class="p-5 pt-0 space-y-4">
         <!-- Info if Stripe usage exists -->
         <Alert v-if="hasStripeUsage" variant="info" class="bg-blue-50/50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800">
           <Info class="h-4 w-4 text-blue-600 dark:text-blue-400" />

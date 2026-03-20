@@ -5,10 +5,11 @@ import { useRouter } from 'vue-router'
 import { getCustomers, getEventsByCustomer } from '@/lib/api'
 import { Users, ChevronRight, Search } from 'lucide-vue-next'
 import MarginBadge from '@/components/shared/MarginBadge.vue'
+import { Input, Select } from '@/components/ui'
 
 const router = useRouter()
 const search = ref('')
-const segmentFilter = ref('')
+const segmentFilter = ref('__all__')
 
 const { data: customers, isLoading, isError } = useQuery({
   queryKey: ['customers'],
@@ -29,7 +30,7 @@ const marginByCustomerId = computed(() => {
 const filtered = computed(() => {
   if (!customers.value) return []
   let list = customers.value
-  if (segmentFilter.value) {
+  if (segmentFilter.value && segmentFilter.value !== '__all__') {
     list = list.filter(c => c.segment === segmentFilter.value)
   }
   const q = search.value.toLowerCase()
@@ -45,6 +46,13 @@ const segments = computed(() => {
   const s = new Set<string>()
   customers.value?.forEach(c => { if (c.segment) s.add(c.segment) })
   return Array.from(s).sort()
+})
+
+const segmentItems = computed(() => {
+  return [
+    { value: '__all__', label: 'All segments' },
+    ...segments.value.map(s => ({ value: s, label: s }))
+  ]
 })
 
 function formatDate(ts: string) {
@@ -75,30 +83,29 @@ function segmentClass(segment: string | null) {
       </div>
     </div>
 
-    <!-- Search + Segment row -->
     <div class="flex items-center gap-3 flex-wrap">
       <div class="relative">
-        <Search class="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <input
-          v-model="search"
-          type="text"
+        <Search class="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none z-10" />
+        <Input
+          :model-value="search"
           placeholder="Search customers…"
-          class="pl-9 pr-3 py-2 text-sm border rounded-lg bg-background focus:outline-none focus:ring-1 focus:ring-ring w-56"
+          class="pl-9 w-56"
+          @update:model-value="search = $event"
         />
       </div>
 
-      <select
-        v-model="segmentFilter"
-        class="text-sm border rounded-md px-2.5 py-2 bg-background focus:outline-none focus:ring-1 focus:ring-ring"
-      >
-        <option value="">All segments</option>
-        <option v-for="s in segments" :key="s" :value="s">{{ s }}</option>
-      </select>
+      <Select
+        :model-value="segmentFilter"
+        :items="segmentItems"
+        placeholder="All segments"
+        class="w-44"
+        @update:model-value="segmentFilter = $event"
+      />
 
       <button
-        v-if="search || segmentFilter"
+        v-if="search || (segmentFilter && segmentFilter !== '__all__')"
         class="text-xs text-muted-foreground hover:text-foreground underline"
-        @click="search = ''; segmentFilter = ''"
+        @click="search = ''; segmentFilter = '__all__'"
       >
         Clear
       </button>
@@ -110,7 +117,7 @@ function segmentClass(segment: string | null) {
       <div v-else-if="isError" class="p-8 text-center text-destructive text-sm">Failed to load customers.</div>
       <div v-else-if="filtered.length === 0" class="p-8 text-center text-muted-foreground text-sm">
         <Users class="h-8 w-8 mx-auto mb-2 opacity-40" />
-        <span v-if="search || segmentFilter">No customers matching your filters</span>
+        <span v-if="search || (segmentFilter && segmentFilter !== '__all__')">No customers matching your filters</span>
         <span v-else>No customers yet. Load sample data or sync an integration.</span>
       </div>
       <table v-else class="w-full text-sm">

@@ -19,7 +19,7 @@ import {
   CheckCircle,
   X,
 } from 'lucide-vue-next'
-import { Card, CardContent, Button } from '@/components/ui'
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, Button } from '@/components/ui'
 import * as api from '@/lib/api'
 import {
   validateFileSize,
@@ -196,13 +196,15 @@ function handleAnthropicConnected(): void {
 
 <template>
   <section>
-    <div class="flex items-center gap-2 mb-4">
-      <Cpu class="h-5 w-5 text-muted-foreground" />
-      <h2 class="text-sm font-semibold uppercase tracking-wide text-muted-foreground">AI Costs</h2>
-    </div>
-
     <Card>
-      <CardContent class="p-5 space-y-4">
+      <CardHeader class="pb-3">
+        <CardTitle class="text-base flex items-center gap-2">
+          <Cpu class="h-4 w-4" />
+          AI Costs
+        </CardTitle>
+        <CardDescription>Connect AI providers or upload cost CSVs</CardDescription>
+      </CardHeader>
+      <CardContent class="p-5 pt-0 space-y-4">
         <!-- OpenAI -->
         <div class="flex items-center justify-between">
           <div class="flex items-center gap-3">

@@ -27,7 +27,7 @@ import {
   ArrowRight,
   Zap,
 } from 'lucide-vue-next'
-import { Card, CardContent, Button, Badge } from '@/components/ui'
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, Button, Badge } from '@/components/ui'
 import { useStripeUpload } from '@/composables/useStripeUpload'
 import { useStripeConnection } from '@/composables/useStripeConnection'
 import StripeConnectModal from './StripeConnectModal.vue'
@@ -263,11 +263,6 @@ function downloadFile(content: string, filename: string): void {
 
 <template>
   <section>
-    <div class="flex items-center gap-2 mb-4">
-      <DollarSign class="h-5 w-5 text-muted-foreground" />
-      <h2 class="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Revenue</h2>
-    </div>
-
     <!-- Sync Progress Card (when syncing or just completed) -->
     <StripeSyncProgress
       v-if="showSyncProgress"
@@ -280,7 +275,14 @@ function downloadFile(content: string, filename: string): void {
 
     <!-- Main Card (when not showing sync progress) -->
     <Card v-else>
-      <CardContent class="p-5 space-y-4">
+      <CardHeader class="pb-3">
+        <CardTitle class="text-base flex items-center gap-2">
+          <DollarSign class="h-4 w-4" />
+          Revenue
+        </CardTitle>
+        <CardDescription>Connect Stripe or upload CSV exports</CardDescription>
+      </CardHeader>
+      <CardContent class="p-5 pt-0 space-y-4">
         <!-- Stripe Connect (API) -->
         <div class="flex items-center justify-between">
           <div class="flex items-center gap-3">

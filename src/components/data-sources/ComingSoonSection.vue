@@ -16,7 +16,7 @@ import {
   Check,
   ArrowRight,
 } from 'lucide-vue-next'
-import { Card, CardContent, Button } from '@/components/ui'
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, Button, Input } from '@/components/ui'
 import { supabase } from '@/lib/supabase'
 
 /** Integrations that user has requested notifications for */
@@ -101,13 +101,15 @@ const comingSoonIntegrations = [
 
 <template>
   <section>
-    <div class="flex items-center gap-2 mb-4">
-      <Clock class="h-5 w-5 text-muted-foreground" />
-      <h2 class="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Coming Soon</h2>
-    </div>
-
     <Card>
-      <CardContent class="p-5 space-y-3">
+      <CardHeader class="pb-3">
+        <CardTitle class="text-base flex items-center gap-2">
+          <Clock class="h-4 w-4" />
+          Coming Soon
+        </CardTitle>
+        <CardDescription>Integrations we're working on</CardDescription>
+      </CardHeader>
+      <CardContent class="p-5 pt-0 space-y-3">
         <!-- Integration list -->
         <div
           v-for="integration in comingSoonIntegrations"
@@ -165,11 +167,10 @@ const comingSoonIntegrations = [
         <!-- Request Form (inline) -->
         <div v-if="showRequestForm" class="pt-3 border-t space-y-3">
           <p class="text-sm font-medium">What integration do you need?</p>
-          <input
+          <Input
             v-model="requestFormData.integration"
             type="text"
             placeholder="e.g., Xero, Chargebee, Recurly..."
-            class="w-full px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary/50"
           />
           <div class="flex gap-2">
             <Button

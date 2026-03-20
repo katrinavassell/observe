@@ -14,6 +14,7 @@ import {
   Loader2,
 } from 'lucide-vue-next'
 import { toast } from 'vue-sonner'
+import { Button, Input, Select, Label, Card, CardContent } from '@/components/ui'
 
 const router = useRouter()
 const queryClient = useQueryClient()
@@ -166,12 +167,14 @@ async function runSimulation() {
   <div class="space-y-6 max-w-3xl">
     <!-- Header -->
     <div>
-      <button
-        class="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground mb-3"
+      <Button
+        variant="ghost"
+        size="sm"
+        class="mb-3 gap-1.5 text-muted-foreground"
         @click="router.push('/simulations')"
       >
         <ArrowLeft class="h-3.5 w-3.5" /> Back to Simulations
-      </button>
+      </Button>
       <h1 class="text-2xl font-semibold tracking-tight">New Simulation</h1>
       <p class="text-sm text-muted-foreground mt-1">Model the impact of pricing changes before rolling them out</p>
     </div>
@@ -206,138 +209,144 @@ async function runSimulation() {
 
     <!-- Step 1: Define -->
     <div v-if="step === 1" class="space-y-4">
-      <div class="rounded-lg border bg-card p-5 space-y-4">
-        <div>
-          <label class="block text-sm font-medium mb-1.5">Simulation Name</label>
-          <input
-            v-model="simName"
-            type="text"
-            placeholder="e.g. API Pricing Optimization"
-            class="w-full rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-          />
-        </div>
+      <Card>
+        <CardContent class="p-5 space-y-4">
+          <div>
+            <Label class="mb-1.5 block">Simulation Name</Label>
+            <Input
+              :model-value="simName"
+              placeholder="e.g. API Pricing Optimization"
+              @update:model-value="simName = $event"
+            />
+          </div>
 
-        <div class="grid grid-cols-2 gap-4">
-          <div>
-            <label class="block text-sm font-medium mb-1.5">Date From (optional)</label>
-            <input
-              v-model="dateFrom"
-              type="date"
-              class="w-full rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-            />
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <Label class="mb-1.5 block">Date From (optional)</Label>
+              <Input
+                type="date"
+                :model-value="dateFrom"
+                @update:model-value="dateFrom = $event"
+              />
+            </div>
+            <div>
+              <Label class="mb-1.5 block">Date To (optional)</Label>
+              <Input
+                type="date"
+                :model-value="dateTo"
+                @update:model-value="dateTo = $event"
+              />
+            </div>
           </div>
-          <div>
-            <label class="block text-sm font-medium mb-1.5">Date To (optional)</label>
-            <input
-              v-model="dateTo"
-              type="date"
-              class="w-full rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-            />
-          </div>
-        </div>
-      </div>
+        </CardContent>
+      </Card>
     </div>
 
     <!-- Step 2: Scenarios -->
     <div v-if="step === 2" class="space-y-4">
-      <div
+      <Card
         v-for="(scenario, sIdx) in scenarios"
         :key="scenario.id"
-        class="rounded-lg border bg-card p-5 space-y-4"
       >
-        <div class="flex items-center justify-between">
-          <h3 class="text-sm font-semibold">Scenario {{ sIdx + 1 }}</h3>
-          <button
-            v-if="scenarios.length > 1"
-            class="text-muted-foreground hover:text-destructive transition-colors"
-            @click="removeScenario(sIdx)"
-          >
-            <Trash2 class="h-4 w-4" />
-          </button>
-        </div>
-
-        <div class="grid grid-cols-2 gap-4">
-          <div>
-            <label class="block text-xs font-medium text-muted-foreground mb-1">Name</label>
-            <input
-              v-model="scenario.name"
-              type="text"
-              placeholder="e.g. Conservative (+10%)"
-              class="w-full rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-            />
-          </div>
-          <div>
-            <label class="block text-xs font-medium text-muted-foreground mb-1">Description</label>
-            <input
-              v-model="scenario.description"
-              type="text"
-              placeholder="Optional description"
-              class="w-full rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-            />
-          </div>
-        </div>
-
-        <div class="space-y-2">
-          <label class="block text-xs font-medium text-muted-foreground">Pricing Changes</label>
-          <div
-            v-for="(change, cIdx) in scenario.changes"
-            :key="cIdx"
-            class="flex items-center gap-2"
-          >
-            <select
-              v-model="change.feature_key"
-              class="flex-1 rounded-md border bg-background px-2.5 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+        <CardContent class="p-5 space-y-4">
+          <div class="flex items-center justify-between">
+            <h3 class="text-sm font-semibold">Scenario {{ sIdx + 1 }}</h3>
+            <Button
+              v-if="scenarios.length > 1"
+              variant="ghost"
+              size="icon"
+              class="h-8 w-8 text-muted-foreground hover:text-destructive"
+              @click="removeScenario(sIdx)"
             >
-              <option value="">Select feature...</option>
-              <option v-for="fk in featureKeys" :key="fk" :value="fk">{{ fk }}</option>
-            </select>
-
-            <select
-              v-model="change.change_type"
-              class="w-36 rounded-md border bg-background px-2.5 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-            >
-              <option v-for="opt in changeTypeOptions" :key="opt.value" :value="opt.value">
-                {{ opt.label }}
-              </option>
-            </select>
-
-            <input
-              v-model.number="change.change_value"
-              type="number"
-              min="0"
-              step="0.01"
-              class="w-24 rounded-md border bg-background px-2.5 py-2 text-sm text-right focus:outline-none focus:ring-1 focus:ring-ring"
-            />
-
-            <button
-              v-if="scenario.changes.length > 1"
-              class="text-muted-foreground hover:text-destructive shrink-0"
-              @click="removeChange(sIdx, cIdx)"
-            >
-              <Trash2 class="h-3.5 w-3.5" />
-            </button>
+              <Trash2 class="h-4 w-4" />
+            </Button>
           </div>
 
-          <button
-            class="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-            @click="addChange(sIdx)"
-          >
-            <Plus class="h-3 w-3" /> Add change
-          </button>
-        </div>
-      </div>
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <Label class="mb-1 block text-xs text-muted-foreground">Name</Label>
+              <Input
+                :model-value="scenario.name"
+                placeholder="e.g. Conservative (+10%)"
+                @update:model-value="scenario.name = $event"
+              />
+            </div>
+            <div>
+              <Label class="mb-1 block text-xs text-muted-foreground">Description</Label>
+              <Input
+                :model-value="scenario.description"
+                placeholder="Optional description"
+                @update:model-value="scenario.description = $event"
+              />
+            </div>
+          </div>
 
-      <button
-        class="inline-flex items-center gap-1.5 rounded-md border px-3 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
+          <div class="space-y-2">
+            <Label class="block text-xs text-muted-foreground">Pricing Changes</Label>
+            <div
+              v-for="(change, cIdx) in scenario.changes"
+              :key="cIdx"
+              class="flex items-center gap-2"
+            >
+              <Select
+                :model-value="change.feature_key"
+                placeholder="Select feature..."
+                class="flex-1"
+                :items="featureKeys.map(fk => ({ value: fk, label: fk }))"
+                @update:model-value="change.feature_key = $event"
+              />
+
+              <Select
+                :model-value="change.change_type"
+                class="w-40"
+                :items="changeTypeOptions"
+                @update:model-value="change.change_type = $event as PricingChangeType"
+              />
+
+              <Input
+                type="number"
+                :model-value="String(change.change_value)"
+                class="w-24 text-right"
+                @update:model-value="change.change_value = Number($event)"
+              />
+
+              <Button
+                v-if="scenario.changes.length > 1"
+                variant="ghost"
+                size="icon"
+                class="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
+                @click="removeChange(sIdx, cIdx)"
+              >
+                <Trash2 class="h-3.5 w-3.5" />
+              </Button>
+            </div>
+
+            <Button
+              variant="ghost"
+              size="sm"
+              class="gap-1 text-xs text-muted-foreground"
+              @click="addChange(sIdx)"
+            >
+              <Plus class="h-3 w-3" /> Add change
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Button
+        variant="outline"
+        size="sm"
+        class="gap-1.5"
         @click="addScenario"
       >
         <Plus class="h-4 w-4" /> Add Scenario
-      </button>
+      </Button>
     </div>
 
     <!-- Step 3: Review & Run -->
     <div v-if="step === 3" class="space-y-4">
-      <div class="rounded-lg border bg-card p-5 space-y-4">
+      <Card>
+        <CardContent class="p-5 space-y-4">
         <div>
           <div class="text-xs text-muted-foreground mb-1">Simulation Name</div>
           <div class="font-semibold">{{ simName }}</div>
@@ -387,39 +396,41 @@ async function runSimulation() {
             </div>
           </div>
         </div>
-      </div>
+        </CardContent>
+      </Card>
     </div>
 
     <!-- Navigation buttons -->
     <div class="flex items-center justify-between pt-2">
-      <button
+      <Button
         v-if="step > 1"
-        class="inline-flex items-center gap-1.5 rounded-md border px-4 py-2 text-sm font-medium hover:bg-muted/50 transition-colors"
+        variant="outline"
+        class="gap-1.5"
         @click="prevStep"
       >
         <ArrowLeft class="h-4 w-4" /> Back
-      </button>
+      </Button>
       <div v-else />
 
-      <button
+      <Button
         v-if="step < totalSteps"
         :disabled="(step === 1 && !canProceedStep1) || (step === 2 && !canProceedStep2)"
-        class="inline-flex items-center gap-1.5 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:pointer-events-none transition-colors"
+        class="gap-1.5"
         @click="nextStep"
       >
         Next <ArrowRight class="h-4 w-4" />
-      </button>
+      </Button>
 
-      <button
+      <Button
         v-if="step === totalSteps"
         :disabled="isSubmitting"
-        class="inline-flex items-center gap-2 rounded-md bg-primary px-5 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors"
+        :loading="isSubmitting"
+        class="gap-2"
         @click="runSimulation"
       >
-        <Loader2 v-if="isSubmitting" class="h-4 w-4 animate-spin" />
-        <Play v-else class="h-4 w-4" />
+        <Play v-if="!isSubmitting" class="h-4 w-4" />
         {{ isSubmitting ? 'Running...' : 'Run Simulation' }}
-      </button>
+      </Button>
     </div>
   </div>
 </template>
