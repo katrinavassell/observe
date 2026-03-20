@@ -43,7 +43,7 @@ externalPort = 3000
 
 [deployment]
 deploymentTarget = "autoscale"
-run = ["npx", "tsx", "server/index.ts"]
+run = ["bash", "-c", "PORT=5000 npx tsx server/index.ts"]
 build = ["npm", "run", "build"]
 
 [postMerge]
