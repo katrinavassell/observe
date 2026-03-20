@@ -77,6 +77,7 @@ Uses Replit's built-in PostgreSQL with the following tables:
 - `/customers` - Customer list with search and segment filter
 - `/customers/:id` - Customer detail with feature usage and events
 - `/data-sources` - Connect integrations or upload CSV files
+- `/referrals` - Referral program with invite links and credit tracking
 
 ## Shared Components
 - `src/components/shared/MarginBadge.vue` - Color-coded margin percentage badge
@@ -108,7 +109,33 @@ Uses Replit's built-in PostgreSQL with the following tables:
 - PUT /api/simulations/:id - Update simulation / run simulation engine (admin only)
 - DELETE /api/simulations/:id - Delete simulation (admin only)
 
+## Referral System
+- `referral_codes` table: stores one unique code per visitor (user_id UNIQUE, code UNIQUE)
+- `referrals` table: tracks referrer/referred relationships (status: pending/converted)
+- `referral_credits` table: AI insight credits earned from successful referrals
+- `maybeAwardReferralCredit()` called after sample data load and all upload endpoints
+- Referral link captured via `?ref=CODE` query param on app load (App.vue)
+
+## Referral API Endpoints
+- GET /api/referral/code - Get or create referral code for current user
+- POST /api/referral/record - Record a referral when new user arrives via link
+- GET /api/referral/stats - Get total/converted/pending referrals and credits earned
+
+## Post-Merge Setup
+- Script: `scripts/post-merge.sh` (runs `npm install --legacy-peer-deps`)
+- Configured in `.replit` [postMerge] section
+
 ## Recent Changes
+- 2026-03-20: Referral system (Task #4)
+  - Added referral_codes, referrals, referral_credits tables (created at server startup)
+  - Added referral API endpoints and maybeAwardReferralCredit helper
+  - Added ReferralsPage with how-it-works explainer, link sharing, stats cards
+  - Referral code captured via ?ref= query param on app load
+- 2026-03-20: UI consistency polish
+  - Replaced native HTML form elements with shadcn/UI components across all pages
+  - Fixed font-mono → tabular-nums for numeric/currency table cells
+  - Modernized Data Sources section headers
+  - Fixed Team Settings invite link URL (was localhost:3001)
 - 2026-03-20: Pricing Simulator (Task #2)
   - Created simulations table with indexes at server startup
   - Added CRUD + simulation engine endpoints (run calculates projections from observe_events)

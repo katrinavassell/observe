@@ -609,4 +609,3 @@ export async function recordReferral(code: string): Promise<{ success: boolean; 
 export async function getReferralStats(): Promise<ReferralStats> {
   return request('/referral/stats')
 }
-}

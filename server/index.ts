@@ -1043,6 +1043,37 @@ async function startServer() {
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_simulations_user_created ON simulations(user_id, created_at DESC)`)
     console.log('Simulations table ready')
 
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS referral_codes (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id TEXT NOT NULL UNIQUE,
+        code TEXT NOT NULL UNIQUE,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS referrals (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        referrer_user_id TEXT NOT NULL,
+        referred_user_id TEXT NOT NULL UNIQUE,
+        referral_code TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending',
+        credited_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS referral_credits (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id TEXT NOT NULL,
+        credit_type TEXT NOT NULL DEFAULT 'ai_insight',
+        amount INTEGER NOT NULL DEFAULT 1,
+        source_referral_id UUID REFERENCES referrals(id),
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `)
+    console.log('Referral tables ready')
+
     app.listen(PORT, '127.0.0.1', () => {
       console.log(`Backend server running on http://127.0.0.1:${PORT}`)
     })
@@ -1898,6 +1929,10 @@ app.delete('/simulations/:id', ensureVisitor, requireAdmin, async (req: AuthRequ
   } catch (error) {
     console.error('Delete simulation error:', error)
     res.status(500).json({ error: 'Failed to delete simulation' })
+  }
+})
+
+// =============================================================================
 // REFERRAL SYSTEM
 // =============================================================================
 
