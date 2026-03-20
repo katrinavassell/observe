@@ -503,7 +503,6 @@ export async function renameTeam(name: string): Promise<{ success: boolean }> {
 export interface InviteResult {
   success: boolean
   invite_token: string
-  invite_link: string
 }
 
 export async function createInvite(email: string, role: 'admin' | 'viewer'): Promise<InviteResult> {

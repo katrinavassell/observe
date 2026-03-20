@@ -824,8 +824,7 @@ app.post('/team/invite', ensureVisitor, async (req: AuthRequest, res: Response) 
       [orgId, email || null, token, memberRole]
     )
 
-    const inviteLink = `${req.protocol}://${req.get('host')}/join/${token}`
-    res.json({ success: true, invite_token: token, invite_link: inviteLink })
+    res.json({ success: true, invite_token: token })
   } catch (error) {
     console.error('Create invite error:', error)
     res.status(500).json({ error: 'Failed to create invite' })
