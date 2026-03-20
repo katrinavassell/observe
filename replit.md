@@ -126,6 +126,16 @@ Uses Replit's built-in PostgreSQL with the following tables:
 - Configured in `.replit` [postMerge] section
 
 ## Recent Changes
+- 2026-03-20: Tanso monetization integration
+  - Created `server/tanso-client.ts` — HTTP wrapper for Tanso MCP endpoint
+  - Added `tanso_customers` table, helper functions (getOrCreateTansoCustomer, checkTansoEntitlement, trackTansoUsage)
+  - Added 6 new `/tanso/*` API endpoints (plans, features, entitlements, subscription, subscribe, check)
+  - Entitlement gating on upload endpoints (csv_upload) and simulation creation (simulation_run)
+  - Created `PlansPage.vue` with plan listing, usage tracking, subscription management
+  - Created `useEntitlement` composable for per-feature usage checking
+  - Created `UsageLimitBanner` shared component for usage progress bars and upgrade prompts
+  - Added usage indicators on DataSourcesPage and SimulationsPage
+  - Graceful fallback when Tanso API is unreachable (all features allowed, "Billing Not Connected" state)
 - 2026-03-20: Referral system (Task #4)
   - Added referral_codes, referrals, referral_credits tables (created at server startup)
   - Added referral API endpoints and maybeAwardReferralCredit helper

@@ -7,6 +7,17 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 import fs from 'fs'
 import { getUncachableStripeClient } from './stripe-client'
+import {
+  isTansoConfigured,
+  tansoListPlans,
+  tansoListFeatures,
+  tansoGetCustomer,
+  tansoCreateCustomer,
+  tansoCheckEntitlement,
+  tansoListCustomerEntitlements,
+  tansoIngestEvent,
+  tansoCreateSubscription,
+} from './tanso-client'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -520,6 +531,11 @@ app.delete('/data/clear/usage', ensureVisitor, requireAdmin, async (req: AuthReq
 
 // Upload cost records
 app.post('/data/upload/costs', ensureVisitor, requireAdmin, async (req: AuthRequest, res: Response) => {
+  const entitlement = await checkTansoEntitlement(req.visitorId!, 'csv_upload')
+  if (!entitlement.allowed) {
+    return res.status(403).json({ error: 'Usage limit reached. Upgrade your plan to continue uploading data.', entitlement })
+  }
+
   const client = await pool.connect()
   try {
     const { records } = req.body
@@ -557,6 +573,7 @@ app.post('/data/upload/costs', ensureVisitor, requireAdmin, async (req: AuthRequ
 
     await client.query('COMMIT')
     await maybeAwardReferralCredit(req.visitorId!)
+    trackTansoUsage(req.visitorId!, 'csv_upload', 'cost_upload')
     res.json({ success: true, count: records.length })
   } catch (error) {
     await client.query('ROLLBACK')
@@ -569,6 +586,11 @@ app.post('/data/upload/costs', ensureVisitor, requireAdmin, async (req: AuthRequ
 
 // Upload usage records
 app.post('/data/upload/usage', ensureVisitor, requireAdmin, async (req: AuthRequest, res: Response) => {
+  const entitlement = await checkTansoEntitlement(req.visitorId!, 'csv_upload')
+  if (!entitlement.allowed) {
+    return res.status(403).json({ error: 'Usage limit reached. Upgrade your plan to continue uploading data.', entitlement })
+  }
+
   const client = await pool.connect()
   try {
     const { records } = req.body
@@ -609,6 +631,7 @@ app.post('/data/upload/usage', ensureVisitor, requireAdmin, async (req: AuthRequ
 
     await client.query('COMMIT')
     await maybeAwardReferralCredit(req.visitorId!)
+    trackTansoUsage(req.visitorId!, 'csv_upload', 'usage_upload')
     res.json({ success: true, count: records.length })
   } catch (error) {
     await client.query('ROLLBACK')
@@ -621,6 +644,11 @@ app.post('/data/upload/usage', ensureVisitor, requireAdmin, async (req: AuthRequ
 
 // Upload revenue data (customers, plans, subscriptions)
 app.post('/data/upload/revenue', ensureVisitor, requireAdmin, async (req: AuthRequest, res: Response) => {
+  const entitlement = await checkTansoEntitlement(req.visitorId!, 'csv_upload')
+  if (!entitlement.allowed) {
+    return res.status(403).json({ error: 'Usage limit reached. Upgrade your plan to continue uploading data.', entitlement })
+  }
+
   const client = await pool.connect()
   try {
     const { customers, plans, subscriptions } = req.body
@@ -683,6 +711,7 @@ app.post('/data/upload/revenue', ensureVisitor, requireAdmin, async (req: AuthRe
 
     await client.query('COMMIT')
     await maybeAwardReferralCredit(req.visitorId!)
+    trackTansoUsage(req.visitorId!, 'csv_upload', 'revenue_upload')
     res.json({ 
       success: true, 
       counts: {
@@ -1242,6 +1271,15 @@ async function startServer() {
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_observe_events_user_source ON observe_events(user_id, source)`)
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_insights_user ON ai_insights(user_id, created_at DESC)`)
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_org_members_lookup ON organization_members(org_id, visitor_id, status)`)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS tanso_customers (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        visitor_id TEXT NOT NULL UNIQUE,
+        tanso_customer_id TEXT NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `)
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_tanso_customers_visitor ON tanso_customers(visitor_id)`)
     console.log('All application tables ready')
 
     const host = isProduction ? '0.0.0.0' : '127.0.0.1'
@@ -1884,6 +1922,11 @@ app.get('/simulations/:id', ensureVisitor, async (req: AuthRequest, res: Respons
 })
 
 app.post('/simulations', ensureVisitor, requireAdmin, async (req: AuthRequest, res: Response) => {
+  const entitlement = await checkTansoEntitlement(req.visitorId!, 'simulation_run')
+  if (!entitlement.allowed) {
+    return res.status(403).json({ error: 'Usage limit reached. Upgrade your plan to run more simulations.', entitlement })
+  }
+
   try {
     const { name, scenarios, time_range, segment_name } = req.body
     if (!name) return res.status(400).json({ error: 'Name is required' })
@@ -1894,6 +1937,7 @@ app.post('/simulations', ensureVisitor, requireAdmin, async (req: AuthRequest, r
        RETURNING *`,
       [req.effectiveUserId!, name, segment_name || null, time_range ? JSON.stringify(time_range) : null, JSON.stringify(scenarios || [])]
     )
+    trackTansoUsage(req.visitorId!, 'simulation_run', 'simulation_created')
     res.json(result.rows[0])
   } catch (error) {
     console.error('Create simulation error:', error)
@@ -2241,6 +2285,154 @@ app.get('/referral/stats', ensureVisitor, async (req: AuthRequest, res: Response
   } catch (error) {
     console.error('Get referral stats error:', error)
     res.status(500).json({ error: 'Failed to get referral stats' })
+  }
+})
+
+async function getOrCreateTansoCustomer(visitorId: string): Promise<string | null> {
+  if (!isTansoConfigured()) return null
+
+  const existing = await pool.query('SELECT tanso_customer_id FROM tanso_customers WHERE visitor_id = $1', [visitorId])
+  if (existing.rows.length > 0) return existing.rows[0].tanso_customer_id
+
+  try {
+    const result = await tansoCreateCustomer(visitorId, `${visitorId}@app.tansohq.com`)
+    if (result?.success || result?.id || result?.customerReferenceId) {
+      await pool.query(
+        'INSERT INTO tanso_customers (visitor_id, tanso_customer_id) VALUES ($1, $2) ON CONFLICT (visitor_id) DO NOTHING',
+        [visitorId, visitorId]
+      )
+      return visitorId
+    }
+  } catch (error: any) {
+    if (error.message?.includes('already exists') || error.message?.includes('duplicate')) {
+      await pool.query(
+        'INSERT INTO tanso_customers (visitor_id, tanso_customer_id) VALUES ($1, $2) ON CONFLICT (visitor_id) DO NOTHING',
+        [visitorId, visitorId]
+      )
+      return visitorId
+    }
+    console.error('Tanso create customer error:', error.message)
+  }
+  return null
+}
+
+async function checkTansoEntitlement(visitorId: string, featureKey: string): Promise<{ allowed: boolean; usage?: number; limit?: number; remaining?: number }> {
+  if (!isTansoConfigured()) return { allowed: true }
+
+  try {
+    const customerId = await getOrCreateTansoCustomer(visitorId)
+    if (!customerId) return { allowed: true }
+
+    const result = await tansoCheckEntitlement(customerId, featureKey)
+    return {
+      allowed: result.allowed !== false,
+      usage: result.currentUsage ?? result.usage,
+      limit: result.usageLimit ?? result.limit,
+      remaining: result.remainingQuota ?? result.remaining,
+    }
+  } catch (error: any) {
+    console.error(`Tanso entitlement check error (${featureKey}):`, error.message)
+    return { allowed: true }
+  }
+}
+
+async function trackTansoUsage(visitorId: string, featureKey: string, eventName: string, units?: string) {
+  if (!isTansoConfigured()) return
+
+  try {
+    const customerId = await getOrCreateTansoCustomer(visitorId)
+    if (!customerId) return
+
+    await tansoIngestEvent({
+      eventIdempotencyKey: `${visitorId}_${featureKey}_${Date.now()}_${crypto.randomUUID().slice(0, 8)}`,
+      eventName,
+      occurredAt: new Date().toISOString(),
+      customerReferenceId: customerId,
+      featureKey,
+      ...(units ? { usageUnits: units } : {}),
+    })
+  } catch (error: any) {
+    console.error(`Tanso usage tracking error (${featureKey}):`, error.message)
+  }
+}
+
+app.get('/tanso/plans', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!isTansoConfigured()) return res.json({ plans: [], configured: false })
+    const plans = await tansoListPlans()
+    res.json({ plans: Array.isArray(plans) ? plans : plans?.plans || [], configured: true })
+  } catch (error: any) {
+    console.error('Tanso list plans error:', error.message)
+    res.status(500).json({ error: 'Failed to fetch plans' })
+  }
+})
+
+app.get('/tanso/features', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!isTansoConfigured()) return res.json({ features: [], configured: false })
+    const features = await tansoListFeatures()
+    res.json({ features: Array.isArray(features) ? features : features?.features || [], configured: true })
+  } catch (error: any) {
+    console.error('Tanso list features error:', error.message)
+    res.status(500).json({ error: 'Failed to fetch features' })
+  }
+})
+
+app.get('/tanso/entitlements', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!isTansoConfigured()) return res.json({ entitlements: [], configured: false })
+    const customerId = await getOrCreateTansoCustomer(req.visitorId!)
+    if (!customerId) return res.json({ entitlements: [], configured: true })
+
+    const entitlements = await tansoListCustomerEntitlements(customerId)
+    res.json({
+      entitlements: Array.isArray(entitlements) ? entitlements : entitlements?.entitlements || [],
+      configured: true,
+    })
+  } catch (error: any) {
+    console.error('Tanso entitlements error:', error.message)
+    res.status(500).json({ error: 'Failed to fetch entitlements' })
+  }
+})
+
+app.get('/tanso/subscription', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!isTansoConfigured()) return res.json({ customer: null, configured: false })
+    const customerId = await getOrCreateTansoCustomer(req.visitorId!)
+    if (!customerId) return res.json({ customer: null, configured: true })
+
+    const customer = await tansoGetCustomer(customerId)
+    res.json({ customer, configured: true })
+  } catch (error: any) {
+    console.error('Tanso subscription error:', error.message)
+    res.status(500).json({ error: 'Failed to fetch subscription info' })
+  }
+})
+
+app.post('/tanso/subscribe', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!isTansoConfigured()) return res.status(400).json({ error: 'Tanso not configured' })
+    const { planId } = req.body
+    if (!planId) return res.status(400).json({ error: 'planId is required' })
+
+    const customerId = await getOrCreateTansoCustomer(req.visitorId!)
+    if (!customerId) return res.status(500).json({ error: 'Failed to create customer' })
+
+    const result = await tansoCreateSubscription(customerId, planId)
+    res.json({ success: true, subscription: result })
+  } catch (error: any) {
+    console.error('Tanso subscribe error:', error.message)
+    res.status(500).json({ error: 'Failed to create subscription' })
+  }
+})
+
+app.get('/tanso/check/:featureKey', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  try {
+    const result = await checkTansoEntitlement(req.visitorId!, req.params.featureKey)
+    res.json(result)
+  } catch (error: any) {
+    console.error('Tanso check error:', error.message)
+    res.status(500).json({ error: 'Failed to check entitlement' })
   }
 })
 

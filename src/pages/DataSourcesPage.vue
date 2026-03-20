@@ -20,9 +20,11 @@ import {
   ComingSoonSection,
 } from '@/components/data-sources'
 import StripeApiKeyModal from '@/components/integrations/StripeApiKeyModal.vue'
+import UsageLimitBanner from '@/components/shared/UsageLimitBanner.vue'
 import { useDataMode } from '@/composables/useDataMode'
 import { useDemoMode } from '@/composables/useDemoMode'
 import { useTeam } from '@/composables/useTeam'
+import { useEntitlement } from '@/composables/useEntitlement'
 import {
   loadSampleData,
   clearRevenueData,
@@ -31,6 +33,8 @@ import {
 } from '@/lib/api'
 
 const { isViewer } = useTeam()
+
+const csvUpload = useEntitlement('csv_upload')
 
 // =============================================================================
 // STATE MANAGEMENT
@@ -435,6 +439,17 @@ watch(
         <span class="bg-background px-3 text-muted-foreground">Or connect your own</span>
       </div>
     </div>
+
+    <UsageLimitBanner
+      v-if="!isDemoMode && !isViewer && csvUpload.hasLimit.value"
+      feature-label="CSV Uploads"
+      :allowed="csvUpload.allowed.value"
+      :usage="csvUpload.usage.value"
+      :limit="csvUpload.limit.value"
+      :usage-percent="csvUpload.usagePercent.value"
+      :bar-color="csvUpload.barColor.value"
+      :has-limit="csvUpload.hasLimit.value"
+    />
 
     <!-- Revenue Section (hidden in demo mode) -->
     <RevenueSection

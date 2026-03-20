@@ -12,6 +12,7 @@ import {
   Cpu,
   Users,
   Gift,
+  CreditCard,
   X,
   Settings,
   Eye,
@@ -81,6 +82,12 @@ const navItems = computed(() => [
     label: 'Referrals',
     icon: Gift,
     description: 'Invite colleagues, earn AI credits',
+  },
+  {
+    path: '/plans',
+    label: 'Plans & Billing',
+    icon: CreditCard,
+    description: 'View your plan and usage',
   },
 ])
 

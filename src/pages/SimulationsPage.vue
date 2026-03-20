@@ -5,6 +5,8 @@ import { useRouter } from 'vue-router'
 import { listSimulations, getOpportunities } from '@/lib/api'
 import type { SimulationStatus } from '@/types/simulation'
 import { getSimulationStatusColor, getSimulationStatusLabel } from '@/types/simulation'
+import { useEntitlement } from '@/composables/useEntitlement'
+import UsageLimitBanner from '@/components/shared/UsageLimitBanner.vue'
 import {
   FlaskConical,
   Plus,
@@ -17,6 +19,7 @@ import {
 
 const router = useRouter()
 const statusFilter = ref<'all' | SimulationStatus>('all')
+const simRun = useEntitlement('simulation_run')
 
 const { data: simulations, isLoading, isError } = useQuery({
   queryKey: ['simulations'],
@@ -65,13 +68,26 @@ function formatCurrency(val: number) {
         <p class="text-sm text-muted-foreground mt-1">What-if pricing scenarios and revenue modeling</p>
       </div>
       <button
-        class="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
+        class="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        :disabled="simRun.isAtLimit.value"
+        :title="simRun.isAtLimit.value ? 'Simulation limit reached — upgrade your plan' : ''"
         @click="router.push('/simulations/new')"
       >
         <Plus class="h-4 w-4" />
         New Simulation
       </button>
     </div>
+
+    <UsageLimitBanner
+      v-if="simRun.hasLimit.value"
+      feature-label="Simulations"
+      :allowed="simRun.allowed.value"
+      :usage="simRun.usage.value"
+      :limit="simRun.limit.value"
+      :usage-percent="simRun.usagePercent.value"
+      :bar-color="simRun.barColor.value"
+      :has-limit="simRun.hasLimit.value"
+    />
 
     <!-- Opportunity banner -->
     <div
@@ -130,7 +146,9 @@ function formatCurrency(val: number) {
         prices, or packaging before rolling out changes.
       </p>
       <button
-        class="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+        class="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
+        :disabled="simRun.isAtLimit.value"
+        :title="simRun.isAtLimit.value ? 'Simulation limit reached — upgrade your plan' : ''"
         @click="router.push('/simulations/new')"
       >
         <Plus class="h-4 w-4" />

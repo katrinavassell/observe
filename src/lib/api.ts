@@ -633,3 +633,54 @@ export async function generateInsights(): Promise<{ insights: AiInsight[]; sourc
 export async function clearInsights(): Promise<{ success: boolean }> {
   return request('/insights', { method: 'DELETE' })
 }
+
+export interface TansoPlan {
+  id: string
+  key: string
+  name: string
+  description?: string
+  priceAmount: string | number
+  intervalMonths: number
+  status: string
+  features?: any[]
+}
+
+export interface TansoEntitlement {
+  featureKey: string
+  featureName?: string
+  allowed: boolean
+  usageLimit?: number
+  currentUsage?: number
+  remainingQuota?: number
+}
+
+export interface TansoEntitlementCheck {
+  allowed: boolean
+  usage?: number
+  limit?: number
+  remaining?: number
+}
+
+export async function tansoGetPlans(): Promise<{ plans: TansoPlan[]; configured: boolean }> {
+  return request('/tanso/plans')
+}
+
+export async function tansoGetFeatures(): Promise<{ features: any[]; configured: boolean }> {
+  return request('/tanso/features')
+}
+
+export async function tansoGetEntitlements(): Promise<{ entitlements: TansoEntitlement[]; configured: boolean }> {
+  return request('/tanso/entitlements')
+}
+
+export async function tansoGetSubscription(): Promise<{ customer: any; configured: boolean }> {
+  return request('/tanso/subscription')
+}
+
+export async function tansoSubscribe(planId: string): Promise<{ success: boolean; subscription: any }> {
+  return request('/tanso/subscribe', { method: 'POST', body: JSON.stringify({ planId }) })
+}
+
+export async function tansoCheckFeature(featureKey: string): Promise<TansoEntitlementCheck> {
+  return request(`/tanso/check/${featureKey}`)
+}
