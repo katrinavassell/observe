@@ -15,6 +15,7 @@ Tanso provides deep insights into your SaaS metrics by connecting to your billin
 - **Margin Tracking** - Identify negative margin customers and margin compression
 - **Usage Anomaly Detection** - Flag unusual usage patterns
 - **Pricing Simulations** - Model pricing changes and project revenue impact
+- **AI Insights** - AI-powered analysis via OpenAI and Anthropic integrations
 - **Stripe Integration** - Direct API connection or CSV import
 - **Sample Data** - Demo dataset for exploration
 
@@ -27,7 +28,8 @@ Tanso provides deep insights into your SaaS metrics by connecting to your billin
 | Charts | Chart.js, Vue Chart.js |
 | State | TanStack Vue Query |
 | Forms | Vee-Validate, Zod |
-| Backend | Supabase (PostgreSQL + Auth + Edge Functions) |
+| Backend | Express (Node.js), PostgreSQL |
+| Edge Functions | Supabase Edge Functions (Stripe sync, simulations) |
 | Billing | Stripe API |
 
 ## Documentation
@@ -38,6 +40,11 @@ Tanso provides deep insights into your SaaS metrics by connecting to your billin
 | [Database Schema](docs/DATABASE.md) | Tables, relationships, RLS policies |
 | [API Reference](docs/API.md) | Edge Functions endpoints |
 | [Components](docs/COMPONENTS.md) | Vue components and composables |
+| [Quickstart](docs/quickstart.md) | Quick setup guide |
+| [Data Sources](docs/data-sources.md) | Data import workflows |
+| [Simulator](docs/simulator.md) | Pricing simulation engine |
+| [AI Insights](docs/ai-insights.md) | AI-powered analytics |
+| [Feature Economics](docs/feature-economics.md) | Feature-level cost analysis |
 
 ---
 
@@ -47,49 +54,54 @@ Tanso provides deep insights into your SaaS metrics by connecting to your billin
 
 - Node.js 18+
 - npm or pnpm
-- Supabase account (free tier works)
+- PostgreSQL database
+- Supabase account (for edge functions)
 - Stripe account (optional, for live data)
 
 ### Installation
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-org/metrics-onboarding.git
+git clone https://github.com/katrinavassell/metrics-onboarding.git
 cd metrics-onboarding
 
 # Install dependencies
 npm install
-
-# Copy environment template
-cp .env.example .env
 ```
 
 ### Environment Variables
 
-Edit `.env` with your Supabase credentials:
+Create a `.env` file in the project root:
 
 ```env
+# Required - Backend
+DATABASE_URL=postgresql://user:password@localhost:5432/metrics
+SESSION_SECRET=your-session-secret
+
+# Required - Supabase (for edge functions)
 VITE_SUPABASE_URL=https://your-project.supabase.co
 VITE_SUPABASE_ANON_KEY=your-anon-key
 ```
 
-### Supabase Setup
+### Database Setup
 
-1. Create a new Supabase project at [supabase.com](https://supabase.com)
+1. Create a PostgreSQL database
 
-2. Run the schema in SQL Editor:
+2. Run the base schema in Supabase SQL Editor:
    ```bash
    # Copy contents of supabase/schema.sql
    # Paste into Supabase SQL Editor and run
    ```
 
-3. Run migrations:
+3. Run all migrations in order:
    ```bash
    # supabase/migrations/001_stripe_integrations.sql
    # supabase/migrations/002_simulation_engine.sql
+   # supabase/migrations/003_ai_integrations.sql
+   # supabase/migrations/004_observe_events.sql
+   # supabase/migrations/005_simulations.sql
+   # supabase/migrations/006_ai_insights.sql
    ```
-
-4. Enable Email Auth in Authentication > Providers
 
 ### Deploy Edge Functions
 
@@ -100,17 +112,27 @@ npx supabase link --project-ref your-project-ref
 # Deploy all functions
 npx supabase functions deploy stripe-connect --no-verify-jwt
 npx supabase functions deploy stripe-sync-enhanced --no-verify-jwt
+npx supabase functions deploy stripe-disconnect --no-verify-jwt
+npx supabase functions deploy stripe-status --no-verify-jwt
 npx supabase functions deploy run-simulation --no-verify-jwt
+npx supabase functions deploy anthropic-connect --no-verify-jwt
+npx supabase functions deploy anthropic-status --no-verify-jwt
+npx supabase functions deploy openai-connect --no-verify-jwt
+npx supabase functions deploy openai-status --no-verify-jwt
 ```
 
 ### Start Development
 
 ```bash
-# Start Vite dev server
+# Start both frontend and backend
 npm run dev
 ```
 
-The app runs at `http://localhost:5174`
+This starts:
+- **Frontend** (Vite) at `http://localhost:5000`
+- **Backend** (Express) at `http://localhost:3001`
+
+The frontend proxies `/api` requests to the backend automatically.
 
 ---
 
@@ -118,35 +140,72 @@ The app runs at `http://localhost:5174`
 
 ```
 src/
-├── pages/                  # Route components
-│   ├── LoginPage.vue       # Authentication
-│   ├── PricingPage.vue     # Main analytics dashboard
-│   ├── DataSourcesPage.vue # Data import interface
-│   └── OnboardingScreen.vue
+├── pages/                      # Route components
+│   ├── PricingAnalyzerPage.vue # Main analytics dashboard (home)
+│   ├── AnalyticsPage.vue       # Analytics overview
+│   ├── CustomersPage.vue       # Customer list
+│   ├── CustomerDetailPage.vue  # Individual customer view
+│   ├── DataSourcesPage.vue     # Data import interface
+│   ├── EventsPage.vue          # Event tracking
+│   ├── FeaturesPage.vue        # Feature management
+│   ├── FeatureDetailPage.vue   # Feature detail view
+│   ├── InsightsPage.vue        # AI-powered insights
+│   ├── ModelsPage.vue          # Pricing models
+│   ├── SimulationsPage.vue     # Simulation list
+│   ├── SimulationNewPage.vue   # Create simulation
+│   └── SimulationDetailPage.vue# Simulation results
 ├── components/
-│   ├── ui/                 # Reusable UI (Button, Card, Tabs, etc.)
-│   ├── charts/             # Data visualizations
-│   ├── data-sources/       # Import workflows
-│   └── simulation/         # Pricing simulations
-├── composables/            # Vue 3 composables
-│   ├── useAuth.ts          # Authentication
-│   ├── useDataMode.ts      # Data mode state
-│   ├── useStripeConnection.ts # Stripe sync
-│   └── useSimulation.ts    # Simulation execution
-├── lib/                    # Business logic
-│   ├── pricing-analyzer.ts # Core metrics engine
-│   ├── supabase-data.ts    # Database operations
-│   ├── stripe-import.ts    # CSV parsing
-│   └── stripe-api/         # Stripe API client
-└── types/                  # TypeScript definitions
+│   ├── ui/                     # Reusable UI (Button, Card, Tabs, etc.)
+│   ├── charts/                 # Data visualizations
+│   ├── dashboard/              # Dashboard widgets
+│   ├── data-sources/           # Import workflows
+│   ├── integrations/           # Third-party integrations
+│   ├── pricing/                # Pricing components
+│   ├── simulation/             # Pricing simulations
+│   ├── accounts/               # Account management
+│   ├── onboarding/             # Onboarding flow
+│   └── shared/                 # Shared components
+├── composables/                # Vue 3 composables
+│   ├── useAuth.ts              # Session management
+│   ├── useDataMode.ts          # Data mode state
+│   ├── useStripeConnection.ts  # Stripe sync
+│   ├── useStripeAnalysis.ts    # Stripe data analysis
+│   ├── useStripeUpload.ts      # CSV upload handling
+│   ├── useSimulation.ts        # Simulation execution
+│   ├── useAppMode.ts           # App mode state
+│   └── useOnline.ts            # Online status detection
+├── lib/                        # Business logic
+│   ├── api.ts                  # API client
+│   ├── pricing-analyzer.ts     # Core metrics engine
+│   ├── supabase-data.ts        # Supabase operations
+│   ├── supabase.ts             # Supabase client
+│   ├── stripe-import.ts        # CSV parsing
+│   ├── stripe-api/             # Stripe API client
+│   ├── stripe-claude-analyzer.ts # AI-powered Stripe analysis
+│   ├── sample-data.ts          # Demo data generator
+│   ├── validation.ts           # Input validation
+│   ├── logger.ts               # Logging utility
+│   ├── errors.ts               # Error handling
+│   └── utils.ts                # General utilities
+└── types/                      # TypeScript definitions
+
+server/
+├── index.ts                    # Express server (port 3001)
+└── stripe-client.ts            # Stripe SDK client
 
 supabase/
-├── schema.sql              # Database schema
-├── migrations/             # Schema migrations
-└── functions/              # Edge Functions
-    ├── stripe-connect/     # API key validation
-    ├── stripe-sync-enhanced/ # Data sync
-    └── run-simulation/     # Pricing simulations
+├── schema.sql                  # Base database schema
+├── migrations/                 # Schema migrations (001-006)
+└── functions/                  # Edge Functions
+    ├── stripe-connect/         # Stripe API key validation
+    ├── stripe-sync-enhanced/   # Stripe data sync
+    ├── stripe-disconnect/      # Disconnect Stripe
+    ├── stripe-status/          # Stripe connection status
+    ├── run-simulation/         # Pricing simulations
+    ├── anthropic-connect/      # Anthropic API integration
+    ├── anthropic-status/       # Anthropic connection status
+    ├── openai-connect/         # OpenAI API integration
+    └── openai-status/          # OpenAI connection status
 ```
 
 ---
@@ -155,10 +214,11 @@ supabase/
 
 | Script | Description |
 |--------|-------------|
-| `npm run dev` | Start Vite dev server |
-| `npm run build` | Build for production |
+| `npm run dev` | Start frontend + backend concurrently |
+| `npm run dev:frontend` | Start Vite dev server only |
+| `npm run dev:backend` | Start Express server only |
+| `npm run build` | Type-check and build for production |
 | `npm run preview` | Preview production build |
-| `npm run typecheck` | Run TypeScript type checking |
 | `npm run lint` | Check code with ESLint |
 | `npm run lint:fix` | Auto-fix lint issues |
 
@@ -206,12 +266,7 @@ Load demo data to explore the dashboard without connecting real data.
 
 ## Authentication
 
-Uses Supabase Auth with passwordless magic links:
-
-1. Enter email on login page
-2. Receive magic link via email
-3. Click link to authenticate
-4. Session persists across browser tabs
+Uses anonymous session-based authentication. When a user visits the app, the Express backend automatically creates a session with a unique visitor ID. Sessions are stored in PostgreSQL and persist for 30 days.
 
 ---
 
@@ -223,6 +278,8 @@ Uses Supabase Auth with passwordless magic links:
 2. Set build command: `npm run build`
 3. Set output directory: `dist`
 4. Add environment variables:
+   - `DATABASE_URL`
+   - `SESSION_SECRET`
    - `VITE_SUPABASE_URL`
    - `VITE_SUPABASE_ANON_KEY`
 
@@ -247,8 +304,9 @@ Core tables:
 - `usage_records` - Usage metrics
 - `cost_records` - Cost data
 - `pricing_scenarios` - Simulation configurations
+- `sessions` - Express session store
 
-All tables use Row Level Security (RLS) to isolate data per user.
+All tables use Row Level Security (RLS) scoped to the visitor session.
 
 ---
 
@@ -256,7 +314,7 @@ All tables use Row Level Security (RLS) to isolate data per user.
 
 1. Fork the repository
 2. Create a feature branch: `git checkout -b feature/my-feature`
-3. Make changes and run `npm run lint && npm run typecheck`
+3. Make changes and run `npm run lint`
 4. Commit changes: `git commit -m "Add my feature"`
 5. Push to branch: `git push origin feature/my-feature`
 6. Submit a pull request
