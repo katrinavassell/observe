@@ -579,3 +579,34 @@ export async function deleteSimulation(id: string): Promise<{ success: boolean }
 export async function getOpportunities(): Promise<PricingOpportunity[]> {
   return request('/simulations/opportunities')
 }
+
+// REFERRAL SYSTEM
+// =============================================================================
+
+export interface ReferralCodeResponse {
+  code: string
+}
+
+export interface ReferralStats {
+  code: string | null
+  total_referrals: number
+  converted_referrals: number
+  pending_referrals: number
+  credits_earned: number
+}
+
+export async function getReferralCode(): Promise<ReferralCodeResponse> {
+  return request('/referral/code')
+}
+
+export async function recordReferral(code: string): Promise<{ success: boolean; already_recorded?: boolean }> {
+  return request('/referral/record', {
+    method: 'POST',
+    body: JSON.stringify({ code }),
+  })
+}
+
+export async function getReferralStats(): Promise<ReferralStats> {
+  return request('/referral/stats')
+}
+}

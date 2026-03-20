@@ -1,16 +1,34 @@
 <script setup lang="ts">
-import { RouterView, useRoute } from 'vue-router'
+import { computed, watch } from 'vue'
+import { RouterView, useRoute, useRouter } from 'vue-router'
 import { Toaster } from 'vue-sonner'
 import { WifiOff } from 'lucide-vue-next'
-import { computed } from 'vue'
 import AppLayout from '@/layouts/AppLayout.vue'
 import { useOnline } from '@/composables/useOnline'
 import { useAuth } from '@/composables/useAuth'
+import { recordReferral } from '@/lib/api'
 
 const { isOnline } = useOnline()
-const { isLoading } = useAuth()
+const { isLoading, isInitialized } = useAuth()
 const route = useRoute()
+const router = useRouter()
 const noLayout = computed(() => !!route.meta?.noLayout)
+
+watch(isInitialized, async (initialized) => {
+  if (!initialized) return
+  const params = new URLSearchParams(window.location.search)
+  const refCode = params.get('ref')
+  if (!refCode) return
+  try {
+    await recordReferral(refCode)
+  } catch {
+    // Silently ignore referral recording errors
+  }
+  // Remove the ref param from the URL without reloading
+  const url = new URL(window.location.href)
+  url.searchParams.delete('ref')
+  router.replace({ path: url.pathname, query: Object.fromEntries(url.searchParams) })
+}, { immediate: true })
 </script>
 
 <template>

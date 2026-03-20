@@ -424,6 +424,7 @@ app.post('/data/sample', ensureVisitor, requireAdmin, async (req: AuthRequest, r
     )
 
     await client.query('COMMIT')
+    await maybeAwardReferralCredit(req.visitorId!)
     res.json({ success: true, message: 'Sample data loaded' })
   } catch (error) {
     await client.query('ROLLBACK')
@@ -548,6 +549,7 @@ app.post('/data/upload/costs', ensureVisitor, requireAdmin, async (req: AuthRequ
     )
 
     await client.query('COMMIT')
+    await maybeAwardReferralCredit(req.visitorId!)
     res.json({ success: true, count: records.length })
   } catch (error) {
     await client.query('ROLLBACK')
@@ -599,6 +601,7 @@ app.post('/data/upload/usage', ensureVisitor, requireAdmin, async (req: AuthRequ
     )
 
     await client.query('COMMIT')
+    await maybeAwardReferralCredit(req.visitorId!)
     res.json({ success: true, count: records.length })
   } catch (error) {
     await client.query('ROLLBACK')
@@ -672,6 +675,7 @@ app.post('/data/upload/revenue', ensureVisitor, requireAdmin, async (req: AuthRe
     )
 
     await client.query('COMMIT')
+    await maybeAwardReferralCredit(req.visitorId!)
     res.json({ 
       success: true, 
       counts: {
@@ -1146,6 +1150,7 @@ app.post('/stripe/sync', ensureVisitor, requireAdmin, async (req: AuthRequest, r
     )
 
     await client.query('COMMIT')
+    await maybeAwardReferralCredit(req.visitorId!)
 
     res.json({
       success: true,
@@ -1893,6 +1898,143 @@ app.delete('/simulations/:id', ensureVisitor, requireAdmin, async (req: AuthRequ
   } catch (error) {
     console.error('Delete simulation error:', error)
     res.status(500).json({ error: 'Failed to delete simulation' })
+// REFERRAL SYSTEM
+// =============================================================================
+
+// Award credit to referrer when a referred user becomes active
+async function maybeAwardReferralCredit(referredUserId: string): Promise<void> {
+  try {
+    const referralResult = await pool.query(
+      "SELECT id, referrer_user_id FROM referrals WHERE referred_user_id = $1 AND status = 'pending'",
+      [referredUserId]
+    )
+    if (referralResult.rows.length === 0) return
+
+    const referral = referralResult.rows[0]
+    const client = await pool.connect()
+    try {
+      await client.query('BEGIN')
+      await client.query(
+        "UPDATE referrals SET status = 'converted', credited_at = NOW() WHERE id = $1",
+        [referral.id]
+      )
+      await client.query(
+        "INSERT INTO referral_credits (user_id, credit_type, amount, source_referral_id) VALUES ($1, 'ai_insight', 1, $2)",
+        [referral.referrer_user_id, referral.id]
+      )
+      await client.query('COMMIT')
+    } catch (err) {
+      await client.query('ROLLBACK')
+      throw err
+    } finally {
+      client.release()
+    }
+  } catch (err) {
+    console.error('maybeAwardReferralCredit error:', err)
+  }
+}
+
+function generateReferralCode(userId: string): string {
+  const hash = crypto.createHash('sha256').update(userId + process.env.SESSION_SECRET).digest('hex')
+  return hash.slice(0, 8).toUpperCase()
+}
+
+// GET /referral/code — get or create referral code for current user
+app.get('/referral/code', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  try {
+    const existing = await pool.query(
+      'SELECT code FROM referral_codes WHERE user_id = $1',
+      [req.visitorId]
+    )
+    if (existing.rows.length > 0) {
+      return res.json({ code: existing.rows[0].code })
+    }
+
+    const code = generateReferralCode(req.visitorId!)
+    await pool.query(
+      'INSERT INTO referral_codes (user_id, code) VALUES ($1, $2) ON CONFLICT (user_id) DO NOTHING',
+      [req.visitorId, code]
+    )
+    res.json({ code })
+  } catch (error) {
+    console.error('Get referral code error:', error)
+    res.status(500).json({ error: 'Failed to get referral code' })
+  }
+})
+
+// POST /referral/record — record a referral when a new user arrives via referral link
+app.post('/referral/record', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  try {
+    const { code } = req.body
+    if (!code) return res.status(400).json({ error: 'Referral code required' })
+
+    // Find referrer
+    const codeResult = await pool.query(
+      'SELECT user_id FROM referral_codes WHERE code = $1',
+      [code.toUpperCase()]
+    )
+    if (codeResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Invalid referral code' })
+    }
+
+    const referrerUserId = codeResult.rows[0].user_id
+
+    // Don't allow self-referral
+    if (referrerUserId === req.visitorId) {
+      return res.status(400).json({ error: 'Cannot refer yourself' })
+    }
+
+    // Check if this user already has a referral record
+    const existingReferral = await pool.query(
+      'SELECT id FROM referrals WHERE referred_user_id = $1',
+      [req.visitorId]
+    )
+    if (existingReferral.rows.length > 0) {
+      return res.json({ success: true, already_recorded: true })
+    }
+
+    await pool.query(
+      'INSERT INTO referrals (referrer_user_id, referred_user_id, referral_code, status) VALUES ($1, $2, $3, $4) ON CONFLICT (referred_user_id) DO NOTHING',
+      [referrerUserId, req.visitorId, code.toUpperCase(), 'pending']
+    )
+    res.json({ success: true })
+  } catch (error) {
+    console.error('Record referral error:', error)
+    res.status(500).json({ error: 'Failed to record referral' })
+  }
+})
+
+// GET /referral/stats — get referral stats for current user
+app.get('/referral/stats', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  try {
+    const [codeResult, referralsResult, creditsResult] = await Promise.all([
+      pool.query('SELECT code FROM referral_codes WHERE user_id = $1', [req.visitorId]),
+      pool.query(
+        'SELECT status, COUNT(*) as count FROM referrals WHERE referrer_user_id = $1 GROUP BY status',
+        [req.visitorId]
+      ),
+      pool.query(
+        'SELECT COALESCE(SUM(amount), 0) as total FROM referral_credits WHERE user_id = $1',
+        [req.visitorId]
+      ),
+    ])
+
+    const code = codeResult.rows[0]?.code || null
+    const statusCounts: Record<string, number> = {}
+    referralsResult.rows.forEach((r: { status: string; count: string }) => {
+      statusCounts[r.status] = parseInt(r.count)
+    })
+
+    res.json({
+      code,
+      total_referrals: Object.values(statusCounts).reduce((a, b) => a + b, 0),
+      converted_referrals: statusCounts['converted'] || 0,
+      pending_referrals: statusCounts['pending'] || 0,
+      credits_earned: parseInt(creditsResult.rows[0].total) || 0,
+    })
+  } catch (error) {
+    console.error('Get referral stats error:', error)
+    res.status(500).json({ error: 'Failed to get referral stats' })
   }
 })
 

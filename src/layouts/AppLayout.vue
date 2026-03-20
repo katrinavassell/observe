@@ -11,6 +11,7 @@ import {
   Layers,
   Cpu,
   Users,
+  Gift,
   X,
   Settings,
   Eye,
@@ -74,6 +75,12 @@ const navItems = computed(() => [
     label: 'Data Sources',
     icon: Plug,
     description: 'Connect integrations or upload files',
+  },
+  {
+    path: '/referrals',
+    label: 'Referrals',
+    icon: Gift,
+    description: 'Invite colleagues, earn AI credits',
   },
 ])
 

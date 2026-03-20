@@ -218,6 +218,41 @@ CREATE POLICY "Users can delete own integration_requests" ON integration_request
   FOR DELETE USING (auth.uid() = user_id);
 
 -- =============================================================================
+-- REFERRAL SYSTEM TABLES
+-- Note: These tables use TEXT user_id (not UUID) to match the session-based
+-- visitor ID system used by the application backend.
+-- =============================================================================
+
+-- referral_codes: one unique code per user
+-- CREATE TABLE IF NOT EXISTS referral_codes (
+--   id SERIAL PRIMARY KEY,
+--   user_id TEXT NOT NULL UNIQUE,
+--   code TEXT NOT NULL UNIQUE,
+--   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+-- );
+
+-- referrals: tracks who referred whom
+-- CREATE TABLE IF NOT EXISTS referrals (
+--   id SERIAL PRIMARY KEY,
+--   referrer_user_id TEXT NOT NULL,
+--   referred_user_id TEXT NOT NULL UNIQUE,
+--   referral_code TEXT NOT NULL,
+--   status TEXT NOT NULL DEFAULT 'pending',
+--   credited_at TIMESTAMPTZ,
+--   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+-- );
+
+-- referral_credits: AI insight credits earned through referrals
+-- CREATE TABLE IF NOT EXISTS referral_credits (
+--   id SERIAL PRIMARY KEY,
+--   user_id TEXT NOT NULL,
+--   credit_type TEXT NOT NULL DEFAULT 'ai_insight',
+--   amount INTEGER NOT NULL DEFAULT 1,
+--   source_referral_id INTEGER REFERENCES referrals(id),
+--   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+-- );
+
+-- =============================================================================
 -- FUNCTIONS
 -- =============================================================================
 

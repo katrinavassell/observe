@@ -36,6 +36,9 @@ Uses Replit's built-in PostgreSQL with the following tables:
 - cost_records - Cost tracking
 - user_data_status - Tracks data mode (sample/user/none)
 - observe_events - Feature-level usage events with cost/revenue/model attribution (dual-written from all upload flows)
+- referral_codes - One unique code per visitor (TEXT user_id)
+- referrals - Tracks referrer/referred relationships and conversion status
+- referral_credits - AI insight credits earned through successful referrals
 
 ## Development
 - `npm run dev` - Runs both frontend (port 5000) and backend (port 3001) concurrently
