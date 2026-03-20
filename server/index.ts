@@ -35,7 +35,7 @@ app.use(session({
   resave: false,
   saveUninitialized: false,
   cookie: {
-    secure: process.env.NODE_ENV === 'production',
+    secure: process.env.NODE_ENV === 'production' || !!process.env.REPL_ID,
     httpOnly: true,
     sameSite: 'lax',
     maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days for anonymous users
@@ -771,8 +771,8 @@ async function startServer() {
     await pool.query('SELECT 1')
     console.log('Database connection verified')
     
-    app.listen(PORT, '127.0.0.1', () => {
-      console.log(`Backend server running on http://127.0.0.1:${PORT}`)
+    app.listen(PORT, '0.0.0.0', () => {
+      console.log(`Backend server running on http://0.0.0.0:${PORT}`)
     })
   } catch (error) {
     console.error('Failed to connect to database:', error)
