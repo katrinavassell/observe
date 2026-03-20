@@ -7,6 +7,7 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 import fs from 'fs'
 import bcrypt from 'bcryptjs'
+import { getUncachableStripeClient } from './stripe-client'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -933,6 +934,160 @@ async function startServer() {
     process.exit(1)
   }
 }
+
+// =============================================================================
+// STRIPE NATIVE INTEGRATION
+// =============================================================================
+
+// Check Stripe connection status (via native Replit integration)
+app.get('/stripe/status', ensureVisitor, async (_req: AuthRequest, res: Response) => {
+  try {
+    const stripe = await getUncachableStripeClient()
+    const account = await stripe.accounts.retrieve()
+    res.json({
+      connected: true,
+      account_id: account.id,
+      account_name: (account as { business_profile?: { name?: string }; display_name?: string }).business_profile?.name
+        || (account as { display_name?: string }).display_name
+        || account.id,
+    })
+  } catch (error) {
+    res.json({ connected: false, error: error instanceof Error ? error.message : 'Not connected' })
+  }
+})
+
+// Sync data from Stripe into the user's session
+app.post('/stripe/sync', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  const client = await pool.connect()
+  try {
+    const stripe = await getUncachableStripeClient()
+
+    // Fetch all data from Stripe using auto-pagination
+    const [stripeCustomersList, stripeSubscriptionsList, stripeProductsList, pricesList] = await Promise.all([
+      stripe.customers.list({ limit: 100 }).autoPagingToArray({ limit: 10000 }),
+      stripe.subscriptions.list({ limit: 100, status: 'all' }).autoPagingToArray({ limit: 10000 }),
+      stripe.products.list({ limit: 100, active: true }).autoPagingToArray({ limit: 10000 }),
+      stripe.prices.list({ limit: 100, active: true }).autoPagingToArray({ limit: 10000 }),
+    ])
+    const stripeCustomers = { data: stripeCustomersList }
+    const stripeSubscriptions = { data: stripeSubscriptionsList }
+    const stripeProducts = { data: stripeProductsList }
+    const prices = pricesList
+
+    await client.query('BEGIN')
+
+    // Clear existing revenue data
+    await client.query('DELETE FROM subscriptions WHERE user_id = $1', [req.visitorId])
+    await client.query('DELETE FROM customers WHERE user_id = $1', [req.visitorId])
+    await client.query('DELETE FROM plans WHERE user_id = $1', [req.visitorId])
+    await client.query("DELETE FROM observe_events WHERE user_id = $1 AND source = 'stripe'", [req.visitorId])
+
+    // Insert plans (from Stripe products + prices) — batched
+    const planIds = new Set<string>()
+    const planRows: { planId: string; name: string; amount: number; intervalMonths: number }[] = []
+    for (const price of prices) {
+      const planId = price.id
+      if (planIds.has(planId)) continue
+      planIds.add(planId)
+      const product = stripeProducts.data.find(p => p.id === (typeof price.product === 'string' ? price.product : price.product?.id))
+      const name = product?.name || planId
+      const amount = (price.unit_amount || 0) / 100
+      const intervalMonths = price.recurring?.interval === 'year' ? 12 : 1
+      planRows.push({ planId, name, amount, intervalMonths })
+    }
+    const batchSize = 500
+    for (let i = 0; i < planRows.length; i += batchSize) {
+      const batch = planRows.slice(i, i + batchSize)
+      const values: unknown[] = []
+      const placeholders: string[] = []
+      let idx = 1
+      for (const p of batch) {
+        placeholders.push(`($${idx++}, $${idx++}, $${idx++}, $${idx++}, $${idx++}, $${idx++})`)
+        values.push(req.visitorId, p.planId, p.name, p.amount, p.intervalMonths, 'recurring')
+      }
+      await client.query(
+        `INSERT INTO plans (user_id, plan_id, name, price_amount, interval_months, billing_model) VALUES ${placeholders.join(', ')} ON CONFLICT DO NOTHING`,
+        values
+      )
+    }
+
+    // Insert customers — batched
+    const validCustomers = stripeCustomers.data.filter(c => typeof c !== 'string')
+    for (let i = 0; i < validCustomers.length; i += batchSize) {
+      const batch = validCustomers.slice(i, i + batchSize)
+      const values: unknown[] = []
+      const placeholders: string[] = []
+      let idx = 1
+      for (const customer of batch) {
+        placeholders.push(`($${idx++}, $${idx++}, $${idx++}, $${idx++})`)
+        values.push(req.visitorId, customer.id, customer.name || customer.email || customer.id, customer.email || null)
+      }
+      await client.query(
+        `INSERT INTO customers (user_id, customer_id, name, email) VALUES ${placeholders.join(', ')} ON CONFLICT DO NOTHING`,
+        values
+      )
+    }
+
+    // Insert subscriptions — batched
+    let syncedSubs = 0
+    const subRows: { id: string; customerId: string; priceId: string; isActive: boolean; mrr: number }[] = []
+    for (const sub of stripeSubscriptions.data) {
+      const priceId = sub.items?.data?.[0]?.price?.id
+      if (!priceId) continue
+      const unitAmount = sub.items.data[0].price.unit_amount || 0
+      const mrr = sub.items.data[0].price.recurring?.interval === 'year'
+        ? Math.round(unitAmount / 12 / 100)
+        : Math.round(unitAmount / 100)
+      subRows.push({ id: sub.id, customerId: sub.customer as string, priceId, isActive: sub.status === 'active', mrr })
+      syncedSubs++
+    }
+    for (let i = 0; i < subRows.length; i += batchSize) {
+      const batch = subRows.slice(i, i + batchSize)
+      const subValues: unknown[] = []
+      const subPlaceholders: string[] = []
+      const eventValues: unknown[] = []
+      const eventPlaceholders: string[] = []
+      let subIdx = 1
+      let eventIdx = 1
+      for (const s of batch) {
+        subPlaceholders.push(`($${subIdx++}, $${subIdx++}, $${subIdx++}, $${subIdx++}, $${subIdx++}, $${subIdx++})`)
+        subValues.push(req.visitorId, s.id, s.customerId, s.priceId, s.isActive, s.mrr)
+        eventPlaceholders.push(`($${eventIdx++}, $${eventIdx++}, 'subscription', 'revenue', NOW(), $${eventIdx++}, 'stripe', 'monthly_aggregate')`)
+        eventValues.push(req.visitorId, s.customerId, s.mrr)
+      }
+      await client.query(
+        `INSERT INTO subscriptions (user_id, subscription_id, customer_id, plan_id, is_active, mrr_override) VALUES ${subPlaceholders.join(', ')} ON CONFLICT DO NOTHING`,
+        subValues
+      )
+      await client.query(
+        `INSERT INTO observe_events (user_id, customer_id, feature_key, event_name, timestamp, revenue_amount, source, granularity) VALUES ${eventPlaceholders.join(', ')}`,
+        eventValues
+      )
+    }
+
+    await client.query(
+      'INSERT INTO user_data_status (user_id, data_mode) VALUES ($1, $2) ON CONFLICT (user_id) DO UPDATE SET data_mode = $2, updated_at = NOW()',
+      [req.visitorId, 'user']
+    )
+
+    await client.query('COMMIT')
+
+    res.json({
+      success: true,
+      synced: {
+        customers: stripeCustomers.data.length,
+        subscriptions: syncedSubs,
+        plans: planIds.size,
+      },
+    })
+  } catch (error) {
+    await client.query('ROLLBACK')
+    console.error('Stripe sync error:', error)
+    res.status(500).json({ error: error instanceof Error ? error.message : 'Stripe sync failed' })
+  } finally {
+    client.release()
+  }
+})
 
 // =============================================================================
 // FEATURE ECONOMICS ENDPOINTS

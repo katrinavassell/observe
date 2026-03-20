@@ -9,7 +9,7 @@
  * - Unsaved changes confirmation
  */
 
-import { ref, watch } from 'vue'
+import { ref, watch, onMounted, onUnmounted } from 'vue'
 import { toast } from 'vue-sonner'
 import { TrendingUp, FlaskConical, Eye } from 'lucide-vue-next'
 import { Card, CardContent, Button } from '@/components/ui'
@@ -19,6 +19,7 @@ import {
   UsageSection,
   ComingSoonSection,
 } from '@/components/data-sources'
+import StripeApiKeyModal from '@/components/integrations/StripeApiKeyModal.vue'
 import UsageLimitBanner from '@/components/shared/UsageLimitBanner.vue'
 import { useDataMode } from '@/composables/useDataMode'
 import { useDemoMode } from '@/composables/useDemoMode'
@@ -45,12 +46,24 @@ const {
   hasRevenue,
   hasCosts,
   hasUsage,
+  lastSyncAt,
   switchToSampleData,
 } = useDataMode()
 
 const { isDemoMode, isLoadingDemo, enterDemoMode } = useDemoMode()
 
+// Sync cadence constants (best practices for billing data)
+const SYNC_STALE_THRESHOLD_MS = 60 * 60 * 1000 // 1 hour - sync if older
+const SYNC_INTERVAL_MS = 4 * 60 * 60 * 1000 // 4 hours - background sync interval
+let syncIntervalId: ReturnType<typeof setInterval> | null = null
 
+/** Check if data is stale and needs refresh */
+function isDataStale(): boolean {
+  if (!lastSyncAt.value) return true
+  const lastSync = new Date(lastSyncAt.value).getTime()
+  const now = Date.now()
+  return (now - lastSync) > SYNC_STALE_THRESHOLD_MS
+}
 
 /** Track file state for each section */
 const revenueFiles = ref<{ customers: boolean; subscriptions: boolean; invoices: boolean }>({
@@ -67,10 +80,37 @@ const isLoadingRevenue = ref(false)
 const isLoadingCosts = ref(false)
 const isLoadingUsage = ref(false)
 
+/** Stripe API Key Modal */
+const showStripeModal = ref(false)
+const isStripeConnected = ref(false)
+const stripeAccountName = ref('')
+const isSyncing = ref(false)
 
 /** Component refs */
 const revenueSectionRef = ref<InstanceType<typeof RevenueSection> | null>(null)
 
+// =============================================================================
+// LIFECYCLE - Check Stripe status and auto-sync
+// =============================================================================
+
+onMounted(async () => {
+  try {
+    const { getStripeStatus } = await import('@/lib/api')
+    const status = await getStripeStatus()
+    isStripeConnected.value = status.connected
+    stripeAccountName.value = status.account_name || ''
+  } catch {
+    isStripeConnected.value = false
+  }
+})
+
+onUnmounted(() => {
+  // Clean up sync interval
+  if (syncIntervalId) {
+    clearInterval(syncIntervalId)
+    syncIntervalId = null
+  }
+})
 
 // =============================================================================
 // SAMPLE DATA HANDLERS
@@ -221,6 +261,76 @@ async function handleUsageFileCleared(): Promise<void> {
   }
 }
 
+function handleStripeConnect(): void {
+  showStripeModal.value = true
+}
+
+async function handleStripeConnected(accountName: string): Promise<void> {
+  isStripeConnected.value = true
+  stripeAccountName.value = accountName
+  toast.success(`Connected to ${accountName}. Syncing data...`)
+
+  // Auto-sync immediately after connecting
+  await handleStripeSync()
+
+  // Set up background sync if not already running
+  if (!syncIntervalId) {
+    syncIntervalId = setInterval(async () => {
+      if (isStripeConnected.value && !isSyncing.value) {
+        console.log('[Stripe] Background sync triggered')
+        await handleStripeSync()
+      }
+    }, SYNC_INTERVAL_MS)
+  }
+}
+
+async function handleStripeSync(): Promise<void> {
+  if (isSyncing.value) return
+
+  isSyncing.value = true
+  try {
+    const { syncStripeData } = await import('@/lib/api')
+    const result = await syncStripeData()
+
+    if (result.success) {
+      toast.success(`Synced ${result.synced.customers} customers, ${result.synced.subscriptions} subscriptions`)
+      revenueFiles.value = { customers: true, subscriptions: true, invoices: false }
+      await refetchDataMode()
+    }
+  } catch (error) {
+    toast.error('Sync failed', {
+      description: error instanceof Error ? error.message : 'Please try again',
+    })
+  } finally {
+    isSyncing.value = false
+  }
+}
+
+async function handleStripeDisconnect(): Promise<void> {
+  try {
+    // Clear local state
+    isStripeConnected.value = false
+    stripeAccountName.value = ''
+
+    // Clear file indicators
+    revenueFiles.value = { customers: false, subscriptions: false, invoices: false }
+
+    // Stop background sync
+    if (syncIntervalId) {
+      clearInterval(syncIntervalId)
+      syncIntervalId = null
+    }
+
+    // Refresh data mode
+    await refetchDataMode()
+
+    toast.success('Stripe disconnected and data cleared')
+  } catch (error) {
+    toast.error('Failed to disconnect Stripe', {
+      description: error instanceof Error ? error.message : 'Please try again',
+    })
+  }
+}
 
 // =============================================================================
 // DATA RESTORATION
@@ -346,8 +456,14 @@ watch(
       v-if="!isDemoMode"
       ref="revenueSectionRef"
       :is-loading-sample="isLoadingRevenue"
+      :is-stripe-connected="isStripeConnected"
+      :stripe-account-name="stripeAccountName"
+      :is-syncing="isSyncing"
       :readonly="isViewer"
       @use-sample="handleUseSampleRevenue"
+      @connect-stripe="handleStripeConnect"
+      @sync-stripe="handleStripeSync"
+      @disconnect-stripe="handleStripeDisconnect"
       @files-changed="handleRevenueFilesChanged"
       @all-files-cleared="handleRevenueFilesCleared"
     />
@@ -378,5 +494,10 @@ watch(
     <ComingSoonSection v-if="!isDemoMode" />
   </div>
 
-
+  <!-- Stripe API Key Modal -->
+  <StripeApiKeyModal
+    :open="showStripeModal"
+    @close="showStripeModal = false"
+    @connected="handleStripeConnected"
+  />
 </template>
