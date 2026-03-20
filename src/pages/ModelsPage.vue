@@ -98,9 +98,9 @@ function providerClass(provider: string | null) {
             <td class="px-4 py-3 text-right text-muted-foreground">{{ m.event_count.toLocaleString() }}</td>
             <td class="px-4 py-3 text-right text-muted-foreground">{{ m.customer_count }}</td>
             <td class="px-4 py-3 text-right text-muted-foreground">{{ m.feature_count }}</td>
-            <td class="px-4 py-3 text-right font-mono text-xs">{{ formatCurrency(m.total_cost) }}</td>
-            <td class="px-4 py-3 text-right font-mono text-xs">{{ formatCurrency(m.avg_cost_per_event) }}</td>
-            <td class="px-4 py-3 text-right font-mono text-xs">{{ formatCurrency(m.total_revenue) }}</td>
+            <td class="px-4 py-3 text-right tabular-nums text-xs">{{ formatCurrency(m.total_cost) }}</td>
+            <td class="px-4 py-3 text-right tabular-nums text-xs">{{ formatCurrency(m.avg_cost_per_event) }}</td>
+            <td class="px-4 py-3 text-right tabular-nums text-xs">{{ formatCurrency(m.total_revenue) }}</td>
             <td class="px-4 py-3 text-right">
               <MarginBadge :margin="m.margin_pct" />
             </td>

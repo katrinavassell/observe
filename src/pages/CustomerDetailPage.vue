@@ -190,8 +190,8 @@ function mrr() {
                     </div>
                   </td>
                   <td class="px-4 py-2.5 text-right text-muted-foreground">{{ f.event_count }}</td>
-                  <td class="px-4 py-2.5 text-right font-mono text-xs">{{ formatCurrency(f.total_cost) }}</td>
-                  <td class="px-4 py-2.5 text-right font-mono text-xs">{{ formatCurrency(f.total_revenue) }}</td>
+                  <td class="px-4 py-2.5 text-right tabular-nums text-xs">{{ formatCurrency(f.total_cost) }}</td>
+                  <td class="px-4 py-2.5 text-right tabular-nums text-xs">{{ formatCurrency(f.total_revenue) }}</td>
                 </tr>
               </tbody>
             </table>
@@ -225,7 +225,7 @@ function mrr() {
                     </button>
                     <span v-else class="text-muted-foreground text-xs">—</span>
                   </td>
-                  <td class="px-4 py-2 text-right font-mono text-xs">{{ ev.cost_amount !== null ? `$${ev.cost_amount.toFixed(4)}` : '—' }}</td>
+                  <td class="px-4 py-2 text-right tabular-nums text-xs">{{ ev.cost_amount !== null ? `$${ev.cost_amount.toFixed(4)}` : '—' }}</td>
                   <td class="px-4 py-2 text-right">
                     <MarginBadge :margin="marginForEvent(ev.cost_amount, ev.revenue_amount)" />
                   </td>

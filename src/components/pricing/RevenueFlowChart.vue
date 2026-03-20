@@ -211,7 +211,7 @@ function formatCurrency(amount: number): string {
           </Tooltip>
         </div>
         <div class="flex items-center gap-2">
-          <Badge variant="outline" class="font-mono">
+          <Badge variant="outline" class="tabular-nums">
             {{ formatCurrency(summary.currentMrr) }} MRR
           </Badge>
           <Badge
@@ -280,21 +280,21 @@ function formatCurrency(amount: number): string {
               class="border-b hover:bg-muted/50"
             >
               <td class="py-2 font-medium">{{ month.monthLabel }}</td>
-              <td class="py-2 text-right font-mono">{{ month.formatted.mrr }}</td>
-              <td class="py-2 text-right font-mono text-green-600">
+              <td class="py-2 text-right tabular-nums">{{ month.formatted.mrr }}</td>
+              <td class="py-2 text-right tabular-nums text-green-600">
                 +{{ month.formatted.newMRR }}
               </td>
-              <td class="py-2 text-right font-mono text-blue-600">
+              <td class="py-2 text-right tabular-nums text-blue-600">
                 +{{ month.formatted.expansionMRR }}
               </td>
-              <td class="py-2 text-right font-mono text-orange-600">
+              <td class="py-2 text-right tabular-nums text-orange-600">
                 -{{ month.formatted.contractionMRR }}
               </td>
-              <td class="py-2 text-right font-mono text-red-600">
+              <td class="py-2 text-right tabular-nums text-red-600">
                 -{{ month.formatted.churnedMRR }}
               </td>
               <td
-                class="py-2 text-right font-mono"
+                class="py-2 text-right tabular-nums"
                 :class="month.netNewMRR >= 0 ? 'text-green-600' : 'text-red-600'"
               >
                 {{ month.netNewMRR >= 0 ? '+' : '' }}{{ month.formatted.netNewMRR }}

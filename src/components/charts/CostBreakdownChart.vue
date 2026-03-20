@@ -189,7 +189,7 @@ function getProviderTextColor(index: number, percentage: number): string {
                   </span>
                 </div>
                 <div class="flex items-center gap-2">
-                  <span class="font-mono text-muted-foreground">
+                  <span class="tabular-nums text-muted-foreground">
                     {{ formatCurrency(provider.amount) }}
                   </span>
                   <span :class="getProviderTextColor(index, provider.percentage)" class="font-semibold">
@@ -243,7 +243,7 @@ function getProviderTextColor(index: number, percentage: number): string {
               <TrendingDown v-else-if="totalCostsChange.direction === 'down'" class="h-3 w-3 mr-0.5" />
               {{ totalCostsChange.direction === 'up' ? '+' : '' }}{{ totalCostsChange.value }}%
             </span>
-            <span class="font-semibold font-mono">{{ formatCurrency(totalCosts) }}</span>
+            <span class="font-semibold tabular-nums">{{ formatCurrency(totalCosts) }}</span>
           </div>
         </div>
       </div>

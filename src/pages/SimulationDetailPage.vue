@@ -275,12 +275,12 @@ function churnRiskClass(risk: string) {
                   <td class="px-4 py-3">
                     <span class="font-mono text-xs bg-muted px-1.5 py-0.5 rounded">{{ fa.feature_key }}</span>
                   </td>
-                  <td class="px-4 py-3 text-right font-mono text-xs">{{ formatCurrency(fa.current_cost) }}</td>
-                  <td class="px-4 py-3 text-right font-mono text-xs">{{ formatCurrency(fa.current_revenue) }}</td>
+                  <td class="px-4 py-3 text-right tabular-nums text-xs">{{ formatCurrency(fa.current_cost) }}</td>
+                  <td class="px-4 py-3 text-right tabular-nums text-xs">{{ formatCurrency(fa.current_revenue) }}</td>
                   <td class="px-4 py-3 text-right">
                     <MarginBadge :margin="fa.current_margin_pct" />
                   </td>
-                  <td class="px-4 py-3 text-right font-mono text-xs">{{ formatCurrency(fa.projected_revenue) }}</td>
+                  <td class="px-4 py-3 text-right tabular-nums text-xs">{{ formatCurrency(fa.projected_revenue) }}</td>
                   <td class="px-4 py-3 text-right">
                     <MarginBadge :margin="fa.projected_margin_pct" />
                   </td>
@@ -324,8 +324,8 @@ function churnRiskClass(risk: string) {
                     <span v-if="ci.segment" class="text-xs text-muted-foreground">{{ ci.segment }}</span>
                     <span v-else class="text-muted-foreground">--</span>
                   </td>
-                  <td class="px-4 py-3 text-right font-mono text-xs">{{ formatCurrency(ci.current_revenue) }}</td>
-                  <td class="px-4 py-3 text-right font-mono text-xs">{{ formatCurrency(ci.projected_revenue) }}</td>
+                  <td class="px-4 py-3 text-right tabular-nums text-xs">{{ formatCurrency(ci.current_revenue) }}</td>
+                  <td class="px-4 py-3 text-right tabular-nums text-xs">{{ formatCurrency(ci.projected_revenue) }}</td>
                   <td class="px-4 py-3 text-right">
                     <TrendIndicator
                       :direction="ci.revenue_delta > 0 ? 'up' : ci.revenue_delta < 0 ? 'down' : 'stable'"

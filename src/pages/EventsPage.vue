@@ -253,7 +253,7 @@ function goToCustomer(id: string) { router.push(`/customers/${id}`) }
               <td class="px-4 py-3 text-muted-foreground whitespace-nowrap text-xs">
                 {{ formatDate(event.timestamp) }}
               </td>
-              <td class="px-4 py-3 font-mono text-xs text-foreground">
+              <td class="px-4 py-3 text-xs text-foreground">
                 {{ event.event_name }}
               </td>
               <td class="px-4 py-3">
@@ -289,13 +289,13 @@ function goToCustomer(id: string) { router.push(`/customers/${id}`) }
                 </span>
                 <span v-else class="text-muted-foreground text-sm">—</span>
               </td>
-              <td class="px-4 py-3 text-right font-mono text-xs text-muted-foreground tabular-nums">
+              <td class="px-4 py-3 text-right text-xs text-muted-foreground tabular-nums">
                 {{ event.usage_units != null && event.usage_units !== 0 ? event.usage_units.toLocaleString() : '—' }}
               </td>
-              <td class="px-4 py-3 text-right font-mono text-xs text-foreground tabular-nums">
+              <td class="px-4 py-3 text-right text-xs text-foreground tabular-nums">
                 {{ formatCost(event.cost_amount) }}
               </td>
-              <td class="px-4 py-3 text-right font-mono text-xs text-foreground tabular-nums">
+              <td class="px-4 py-3 text-right text-xs text-foreground tabular-nums">
                 {{ formatCost(event.revenue_amount) }}
               </td>
               <td class="px-4 py-3 text-right">

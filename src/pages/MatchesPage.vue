@@ -81,15 +81,15 @@ function getScoreBarColor(score: number) {
     <!-- Stats -->
     <div v-if="totalCount > 0" class="flex gap-3">
       <div class="flex items-center gap-2 rounded-md border bg-card px-3 py-2">
-        <span class="font-mono text-lg font-semibold text-warning">{{ pendingCount }}</span>
+        <span class="tabular-nums text-lg font-semibold text-warning">{{ pendingCount }}</span>
         <span class="text-xs text-muted-foreground">Pending</span>
       </div>
       <div class="flex items-center gap-2 rounded-md border bg-card px-3 py-2">
-        <span class="font-mono text-lg font-semibold text-success">{{ confirmedCount }}</span>
+        <span class="tabular-nums text-lg font-semibold text-success">{{ confirmedCount }}</span>
         <span class="text-xs text-muted-foreground">Confirmed</span>
       </div>
       <div class="flex items-center gap-2 rounded-md border bg-card px-3 py-2">
-        <span class="font-mono text-lg font-semibold text-destructive">{{ rejectedCount }}</span>
+        <span class="tabular-nums text-lg font-semibold text-destructive">{{ rejectedCount }}</span>
         <span class="text-xs text-muted-foreground">Rejected</span>
       </div>
     </div>
@@ -184,7 +184,7 @@ function getScoreBarColor(score: number) {
                   :style="{ width: `${match.overall_score * 100}%` }"
                 />
               </div>
-              <span :class="['text-xs font-semibold font-mono', getScoreColor(match.overall_score)]">
+              <span :class="['text-xs font-semibold tabular-nums', getScoreColor(match.overall_score)]">
                 {{ formatPercent(match.overall_score) }}
               </span>
             </div>
@@ -221,7 +221,7 @@ function getScoreBarColor(score: number) {
               <div class="flex items-center justify-center">
                 <div class="flex flex-col items-center justify-center w-14 h-14 rounded-full border-2" :style="{ borderColor: `hsl(var(--${selectedMatch.overall_score >= 0.7 ? 'success' : 'warning'}))` }">
                   <span class="text-[10px] uppercase text-muted-foreground">Score</span>
-                  <span :class="['text-sm font-semibold font-mono', getScoreColor(selectedMatch.overall_score)]">
+                  <span :class="['text-sm font-semibold tabular-nums', getScoreColor(selectedMatch.overall_score)]">
                     {{ formatPercent(selectedMatch.overall_score) }}
                   </span>
                 </div>
@@ -248,7 +248,7 @@ function getScoreBarColor(score: number) {
                 <div v-for="field in selectedMatch.field_scores" :key="field.field" class="space-y-1">
                   <div class="flex items-center justify-between text-sm">
                     <span class="font-medium capitalize">{{ field.field.replace(/_/g, ' ') }}</span>
-                    <span :class="['font-mono', getScoreColor(field.score)]">{{ formatPercent(field.score) }}</span>
+                    <span :class="['tabular-nums', getScoreColor(field.score)]">{{ formatPercent(field.score) }}</span>
                   </div>
                   <div class="flex items-center gap-2 text-xs">
                     <span class="flex-1 truncate rounded bg-muted px-2 py-1 text-muted-foreground">{{ field.value_a || '—' }}</span>

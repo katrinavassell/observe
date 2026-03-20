@@ -215,14 +215,14 @@ function formatCurrency(amount: number): string {
               class="border-b hover:bg-muted/50"
             >
               <td class="py-2 font-medium">{{ month.monthLabel }}</td>
-              <td class="py-2 text-right font-mono text-green-600">
+              <td class="py-2 text-right tabular-nums text-green-600">
                 {{ formatCurrency(month.mrr) }}
               </td>
-              <td class="py-2 text-right font-mono text-red-600">
+              <td class="py-2 text-right tabular-nums text-red-600">
                 {{ formatCurrency(month.costs || 0) }}
               </td>
               <td
-                class="py-2 text-right font-mono"
+                class="py-2 text-right tabular-nums"
                 :class="(month.margin || 0) >= 50 ? 'text-blue-600' : 'text-red-600'"
               >
                 {{ month.margin || 0 }}%

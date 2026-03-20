@@ -191,7 +191,7 @@ function formatCurrency(amount: number): string {
                   </span>
                 </div>
               </td>
-              <td class="py-3 text-right font-mono text-muted-foreground">
+              <td class="py-3 text-right tabular-nums text-muted-foreground">
                 {{ formatCurrency(impact.currentPrice) }}
               </td>
               <td class="py-3 text-right">

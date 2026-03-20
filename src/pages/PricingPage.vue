@@ -696,20 +696,20 @@ onMounted(async () => {
                       class="border-b border-border hover:bg-muted/50"
                     >
                       <td class="p-3 text-sm font-medium">{{ month.monthLabel }}</td>
-                      <td class="p-3 text-sm font-mono text-right">{{ month.formatted.mrr }}</td>
-                      <td class="p-3 text-sm font-mono text-right text-green-600">
+                      <td class="p-3 text-sm tabular-nums text-right">{{ month.formatted.mrr }}</td>
+                      <td class="p-3 text-sm tabular-nums text-right text-green-600">
                         {{ month.newMRR > 0 ? '+' : '' }}{{ month.formatted.newMRR }}
                       </td>
-                      <td class="p-3 text-sm font-mono text-right text-blue-600">
+                      <td class="p-3 text-sm tabular-nums text-right text-blue-600">
                         {{ month.expansionMRR > 0 ? '+' : '' }}{{ month.formatted.expansionMRR }}
                       </td>
-                      <td class="p-3 text-sm font-mono text-right text-orange-600">
+                      <td class="p-3 text-sm tabular-nums text-right text-orange-600">
                         {{ month.contractionMRR > 0 ? '-' : '' }}{{ month.formatted.contractionMRR }}
                       </td>
-                      <td class="p-3 text-sm font-mono text-right text-red-600">
+                      <td class="p-3 text-sm tabular-nums text-right text-red-600">
                         {{ month.churnedMRR > 0 ? '-' : '' }}{{ month.formatted.churnedMRR }}
                       </td>
-                      <td class="p-3 text-sm font-mono text-right" :class="month.netNewMRR >= 0 ? 'text-green-600' : 'text-red-600'">
+                      <td class="p-3 text-sm tabular-nums text-right" :class="month.netNewMRR >= 0 ? 'text-green-600' : 'text-red-600'">
                         {{ month.netNewMRR >= 0 ? '+' : '' }}{{ month.formatted.netNewMRR }}
                       </td>
                       <td class="p-3 text-sm text-right">{{ month.customerCount }}</td>
@@ -802,7 +802,7 @@ onMounted(async () => {
                       <td class="p-3 text-sm">
                         <Badge variant="secondary">{{ customer.planName }}</Badge>
                       </td>
-                      <td class="p-3 text-sm text-right font-mono font-medium">
+                      <td class="p-3 text-sm text-right tabular-nums font-medium">
                         {{ formatTableCurrency(customer.mrr) }}
                       </td>
                       <td class="p-3 text-sm text-right">
@@ -811,7 +811,7 @@ onMounted(async () => {
                           <ArrowDown v-else-if="customer.mrrChange < 0" class="h-3 w-3 text-red-600" />
                           <Minus v-else class="h-3 w-3 text-muted-foreground" />
                           <span
-                            class="font-mono"
+                            class="tabular-nums"
                             :class="{
                               'text-green-600 dark:text-green-400': customer.mrrChange > 0,
                               'text-red-600 dark:text-red-400': customer.mrrChange < 0,
@@ -921,8 +921,8 @@ onMounted(async () => {
                     </Tooltip>
                     <span v-else>{{ plan.customerCount }}</span>
                   </td>
-                  <td class="p-3 text-sm text-right font-mono">{{ formatTableCurrency(plan.totalMRR) }}</td>
-                  <td class="p-3 text-sm text-right font-mono">{{ formatTableCurrency(plan.avgMRR) }}</td>
+                  <td class="p-3 text-sm text-right tabular-nums">{{ formatTableCurrency(plan.totalMRR) }}</td>
+                  <td class="p-3 text-sm text-right tabular-nums">{{ formatTableCurrency(plan.avgMRR) }}</td>
                   <td class="p-3 text-sm text-center">
                     <Tooltip v-if="plan.churnRiskCount > 0">
                       <TooltipTrigger>
@@ -986,7 +986,7 @@ onMounted(async () => {
                     >
                       <td class="p-3 text-sm font-medium">{{ anomaly.customer }}</td>
                       <td class="p-3 text-sm"><Badge variant="secondary">{{ anomaly.plan }}</Badge></td>
-                      <td class="p-3 text-sm font-mono">
+                      <td class="p-3 text-sm tabular-nums">
                         <span :class="anomaly.type === 'warning' ? 'text-orange-600 dark:text-orange-400' : 'text-green-600 dark:text-green-400'">
                           {{ anomaly.usage }}
                         </span>
@@ -1028,7 +1028,7 @@ onMounted(async () => {
                   <TrendingUp class="h-5 w-5 text-green-600" />
                   <div>
                     <p class="text-xs text-muted-foreground">MRR at Renewal</p>
-                    <p class="text-lg font-bold font-mono text-green-600 dark:text-green-400">
+                    <p class="text-lg font-bold tabular-nums text-green-600 dark:text-green-400">
                       {{ formatTableCurrency(analysisResult.upcomingRenewals.reduce((sum, r) => sum + r.mrr, 0)) }}
                     </p>
                   </div>
@@ -1066,7 +1066,7 @@ onMounted(async () => {
                     >
                       <td class="p-3 text-sm font-medium">{{ renewal.customerName }}</td>
                       <td class="p-3 text-sm"><Badge variant="secondary">{{ renewal.planName }}</Badge></td>
-                      <td class="p-3 text-sm text-right font-mono">{{ formatTableCurrency(renewal.mrr) }}</td>
+                      <td class="p-3 text-sm text-right tabular-nums">{{ formatTableCurrency(renewal.mrr) }}</td>
                       <td class="p-3 text-sm text-center">{{ renewal.renewalDate }}</td>
                       <td class="p-3 text-sm text-center">
                         <span
@@ -1124,8 +1124,8 @@ onMounted(async () => {
                 >
                   <td class="p-3 text-sm font-medium">{{ customer.customer }}</td>
                   <td class="p-3 text-sm"><Badge variant="secondary">{{ customer.plan }}</Badge></td>
-                  <td class="p-3 text-sm font-mono">{{ customer.mrr }}</td>
-                  <td class="p-3 text-sm font-mono text-destructive">{{ customer.costs }}</td>
+                  <td class="p-3 text-sm tabular-nums">{{ customer.mrr }}</td>
+                  <td class="p-3 text-sm tabular-nums text-destructive">{{ customer.costs }}</td>
                   <td class="p-3 text-sm"><Badge variant="destructive">{{ customer.margin }}</Badge></td>
                   <td class="p-3 text-sm text-muted-foreground">{{ customer.reason }}</td>
                 </tr>
@@ -1237,8 +1237,8 @@ onMounted(async () => {
                           {{ cohort.retentionRate }}%
                         </Badge>
                       </td>
-                      <td class="p-3 text-sm text-right font-mono">{{ cohort.avgMRR }}</td>
-                      <td class="p-3 text-sm text-right font-mono">{{ cohort.totalMRR }}</td>
+                      <td class="p-3 text-sm text-right tabular-nums">{{ cohort.avgMRR }}</td>
+                      <td class="p-3 text-sm text-right tabular-nums">{{ cohort.totalMRR }}</td>
                     </tr>
                   </tbody>
                 </table>

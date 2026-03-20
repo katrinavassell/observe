@@ -141,7 +141,7 @@ watch(dataMode, () => {
                 v-for="badge in summaryBadges"
                 :key="badge.label"
                 :variant="badge.variant"
-                class="font-mono"
+                class="tabular-nums"
               >
                 {{ badge.label }}: {{ badge.value }}
               </Badge>

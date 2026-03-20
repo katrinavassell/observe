@@ -205,8 +205,8 @@ function marginForEvent(cost: number | null, revenue: number | null): number | n
                   </div>
                 </td>
                 <td class="px-4 py-2.5 text-right text-muted-foreground">{{ c.event_count }}</td>
-                <td class="px-4 py-2.5 text-right font-mono text-xs">{{ formatCurrency(c.total_cost) }}</td>
-                <td class="px-4 py-2.5 text-right font-mono text-xs">{{ formatCurrency(c.total_revenue) }}</td>
+                <td class="px-4 py-2.5 text-right tabular-nums text-xs">{{ formatCurrency(c.total_cost) }}</td>
+                <td class="px-4 py-2.5 text-right tabular-nums text-xs">{{ formatCurrency(c.total_revenue) }}</td>
               </tr>
               <tr v-if="feature.by_customer.length === 0">
                 <td colspan="4" class="px-4 py-4 text-center text-muted-foreground">No customer data</td>
@@ -237,8 +237,8 @@ function marginForEvent(cost: number | null, revenue: number | null): number | n
                   <div v-if="m.model_provider" class="text-xs text-muted-foreground mt-0.5">{{ m.model_provider }}</div>
                 </td>
                 <td class="px-4 py-2.5 text-right text-muted-foreground">{{ m.event_count }}</td>
-                <td class="px-4 py-2.5 text-right font-mono text-xs">{{ formatCurrency(m.total_cost) }}</td>
-                <td class="px-4 py-2.5 text-right font-mono text-xs">{{ formatCurrency(m.total_revenue) }}</td>
+                <td class="px-4 py-2.5 text-right tabular-nums text-xs">{{ formatCurrency(m.total_cost) }}</td>
+                <td class="px-4 py-2.5 text-right tabular-nums text-xs">{{ formatCurrency(m.total_revenue) }}</td>
               </tr>
             </tbody>
           </table>
@@ -263,7 +263,7 @@ function marginForEvent(cost: number | null, revenue: number | null): number | n
           <tbody class="divide-y">
             <tr v-for="ev in feature.recent_events" :key="ev.id" class="hover:bg-muted/30">
               <td class="px-4 py-2 text-muted-foreground text-xs whitespace-nowrap">{{ formatDate(ev.timestamp) }}</td>
-              <td class="px-4 py-2 font-mono text-xs">{{ ev.event_name }}</td>
+              <td class="px-4 py-2 text-xs">{{ ev.event_name }}</td>
               <td class="px-4 py-2">
                 <button
                   v-if="ev.customer_id"
@@ -278,8 +278,8 @@ function marginForEvent(cost: number | null, revenue: number | null): number | n
                 <span v-if="ev.model" class="font-mono text-xs bg-muted px-1.5 py-0.5 rounded">{{ ev.model }}</span>
                 <span v-else class="text-muted-foreground text-xs">—</span>
               </td>
-              <td class="px-4 py-2 text-right font-mono text-xs">{{ ev.cost_amount !== null ? `$${ev.cost_amount.toFixed(4)}` : '—' }}</td>
-              <td class="px-4 py-2 text-right font-mono text-xs">{{ ev.revenue_amount !== null ? `$${ev.revenue_amount.toFixed(4)}` : '—' }}</td>
+              <td class="px-4 py-2 text-right tabular-nums text-xs">{{ ev.cost_amount !== null ? `$${ev.cost_amount.toFixed(4)}` : '—' }}</td>
+              <td class="px-4 py-2 text-right tabular-nums text-xs">{{ ev.revenue_amount !== null ? `$${ev.revenue_amount.toFixed(4)}` : '—' }}</td>
               <td class="px-4 py-2 text-right">
                 <MarginBadge :margin="marginForEvent(ev.cost_amount, ev.revenue_amount)" />
               </td>

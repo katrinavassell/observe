@@ -192,20 +192,20 @@ function getGrowthColor(growth: string): string {
               <td class="py-3 px-4">
                 <div class="font-medium">{{ month.month }}</div>
               </td>
-              <td class="py-3 px-4 text-right font-mono text-green-700">
+              <td class="py-3 px-4 text-right tabular-nums text-green-700">
                 +{{ formatCurrency(month.new, false) }}
               </td>
-              <td class="py-3 px-4 text-right font-mono text-green-700">
+              <td class="py-3 px-4 text-right tabular-nums text-green-700">
                 +{{ formatCurrency(month.expansion, false) }}
               </td>
-              <td class="py-3 px-4 text-right font-mono text-red-700">
+              <td class="py-3 px-4 text-right tabular-nums text-red-700">
                 -{{ formatCurrency(month.contraction, false) }}
               </td>
-              <td class="py-3 px-4 text-right font-mono text-red-700">
+              <td class="py-3 px-4 text-right tabular-nums text-red-700">
                 -{{ formatCurrency(month.churn, false) }}
               </td>
               <td
-                class="py-3 px-4 text-right font-mono"
+                class="py-3 px-4 text-right tabular-nums"
                 :class="month.netNew >= 0 ? 'text-green-700' : 'text-red-700'"
               >
                 {{ month.netNew >= 0 ? '+' : '' }}{{ formatCurrency(month.netNew, false) }}

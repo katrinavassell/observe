@@ -186,7 +186,7 @@ function formatDate(dateStr: string | null): string {
                   <Badge :variant="getStatusBadgeVariant(sub.status)" class="text-[10px] uppercase mb-1">
                     {{ sub.status }}
                   </Badge>
-                  <div class="font-mono text-sm">{{ formatCurrency(sub.amount) }}</div>
+                  <div class="tabular-nums text-sm">{{ formatCurrency(sub.amount) }}</div>
                 </div>
               </div>
             </div>
@@ -209,7 +209,7 @@ function formatDate(dateStr: string | null): string {
                 class="flex items-center justify-between"
               >
                 <span class="text-sm capitalize">{{ usage.metric_key.replace(/_/g, ' ') }}</span>
-                <span class="font-mono text-sm">{{ usage.metric_value.toLocaleString() }}</span>
+                <span class="tabular-nums text-sm">{{ usage.metric_value.toLocaleString() }}</span>
               </div>
             </div>
           </CardContent>
@@ -239,7 +239,7 @@ function formatDate(dateStr: string | null): string {
                   </Badge>
                   <span class="text-muted-foreground">{{ formatDate(invoice.date) }}</span>
                 </div>
-                <span class="font-mono">{{ formatCurrency(invoice.amount) }}</span>
+                <span class="tabular-nums">{{ formatCurrency(invoice.amount) }}</span>
               </div>
             </div>
           </CardContent>
@@ -277,7 +277,7 @@ function formatDate(dateStr: string | null): string {
                   </div>
                 </div>
                 <div class="text-right">
-                  <div class="text-sm font-mono">{{ (match.score * 100).toFixed(0) }}%</div>
+                  <div class="text-sm tabular-nums">{{ (match.score * 100).toFixed(0) }}%</div>
                   <div class="text-xs text-muted-foreground capitalize">{{ match.confidence }}</div>
                 </div>
               </div>
