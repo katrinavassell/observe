@@ -1,6 +1,6 @@
 import type { Simulation, PricingOpportunity } from '@/types/simulation'
 
-const API_BASE = '/api'
+const API_BASE = import.meta.env.PROD ? '' : '/api'
 
 async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const response = await fetch(`${API_BASE}${endpoint}`, {
@@ -608,4 +608,28 @@ export async function recordReferral(code: string): Promise<{ success: boolean; 
 
 export async function getReferralStats(): Promise<ReferralStats> {
   return request('/referral/stats')
+}
+
+export interface AiInsight {
+  id: string
+  type: string
+  severity: string
+  title: string
+  description: string
+  feature_key: string | null
+  customer_id: string | null
+  metric_value: number | null
+  created_at: string
+}
+
+export async function listInsights(): Promise<AiInsight[]> {
+  return request('/insights')
+}
+
+export async function generateInsights(): Promise<{ insights: AiInsight[]; source: string }> {
+  return request('/insights/generate', { method: 'POST' })
+}
+
+export async function clearInsights(): Promise<{ success: boolean }> {
+  return request('/insights', { method: 'DELETE' })
 }

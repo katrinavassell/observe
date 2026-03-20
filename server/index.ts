@@ -3,10 +3,17 @@ import session from 'express-session'
 import pgSession from 'connect-pg-simple'
 import { Pool } from 'pg'
 import crypto from 'crypto'
+import path from 'path'
+import { fileURLToPath } from 'url'
+import fs from 'fs'
 import { getUncachableStripeClient } from './stripe-client'
 
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
+
 const app = express()
-const PORT = 3001
+const isProduction = process.env.NODE_ENV === 'production'
+const PORT = Number(process.env.PORT) || (isProduction ? 5000 : 3001)
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -1074,8 +1081,9 @@ async function startServer() {
     `)
     console.log('Referral tables ready')
 
-    app.listen(PORT, '127.0.0.1', () => {
-      console.log(`Backend server running on http://127.0.0.1:${PORT}`)
+    const host = isProduction ? '0.0.0.0' : '127.0.0.1'
+    app.listen(PORT, host, () => {
+      console.log(`Backend server running on http://${host}:${PORT}`)
     })
   } catch (error) {
     console.error('Failed to connect to database:', error)
@@ -2072,5 +2080,13 @@ app.get('/referral/stats', ensureVisitor, async (req: AuthRequest, res: Response
     res.status(500).json({ error: 'Failed to get referral stats' })
   }
 })
+
+const distPath = path.resolve(__dirname, '..', 'dist')
+if (isProduction && fs.existsSync(distPath)) {
+  app.use(express.static(distPath))
+  app.get('/{*splat}', (_req: Request, res: Response) => {
+    res.sendFile(path.join(distPath, 'index.html'))
+  })
+}
 
 startServer()
