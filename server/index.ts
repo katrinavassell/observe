@@ -79,7 +79,7 @@ async function ensureVisitor(req: AuthRequest, res: Response, next: NextFunction
        JOIN organizations o ON vm.org_id = o.id
        LEFT JOIN organization_members om ON om.org_id = vm.org_id AND om.visitor_id = $1 AND om.status = 'active'
        WHERE vm.visitor_id = $1`,
-      [req.effectiveUserId!]
+      [req.visitorId]
     )
     if (orgMapping.rows.length > 0) {
       req.effectiveUserId = orgMapping.rows[0].owner_visitor_id
@@ -1080,6 +1080,169 @@ async function startServer() {
       )
     `)
     console.log('Referral tables ready')
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS plans (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id TEXT NOT NULL,
+        plan_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        price_amount DECIMAL(10,2) NOT NULL DEFAULT 0,
+        interval_months INTEGER NOT NULL DEFAULT 1,
+        billing_model TEXT NOT NULL DEFAULT 'recurring',
+        api_calls_limit INTEGER,
+        tokens_limit INTEGER,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE(user_id, plan_id)
+      )
+    `)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS customers (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id TEXT NOT NULL,
+        customer_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        email TEXT,
+        segment TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE(user_id, customer_id)
+      )
+    `)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS subscriptions (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id TEXT NOT NULL,
+        subscription_id TEXT NOT NULL,
+        customer_id TEXT NOT NULL,
+        plan_id TEXT NOT NULL,
+        is_active BOOLEAN NOT NULL DEFAULT true,
+        current_period_start TIMESTAMPTZ,
+        current_period_end TIMESTAMPTZ,
+        cancelled_at TIMESTAMPTZ,
+        previous_mrr DECIMAL(10,2),
+        mrr_override DECIMAL(10,2),
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE(user_id, subscription_id)
+      )
+    `)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS usage_records (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id TEXT NOT NULL,
+        customer_id TEXT NOT NULL,
+        metric_key TEXT NOT NULL,
+        metric_value DECIMAL(12,2) NOT NULL,
+        metric_limit DECIMAL(12,2),
+        period_start TIMESTAMPTZ NOT NULL,
+        period_end TIMESTAMPTZ NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS cost_records (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id TEXT NOT NULL,
+        customer_id TEXT,
+        cost_type TEXT NOT NULL,
+        amount DECIMAL(10,2) NOT NULL,
+        period_start TIMESTAMPTZ NOT NULL,
+        period_end TIMESTAMPTZ NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS user_data_status (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id TEXT NOT NULL UNIQUE,
+        data_mode TEXT NOT NULL DEFAULT 'none',
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS observe_events (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id TEXT NOT NULL,
+        customer_id TEXT NOT NULL DEFAULT 'unknown',
+        feature_key TEXT NOT NULL DEFAULT 'unknown',
+        event_name TEXT NOT NULL DEFAULT 'usage',
+        timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        cost_amount NUMERIC(12, 4) NOT NULL DEFAULT 0,
+        cost_unit TEXT DEFAULT 'usd',
+        revenue_amount NUMERIC(12, 4) NOT NULL DEFAULT 0,
+        usage_units NUMERIC(12, 4) NOT NULL DEFAULT 0,
+        model TEXT,
+        model_provider TEXT,
+        source TEXT NOT NULL DEFAULT 'csv',
+        granularity TEXT NOT NULL DEFAULT 'monthly_aggregate',
+        properties JSONB DEFAULT '{}',
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS organizations (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        name TEXT NOT NULL DEFAULT 'My Team',
+        owner_visitor_id TEXT NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS organization_members (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        org_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        visitor_id TEXT,
+        invited_email TEXT,
+        invite_token TEXT UNIQUE,
+        role TEXT NOT NULL DEFAULT 'viewer' CHECK (role IN ('admin', 'viewer')),
+        status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'active')),
+        joined_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS visitor_org_map (
+        visitor_id TEXT PRIMARY KEY,
+        org_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS ai_insights (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id TEXT NOT NULL,
+        insight_type TEXT NOT NULL,
+        title TEXT NOT NULL,
+        description TEXT NOT NULL,
+        severity TEXT DEFAULT 'info',
+        feature_key TEXT,
+        customer_id TEXT,
+        metadata JSONB DEFAULT '{}',
+        tokens_used INTEGER,
+        cost_usd NUMERIC(10, 6),
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `)
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_plans_user_id ON plans(user_id)`)
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_customers_user_id ON customers(user_id)`)
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_subscriptions_user_id ON subscriptions(user_id)`)
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_subscriptions_customer_id ON subscriptions(user_id, customer_id)`)
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_usage_records_user_id ON usage_records(user_id)`)
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_usage_records_customer_id ON usage_records(user_id, customer_id)`)
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_usage_records_period ON usage_records(user_id, period_start, period_end)`)
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_cost_records_user_id ON cost_records(user_id)`)
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_cost_records_period ON cost_records(user_id, period_start, period_end)`)
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_observe_events_user_ts ON observe_events(user_id, timestamp DESC)`)
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_observe_events_user_feature ON observe_events(user_id, feature_key)`)
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_observe_events_user_customer ON observe_events(user_id, customer_id)`)
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_observe_events_user_model ON observe_events(user_id, model) WHERE model IS NOT NULL`)
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_observe_events_user_source ON observe_events(user_id, source)`)
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_insights_user ON ai_insights(user_id, created_at DESC)`)
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_org_members_lookup ON organization_members(org_id, visitor_id, status)`)
+    console.log('All application tables ready')
 
     const host = isProduction ? '0.0.0.0' : '127.0.0.1'
     app.listen(PORT, host, () => {
