@@ -2999,10 +2999,29 @@ app.post('/tanso/subscribe', ensureVisitor, async (req: AuthRequest, res: Respon
       const targetPrice = targetPlan?.plan?.priceAmount ?? targetPlan?.priceAmount ?? 0
 
       if (targetPrice > currentPrice) {
-        // UPGRADE — immediate, skip invoice payment (reference: Checkout.tsx line 112-115)
+        // UPGRADE — apply plan change, then handle payment if needed
         await tansoChangeSubscriptionPlan(activeSub.id, planId, 'UPGRADE')
         const updated = await tansoGetCustomer(visitorId)
         const newSub = updated?.subscriptions?.find((s: any) => s.isActive)
+
+        // If upgrading from free to paid, need Stripe checkout for the price difference
+        if (currentPrice === 0 && targetPrice > 0) {
+          try {
+            const invoices = await tansoListCustomerInvoices(visitorId)
+            const items = Array.isArray(invoices) ? invoices : invoices?.items ?? []
+            const unpaid = items.find((inv: any) => inv.status !== 'PAID' && inv.amount > 0)
+            if (unpaid?.id) {
+              const checkout = await tansoCreateCheckoutSession(unpaid.id)
+              if (checkout?.url) {
+                return res.json({ success: true, subscription: newSub, checkoutUrl: checkout.url, changeType: 'upgrade' })
+              }
+            }
+          } catch (checkoutErr) {
+            console.error('Upgrade checkout error:', checkoutErr)
+            return res.status(500).json({ error: 'Plan upgraded but payment setup failed. Please check your billing.' })
+          }
+        }
+
         return res.json({ success: true, subscription: newSub, changeType: 'upgrade' })
       } else {
         // DOWNGRADE — scheduled for end of billing period (reference: Pricing.tsx line 205-236)
@@ -3022,19 +3041,20 @@ app.post('/tanso/subscribe', ensureVisitor, async (req: AuthRequest, res: Respon
       return res.json({ success: true, subscription })
     }
 
-    // Paid plan — try Stripe checkout, fall back to mark-paid
+    // Paid plan — must go through Stripe checkout
     if (invoice.amount > 0) {
       try {
         const checkout = await tansoCreateCheckoutSession(invoice.id)
         if (checkout?.url) {
           return res.json({ success: true, subscription, checkoutUrl: checkout.url })
         }
+        // No URL returned — Stripe may not be configured on Tanso side
+        console.error('Stripe checkout returned no URL — is Stripe connected in Tanso?')
+        return res.status(500).json({ error: 'Payment setup failed. Please ensure Stripe is connected.' })
       } catch (checkoutErr) {
         console.error('Stripe checkout session error:', checkoutErr)
+        return res.status(500).json({ error: 'Payment setup failed. Please try again.' })
       }
-      // Stripe not configured — demo mode: mark invoice as paid
-      try { await tansoMarkInvoicePaid(invoice.id) } catch (_) { /* best effort */ }
-      return res.json({ success: true, subscription })
     }
 
     // Free plan ($0 invoice) — mark as paid to activate
