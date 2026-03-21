@@ -2679,19 +2679,8 @@ async function autoSubscribeToFreePlan(customerReferenceId: string): Promise<voi
 
     const result = await tansoCreateSubscription(customerReferenceId, freePlanId)
     // Mark the $0 invoice as paid to activate the subscription
-    const invoiceId = result?.invoice?.id
-    if (invoiceId) {
-      await tansoMarkInvoicePaid(invoiceId)
-    } else {
-      // Invoice not in create response — fetch the latest unpaid one
-      try {
-        const invoices = await tansoListCustomerInvoices(customerReferenceId)
-        const items = Array.isArray(invoices) ? invoices : invoices?.items ?? []
-        const unpaid = items.find((inv: any) => inv.status !== 'PAID')
-        if (unpaid?.id) await tansoMarkInvoicePaid(unpaid.id)
-      } catch (invErr) {
-        console.error('Failed to fetch/mark invoice for free plan:', invErr instanceof Error ? invErr.message : invErr)
-      }
+    if (result?.invoice?.id) {
+      await tansoMarkInvoicePaid(result.invoice.id)
     }
     console.log('Auto-subscribed', customerReferenceId, 'to free plan')
   } catch (err) {
@@ -3027,24 +3016,13 @@ app.post('/tanso/subscribe', ensureVisitor, async (req: AuthRequest, res: Respon
     // ── NEW SUBSCRIPTION ──
     const result = await tansoCreateSubscription(visitorId, planId)
     const subscription = result?.subscription ?? result
-
-    // Find unpaid invoice (reference: Checkout.tsx lines 147-167)
-    let invoice: any = null
-    try {
-      const invoices = await tansoListCustomerInvoices(visitorId)
-      const items = Array.isArray(invoices) ? invoices : invoices?.items ?? []
-      invoice = items
-        .filter((inv: any) => inv.status !== 'PAID')
-        .sort((a: any, b: any) => new Date(b.dueDate || b.createdAt || 0).getTime() - new Date(a.dueDate || a.createdAt || 0).getTime())[0]
-    } catch (invErr) {
-      console.error('Failed to fetch invoices:', invErr)
-    }
+    const invoice = result?.invoice
 
     if (!invoice?.id) {
       return res.json({ success: true, subscription })
     }
 
-    // Paid plan — try Stripe checkout, fall back to mark-paid (reference: Checkout.tsx lines 173-206)
+    // Paid plan — try Stripe checkout, fall back to mark-paid
     if (invoice.amount > 0) {
       try {
         const checkout = await tansoCreateCheckoutSession(invoice.id)
