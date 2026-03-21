@@ -20,6 +20,7 @@ import {
   tansoCancelScheduledCancellation,
   tansoCancelScheduledPlanChanges,
   tansoListCustomerInvoices,
+  tansoMarkInvoicePaid,
   tansoCreateCheckoutSession,
   isTansoConfigured,
 } from './tanso-client.js'
@@ -2674,7 +2675,22 @@ async function autoSubscribeToFreePlan(customerReferenceId: string): Promise<voi
       return
     }
 
-    await tansoCreateSubscription(customerReferenceId, freePlanId)
+    const result = await tansoCreateSubscription(customerReferenceId, freePlanId)
+    // Mark the $0 invoice as paid to activate the subscription
+    const invoiceId = result?.invoice?.id
+    if (invoiceId) {
+      await tansoMarkInvoicePaid(invoiceId)
+    } else {
+      // Invoice not in create response — fetch the latest unpaid one
+      try {
+        const invoices = await tansoListCustomerInvoices(customerReferenceId)
+        const items = Array.isArray(invoices) ? invoices : invoices?.items ?? []
+        const unpaid = items.find((inv: any) => inv.status !== 'PAID')
+        if (unpaid?.id) await tansoMarkInvoicePaid(unpaid.id)
+      } catch (invErr) {
+        console.error('Failed to fetch/mark invoice for free plan:', invErr instanceof Error ? invErr.message : invErr)
+      }
+    }
     console.log('Auto-subscribed', customerReferenceId, 'to free plan')
   } catch (err) {
     console.error('Auto-subscribe to free plan failed:', err instanceof Error ? err.message : err)
@@ -2935,8 +2951,19 @@ app.post('/tanso/subscribe', ensureVisitor, async (req: AuthRequest, res: Respon
         return res.json({ success: true, subscription, checkoutUrl: checkout.url })
       } catch (checkoutErr) {
         console.error('Stripe checkout session error:', checkoutErr)
+        // Stripe not configured — mark invoice as paid directly (demo mode)
+        try {
+          await tansoMarkInvoicePaid(invoice.id)
+        } catch (_) { /* best effort */ }
         return res.status(500).json({ error: 'Subscription created but payment setup failed. Please try again.' })
       }
+    }
+
+    // Free plan or no invoice — mark as paid to activate subscription
+    if (invoice?.id) {
+      try {
+        await tansoMarkInvoicePaid(invoice.id)
+      } catch (_) { /* best effort */ }
     }
 
     res.json({ success: true, subscription })

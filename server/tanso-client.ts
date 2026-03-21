@@ -142,6 +142,10 @@ export async function tansoListCustomerInvoices(customerReferenceId: string) {
   return apiGet(`/api/v1/client/billing/invoices/${encodeURIComponent(customerReferenceId)}`)
 }
 
+export async function tansoMarkInvoicePaid(invoiceId: string) {
+  return apiPost(`/api/v1/client/billing/invoices/${encodeURIComponent(invoiceId)}/mark-paid`)
+}
+
 export async function tansoCreateCheckoutSession(invoiceId: string): Promise<{ url: string }> {
   return apiPost(`/api/v1/client/billing/invoices/${encodeURIComponent(invoiceId)}/stripe/checkout`)
 }
