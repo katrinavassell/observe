@@ -1,11 +1,9 @@
+import 'dotenv/config'
 import express, { Request, Response, NextFunction } from 'express'
 import session from 'express-session'
 import pgSession from 'connect-pg-simple'
 import { Pool } from 'pg'
 import crypto from 'crypto'
-import path from 'path'
-import { fileURLToPath } from 'url'
-import fs from 'fs'
 import bcrypt from 'bcryptjs'
 import { getUncachableStripeClient } from './stripe-client'
 import {
@@ -20,11 +18,7 @@ import {
   isTansoConfigured,
 } from './tanso-client'
 
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = path.dirname(__filename)
-
 const app = express()
-const PORT = Number(process.env.PORT) || 5000
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -36,23 +30,6 @@ const pool = new Pool({
 const PgStore = pgSession(session)
 
 app.use(express.json({ limit: '2mb' }))
-
-// CORS for Vercel frontend
-const allowedOrigins = process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',') : []
-app.use((req: Request, res: Response, next: NextFunction) => {
-  const origin = req.headers.origin
-  if (origin && allowedOrigins.includes(origin)) {
-    res.setHeader('Access-Control-Allow-Origin', origin)
-    res.setHeader('Access-Control-Allow-Credentials', 'true')
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-  }
-  if (req.method === 'OPTIONS') {
-    res.sendStatus(204)
-    return
-  }
-  next()
-})
 
 if (!process.env.SESSION_SECRET) {
   throw new Error('SESSION_SECRET environment variable is required')
@@ -70,9 +47,9 @@ app.use(session({
   resave: false,
   saveUninitialized: false,
   cookie: {
-    secure: process.env.NODE_ENV === 'production' || !!process.env.REPL_ID,
+    secure: process.env.NODE_ENV === 'production',
     httpOnly: true,
-    sameSite: process.env.CORS_ORIGIN ? 'none' as const : 'lax' as const,
+    sameSite: 'lax',
     maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days for anonymous users
   },
 }))
@@ -946,7 +923,9 @@ app.get('/metrics/summary', ensureVisitor, async (req: AuthRequest, res: Respons
   }
 })
 
-async function startServer() {
+let dbInitialized = false
+async function ensureDbInitialized() {
+  if (dbInitialized) return
   try {
     await pool.query('SELECT 1')
     console.log('Database connection verified')
@@ -991,14 +970,22 @@ async function startServer() {
       ON simulations (user_id, created_at DESC)
     `)
 
-    app.listen(PORT, '0.0.0.0', () => {
-      console.log(`Backend server running on http://0.0.0.0:${PORT}`)
-    })
+    dbInitialized = true
   } catch (error) {
     console.error('Failed to connect to database:', error)
-    process.exit(1)
+    throw error
   }
 }
+
+// Middleware to ensure DB is initialized on every request (for serverless)
+app.use(async (_req: Request, _res: Response, next: NextFunction) => {
+  try {
+    await ensureDbInitialized()
+    next()
+  } catch (error) {
+    next(error)
+  }
+})
 
 // =============================================================================
 // STRIPE NATIVE INTEGRATION
@@ -2512,12 +2499,18 @@ app.get('/tanso/check/:featureKey', ensureVisitor, async (req: AuthRequest, res:
   }
 })
 
-const distPath = path.resolve(__dirname, '..', 'dist')
-if (fs.existsSync(distPath)) {
-  app.use(express.static(distPath))
-  app.get('/{*splat}', (_req: Request, res: Response) => {
-    res.sendFile(path.join(distPath, 'index.html'))
+// Local dev: start server directly
+if (!process.env.VERCEL) {
+  const PORT = Number(process.env.PORT) || 5000
+  ensureDbInitialized().then(() => {
+    app.listen(PORT, '0.0.0.0', () => {
+      console.log(`Backend server running on http://0.0.0.0:${PORT}`)
+    })
+  }).catch((error) => {
+    console.error('Failed to start server:', error)
+    process.exit(1)
   })
 }
 
-startServer()
+// Vercel serverless export
+export default app

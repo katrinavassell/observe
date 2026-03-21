@@ -13,7 +13,6 @@
     "lint:fix": "eslint src/ --fix"
   },
   "dependencies": {
-    "@replit/connectors-sdk": "^0.3.0",
     "@supabase/supabase-js": "^2.89.0",
     "@tanstack/vue-query": "^5.92.3",
     "@types/bcryptjs": "^2.4.6",
@@ -27,6 +26,7 @@
     "clsx": "^2.1.1",
     "concurrently": "^9.2.1",
     "connect-pg-simple": "^10.0.0",
+    "dotenv": "^17.3.1",
     "express": "^5.2.1",
     "express-session": "^1.18.2",
     "lucide-vue-next": "^0.562.0",

@@ -16,8 +16,8 @@
 
 import { supabase } from '@/lib/supabase'
 
-/** Base URL for all API requests (proxied to backend in dev, full URL in prod) */
-const API_BASE = import.meta.env.VITE_API_URL || '/api'
+/** Base URL for all API requests (proxied to backend in dev, serverless in prod) */
+const API_BASE = '/api'
 
 /**
  * Get the current Supabase session token for authenticated API calls.
