@@ -630,14 +630,11 @@ export interface StripeStatus {
  * Uses Supabase Edge Function directly.
  */
 export async function getStripeStatus(): Promise<StripeStatus> {
-  const { data, error } = await supabase.functions.invoke('stripe-status')
-
-  if (error) {
-    // Return not connected on error
+  try {
+    return await request('/stripe/status')
+  } catch {
     return { connected: false, account_id: null, account_name: null }
   }
-
-  return data as StripeStatus
 }
 
 /**
@@ -646,15 +643,10 @@ export async function getStripeStatus(): Promise<StripeStatus> {
  * @param clearData - If true, also clears all synced revenue/usage data
  */
 export async function disconnectStripe(clearData = false): Promise<{ success: boolean; message: string }> {
-  const { data, error } = await supabase.functions.invoke('stripe-disconnect', {
-    body: { clear_data: clearData },
+  return request('/stripe/disconnect', {
+    method: 'POST',
+    body: JSON.stringify({ clear_data: clearData }),
   })
-
-  if (error) {
-    throw new Error(error.message || 'Failed to disconnect Stripe')
-  }
-
-  return data as { success: boolean; message: string }
 }
 
 export interface SyncResult {
@@ -1068,15 +1060,10 @@ export interface AnthropicConnectResult {
  * @returns Connection result with cost sync info
  */
 export async function connectAnthropic(apiKey: string): Promise<AnthropicConnectResult> {
-  const { data, error } = await supabase.functions.invoke('anthropic-connect', {
-    body: { api_key: apiKey },
+  return request('/integrations/anthropic/connect', {
+    method: 'POST',
+    body: JSON.stringify({ api_key: apiKey }),
   })
-
-  if (error) {
-    throw new Error(error.message || 'Failed to connect Anthropic')
-  }
-
-  return data as AnthropicConnectResult
 }
 
 export interface OpenAIConnectResult {
@@ -1095,15 +1082,10 @@ export interface OpenAIConnectResult {
  * @returns Connection result with cost sync info
  */
 export async function connectOpenAI(apiKey: string): Promise<OpenAIConnectResult> {
-  const { data, error } = await supabase.functions.invoke('openai-connect', {
-    body: { api_key: apiKey },
+  return request('/integrations/openai/connect', {
+    method: 'POST',
+    body: JSON.stringify({ api_key: apiKey }),
   })
-
-  if (error) {
-    throw new Error(error.message || 'Failed to connect OpenAI')
-  }
-
-  return data as OpenAIConnectResult
 }
 
 export interface OpenAIStatus {
@@ -1119,13 +1101,11 @@ export interface OpenAIStatus {
  * Uses Supabase Edge Function directly.
  */
 export async function getOpenAIStatus(): Promise<OpenAIStatus> {
-  const { data, error } = await supabase.functions.invoke('openai-status')
-
-  if (error) {
+  try {
+    return await request('/integrations/openai/status')
+  } catch {
     return { connected: false, has_usage_access: false }
   }
-
-  return data as OpenAIStatus
 }
 
 export interface AnthropicStatus {
@@ -1141,11 +1121,9 @@ export interface AnthropicStatus {
  * Uses Supabase Edge Function directly.
  */
 export async function getAnthropicStatus(): Promise<AnthropicStatus> {
-  const { data, error } = await supabase.functions.invoke('anthropic-status')
-
-  if (error) {
+  try {
+    return await request('/integrations/anthropic/status')
+  } catch {
     return { connected: false, has_usage_access: false }
   }
-
-  return data as AnthropicStatus
 }

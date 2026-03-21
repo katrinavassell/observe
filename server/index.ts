@@ -1119,6 +1119,20 @@ async function ensureDbInitialized() {
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_insights_user ON ai_insights(user_id, created_at DESC)`)
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_simulations_user_created ON simulations(user_id, created_at DESC)`)
 
+    // Integrations table for API key connections (OpenAI, Anthropic, etc.)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS integrations (
+        id SERIAL PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        provider TEXT NOT NULL,
+        api_key_prefix TEXT NOT NULL,
+        has_usage_access BOOLEAN DEFAULT false,
+        connected_at TIMESTAMPTZ DEFAULT NOW(),
+        last_synced_at TIMESTAMPTZ,
+        UNIQUE(user_id, provider)
+      )
+    `)
+
     dbInitialized = true
   } catch (error) {
     console.error('Failed to connect to database:', error)
@@ -2636,6 +2650,167 @@ app.get('/tanso/check/:featureKey', ensureVisitor, async (req: AuthRequest, res:
   } catch (err) {
     console.error('Tanso check error:', err)
     res.json({ allowed: true })
+  }
+})
+
+// =============================================================================
+// OPENAI & ANTHROPIC INTEGRATION ROUTES
+// =============================================================================
+
+// POST /integrations/openai/connect - Validate OpenAI API key and store connection
+app.post('/integrations/openai/connect', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  try {
+    const visitorId = req.visitorId!
+    const { api_key } = req.body
+
+    if (!api_key || typeof api_key !== 'string') {
+      return res.status(400).json({ error: 'api_key is required' })
+    }
+
+    // Validate key by calling OpenAI models endpoint
+    const validationResponse = await fetch('https://api.openai.com/v1/models', {
+      headers: { 'Authorization': `Bearer ${api_key}` },
+    })
+
+    if (!validationResponse.ok) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid OpenAI API key. Please check your key and try again.',
+      })
+    }
+
+    // Store the connection
+    const keyPrefix = api_key.substring(0, 8) + '...'
+    await pool.query(
+      `INSERT INTO integrations (user_id, provider, api_key_prefix, has_usage_access, connected_at)
+       VALUES ($1, 'openai', $2, false, NOW())
+       ON CONFLICT (user_id, provider)
+       DO UPDATE SET api_key_prefix = $2, connected_at = NOW()`,
+      [visitorId, keyPrefix]
+    )
+
+    res.json({
+      success: true,
+      message: 'OpenAI connected successfully',
+      has_usage_access: false,
+      cost_synced: 0,
+      months_synced: 0,
+    })
+  } catch (err) {
+    console.error('OpenAI connect error:', err)
+    res.status(500).json({ error: 'Failed to connect OpenAI' })
+  }
+})
+
+// GET /integrations/openai/status - Check OpenAI connection status
+app.get('/integrations/openai/status', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  try {
+    const visitorId = req.visitorId!
+    const result = await pool.query(
+      `SELECT api_key_prefix, has_usage_access, connected_at, last_synced_at
+       FROM integrations WHERE user_id = $1 AND provider = 'openai'`,
+      [visitorId]
+    )
+
+    if (result.rows.length === 0) {
+      return res.json({ connected: false, has_usage_access: false })
+    }
+
+    const row = result.rows[0]
+    res.json({
+      connected: true,
+      has_usage_access: row.has_usage_access,
+      api_key_prefix: row.api_key_prefix,
+      connected_at: row.connected_at,
+      last_synced_at: row.last_synced_at,
+    })
+  } catch (err) {
+    console.error('OpenAI status error:', err)
+    res.status(500).json({ error: 'Failed to check OpenAI status' })
+  }
+})
+
+// POST /integrations/anthropic/connect - Validate Anthropic API key and store connection
+app.post('/integrations/anthropic/connect', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  try {
+    const visitorId = req.visitorId!
+    const { api_key } = req.body
+
+    if (!api_key || typeof api_key !== 'string') {
+      return res.status(400).json({ error: 'api_key is required' })
+    }
+
+    // Validate key by calling Anthropic messages endpoint with minimal body
+    const validationResponse = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key': api_key,
+        'anthropic-version': '2023-06-01',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'claude-3-haiku-20240307',
+        max_tokens: 1,
+        messages: [{ role: 'user', content: 'hi' }],
+      }),
+    })
+
+    // A valid key will return 200 or a non-401 status
+    if (validationResponse.status === 401 || validationResponse.status === 403) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid Anthropic API key. Please check your key and try again.',
+      })
+    }
+
+    // Store the connection
+    const keyPrefix = api_key.substring(0, 10) + '...'
+    await pool.query(
+      `INSERT INTO integrations (user_id, provider, api_key_prefix, has_usage_access, connected_at)
+       VALUES ($1, 'anthropic', $2, false, NOW())
+       ON CONFLICT (user_id, provider)
+       DO UPDATE SET api_key_prefix = $2, connected_at = NOW()`,
+      [visitorId, keyPrefix]
+    )
+
+    res.json({
+      success: true,
+      message: 'Anthropic connected successfully',
+      has_usage_access: false,
+      cost_synced: 0,
+      months_synced: 0,
+    })
+  } catch (err) {
+    console.error('Anthropic connect error:', err)
+    res.status(500).json({ error: 'Failed to connect Anthropic' })
+  }
+})
+
+// GET /integrations/anthropic/status - Check Anthropic connection status
+app.get('/integrations/anthropic/status', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  try {
+    const visitorId = req.visitorId!
+    const result = await pool.query(
+      `SELECT api_key_prefix, has_usage_access, connected_at, last_synced_at
+       FROM integrations WHERE user_id = $1 AND provider = 'anthropic'`,
+      [visitorId]
+    )
+
+    if (result.rows.length === 0) {
+      return res.json({ connected: false, has_usage_access: false })
+    }
+
+    const row = result.rows[0]
+    res.json({
+      connected: true,
+      has_usage_access: row.has_usage_access,
+      api_key_prefix: row.api_key_prefix,
+      connected_at: row.connected_at,
+      last_synced_at: row.last_synced_at,
+    })
+  } catch (err) {
+    console.error('Anthropic status error:', err)
+    res.status(500).json({ error: 'Failed to check Anthropic status' })
   }
 })
 
