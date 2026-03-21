@@ -120,6 +120,35 @@ export async function tansoChangeSubscriptionPlan(subscriptionId: string, change
   })
 }
 
+// Combined entitlement check + usage tracking (single call)
+export async function tansoCheckEntitlementAndTrack(params: {
+  customerReferenceId: string
+  featureKey: string
+  track?: { eventName?: string; usageUnits?: number; costAmount?: number }
+  context?: { idempotencyKey?: string; flowId?: string }
+}) {
+  return apiPost('/api/v1/client/entitlements', params)
+}
+
+// Batch entitlement check
+export async function tansoCheckMultipleEntitlements(
+  customerReferenceId: string,
+  featureKeys: string[]
+): Promise<Record<string, boolean>> {
+  const results: Record<string, boolean> = {}
+  await Promise.all(
+    featureKeys.map(async (key) => {
+      try {
+        const result = await tansoCheckEntitlement(customerReferenceId, key)
+        results[key] = result?.allowed !== false
+      } catch (_) {
+        results[key] = true // fail open
+      }
+    })
+  )
+  return results
+}
+
 // =============================================================================
 // Events
 // =============================================================================

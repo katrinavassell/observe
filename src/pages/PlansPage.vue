@@ -111,25 +111,30 @@ function getUsagePercent(e: any) {
 async function handleSubscribe(planId: string) {
   isPending.value = true
   try {
-    const targetPlan = plans.value.find((p: any) => p.id === planId)
-    const targetPrice = targetPlan?.priceAmount ?? 0
-    const isDowngrade = currentSub.value?.isActive && targetPrice < currentPlanPrice.value
-
-    // If downgrading, use the scheduled downgrade flow (end of period)
-    if (isDowngrade && currentSub.value) {
-      await apiPost('/tanso/subscribe', { planId })
-      toast.success('Downgrade scheduled for end of billing period')
-      refresh()
-      return
+    // Clear any pending cancellation or downgrade first (matches reference app Pricing.tsx)
+    if (currentSub.value?.id) {
+      if (hasScheduledCancellation.value) {
+        await apiPost('/tanso/reactivate', { subscriptionId: currentSub.value.id })
+      }
+      if (pendingDowngrade.value) {
+        await apiPost('/tanso/cancel-scheduled-changes', { subscriptionId: currentSub.value.id })
+      }
     }
 
-    // Upgrade or new subscription
     const data = await apiPost('/tanso/subscribe', { planId })
+
     if (data.checkoutUrl) {
       window.location.href = data.checkoutUrl
       return
     }
-    toast.success('Plan updated successfully!')
+
+    if (data.changeType === 'downgrade') {
+      toast.success('Downgrade scheduled for end of billing period')
+    } else if (data.changeType === 'upgrade') {
+      toast.success('Plan upgraded successfully!')
+    } else {
+      toast.success('Plan updated successfully!')
+    }
     refresh()
   } catch (error: unknown) {
     toast.error(error instanceof Error ? error.message : 'Failed to change plan')

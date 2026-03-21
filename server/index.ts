@@ -2775,6 +2775,19 @@ async function checkTansoFeatureAccess(visitorId: string, featureKey: string, em
     }
   } catch (err) {
     console.error('Tanso entitlement check error:', err)
+    // Fallback: check if feature exists in customer's plan (matches SaaSSubscriptionSite pattern)
+    try {
+      const customer = await tansoGetCustomer(visitorId)
+      const activeSub = customer?.subscriptions?.find((s: any) => s.isActive)
+      if (activeSub?.plan?.id) {
+        const plans = await tansoListPlans()
+        const planItems = Array.isArray(plans) ? plans : plans?.items ?? plans?.plans ?? []
+        const plan = planItems.find((p: any) => (p.plan?.id ?? p.id) === activeSub.plan.id)
+        const features = plan?.features || []
+        const hasFeature = features.some((f: any) => f.key === featureKey)
+        return { allowed: hasFeature, reason: hasFeature ? undefined : 'Feature not in plan (fallback)' }
+      }
+    } catch (_) { /* fallback also failed — fail open */ }
     return { allowed: true }
   }
 }
@@ -2826,6 +2839,22 @@ app.get('/tanso/status', ensureVisitor, async (req: AuthRequest, res: Response) 
 
   try {
     customer = await tansoGetCustomer(visitorId)
+    // Normalize scheduledChanges on subscriptions (matches SaaSSubscriptionSite pattern)
+    if (customer?.subscriptions) {
+      for (const sub of customer.subscriptions) {
+        // Tanso may return scheduledChange (singular) or scheduledChanges (array) or metadata.SubscriptionScheduledChanges
+        if (!Array.isArray(sub.scheduledChanges) || sub.scheduledChanges.length === 0) {
+          if (sub.scheduledChange) {
+            sub.scheduledChanges = [{
+              ...sub.scheduledChange,
+              toPlanId: sub.scheduledChange.toPlanId || sub.scheduledChange.toPlan?.id,
+            }]
+          } else if (sub.metadata?.SubscriptionScheduledChanges) {
+            sub.scheduledChanges = sub.metadata.SubscriptionScheduledChanges.flat()
+          }
+        }
+      }
+    }
   } catch (err) {
     console.error('Tanso status: customer fetch failed:', err instanceof Error ? err.message : err)
   }
@@ -2890,6 +2919,7 @@ app.get('/tanso/subscription', ensureVisitor, async (req: AuthRequest, res: Resp
   }
 })
 
+// Subscribe / upgrade / downgrade — matches SaaSSubscriptionSite Checkout.tsx pattern
 app.post('/tanso/subscribe', ensureVisitor, async (req: AuthRequest, res: Response) => {
   try {
     if (!isTansoConfigured()) return res.status(503).json({ error: 'Billing not configured' })
@@ -2898,41 +2928,47 @@ app.post('/tanso/subscribe', ensureVisitor, async (req: AuthRequest, res: Respon
     if (!planId) return res.status(400).json({ error: 'planId is required' })
     await getOrCreateTansoCustomer(visitorId, req.accountEmail)
 
-    // Check if customer already has an active subscription
+    // Get current subscription state
     let activeSub: any = null
     try {
       const customer = await tansoGetCustomer(visitorId)
       activeSub = customer?.subscriptions?.find((s: any) => s.isActive)
-      if (activeSub) {
-        // If already on the requested plan, no-op
-        if (activeSub.plan?.id === planId) {
-          return res.json({ success: true, subscription: activeSub })
-        }
-      }
-    } catch (_) { /* no existing customer/sub — proceed with creation */ }
+    } catch (_) { /* no existing customer — will create new subscription */ }
 
-    let subscription: any
-    let invoice: any
-    if (activeSub) {
-      // Determine upgrade vs downgrade by comparing plan prices
-      const currentPrice = activeSub.plan?.priceAmount ?? 0
-      // Fetch target plan price from plan list
-      const plans = await tansoListPlans()
-      const planItems = plans?.items ?? plans
-      const targetPlan = (Array.isArray(planItems) ? planItems : []).find((p: any) => (p.plan?.id ?? p.id) === planId)
-      const targetPrice = targetPlan?.plan?.priceAmount ?? targetPlan?.priceAmount ?? 0
-      const changeType = targetPrice >= currentPrice ? 'UPGRADE' : 'DOWNGRADE'
-
-      await tansoChangeSubscriptionPlan(activeSub.id, planId, changeType)
-      // Fetch updated customer to get new subscription state
-      const updated = await tansoGetCustomer(visitorId)
-      subscription = updated?.subscriptions?.find((s: any) => s.isActive)
-    } else {
-      const result = await tansoCreateSubscription(visitorId, planId)
-      subscription = result?.subscription ?? result
+    // Same plan — no-op
+    if (activeSub?.plan?.id === planId) {
+      return res.json({ success: true, subscription: activeSub })
     }
 
-    // Fetch the most recent unpaid invoice (matches reference app pattern)
+    // ── PLAN CHANGE (upgrade or downgrade) ──
+    if (activeSub) {
+      const currentPrice = activeSub.plan?.priceAmount ?? 0
+      const plans = await tansoListPlans()
+      const planItems = Array.isArray(plans) ? plans : plans?.items ?? plans?.plans ?? []
+      const targetPlan = planItems.find((p: any) => (p.plan?.id ?? p.id) === planId)
+      const targetPrice = targetPlan?.plan?.priceAmount ?? targetPlan?.priceAmount ?? 0
+
+      if (targetPrice > currentPrice) {
+        // UPGRADE — immediate, skip invoice payment (reference: Checkout.tsx line 112-115)
+        await tansoChangeSubscriptionPlan(activeSub.id, planId, 'UPGRADE')
+        const updated = await tansoGetCustomer(visitorId)
+        const newSub = updated?.subscriptions?.find((s: any) => s.isActive)
+        return res.json({ success: true, subscription: newSub, changeType: 'upgrade' })
+      } else {
+        // DOWNGRADE — scheduled for end of billing period (reference: Pricing.tsx line 205-236)
+        await tansoChangeSubscriptionPlan(activeSub.id, planId, 'DOWNGRADE')
+        const updated = await tansoGetCustomer(visitorId)
+        const newSub = updated?.subscriptions?.find((s: any) => s.isActive)
+        return res.json({ success: true, subscription: newSub, changeType: 'downgrade' })
+      }
+    }
+
+    // ── NEW SUBSCRIPTION ──
+    const result = await tansoCreateSubscription(visitorId, planId)
+    const subscription = result?.subscription ?? result
+
+    // Find unpaid invoice (reference: Checkout.tsx lines 147-167)
+    let invoice: any = null
     try {
       const invoices = await tansoListCustomerInvoices(visitorId)
       const items = Array.isArray(invoices) ? invoices : invoices?.items ?? []
@@ -2944,11 +2980,10 @@ app.post('/tanso/subscribe', ensureVisitor, async (req: AuthRequest, res: Respon
     }
 
     if (!invoice?.id) {
-      // No unpaid invoice — subscription is already active
       return res.json({ success: true, subscription })
     }
 
-    // For paid plans, create a Stripe Checkout session and redirect
+    // Paid plan — try Stripe checkout, fall back to mark-paid (reference: Checkout.tsx lines 173-206)
     if (invoice.amount > 0) {
       try {
         const checkout = await tansoCreateCheckoutSession(invoice.id)
@@ -2958,18 +2993,13 @@ app.post('/tanso/subscribe', ensureVisitor, async (req: AuthRequest, res: Respon
       } catch (checkoutErr) {
         console.error('Stripe checkout session error:', checkoutErr)
       }
-      // Stripe not configured — fall back to mark-paid (demo mode)
-      try {
-        await tansoMarkInvoicePaid(invoice.id)
-      } catch (_) { /* best effort */ }
+      // Stripe not configured — demo mode: mark invoice as paid
+      try { await tansoMarkInvoicePaid(invoice.id) } catch (_) { /* best effort */ }
       return res.json({ success: true, subscription })
     }
 
-    // Free plan ($0 invoice) — mark as paid to activate subscription
-    try {
-      await tansoMarkInvoicePaid(invoice.id)
-    } catch (_) { /* best effort */ }
-
+    // Free plan ($0 invoice) — mark as paid to activate
+    try { await tansoMarkInvoicePaid(invoice.id) } catch (_) { /* best effort */ }
     res.json({ success: true, subscription })
   } catch (err) {
     console.error('Tanso subscribe error:', err)
