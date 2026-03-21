@@ -1338,7 +1338,7 @@ app.get('/events', ensureVisitor, async (req: AuthRequest, res: Response) => {
     const eventsResult = await pool.query(
       `SELECT oe.*, c.name as customer_name
        FROM observe_events oe
-       LEFT JOIN customers c ON oe.user_id::uuid = c.user_id AND oe.customer_id = c.customer_id
+       LEFT JOIN customers c ON oe.user_id = c.user_id AND oe.customer_id = c.customer_id
        ${where}
        ORDER BY oe.timestamp DESC
        LIMIT $${paramIdx++} OFFSET $${paramIdx}`,
@@ -1403,7 +1403,7 @@ app.get('/events/by-customer', ensureVisitor, async (req: AuthRequest, res: Resp
          COALESCE(SUM(oe.revenue_amount), 0) as total_revenue,
          MAX(oe.timestamp) as last_seen
        FROM observe_events oe
-       LEFT JOIN customers c ON oe.user_id::uuid = c.user_id AND oe.customer_id = c.customer_id
+       LEFT JOIN customers c ON oe.user_id = c.user_id AND oe.customer_id = c.customer_id
        WHERE oe.user_id = $1
        GROUP BY oe.customer_id, c.name ORDER BY total_cost DESC`,
       [req.visitorId]
@@ -1522,7 +1522,7 @@ app.get('/features/:key', ensureVisitor, async (req: AuthRequest, res: Response)
       ),
       pool.query(
         `SELECT oe.*, c.name as customer_name FROM observe_events oe
-         LEFT JOIN customers c ON oe.user_id::uuid = c.user_id AND oe.customer_id = c.customer_id
+         LEFT JOIN customers c ON oe.user_id = c.user_id AND oe.customer_id = c.customer_id
          WHERE oe.user_id = $1 AND oe.feature_key = $2 ORDER BY oe.timestamp DESC LIMIT 50`,
         [req.visitorId, key]
       ),
@@ -1531,7 +1531,7 @@ app.get('/features/:key', ensureVisitor, async (req: AuthRequest, res: Response)
            COUNT(*) as event_count, COALESCE(SUM(oe.cost_amount), 0) as total_cost,
            COALESCE(SUM(oe.revenue_amount), 0) as total_revenue
          FROM observe_events oe
-         LEFT JOIN customers c ON oe.user_id::uuid = c.user_id AND oe.customer_id = c.customer_id
+         LEFT JOIN customers c ON oe.user_id = c.user_id AND oe.customer_id = c.customer_id
          WHERE oe.user_id = $1 AND oe.feature_key = $2
          GROUP BY oe.customer_id, c.name ORDER BY total_cost DESC`,
         [req.visitorId, key]
@@ -1882,7 +1882,7 @@ app.put('/simulations/:id', ensureVisitor, async (req: AuthRequest, res: Respons
            COALESCE(SUM(oe.cost_amount), 0) as total_cost,
            COALESCE(SUM(oe.revenue_amount), 0) as total_revenue
          FROM observe_events oe
-         LEFT JOIN customers c ON oe.user_id::uuid = c.user_id AND oe.customer_id = c.customer_id
+         LEFT JOIN customers c ON oe.user_id = c.user_id AND oe.customer_id = c.customer_id
          WHERE oe.user_id = $1
          GROUP BY oe.customer_id, c.name, c.segment`,
         [req.visitorId]
