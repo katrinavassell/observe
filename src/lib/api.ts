@@ -84,7 +84,8 @@ export interface Customer {
 }
 
 export async function getCustomers(): Promise<Customer[]> {
-  return request('/customers')
+  const res = await request<{ data: Customer[] }>('/customers')
+  return res.data
 }
 
 export interface Subscription {
@@ -588,12 +589,18 @@ export interface ReferralCodeResponse {
   code: string
 }
 
+export interface ReferralPromo {
+  code: string | null
+  used: boolean
+  created_at: string
+}
+
 export interface ReferralStats {
   code: string | null
   total_referrals: number
   converted_referrals: number
   pending_referrals: number
-  credits_earned: number
+  promos: ReferralPromo[]
 }
 
 export async function getReferralCode(): Promise<ReferralCodeResponse> {

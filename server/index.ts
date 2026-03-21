@@ -15,7 +15,6 @@ import {
   tansoListCustomerEntitlements,
   tansoIngestEvent,
   tansoCreateSubscription,
-  tansoCancelSubscription,
   tansoChangeSubscriptionPlan,
   tansoCreateCheckoutSession,
   isTansoConfigured,
@@ -1208,11 +1207,21 @@ async function ensureDbInitialized() {
       CREATE TABLE IF NOT EXISTS referral_credits (
         id SERIAL PRIMARY KEY,
         user_id TEXT NOT NULL,
-        credit_type TEXT NOT NULL DEFAULT 'ai_insight',
+        credit_type TEXT NOT NULL DEFAULT 'promo_month',
         amount INTEGER NOT NULL DEFAULT 1,
         source_referral_id INTEGER REFERENCES referrals(id),
-        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        used_at TIMESTAMPTZ,
+        promo_code TEXT,
+        stripe_promo_id TEXT
       )
+    `)
+
+    // Add new columns if missing (migration for existing tables)
+    await pool.query(`
+      ALTER TABLE referral_credits ADD COLUMN IF NOT EXISTS used_at TIMESTAMPTZ;
+      ALTER TABLE referral_credits ADD COLUMN IF NOT EXISTS promo_code TEXT;
+      ALTER TABLE referral_credits ADD COLUMN IF NOT EXISTS stripe_promo_id TEXT
     `)
 
     dbInitialized = true
@@ -2853,32 +2862,41 @@ app.post('/tanso/subscribe', ensureVisitor, async (req: AuthRequest, res: Respon
       }
     } catch (_) { /* no existing customer/sub — proceed with creation */ }
 
-    let result: any
+    let subscription: any
+    let invoice: any
     if (existingSubId) {
-      // Use plan-change API for upgrades (immediate) and downgrades (end of period)
-      // For simplicity, treat all changes as upgrades (immediate)
-      await tansoChangeSubscriptionPlan(existingSubId, planId, 'UPGRADE')
+      // Determine upgrade vs downgrade by comparing plan prices
+      const customer = await tansoGetCustomer(visitorId)
+      const currentSub = customer?.subscriptions?.find((s: any) => s.isActive)
+      const currentPrice = currentSub?.plan?.priceAmount ?? 0
+      // Fetch target plan price from plan list
+      const plans = await tansoListPlans()
+      const planItems = plans?.items ?? plans
+      const targetPlan = (Array.isArray(planItems) ? planItems : []).find((p: any) => (p.plan?.id ?? p.id) === planId)
+      const targetPrice = targetPlan?.plan?.priceAmount ?? targetPlan?.priceAmount ?? 0
+      const changeType = targetPrice >= currentPrice ? 'UPGRADE' : 'DOWNGRADE'
+
+      await tansoChangeSubscriptionPlan(existingSubId, planId, changeType)
       // Fetch updated customer to get new subscription state
       const updated = await tansoGetCustomer(visitorId)
-      const newSub = updated?.subscriptions?.find((s: any) => s.isActive)
-      result = { subscription: newSub }
+      subscription = updated?.subscriptions?.find((s: any) => s.isActive)
     } else {
-      result = await tansoCreateSubscription(visitorId, planId)
+      const result = await tansoCreateSubscription(visitorId, planId)
+      subscription = result?.subscription ?? result
+      invoice = result?.invoice
     }
 
     // For paid plans, create a Stripe Checkout session
-    const invoiceId = result?.invoice?.id
-    if (invoiceId && result?.invoice?.amount > 0) {
+    if (invoice?.id && invoice?.amount > 0) {
       try {
-        const checkout = await tansoCreateCheckoutSession(invoiceId)
-        return res.json({ success: true, subscription: result, checkoutUrl: checkout.url })
+        const checkout = await tansoCreateCheckoutSession(invoice.id)
+        return res.json({ success: true, subscription, checkoutUrl: checkout.url })
       } catch (checkoutErr) {
         console.error('Stripe checkout session error:', checkoutErr)
-        // Fall through — subscription created but no checkout URL
       }
     }
 
-    res.json({ success: true, subscription: result })
+    res.json({ success: true, subscription })
   } catch (err) {
     console.error('Tanso subscribe error:', err)
     res.status(500).json({ error: 'Failed to create subscription' })
@@ -3265,7 +3283,7 @@ app.post('/integrations/anthropic/disconnect', ensureVisitor, async (req: AuthRe
 // REFERRAL SYSTEM
 // =============================================================================
 
-// Helper: convert a pending referral to 'converted' and grant a credit to the referrer
+// Helper: convert a pending referral to 'converted' and grant a Stripe promo code to the referrer
 async function convertReferralIfPending(visitorId: string): Promise<void> {
   try {
     // Find the pending referral where this user is the referred party
@@ -3278,12 +3296,41 @@ async function convertReferralIfPending(visitorId: string): Promise<void> {
     if (result.rows.length === 0) return
 
     const { id: referralId, referrer_user_id } = result.rows[0]
-    // Grant 1 AI insight credit to the referrer
-    await pool.query(
-      `INSERT INTO referral_credits (user_id, credit_type, amount, source_referral_id)
-       VALUES ($1, 'ai_insight', 1, $2)`,
-      [referrer_user_id, referralId]
-    )
+
+    // Create a Stripe promo code for 1 free month of Pro
+    try {
+      const stripe = await getUncachableStripeClient()
+
+      // Create a one-time 100% off coupon for 1 month
+      const coupon = await stripe.coupons.create({
+        percent_off: 100,
+        duration: 'once',
+        name: `Referral reward — 1 month free Pro`,
+        metadata: { referral_id: String(referralId), referrer_user_id },
+      })
+
+      // Create a unique promo code from this coupon
+      const promoCode = await stripe.promotionCodes.create({
+        promotion: { type: 'coupon', coupon: coupon.id },
+        max_redemptions: 1,
+        metadata: { referral_id: String(referralId), referrer_user_id },
+      })
+
+      // Store the promo code for the referrer
+      await pool.query(
+        `INSERT INTO referral_credits (user_id, credit_type, amount, source_referral_id, promo_code, stripe_promo_id)
+         VALUES ($1, 'promo_month', 1, $2, $3, $4)`,
+        [referrer_user_id, referralId, promoCode.code, promoCode.id]
+      )
+    } catch (stripeErr) {
+      console.error('Failed to create Stripe promo code for referral:', stripeErr)
+      // Fallback: still record the credit without a promo code
+      await pool.query(
+        `INSERT INTO referral_credits (user_id, credit_type, amount, source_referral_id)
+         VALUES ($1, 'promo_month', 1, $2)`,
+        [referrer_user_id, referralId]
+      )
+    }
   } catch (err) {
     // Non-critical — don't fail the data load
     console.error('Referral conversion error:', err)
@@ -3391,10 +3438,10 @@ app.get('/referral/stats', ensureVisitor, async (req: AuthRequest, res: Response
       [visitorId]
     )
 
-    // Count credits earned
-    const creditsResult = await pool.query(
-      `SELECT COALESCE(SUM(amount), 0)::int AS credits_earned
-       FROM referral_credits WHERE user_id = $1`,
+    // Get promo codes earned from referrals
+    const promosResult = await pool.query(
+      `SELECT promo_code, used_at, created_at
+       FROM referral_credits WHERE user_id = $1 ORDER BY created_at DESC`,
       [visitorId]
     )
 
@@ -3404,7 +3451,11 @@ app.get('/referral/stats', ensureVisitor, async (req: AuthRequest, res: Response
       total_referrals: stats.total_referrals,
       converted_referrals: stats.converted_referrals,
       pending_referrals: stats.pending_referrals,
-      credits_earned: creditsResult.rows[0].credits_earned,
+      promos: promosResult.rows.map((r: any) => ({
+        code: r.promo_code,
+        used: !!r.used_at,
+        created_at: r.created_at,
+      })),
     })
   } catch (err) {
     console.error('Referral stats error:', err)
