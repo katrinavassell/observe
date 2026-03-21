@@ -145,8 +145,8 @@ function handleSubscribe(planId: string) {
             <h3 class="text-lg font-semibold">{{ plan.name }}</h3>
             <p v-if="plan.description" class="text-sm text-muted-foreground mt-1">{{ plan.description }}</p>
             <div class="mt-4 mb-6">
-              <span class="text-3xl font-bold tabular-nums">{{ formatPrice(plan.priceAmount) }}</span>
-              <span class="text-sm text-muted-foreground">/{{ plan.intervalMonths === 1 ? 'mo' : plan.intervalMonths + ' mo' }}</span>
+              <span class="text-3xl font-bold tabular-nums">{{ formatPrice(plan.priceAmount ?? 0) }}</span>
+              <span class="text-sm text-muted-foreground">/{{ String(plan.intervalMonths) === '1' ? 'mo' : plan.intervalMonths + ' mo' }}</span>
             </div>
             <ul v-if="plan.features?.length" class="space-y-2 mb-6 flex-1">
               <li v-for="f in plan.features" :key="f.id || f.key" class="flex items-start gap-2 text-sm">

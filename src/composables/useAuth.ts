@@ -49,6 +49,16 @@ export function useAuth() {
   async function signup(email: string, password: string, name?: string) {
     const result = await api.signup(email, password, name)
     account.value = result.account
+    // Auto-subscribe new users to the free plan
+    try {
+      const { plans } = await api.tansoGetPlans()
+      const freePlan = plans.find(p => p.key === 'free')
+      if (freePlan) {
+        await api.tansoSubscribe(freePlan.id)
+      }
+    } catch (e) {
+      logger.error('Failed to auto-subscribe to free plan', e)
+    }
     return result
   }
 
