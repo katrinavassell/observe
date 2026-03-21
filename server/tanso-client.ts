@@ -34,6 +34,21 @@ async function apiPost(path: string, body?: any): Promise<any> {
   return data.data ?? data
 }
 
+async function apiDelete(path: string): Promise<any> {
+  const res = await fetch(`${TANSO_BASE_URL}${path}`, {
+    method: 'DELETE',
+    headers: { 'Authorization': `Bearer ${TANSO_API_KEY}` },
+  })
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(`Tanso API error (${res.status}): ${text.substring(0, 200)}`)
+  }
+  const text = await res.text()
+  if (!text) return {}
+  const data = JSON.parse(text)
+  return data.data ?? data
+}
+
 // =============================================================================
 // Plans & Features (catalog)
 // =============================================================================
@@ -85,8 +100,16 @@ export async function tansoCreateSubscription(customerReferenceId: string, planI
   })
 }
 
-export async function tansoCancelSubscription(subscriptionId: string, cancelMode: 'IMMEDIATE' | 'END_OF_PERIOD' = 'IMMEDIATE') {
+export async function tansoCancelSubscription(subscriptionId: string, cancelMode: 'IMMEDIATELY' | 'END_OF_PERIOD' = 'IMMEDIATELY') {
   return apiPost(`/api/v1/client/subscriptions/cancellation/${encodeURIComponent(subscriptionId)}?cancelMode=${cancelMode}`)
+}
+
+export async function tansoCancelScheduledCancellation(subscriptionId: string) {
+  return apiDelete(`/api/v1/client/subscriptions/cancellation/${encodeURIComponent(subscriptionId)}/scheduled`)
+}
+
+export async function tansoCancelScheduledPlanChanges(subscriptionId: string) {
+  return apiDelete(`/api/v1/client/subscriptions/${encodeURIComponent(subscriptionId)}/plan-change/scheduled`)
 }
 
 export async function tansoChangeSubscriptionPlan(subscriptionId: string, changeToPlanId: string, changeType: 'UPGRADE' | 'DOWNGRADE') {

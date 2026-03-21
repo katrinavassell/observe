@@ -16,6 +16,10 @@ import {
   tansoIngestEvent,
   tansoCreateSubscription,
   tansoChangeSubscriptionPlan,
+  tansoCancelSubscription,
+  tansoCancelScheduledCancellation,
+  tansoCancelScheduledPlanChanges,
+  tansoListCustomerInvoices,
   tansoCreateCheckoutSession,
   isTansoConfigured,
 } from './tanso-client.js'
@@ -2849,26 +2853,23 @@ app.post('/tanso/subscribe', ensureVisitor, async (req: AuthRequest, res: Respon
     await getOrCreateTansoCustomer(visitorId, req.accountEmail)
 
     // Check if customer already has an active subscription
-    let existingSubId: string | null = null
+    let activeSub: any = null
     try {
       const customer = await tansoGetCustomer(visitorId)
-      const activeSub = customer?.subscriptions?.find((s: any) => s.isActive)
+      activeSub = customer?.subscriptions?.find((s: any) => s.isActive)
       if (activeSub) {
         // If already on the requested plan, no-op
         if (activeSub.plan?.id === planId) {
           return res.json({ success: true, subscription: activeSub })
         }
-        existingSubId = activeSub.id
       }
     } catch (_) { /* no existing customer/sub — proceed with creation */ }
 
     let subscription: any
     let invoice: any
-    if (existingSubId) {
+    if (activeSub) {
       // Determine upgrade vs downgrade by comparing plan prices
-      const customer = await tansoGetCustomer(visitorId)
-      const currentSub = customer?.subscriptions?.find((s: any) => s.isActive)
-      const currentPrice = currentSub?.plan?.priceAmount ?? 0
+      const currentPrice = activeSub.plan?.priceAmount ?? 0
       // Fetch target plan price from plan list
       const plans = await tansoListPlans()
       const planItems = plans?.items ?? plans
@@ -2876,10 +2877,21 @@ app.post('/tanso/subscribe', ensureVisitor, async (req: AuthRequest, res: Respon
       const targetPrice = targetPlan?.plan?.priceAmount ?? targetPlan?.priceAmount ?? 0
       const changeType = targetPrice >= currentPrice ? 'UPGRADE' : 'DOWNGRADE'
 
-      await tansoChangeSubscriptionPlan(existingSubId, planId, changeType)
+      await tansoChangeSubscriptionPlan(activeSub.id, planId, changeType)
       // Fetch updated customer to get new subscription state
       const updated = await tansoGetCustomer(visitorId)
       subscription = updated?.subscriptions?.find((s: any) => s.isActive)
+
+      // Plan-change doesn't return an invoice — fetch the latest DUE invoice
+      try {
+        const invoices = await tansoListCustomerInvoices(visitorId)
+        const items = invoices?.items ?? invoices
+        if (Array.isArray(items)) {
+          invoice = items.find((inv: any) => inv.status === 'DUE' && inv.amount > 0)
+        }
+      } catch (invErr) {
+        console.error('Failed to fetch invoices after plan change:', invErr)
+      }
     } else {
       const result = await tansoCreateSubscription(visitorId, planId)
       subscription = result?.subscription ?? result
@@ -2893,6 +2905,7 @@ app.post('/tanso/subscribe', ensureVisitor, async (req: AuthRequest, res: Respon
         return res.json({ success: true, subscription, checkoutUrl: checkout.url })
       } catch (checkoutErr) {
         console.error('Stripe checkout session error:', checkoutErr)
+        return res.status(500).json({ error: 'Subscription created but payment setup failed. Please try again.' })
       }
     }
 
@@ -2900,6 +2913,56 @@ app.post('/tanso/subscribe', ensureVisitor, async (req: AuthRequest, res: Respon
   } catch (err) {
     console.error('Tanso subscribe error:', err)
     res.status(500).json({ error: 'Failed to create subscription' })
+  }
+})
+
+// Cancel subscription (supports IMMEDIATELY or END_OF_PERIOD)
+app.post('/tanso/cancel', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!isTansoConfigured()) return res.status(503).json({ error: 'Billing not configured' })
+    const { subscriptionId, cancelMode = 'IMMEDIATELY' } = req.body
+    if (!subscriptionId) return res.status(400).json({ error: 'subscriptionId is required' })
+
+    // Cancel any scheduled plan changes first to avoid conflicting states
+    try {
+      await tansoCancelScheduledPlanChanges(subscriptionId)
+    } catch (_) { /* may not have scheduled changes */ }
+
+    const result = await tansoCancelSubscription(subscriptionId, cancelMode)
+    res.json({ success: true, subscription: result })
+  } catch (err) {
+    console.error('Tanso cancel error:', err)
+    res.status(500).json({ error: 'Failed to cancel subscription' })
+  }
+})
+
+// Reactivate — cancel a scheduled cancellation (keep subscription active)
+app.post('/tanso/reactivate', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!isTansoConfigured()) return res.status(503).json({ error: 'Billing not configured' })
+    const { subscriptionId } = req.body
+    if (!subscriptionId) return res.status(400).json({ error: 'subscriptionId is required' })
+
+    await tansoCancelScheduledCancellation(subscriptionId)
+    res.json({ success: true })
+  } catch (err) {
+    console.error('Tanso reactivate error:', err)
+    res.status(500).json({ error: 'Failed to reactivate subscription' })
+  }
+})
+
+// Cancel a pending downgrade
+app.post('/tanso/cancel-scheduled-changes', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!isTansoConfigured()) return res.status(503).json({ error: 'Billing not configured' })
+    const { subscriptionId } = req.body
+    if (!subscriptionId) return res.status(400).json({ error: 'subscriptionId is required' })
+
+    await tansoCancelScheduledPlanChanges(subscriptionId)
+    res.json({ success: true })
+  } catch (err) {
+    console.error('Tanso cancel scheduled changes error:', err)
+    res.status(500).json({ error: 'Failed to cancel scheduled changes' })
   }
 })
 
