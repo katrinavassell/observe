@@ -1,8 +1,4 @@
-import dotenv from 'dotenv'
-dotenv.config()
-if (process.env.NODE_ENV !== 'production') {
-  dotenv.config({ path: '.env.development', override: true })
-}
+import 'dotenv/config'
 import express, { Request, Response, NextFunction } from 'express'
 import session from 'express-session'
 import pgSession from 'connect-pg-simple'

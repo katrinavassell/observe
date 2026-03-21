@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/vue-query'
-import { CreditCard, Check, Zap, Loader2, AlertCircle, Infinity } from 'lucide-vue-next'
+import { Check, Zap, Loader2, AlertCircle, Minus, X } from 'lucide-vue-next'
 import { tansoGetStatus, tansoSubscribe } from '@/lib/api'
 import { toast } from 'vue-sonner'
 
 const queryClient = useQueryClient()
 
-const { data: statusData, isLoading, isError: hasError } = useQuery({
+const { data: statusData, isLoading } = useQuery({
   queryKey: ['tanso-status'],
   queryFn: tansoGetStatus,
   retry: 1,
@@ -26,7 +26,10 @@ const subscribeMutation = useMutation({
 })
 
 const isConfigured = computed(() => statusData.value?.configured ?? false)
-const plans = computed(() => statusData.value?.plans || [])
+const plans = computed(() => {
+  const raw = statusData.value?.plans || []
+  return raw.map((p: any) => p.plan ? { ...p.plan, features: p.features } : p)
+})
 const entitlements = computed(() => statusData.value?.entitlements || [])
 const customer = computed(() => statusData.value?.customer)
 
@@ -41,43 +44,22 @@ const currentPlanKey = computed(() => {
   return sub.planKey || sub.plan?.key || null
 })
 
-// Sorted plans: free first, then pro
-const sortedPlans = computed(() => {
-  const p = [...plans.value]
-  p.sort((a: any, b: any) => {
-    const priceA = Number(a.priceAmount) || 0
-    const priceB = Number(b.priceAmount) || 0
-    return priceA - priceB
-  })
-  return p
-})
+const freePlan = computed(() => plans.value.find((p: any) => p.key === 'free'))
+const proPlan = computed(() => plans.value.find((p: any) => p.key === 'pro'))
 
-const gatedFeatureKeys = ['ai_insights', 'simulations']
-
-function isGatedFeature(featureKey: string) {
-  return gatedFeatureKeys.includes(featureKey)
-}
-
-function isPro(plan: any) {
-  return plan.key === 'pro'
-}
-
-function getFeatureLabel(feature: any, plan: any) {
-  const key = feature.key || feature.featureKey
-  const name = feature.name || feature.featureName || key
-  if (!isGatedFeature(key)) return name
-  if (isPro(plan)) return `Unlimited ${name.toLowerCase()}`
-  if (key === 'ai_insights') return `${name} (3/mo)`
-  if (key === 'simulations') return `${name} (2/mo)`
-  return name
-}
-
-function formatPrice(amount: string | number) {
-  const num = typeof amount === 'string' ? parseFloat(amount) : (amount ?? 0)
-  if (isNaN(num)) return '$0'
-  if (num === 0) return 'Free'
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 }).format(num)
-}
+// Feature comparison rows for the table
+const featureRows = computed(() => [
+  { label: 'AI Insights', key: 'ai_insights', free: '3 / month', pro: 'Unlimited', highlight: true },
+  { label: 'Simulations', key: 'simulations', free: '2 / month', pro: 'Unlimited', highlight: true },
+  { label: 'SaaS Metrics Dashboard', key: 'saas_metrics', free: true, pro: true },
+  { label: 'Plan Health Analysis', key: 'plan_health', free: true, pro: true },
+  { label: 'Usage Anomaly Detection', key: 'usage_anomalies', free: true, pro: true },
+  { label: 'Negative Margin Analysis', key: 'negative_margin', free: true, pro: true },
+  { label: 'Stripe Connection', key: 'stripe_connection', free: true, pro: true },
+  { label: 'AI Provider Connection', key: 'ai_provider_connection', free: true, pro: true },
+  { label: 'CSV Uploads', key: 'csv_upload', free: true, pro: true },
+  { label: 'Sample Data', key: 'sample_data', free: true, pro: true },
+])
 
 function getUsagePercent(e: any) {
   if (!e.usageLimit || e.usageLimit === 0) return 0
@@ -90,7 +72,7 @@ function handleSubscribe(planId: string) {
 </script>
 
 <template>
-  <div class="space-y-8">
+  <div class="space-y-10">
     <div>
       <h1 class="text-2xl font-semibold tracking-tight">Plans & Billing</h1>
       <p class="text-sm text-muted-foreground mt-1">Manage your subscription and track feature usage</p>
@@ -106,13 +88,12 @@ function handleSubscribe(planId: string) {
         <h2 class="text-lg font-semibold">Billing Not Connected</h2>
         <p class="text-sm text-muted-foreground mt-2 max-w-md mx-auto">
           The billing system is connecting to Tanso. All features are currently available without limits.
-          Once your Tanso account is fully configured, plans and usage tracking will appear here.
         </p>
       </div>
     </template>
 
     <template v-else>
-      <!-- Usage tracking -->
+      <!-- Usage tracking (only gated features) -->
       <div v-if="entitlements.length > 0" class="space-y-4">
         <h2 class="text-lg font-semibold">Your Usage</h2>
         <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -127,8 +108,8 @@ function handleSubscribe(planId: string) {
                 :class="[
                   'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium',
                   e.allowed
-                    ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400'
-                    : 'bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-400'
+                    ? 'bg-emerald-50 text-emerald-700'
+                    : 'bg-red-50 text-red-700'
                 ]"
               >
                 {{ e.allowed ? 'Active' : 'Limit reached' }}
@@ -155,97 +136,83 @@ function handleSubscribe(planId: string) {
         </div>
       </div>
 
-      <!-- Active subscription -->
-      <div v-if="activeSubscriptions.length > 0" class="space-y-4">
-        <h2 class="text-lg font-semibold">Active Subscription</h2>
-        <div
-          v-for="sub in activeSubscriptions"
-          :key="sub.id"
-          class="rounded-xl border bg-card p-5"
-        >
-          <div class="flex items-center gap-3">
-            <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-              <CreditCard class="h-5 w-5 text-primary" />
-            </div>
-            <div>
-              <p class="font-medium">{{ sub.planName || sub.plan?.name || 'Current Plan' }}</p>
-              <p class="text-xs text-muted-foreground">{{ sub.status }}</p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Plans comparison -->
-      <div v-if="sortedPlans.length > 0" class="space-y-4">
-        <h2 class="text-lg font-semibold">Available Plans</h2>
+      <!-- Plan cards + comparison table -->
+      <div v-if="freePlan && proPlan" class="space-y-8">
+        <!-- Cards -->
         <div class="grid gap-6 sm:grid-cols-2 max-w-3xl">
+          <!-- Free card -->
           <div
-            v-for="plan in sortedPlans"
-            :key="plan.id"
             :class="[
-              'rounded-xl border p-6 flex flex-col relative',
-              isPro(plan)
-                ? 'border-primary bg-card shadow-sm'
-                : 'border-border bg-card'
+              'rounded-xl border p-6 flex flex-col',
+              currentPlanKey === 'free' ? 'border-emerald-300 bg-emerald-50/30' : 'border-border bg-card'
             ]"
           >
-            <!-- Recommended badge -->
-            <div
-              v-if="isPro(plan)"
-              class="absolute -top-3 left-1/2 -translate-x-1/2 inline-flex items-center rounded-full bg-primary px-3 py-0.5 text-xs font-medium text-primary-foreground"
-            >
-              Recommended
-            </div>
-
-            <!-- Current plan badge -->
-            <div
-              v-if="currentPlanKey === plan.key"
-              class="absolute -top-3 right-4 inline-flex items-center rounded-full bg-emerald-500 px-3 py-0.5 text-xs font-medium text-white"
-            >
-              Current plan
-            </div>
-
-            <h3 class="text-lg font-semibold">{{ plan.name || plan.key }}</h3>
-            <p v-if="plan.description" class="text-sm text-muted-foreground mt-1">{{ plan.description }}</p>
-
-            <div class="mt-4 mb-6">
-              <span class="text-3xl font-bold tabular-nums">{{ formatPrice(plan.priceAmount) }}</span>
-              <span v-if="Number(plan.priceAmount) > 0" class="text-sm text-muted-foreground">/mo</span>
-            </div>
-
-            <ul v-if="plan.features?.length" class="space-y-2.5 mb-6 flex-1">
-              <li
-                v-for="f in plan.features"
-                :key="f.id || f.key"
-                class="flex items-start gap-2 text-sm"
+            <div class="flex items-center justify-between">
+              <h3 class="text-lg font-semibold">Free</h3>
+              <span
+                v-if="currentPlanKey === 'free'"
+                class="inline-flex items-center rounded-full bg-emerald-100 text-emerald-700 px-2.5 py-0.5 text-xs font-medium"
               >
-                <Check
-                  :class="[
-                    'h-4 w-4 shrink-0 mt-0.5',
-                    isGatedFeature(f.key || f.featureKey) && isPro(plan)
-                      ? 'text-primary'
-                      : 'text-emerald-500'
-                  ]"
-                />
-                <span :class="isGatedFeature(f.key || f.featureKey) && isPro(plan) ? 'font-medium' : ''">
-                  {{ getFeatureLabel(f, plan) }}
-                </span>
-              </li>
-            </ul>
-
+                Current
+              </span>
+            </div>
+            <p class="text-sm text-muted-foreground mt-1">{{ freePlan.description }}</p>
+            <div class="mt-4 mb-6">
+              <span class="text-4xl font-bold tracking-tight">$0</span>
+              <span class="text-sm text-muted-foreground ml-1">forever</span>
+            </div>
             <button
-              v-if="currentPlanKey !== plan.key"
-              :class="[
-                'w-full rounded-lg px-4 py-2.5 text-sm font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-2',
-                isPro(plan)
-                  ? 'bg-primary text-primary-foreground hover:bg-primary/90'
-                  : 'bg-muted text-foreground hover:bg-muted/80'
-              ]"
+              v-if="currentPlanKey !== 'free'"
+              class="w-full rounded-lg border border-border bg-card px-4 py-2.5 text-sm font-medium text-foreground hover:bg-muted transition-colors disabled:opacity-50"
               :disabled="subscribeMutation.isPending.value"
-              @click="handleSubscribe(plan.id)"
+              @click="handleSubscribe(freePlan.id)"
             >
-              <Zap v-if="isPro(plan)" class="h-4 w-4" />
-              {{ isPro(plan) ? 'Upgrade to Pro' : 'Start Free' }}
+              Start Free
+            </button>
+            <div
+              v-else
+              class="w-full rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm font-medium text-emerald-700 text-center"
+            >
+              <Check class="h-4 w-4 inline mr-1" />
+              Your current plan
+            </div>
+          </div>
+
+          <!-- Pro card -->
+          <div
+            :class="[
+              'rounded-xl border-2 p-6 flex flex-col relative',
+              currentPlanKey === 'pro' ? 'border-emerald-400 bg-emerald-50/30' : 'border-primary bg-card shadow-md'
+            ]"
+          >
+            <div
+              v-if="currentPlanKey !== 'pro'"
+              class="absolute -top-3 left-1/2 -translate-x-1/2 inline-flex items-center rounded-full bg-primary px-3 py-0.5 text-xs font-semibold text-primary-foreground tracking-wide"
+            >
+              RECOMMENDED
+            </div>
+            <div class="flex items-center justify-between">
+              <h3 class="text-lg font-semibold">Pro</h3>
+              <span
+                v-if="currentPlanKey === 'pro'"
+                class="inline-flex items-center rounded-full bg-emerald-100 text-emerald-700 px-2.5 py-0.5 text-xs font-medium"
+              >
+                Current
+              </span>
+            </div>
+            <p class="text-sm text-muted-foreground mt-1">{{ proPlan.description }}</p>
+            <div class="mt-4 mb-6">
+              <span class="text-4xl font-bold tracking-tight">$12</span>
+              <span class="text-sm text-muted-foreground ml-1">/ month</span>
+            </div>
+            <button
+              v-if="currentPlanKey !== 'pro'"
+              class="w-full rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              :disabled="subscribeMutation.isPending.value"
+              @click="handleSubscribe(proPlan.id)"
+            >
+              <Zap class="h-4 w-4" />
+              Upgrade to Pro
             </button>
             <div
               v-else
@@ -256,10 +223,66 @@ function handleSubscribe(planId: string) {
             </div>
           </div>
         </div>
+
+        <!-- Comparison table -->
+        <div class="max-w-3xl">
+          <h3 class="text-base font-semibold mb-4">Compare plans</h3>
+          <div class="rounded-xl border overflow-hidden">
+            <table class="w-full text-sm">
+              <thead>
+                <tr class="border-b bg-muted/50">
+                  <th class="text-left py-3 px-4 font-medium text-muted-foreground w-1/2">Feature</th>
+                  <th class="text-center py-3 px-4 font-medium text-muted-foreground w-1/4">Free</th>
+                  <th class="text-center py-3 px-4 font-medium w-1/4">
+                    <span class="inline-flex items-center gap-1 text-primary">
+                      Pro
+                    </span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr
+                  v-for="(row, i) in featureRows"
+                  :key="row.key"
+                  :class="[
+                    i < featureRows.length - 1 ? 'border-b' : '',
+                    row.highlight ? 'bg-primary/[0.02]' : ''
+                  ]"
+                >
+                  <td class="py-3 px-4" :class="row.highlight ? 'font-medium' : ''">
+                    {{ row.label }}
+                  </td>
+                  <td class="py-3 px-4 text-center">
+                    <template v-if="row.free === true">
+                      <Check class="h-4 w-4 text-emerald-500 mx-auto" />
+                    </template>
+                    <template v-else-if="row.free === false">
+                      <X class="h-4 w-4 text-muted-foreground/40 mx-auto" />
+                    </template>
+                    <template v-else>
+                      <span class="text-muted-foreground">{{ row.free }}</span>
+                    </template>
+                  </td>
+                  <td class="py-3 px-4 text-center">
+                    <template v-if="row.pro === true">
+                      <Check class="h-4 w-4 text-emerald-500 mx-auto" />
+                    </template>
+                    <template v-else-if="row.pro === false">
+                      <X class="h-4 w-4 text-muted-foreground/40 mx-auto" />
+                    </template>
+                    <template v-else>
+                      <span class="font-medium text-primary">{{ row.pro }}</span>
+                    </template>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
 
-      <div v-if="sortedPlans.length === 0 && entitlements.length === 0" class="rounded-xl border bg-card p-8 text-center">
-        <CreditCard class="h-10 w-10 text-muted-foreground mx-auto mb-4" />
+      <div v-else-if="plans.length === 0 && entitlements.length === 0" class="rounded-xl border bg-card p-8 text-center">
+        <AlertCircle class="h-10 w-10 text-muted-foreground mx-auto mb-4" />
         <h2 class="text-lg font-semibold">No Plans Available Yet</h2>
         <p class="text-sm text-muted-foreground mt-2 max-w-md mx-auto">
           Plans haven't been configured yet. All features are currently available without limits.
