@@ -953,6 +953,131 @@ async function ensureDbInitialized() {
     `)
 
     await pool.query(`
+      CREATE TABLE IF NOT EXISTS plans (
+        id SERIAL PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        plan_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        price_amount DECIMAL(10,2) NOT NULL DEFAULT 0,
+        interval_months INTEGER NOT NULL DEFAULT 1,
+        billing_model TEXT NOT NULL DEFAULT 'recurring',
+        api_calls_limit INTEGER,
+        tokens_limit INTEGER,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(user_id, plan_id)
+      )
+    `)
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS customers (
+        id SERIAL PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        customer_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        email TEXT,
+        segment TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(user_id, customer_id)
+      )
+    `)
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS subscriptions (
+        id SERIAL PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        subscription_id TEXT NOT NULL,
+        customer_id TEXT NOT NULL,
+        plan_id TEXT NOT NULL,
+        is_active BOOLEAN NOT NULL DEFAULT true,
+        current_period_start TIMESTAMPTZ,
+        current_period_end TIMESTAMPTZ,
+        cancelled_at TIMESTAMPTZ,
+        previous_mrr DECIMAL(10,2),
+        mrr_override DECIMAL(10,2),
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(user_id, subscription_id)
+      )
+    `)
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS usage_records (
+        id SERIAL PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        customer_id TEXT NOT NULL,
+        metric_key TEXT NOT NULL,
+        metric_value DECIMAL(12,2) NOT NULL,
+        metric_limit DECIMAL(12,2),
+        period_start TIMESTAMPTZ NOT NULL,
+        period_end TIMESTAMPTZ NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `)
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS cost_records (
+        id SERIAL PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        customer_id TEXT,
+        cost_type TEXT NOT NULL,
+        amount DECIMAL(10,2) NOT NULL,
+        period_start TIMESTAMPTZ NOT NULL,
+        period_end TIMESTAMPTZ NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `)
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS user_data_status (
+        id SERIAL PRIMARY KEY,
+        user_id TEXT NOT NULL UNIQUE,
+        data_mode TEXT NOT NULL DEFAULT 'none',
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `)
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS observe_events (
+        id SERIAL PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        customer_id TEXT NOT NULL DEFAULT 'unknown',
+        feature_key TEXT NOT NULL DEFAULT 'unknown',
+        event_name TEXT NOT NULL DEFAULT 'usage',
+        timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        cost_amount NUMERIC(12, 4) NOT NULL DEFAULT 0,
+        cost_unit TEXT DEFAULT 'usd',
+        revenue_amount NUMERIC(12, 4) NOT NULL DEFAULT 0,
+        usage_units NUMERIC(12, 4) NOT NULL DEFAULT 0,
+        model TEXT,
+        model_provider TEXT,
+        source TEXT NOT NULL DEFAULT 'csv',
+        granularity TEXT NOT NULL DEFAULT 'monthly_aggregate',
+        properties JSONB DEFAULT '{}',
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `)
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS ai_insights (
+        id SERIAL PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        insight_type TEXT NOT NULL,
+        title TEXT NOT NULL,
+        description TEXT NOT NULL,
+        severity TEXT DEFAULT 'info',
+        feature_key TEXT,
+        customer_id TEXT,
+        metadata JSONB DEFAULT '{}',
+        tokens_used INTEGER,
+        cost_usd NUMERIC(10, 6),
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `)
+
+    await pool.query(`
       CREATE TABLE IF NOT EXISTS simulations (
         id SERIAL PRIMARY KEY,
         user_id TEXT NOT NULL,
@@ -961,14 +1086,28 @@ async function ensureDbInitialized() {
         time_range JSONB DEFAULT '{}',
         results JSONB,
         status TEXT DEFAULT 'draft',
+        segment_name TEXT,
+        feature_analysis JSONB,
+        customer_impacts JSONB,
+        margin_impact JSONB,
+        confidence_score NUMERIC(5,2),
+        key_insight TEXT,
+        winning_scenario_id TEXT,
         created_at TIMESTAMPTZ DEFAULT NOW(),
         updated_at TIMESTAMPTZ DEFAULT NOW()
       )
     `)
-    await pool.query(`
-      CREATE INDEX IF NOT EXISTS idx_simulations_user_created
-      ON simulations (user_id, created_at DESC)
-    `)
+
+    // Create indexes
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_plans_user_id ON plans(user_id)`)
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_customers_user_id ON customers(user_id)`)
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_subscriptions_user_id ON subscriptions(user_id)`)
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_usage_records_user_id ON usage_records(user_id)`)
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_cost_records_user_id ON cost_records(user_id)`)
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_observe_events_user_ts ON observe_events(user_id, timestamp DESC)`)
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_observe_events_user_feature ON observe_events(user_id, feature_key)`)
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_insights_user ON ai_insights(user_id, created_at DESC)`)
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_simulations_user_created ON simulations(user_id, created_at DESC)`)
 
     dbInitialized = true
   } catch (error) {
