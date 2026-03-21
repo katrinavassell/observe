@@ -5,7 +5,7 @@ import pgSession from 'connect-pg-simple'
 import { Pool } from '@neondatabase/serverless'
 import crypto from 'crypto'
 import bcrypt from 'bcryptjs'
-import { getUncachableStripeClient } from './stripe-client'
+import { getUncachableStripeClient } from './stripe-client.js'
 import {
   tansoListPlans,
   tansoListFeatures,
@@ -16,7 +16,7 @@ import {
   tansoIngestEvent,
   tansoCreateSubscription,
   isTansoConfigured,
-} from './tanso-client'
+} from './tanso-client.js'
 
 const app = express()
 
