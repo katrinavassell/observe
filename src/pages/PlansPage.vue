@@ -39,13 +39,24 @@ const customer = computed(() => statusData.value?.customer)
 
 const activeSubscriptions = computed(() => {
   if (!customer.value?.subscriptions) return []
-  return customer.value.subscriptions.filter((s: any) => s.status === 'ACTIVE' || s.status === 'active')
+  return customer.value.subscriptions.filter((s: any) =>
+    s.isActive || s.status === 'ACTIVE' || s.status === 'active'
+  )
 })
 
 const currentPlanKey = computed(() => {
-  if (!activeSubscriptions.value.length) return null
-  const sub = activeSubscriptions.value[0]
-  return sub.planKey || sub.plan?.key || null
+  // Check active subscriptions first
+  if (activeSubscriptions.value.length) {
+    const sub = activeSubscriptions.value[0]
+    return sub.plan?.key || sub.planKey || null
+  }
+  // Also check all subscriptions (may be pending payment)
+  const subs = customer.value?.subscriptions || []
+  if (subs.length) {
+    const sub = subs[0]
+    return sub.plan?.key || sub.planKey || null
+  }
+  return null
 })
 
 const freePlan = computed(() => plans.value.find((p: any) => p.key === 'free'))
