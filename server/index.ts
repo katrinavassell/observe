@@ -15,6 +15,7 @@ import {
   tansoListCustomerEntitlements,
   tansoIngestEvent,
   tansoCreateSubscription,
+  tansoCreateCheckoutSession,
   isTansoConfigured,
 } from './tanso-client.js'
 
@@ -2798,6 +2799,19 @@ app.post('/tanso/subscribe', ensureVisitor, async (req: AuthRequest, res: Respon
     if (!planId) return res.status(400).json({ error: 'planId is required' })
     await getOrCreateTansoCustomer(visitorId)
     const result = await tansoCreateSubscription(visitorId, planId)
+
+    // For paid plans, create a Stripe Checkout session
+    const invoiceId = result?.invoice?.id
+    if (invoiceId && result?.invoice?.amount > 0) {
+      try {
+        const checkout = await tansoCreateCheckoutSession(invoiceId)
+        return res.json({ success: true, subscription: result, checkoutUrl: checkout.url })
+      } catch (checkoutErr) {
+        console.error('Stripe checkout session error:', checkoutErr)
+        // Fall through — subscription created but no checkout URL
+      }
+    }
+
     res.json({ success: true, subscription: result })
   } catch (err) {
     console.error('Tanso subscribe error:', err)

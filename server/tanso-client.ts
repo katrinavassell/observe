@@ -188,6 +188,23 @@ export async function tansoGetCreditPools(customerReferenceId: string) {
   return mcpCall('getCreditPools', { customerReferenceId })
 }
 
+export async function tansoCreateCheckoutSession(invoiceId: string): Promise<{ url: string }> {
+  const baseUrl = (process.env.TANSO_MCP_URL || 'https://api.tansohq.com/mcp').replace('/mcp', '')
+  const res = await fetch(`${baseUrl}/api/v1/client/billing/invoices/${encodeURIComponent(invoiceId)}/stripe/checkout`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-API-Key': TANSO_API_KEY,
+    },
+  })
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(`Checkout session failed (${res.status}): ${text.substring(0, 200)}`)
+  }
+  const data = await res.json()
+  return data.data || data
+}
+
 export function isTansoConfigured(): boolean {
   return !!TANSO_API_KEY
 }

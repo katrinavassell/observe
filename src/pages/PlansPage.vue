@@ -16,7 +16,11 @@ const { data: statusData, isLoading } = useQuery({
 
 const subscribeMutation = useMutation({
   mutationFn: (planId: string) => tansoSubscribe(planId),
-  onSuccess: () => {
+  onSuccess: (data: any) => {
+    if (data.checkoutUrl) {
+      window.location.href = data.checkoutUrl
+      return
+    }
     toast.success('Subscription created successfully!')
     queryClient.invalidateQueries({ queryKey: ['tanso-status'] })
   },
