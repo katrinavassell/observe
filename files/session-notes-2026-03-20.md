@@ -45,9 +45,21 @@
 - **REST API:** Run your product (entitlement checks, subscriptions, events, checkout) — every request
 - MCP adds latency (init handshake per call) — don't use for runtime
 
+## Key Learning: MCP vs REST API
+- **Started with:** All Tanso calls going through MCP (slow — init handshake per call)
+- **Switched to:** REST API for runtime calls (`/api/v1/client/*` endpoints)
+- **Result:** Noticeably faster checkout flow and plan loading
+- **Rule:** MCP = setup (plans, features, Stripe config). REST = runtime (entitlements, subscriptions, events, checkout)
+- **REST responses are wrapped:** `{ success: true, data: {...} }` — extract `.data`
+
+## Checkout Flow (working)
+1. `POST /api/v1/client/subscriptions` → returns `{ subscription, invoice }`
+2. `POST /api/v1/client/billing/invoices/{invoiceId}/stripe/checkout` → returns `{ url }`
+3. Frontend opens URL in new tab → user pays in Stripe Checkout
+4. Stripe webhook marks invoice paid → subscription activates → entitlements granted
+
 ## Open Items
 - Sandbox MCP still broken (Doug needs to deploy fix)
-- Convert `tanso-client.ts` runtime calls from MCP to REST for performance
 - Add `createCheckoutSession` MCP tool (for Doug)
 - Document checkout flow in llms-mcp.txt
 - Build pricing page designer and pricing advisor agents
