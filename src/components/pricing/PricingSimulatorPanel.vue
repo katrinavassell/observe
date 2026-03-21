@@ -10,6 +10,7 @@ import { ref, computed, watch } from 'vue'
 import { Loader2, Calculator, RotateCcw, TrendingUp, TrendingDown, Users } from 'lucide-vue-next'
 import { Card, CardContent, CardHeader, CardTitle, Badge, Button, Input } from '@/components/ui'
 import { useSimulation } from '@/composables/useSimulation'
+import { formatCurrency } from '@/lib/simulationFormatters'
 import type { PricingModelConfig } from '@/types/simulation'
 
 // =============================================================================
@@ -136,14 +137,6 @@ async function runSimulation() {
   }
 }
 
-function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(amount)
-}
 </script>
 
 <template>

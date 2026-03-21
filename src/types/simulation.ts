@@ -1,5 +1,96 @@
 // =============================================================================
-// Phase 2 Simulation Types
+// Simulation Engine Types (used by useSimulation composable)
+// =============================================================================
+
+export type SimulationProgress = 'idle' | 'fetching' | 'calculating' | 'saving'
+
+export interface PricingModelConfig {
+  type: 'per_seat' | 'usage_based' | 'hybrid' | 'flat_rate'
+  billingPeriod: 'monthly' | 'quarterly' | 'annual'
+  seatPrice?: number
+  monthlyFee?: number
+  usagePricePerUnit?: number
+  freeTier?: number
+  growthRate?: number
+}
+
+export interface SimulationRequest {
+  scenarioName: string
+  scenarioDescription?: string
+  isBaseline: boolean
+  pricingModel: PricingModelConfig
+}
+
+export interface SimulationSummary {
+  totalRevenue: number
+  totalCost: number
+  totalMargin: number
+  avgMarginPercent: number
+  customerCount: number
+  profitableCustomers: number
+  unprofitableCustomers: number
+  totalTokens: number
+  pricingModel: string
+  billingPeriod: string
+}
+
+export interface MonthlyProjection {
+  month: string
+  monthLabel: string
+  revenue: number
+  cost: number
+  margin: number
+  marginPercent: number
+  customers: number
+  usage: number
+  projectedGrowth: number
+}
+
+export interface CustomerMargin {
+  customerId: string
+  customerName?: string
+  customerEmail?: string
+  revenue: number
+  cost: number
+  margin: number
+  marginPercent: number
+  profitable: boolean
+}
+
+export interface ModelCost {
+  model: string
+  tokens: number
+  cost: number
+  percentOfTotal: number
+}
+
+export interface PricingRecommendation {
+  breakEvenPrice: number
+  currentImpliedPrice: number
+  recommendedPriceFor20Percent: number
+  recommendedPriceFor30Percent: number
+  recommendedPriceFor40Percent: number
+  recommendedPriceFor50Percent: number
+}
+
+export interface SimulationAssumptions {
+  growthRate: number
+  dataSources: Array<{ id: string; name: string; dataTypes: string[] }>
+  dateRange: { start: string; end: string }
+  simulatedAt: string
+}
+
+export interface SimulationResult {
+  summary: SimulationSummary
+  monthlyData: MonthlyProjection[]
+  customerBreakdown: CustomerMargin[]
+  modelBreakdown: ModelCost[]
+  recommendations: PricingRecommendation
+  assumptions: SimulationAssumptions
+}
+
+// =============================================================================
+// Phase 2 Simulation Types (used by SimulationsPage)
 // =============================================================================
 
 export type SimulationStatus = 'draft' | 'running' | 'completed' | 'rolled_out'
