@@ -7,7 +7,7 @@ const TANSO_BASE_URL = (process.env.TANSO_MCP_URL || 'https://api.tansohq.com/mc
 
 async function apiGet(path: string): Promise<any> {
   const res = await fetch(`${TANSO_BASE_URL}${path}`, {
-    headers: { 'X-API-Key': TANSO_API_KEY },
+    headers: { 'Authorization': `Bearer ${TANSO_API_KEY}` },
   })
   if (!res.ok) {
     const text = await res.text()
@@ -22,7 +22,7 @@ async function apiPost(path: string, body?: any): Promise<any> {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-API-Key': TANSO_API_KEY,
+      'Authorization': `Bearer ${TANSO_API_KEY}`,
     },
     ...(body ? { body: JSON.stringify(body) } : {}),
   })
@@ -85,6 +85,17 @@ export async function tansoCreateSubscription(customerReferenceId: string, planI
   })
 }
 
+export async function tansoCancelSubscription(subscriptionId: string, cancelMode: 'IMMEDIATE' | 'END_OF_PERIOD' = 'IMMEDIATE') {
+  return apiPost(`/api/v1/client/subscriptions/cancellation/${encodeURIComponent(subscriptionId)}?cancelMode=${cancelMode}`)
+}
+
+export async function tansoChangeSubscriptionPlan(subscriptionId: string, changeToPlanId: string, changeType: 'UPGRADE' | 'DOWNGRADE') {
+  return apiPost(`/api/v1/client/subscriptions/${encodeURIComponent(subscriptionId)}/plan-change`, {
+    changeToPlanId,
+    changeType,
+  })
+}
+
 // =============================================================================
 // Events
 // =============================================================================
@@ -95,7 +106,7 @@ export async function tansoIngestEvent(params: {
   occurredAt: string
   customerReferenceId: string
   featureKey: string
-  usageUnits?: string
+  usageUnits?: number
 }) {
   return apiPost('/api/v1/client/events', params)
 }

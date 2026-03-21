@@ -15,6 +15,8 @@ import {
   tansoListCustomerEntitlements,
   tansoIngestEvent,
   tansoCreateSubscription,
+  tansoCancelSubscription,
+  tansoChangeSubscriptionPlan,
   tansoCreateCheckoutSession,
   isTansoConfigured,
 } from './tanso-client.js'
@@ -1917,7 +1919,7 @@ app.post('/simulations', ensureVisitor, async (req: AuthRequest, res: Response) 
           occurredAt: new Date().toISOString(),
           customerReferenceId: visitorId,
           featureKey: 'simulations',
-          usageUnits: '1',
+          usageUnits: 1,
         })
       } catch (err) {
         console.error('Tanso usage tracking error (simulations):', err)
@@ -2575,7 +2577,7 @@ Return ONLY the JSON array, no markdown or explanation.`
           occurredAt: new Date().toISOString(),
           customerReferenceId: visitorId,
           featureKey: 'ai_insights',
-          usageUnits: '1',
+          usageUnits: 1,
         })
       } catch (err) {
         console.error('Tanso usage tracking error (ai_insights):', err)
@@ -2836,7 +2838,33 @@ app.post('/tanso/subscribe', ensureVisitor, async (req: AuthRequest, res: Respon
     const { planId } = req.body
     if (!planId) return res.status(400).json({ error: 'planId is required' })
     await getOrCreateTansoCustomer(visitorId, req.accountEmail)
-    const result = await tansoCreateSubscription(visitorId, planId)
+
+    // Check if customer already has an active subscription
+    let existingSubId: string | null = null
+    try {
+      const customer = await tansoGetCustomer(visitorId)
+      const activeSub = customer?.subscriptions?.find((s: any) => s.isActive)
+      if (activeSub) {
+        // If already on the requested plan, no-op
+        if (activeSub.plan?.id === planId) {
+          return res.json({ success: true, subscription: activeSub })
+        }
+        existingSubId = activeSub.id
+      }
+    } catch (_) { /* no existing customer/sub — proceed with creation */ }
+
+    let result: any
+    if (existingSubId) {
+      // Use plan-change API for upgrades (immediate) and downgrades (end of period)
+      // For simplicity, treat all changes as upgrades (immediate)
+      await tansoChangeSubscriptionPlan(existingSubId, planId, 'UPGRADE')
+      // Fetch updated customer to get new subscription state
+      const updated = await tansoGetCustomer(visitorId)
+      const newSub = updated?.subscriptions?.find((s: any) => s.isActive)
+      result = { subscription: newSub }
+    } else {
+      result = await tansoCreateSubscription(visitorId, planId)
+    }
 
     // For paid plans, create a Stripe Checkout session
     const invoiceId = result?.invoice?.id
