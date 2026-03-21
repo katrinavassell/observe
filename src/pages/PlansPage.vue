@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/vue-query'
-import { Check, Zap, Loader2, AlertCircle, Minus, X } from 'lucide-vue-next'
+import { Check, Zap, Loader2, AlertCircle, X, ArrowDown, RotateCcw, XCircle, Calendar } from 'lucide-vue-next'
 import { tansoGetStatus, tansoSubscribe } from '@/lib/api'
 import { toast } from 'vue-sonner'
 
 const queryClient = useQueryClient()
+const isPending = ref(false)
 
 const { data: statusData, isLoading } = useQuery({
   queryKey: ['tanso-status'],
@@ -14,21 +15,23 @@ const { data: statusData, isLoading } = useQuery({
   retryDelay: 2000,
 })
 
-const subscribeMutation = useMutation({
-  mutationFn: (planId: string) => tansoSubscribe(planId),
-  onSuccess: (data: any) => {
-    if (data.checkoutUrl) {
-      // Redirect to Stripe checkout (full page, not popup)
-      window.location.href = data.checkoutUrl
-      return
-    }
-    toast.success('Plan updated successfully!')
-    queryClient.invalidateQueries({ queryKey: ['tanso-status'] })
-  },
-  onError: (error: Error) => {
-    toast.error(error.message || 'Failed to subscribe')
-  },
-})
+async function apiPost(url: string, body: any) {
+  const res = await fetch(`/api${url}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}))
+    throw new Error(data.error || `Request failed: ${res.status}`)
+  }
+  return res.json()
+}
+
+function refresh() {
+  queryClient.invalidateQueries({ queryKey: ['tanso-status'] })
+}
 
 const isConfigured = computed(() => statusData.value?.configured ?? false)
 const plans = computed(() => {
@@ -38,26 +41,36 @@ const plans = computed(() => {
 const entitlements = computed(() => statusData.value?.entitlements || [])
 const customer = computed(() => statusData.value?.customer)
 
-const activeSubscriptions = computed(() => {
-  if (!customer.value?.subscriptions) return []
-  return customer.value.subscriptions.filter((s: any) =>
-    s.isActive || s.status === 'ACTIVE' || s.status === 'active'
-  )
+const currentSub = computed(() => {
+  const subs = customer.value?.subscriptions || []
+  return subs.find((s: any) => s.isActive) || subs[0] || null
 })
 
-const currentPlanKey = computed(() => {
-  // Check active subscriptions first
-  if (activeSubscriptions.value.length) {
-    const sub = activeSubscriptions.value[0]
-    return sub.plan?.key || sub.planKey || null
-  }
-  // Also check all subscriptions (may be pending payment)
-  const subs = customer.value?.subscriptions || []
-  if (subs.length) {
-    const sub = subs[0]
-    return sub.plan?.key || sub.planKey || null
-  }
-  return null
+const currentPlanKey = computed(() => currentSub.value?.plan?.key || null)
+const currentPlanPrice = computed(() => currentSub.value?.plan?.priceAmount ?? 0)
+
+// Subscription states
+const hasScheduledCancellation = computed(() =>
+  currentSub.value?.isActive &&
+  currentSub.value?.cancelledAt &&
+  currentSub.value?.cancelEffectiveAt &&
+  new Date(currentSub.value.cancelEffectiveAt) > new Date()
+)
+
+const pendingDowngrade = computed(() =>
+  currentSub.value?.scheduledChanges?.find(
+    (c: any) => c.type === 'DOWNGRADE' && c.status === 'PENDING'
+  ) || null
+)
+
+const billingPeriodEnd = computed(() => {
+  const d = currentSub.value?.currentPeriodEnd
+  return d ? new Date(d).toLocaleDateString() : null
+})
+
+const cancelEffectiveDate = computed(() => {
+  const d = currentSub.value?.cancelEffectiveAt
+  return d ? new Date(d).toLocaleDateString() : null
 })
 
 const meteredEntitlements = computed(() =>
@@ -77,7 +90,6 @@ function featureLabel(key: string) {
 const freePlan = computed(() => plans.value.find((p: any) => p.key === 'free'))
 const proPlan = computed(() => plans.value.find((p: any) => p.key === 'pro'))
 
-// Feature comparison rows for the table
 const featureRows = computed(() => [
   { label: 'AI Insights', key: 'ai_insights', free: '3 / month', pro: 'Unlimited', highlight: true },
   { label: 'Simulations', key: 'simulations', free: '2 / month', pro: 'Unlimited', highlight: true },
@@ -96,8 +108,78 @@ function getUsagePercent(e: any) {
   return Math.min(100, Math.round(((e.currentUsage || 0) / e.usageLimit) * 100))
 }
 
-function handleSubscribe(planId: string) {
-  subscribeMutation.mutate(planId)
+async function handleSubscribe(planId: string) {
+  isPending.value = true
+  try {
+    const targetPlan = plans.value.find((p: any) => p.id === planId)
+    const targetPrice = targetPlan?.priceAmount ?? 0
+    const isDowngrade = currentSub.value?.isActive && targetPrice < currentPlanPrice.value
+
+    // If downgrading, use the scheduled downgrade flow (end of period)
+    if (isDowngrade && currentSub.value) {
+      await apiPost('/tanso/subscribe', { planId })
+      toast.success('Downgrade scheduled for end of billing period')
+      refresh()
+      return
+    }
+
+    // Upgrade or new subscription
+    const data = await apiPost('/tanso/subscribe', { planId })
+    if (data.checkoutUrl) {
+      window.location.href = data.checkoutUrl
+      return
+    }
+    toast.success('Plan updated successfully!')
+    refresh()
+  } catch (error: unknown) {
+    toast.error(error instanceof Error ? error.message : 'Failed to change plan')
+  } finally {
+    isPending.value = false
+  }
+}
+
+async function handleCancel(mode: 'IMMEDIATELY' | 'END_OF_PERIOD' = 'END_OF_PERIOD') {
+  if (!currentSub.value?.id) return
+  isPending.value = true
+  try {
+    await apiPost('/tanso/cancel', { subscriptionId: currentSub.value.id, cancelMode: mode })
+    toast.success(mode === 'END_OF_PERIOD'
+      ? 'Subscription will cancel at end of billing period'
+      : 'Subscription cancelled')
+    refresh()
+  } catch (error: unknown) {
+    toast.error(error instanceof Error ? error.message : 'Failed to cancel')
+  } finally {
+    isPending.value = false
+  }
+}
+
+async function handleReactivate() {
+  if (!currentSub.value?.id) return
+  isPending.value = true
+  try {
+    await apiPost('/tanso/reactivate', { subscriptionId: currentSub.value.id })
+    toast.success('Subscription reactivated!')
+    refresh()
+  } catch (error: unknown) {
+    toast.error(error instanceof Error ? error.message : 'Failed to reactivate')
+  } finally {
+    isPending.value = false
+  }
+}
+
+async function handleCancelDowngrade() {
+  if (!currentSub.value?.id) return
+  isPending.value = true
+  try {
+    await apiPost('/tanso/cancel-scheduled-changes', { subscriptionId: currentSub.value.id })
+    toast.success('Scheduled downgrade cancelled')
+    refresh()
+  } catch (error: unknown) {
+    toast.error(error instanceof Error ? error.message : 'Failed to cancel downgrade')
+  } finally {
+    isPending.value = false
+  }
 }
 </script>
 
@@ -123,7 +205,44 @@ function handleSubscribe(planId: string) {
     </template>
 
     <template v-else>
-      <!-- Usage tracking (only metered features with limits) -->
+      <!-- Subscription status banner -->
+      <div v-if="hasScheduledCancellation" class="rounded-xl border border-amber-200 bg-amber-50 p-4 flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <Calendar class="h-5 w-5 text-amber-600" />
+          <div>
+            <p class="text-sm font-medium text-amber-900">Your subscription is cancelling</p>
+            <p class="text-xs text-amber-700">Access continues until {{ cancelEffectiveDate }}</p>
+          </div>
+        </div>
+        <button
+          class="rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-700 transition-colors disabled:opacity-50"
+          :disabled="isPending"
+          @click="handleReactivate"
+        >
+          <RotateCcw class="h-3 w-3 inline mr-1" />
+          Keep Subscription
+        </button>
+      </div>
+
+      <div v-if="pendingDowngrade" class="rounded-xl border border-blue-200 bg-blue-50 p-4 flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <ArrowDown class="h-5 w-5 text-blue-600" />
+          <div>
+            <p class="text-sm font-medium text-blue-900">Downgrade scheduled</p>
+            <p class="text-xs text-blue-700">Changes at end of billing period{{ billingPeriodEnd ? ` (${billingPeriodEnd})` : '' }}</p>
+          </div>
+        </div>
+        <button
+          class="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 transition-colors disabled:opacity-50"
+          :disabled="isPending"
+          @click="handleCancelDowngrade"
+        >
+          <XCircle class="h-3 w-3 inline mr-1" />
+          Cancel Downgrade
+        </button>
+      </div>
+
+      <!-- Usage tracking -->
       <div v-if="meteredEntitlements.length > 0" class="space-y-4">
         <h2 class="text-lg font-semibold">Your Usage</h2>
         <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -162,9 +281,8 @@ function handleSubscribe(planId: string) {
         </div>
       </div>
 
-      <!-- Plan cards + comparison table -->
+      <!-- Plan cards -->
       <div v-if="freePlan && proPlan" class="space-y-8">
-        <!-- Cards -->
         <div class="grid gap-6 sm:grid-cols-2 max-w-3xl">
           <!-- Free card -->
           <div
@@ -187,16 +305,28 @@ function handleSubscribe(planId: string) {
               <span class="text-4xl font-bold tracking-tight">$0</span>
               <span class="text-sm text-muted-foreground ml-1">forever</span>
             </div>
+            <!-- On Pro → show downgrade button -->
             <button
-              v-if="currentPlanKey !== 'free'"
+              v-if="currentPlanKey === 'pro' && !hasScheduledCancellation"
+              class="w-full rounded-lg border border-border bg-card px-4 py-2.5 text-sm font-medium text-foreground hover:bg-muted transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              :disabled="isPending"
+              @click="handleSubscribe(freePlan.id)"
+            >
+              <ArrowDown class="h-4 w-4" />
+              Downgrade to Free
+            </button>
+            <!-- No subscription → show start button -->
+            <button
+              v-else-if="!currentPlanKey"
               class="w-full rounded-lg border border-border bg-card px-4 py-2.5 text-sm font-medium text-foreground hover:bg-muted transition-colors disabled:opacity-50"
-              :disabled="subscribeMutation.isPending.value"
+              :disabled="isPending"
               @click="handleSubscribe(freePlan.id)"
             >
               Start Free
             </button>
+            <!-- On Free → current plan -->
             <div
-              v-else
+              v-else-if="currentPlanKey === 'free'"
               class="w-full rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm font-medium text-emerald-700 text-center"
             >
               <Check class="h-4 w-4 inline mr-1" />
@@ -231,22 +361,36 @@ function handleSubscribe(planId: string) {
               <span class="text-4xl font-bold tracking-tight">$12</span>
               <span class="text-sm text-muted-foreground ml-1">/ month</span>
             </div>
+            <!-- Not on Pro → upgrade button -->
             <button
               v-if="currentPlanKey !== 'pro'"
               class="w-full rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-              :disabled="subscribeMutation.isPending.value"
+              :disabled="isPending"
               @click="handleSubscribe(proPlan.id)"
             >
               <Zap class="h-4 w-4" />
               Upgrade to Pro
             </button>
-            <div
-              v-else
-              class="w-full rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm font-medium text-emerald-700 text-center"
-            >
-              <Check class="h-4 w-4 inline mr-1" />
-              Your current plan
-            </div>
+            <!-- On Pro → current plan + cancel option -->
+            <template v-else>
+              <div
+                class="w-full rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm font-medium text-emerald-700 text-center"
+              >
+                <Check class="h-4 w-4 inline mr-1" />
+                Your current plan
+              </div>
+              <div v-if="billingPeriodEnd" class="mt-3 text-xs text-muted-foreground text-center">
+                Renews {{ billingPeriodEnd }}
+              </div>
+              <button
+                v-if="!hasScheduledCancellation"
+                class="mt-3 w-full text-xs text-muted-foreground hover:text-red-600 transition-colors disabled:opacity-50"
+                :disabled="isPending"
+                @click="handleCancel('END_OF_PERIOD')"
+              >
+                Cancel subscription
+              </button>
+            </template>
           </div>
         </div>
 
@@ -260,9 +404,7 @@ function handleSubscribe(planId: string) {
                   <th class="text-left py-3 px-4 font-medium text-muted-foreground w-1/2">Feature</th>
                   <th class="text-center py-3 px-4 font-medium text-muted-foreground w-1/4">Free</th>
                   <th class="text-center py-3 px-4 font-medium w-1/4">
-                    <span class="inline-flex items-center gap-1 text-primary">
-                      Pro
-                    </span>
+                    <span class="inline-flex items-center gap-1 text-primary">Pro</span>
                   </th>
                 </tr>
               </thead>
@@ -275,30 +417,16 @@ function handleSubscribe(planId: string) {
                     row.highlight ? 'bg-primary/[0.02]' : ''
                   ]"
                 >
-                  <td class="py-3 px-4" :class="row.highlight ? 'font-medium' : ''">
-                    {{ row.label }}
+                  <td class="py-3 px-4" :class="row.highlight ? 'font-medium' : ''">{{ row.label }}</td>
+                  <td class="py-3 px-4 text-center">
+                    <Check v-if="row.free === true" class="h-4 w-4 text-emerald-500 mx-auto" />
+                    <X v-else-if="row.free === false" class="h-4 w-4 text-muted-foreground/40 mx-auto" />
+                    <span v-else class="text-muted-foreground">{{ row.free }}</span>
                   </td>
                   <td class="py-3 px-4 text-center">
-                    <template v-if="row.free === true">
-                      <Check class="h-4 w-4 text-emerald-500 mx-auto" />
-                    </template>
-                    <template v-else-if="row.free === false">
-                      <X class="h-4 w-4 text-muted-foreground/40 mx-auto" />
-                    </template>
-                    <template v-else>
-                      <span class="text-muted-foreground">{{ row.free }}</span>
-                    </template>
-                  </td>
-                  <td class="py-3 px-4 text-center">
-                    <template v-if="row.pro === true">
-                      <Check class="h-4 w-4 text-emerald-500 mx-auto" />
-                    </template>
-                    <template v-else-if="row.pro === false">
-                      <X class="h-4 w-4 text-muted-foreground/40 mx-auto" />
-                    </template>
-                    <template v-else>
-                      <span class="font-medium text-primary">{{ row.pro }}</span>
-                    </template>
+                    <Check v-if="row.pro === true" class="h-4 w-4 text-emerald-500 mx-auto" />
+                    <X v-else-if="row.pro === false" class="h-4 w-4 text-muted-foreground/40 mx-auto" />
+                    <span v-else class="font-medium text-primary">{{ row.pro }}</span>
                   </td>
                 </tr>
               </tbody>
