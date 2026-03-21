@@ -37,6 +37,23 @@ const PgStore = pgSession(session)
 
 app.use(express.json({ limit: '2mb' }))
 
+// CORS for Vercel frontend
+const allowedOrigins = process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',') : []
+app.use((req: Request, res: Response, next: NextFunction) => {
+  const origin = req.headers.origin
+  if (origin && allowedOrigins.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin)
+    res.setHeader('Access-Control-Allow-Credentials', 'true')
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+  }
+  if (req.method === 'OPTIONS') {
+    res.sendStatus(204)
+    return
+  }
+  next()
+})
+
 if (!process.env.SESSION_SECRET) {
   throw new Error('SESSION_SECRET environment variable is required')
 }
@@ -55,7 +72,7 @@ app.use(session({
   cookie: {
     secure: process.env.NODE_ENV === 'production' || !!process.env.REPL_ID,
     httpOnly: true,
-    sameSite: 'lax',
+    sameSite: process.env.CORS_ORIGIN ? 'none' as const : 'lax' as const,
     maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days for anonymous users
   },
 }))
