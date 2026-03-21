@@ -2,47 +2,33 @@
 import { ref, computed } from 'vue'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/vue-query'
 import { CreditCard, Check, Zap, ArrowUpRight, Loader2, AlertCircle } from 'lucide-vue-next'
-import { tansoGetPlans, tansoGetEntitlements, tansoGetSubscription, tansoSubscribe } from '@/lib/api'
+import { tansoGetStatus, tansoSubscribe } from '@/lib/api'
 import { toast } from 'vue-sonner'
 
 const queryClient = useQueryClient()
 
-const { data: plansData, isLoading: loadingPlans, isError: plansError } = useQuery({
-  queryKey: ['tanso-plans'],
-  queryFn: tansoGetPlans,
-  retry: false,
-})
-
-const { data: entitlementsData, isLoading: loadingEntitlements, isError: entitlementsError } = useQuery({
-  queryKey: ['tanso-entitlements'],
-  queryFn: tansoGetEntitlements,
-  retry: false,
-})
-
-const { data: subscriptionData, isLoading: loadingSubscription, isError: subscriptionError } = useQuery({
-  queryKey: ['tanso-subscription'],
-  queryFn: tansoGetSubscription,
-  retry: false,
+const { data: statusData, isLoading: isLoading, isError: hasError } = useQuery({
+  queryKey: ['tanso-status'],
+  queryFn: tansoGetStatus,
+  retry: 1,
+  retryDelay: 2000,
 })
 
 const subscribeMutation = useMutation({
   mutationFn: (planId: string) => tansoSubscribe(planId),
   onSuccess: () => {
     toast.success('Subscription created successfully!')
-    queryClient.invalidateQueries({ queryKey: ['tanso-subscription'] })
-    queryClient.invalidateQueries({ queryKey: ['tanso-entitlements'] })
+    queryClient.invalidateQueries({ queryKey: ['tanso-status'] })
   },
   onError: (error: Error) => {
     toast.error(error.message || 'Failed to subscribe')
   },
 })
 
-const hasError = computed(() => plansError.value || entitlementsError.value || subscriptionError.value)
-const isConfigured = computed(() => plansData.value?.configured ?? false)
-const plans = computed(() => plansData.value?.plans || [])
-const entitlements = computed(() => entitlementsData.value?.entitlements || [])
-const customer = computed(() => subscriptionData.value?.customer)
-const isLoading = computed(() => !hasError.value && (loadingPlans.value || loadingEntitlements.value || loadingSubscription.value))
+const isConfigured = computed(() => statusData.value?.configured ?? false)
+const plans = computed(() => statusData.value?.plans || [])
+const entitlements = computed(() => statusData.value?.entitlements || [])
+const customer = computed(() => statusData.value?.customer)
 
 const activeSubscriptions = computed(() => {
   if (!customer.value?.subscriptions) return []
@@ -75,7 +61,7 @@ function handleSubscribe(planId: string) {
       <Loader2 class="h-6 w-6 animate-spin text-muted-foreground" />
     </div>
 
-    <template v-else-if="hasError || !isConfigured">
+    <template v-else-if="!isConfigured">
       <div class="rounded-xl border bg-card p-8 text-center">
         <AlertCircle class="h-10 w-10 text-muted-foreground mx-auto mb-4" />
         <h2 class="text-lg font-semibold">Billing Not Connected</h2>

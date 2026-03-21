@@ -662,6 +662,15 @@ export interface TansoEntitlementCheck {
   remaining?: number
 }
 
+export async function tansoGetStatus(): Promise<{
+  plans: TansoPlan[]
+  entitlements: TansoEntitlement[]
+  customer: any
+  configured: boolean
+}> {
+  return request('/tanso/status')
+}
+
 export async function tansoGetPlans(): Promise<{ plans: TansoPlan[]; configured: boolean }> {
   return request('/tanso/plans')
 }

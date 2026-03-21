@@ -2372,6 +2372,51 @@ async function trackTansoUsage(visitorId: string, featureKey: string, eventName:
   }
 }
 
+app.get('/tanso/status', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  if (!isTansoConfigured()) return res.json({ plans: [], entitlements: [], customer: null, configured: false })
+
+  const visitorId = req.visitorId!
+  let plansResult: any[] = []
+  let entitlements: any[] = []
+  let customer: any = null
+  let healthy = true
+
+  try {
+    const plans = await tansoListPlans()
+    plansResult = Array.isArray(plans) ? plans : plans?.plans || []
+  } catch (err) {
+    console.error('Tanso status: plans fetch failed:', err instanceof Error ? err.message : err)
+    healthy = false
+  }
+
+  try {
+    await getOrCreateTansoCustomer(visitorId)
+  } catch (err) {
+    console.error('Tanso status: customer setup failed:', err instanceof Error ? err.message : err)
+  }
+
+  try {
+    const ent = await tansoListCustomerEntitlements(visitorId)
+    entitlements = Array.isArray(ent) ? ent : ent?.entitlements || []
+  } catch (err) {
+    console.error('Tanso status: entitlements fetch failed:', err instanceof Error ? err.message : err)
+  }
+
+  try {
+    customer = await tansoGetCustomer(visitorId)
+  } catch (err) {
+    console.error('Tanso status: customer fetch failed:', err instanceof Error ? err.message : err)
+  }
+
+  res.json({
+    plans: plansResult,
+    entitlements,
+    customer,
+    configured: true,
+    healthy,
+  })
+})
+
 app.get('/tanso/plans', ensureVisitor, async (_req: AuthRequest, res: Response) => {
   try {
     if (!isTansoConfigured()) return res.json({ plans: [], configured: false })
