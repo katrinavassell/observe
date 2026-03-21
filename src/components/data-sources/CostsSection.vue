@@ -9,7 +9,7 @@
  * - Template downloads
  */
 
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { toast } from 'vue-sonner'
 import Papa from 'papaparse'
 import {
@@ -57,6 +57,15 @@ const showAnthropicModal = ref(false)
 const isAnthropicConnected = ref(false)
 const showOpenAIModal = ref(false)
 const isOpenAIConnected = ref(false)
+
+onMounted(async () => {
+  try {
+    const { getOpenAIStatus, getAnthropicStatus } = await import('@/api/client')
+    const [openai, anthropic] = await Promise.all([getOpenAIStatus(), getAnthropicStatus()])
+    isOpenAIConnected.value = openai.connected
+    isAnthropicConnected.value = anthropic.connected
+  } catch { /* ignore */ }
+})
 
 function triggerFileInput(): void {
   fileInput.value?.click()
