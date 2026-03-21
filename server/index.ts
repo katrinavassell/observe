@@ -2658,6 +2658,29 @@ function flattenEntitlements(raw: any): any[] {
   return items
 }
 
+async function autoSubscribeToFreePlan(customerReferenceId: string): Promise<void> {
+  try {
+    // Check if already subscribed
+    const customer = await tansoGetCustomer(customerReferenceId)
+    if (customer?.subscriptions?.some((s: any) => s.isActive)) return
+
+    // Find the free plan
+    const plans = await tansoListPlans()
+    const planItems = Array.isArray(plans) ? plans : plans?.items ?? plans?.plans ?? []
+    const freePlan = planItems.find((p: any) => (p.plan?.key ?? p.key) === 'free')
+    const freePlanId = freePlan?.plan?.id ?? freePlan?.id
+    if (!freePlanId) {
+      console.warn('No free plan found for auto-subscription')
+      return
+    }
+
+    await tansoCreateSubscription(customerReferenceId, freePlanId)
+    console.log('Auto-subscribed', customerReferenceId, 'to free plan')
+  } catch (err) {
+    console.error('Auto-subscribe to free plan failed:', err instanceof Error ? err.message : err)
+  }
+}
+
 async function getOrCreateTansoCustomer(visitorId: string, email?: string): Promise<string | null> {
   if (!isTansoConfigured()) return null
   try {
@@ -2672,6 +2695,10 @@ async function getOrCreateTansoCustomer(visitorId: string, email?: string): Prom
           'INSERT INTO tanso_customers (visitor_id, tanso_customer_id, email) VALUES ($1, $2, $3) ON CONFLICT (visitor_id) DO UPDATE SET tanso_customer_id = $2',
           [visitorId, customerId, email || customer?.email || null]
         )
+        // Auto-subscribe if no active subscription
+        if (!customer?.subscriptions?.some((s: any) => s.isActive)) {
+          await autoSubscribeToFreePlan(visitorId)
+        }
         return customerId
       }
     } catch (fetchErr) {
@@ -2690,6 +2717,8 @@ async function getOrCreateTansoCustomer(visitorId: string, email?: string): Prom
           'INSERT INTO tanso_customers (visitor_id, tanso_customer_id, email) VALUES ($1, $2, $3) ON CONFLICT (visitor_id) DO UPDATE SET tanso_customer_id = $2',
           [visitorId, tansoId, email || null]
         )
+        // New customer — auto-subscribe to free plan
+        await autoSubscribeToFreePlan(visitorId)
       }
       return tansoId
     } catch (createErr: any) {
@@ -2702,6 +2731,7 @@ async function getOrCreateTansoCustomer(visitorId: string, email?: string): Prom
             'INSERT INTO tanso_customers (visitor_id, tanso_customer_id, email) VALUES ($1, $2, $3) ON CONFLICT (visitor_id) DO UPDATE SET tanso_customer_id = $2, email = $3',
             [visitorId, retryId, email]
           )
+          await autoSubscribeToFreePlan(visitorId)
           return retryId
         }
       }
