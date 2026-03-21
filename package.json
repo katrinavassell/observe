@@ -13,6 +13,7 @@
     "lint:fix": "eslint src/ --fix"
   },
   "dependencies": {
+    "@neondatabase/serverless": "^1.0.2",
     "@supabase/supabase-js": "^2.89.0",
     "@tanstack/vue-query": "^5.92.3",
     "@types/bcryptjs": "^2.4.6",
@@ -20,6 +21,7 @@
     "@types/express-session": "^1.18.2",
     "@types/pg": "^8.16.0",
     "@vee-validate/zod": "^4.15.1",
+    "@vercel/node": "^5.6.18",
     "bcryptjs": "^3.0.3",
     "chart.js": "^4.5.1",
     "class-variance-authority": "^0.7.1",
