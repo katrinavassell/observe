@@ -17,7 +17,8 @@ import {
   ArrowRight,
 } from 'lucide-vue-next'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, Button, Input } from '@/components/ui'
-import { supabase } from '@/lib/supabase'
+
+const API_BASE = '/api'
 
 /** Integrations that user has requested notifications for */
 const requestedIntegrations = ref<Set<string>>(new Set())
@@ -29,22 +30,16 @@ const isSubmittingRequest = ref(false)
 
 /**
  * Request notification when an integration becomes available.
- *
- * @param integration - Name of the integration (e.g., "Salesforce")
  */
 async function handleNotifyMe(integration: string): Promise<void> {
   try {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) {
-      toast.error('Please sign in first')
-      return
-    }
-
-    await supabase.from('integration_requests').upsert({
-      user_id: user.id,
-      integration_name: integration,
-      request_type: 'notify',
-    }, { onConflict: 'user_id,integration_name' })
+    const response = await fetch(`${API_BASE}/integration-requests`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ integration_name: integration, request_type: 'notify' }),
+    })
+    if (!response.ok) throw new Error('Failed')
 
     requestedIntegrations.value.add(integration)
     toast.success('Got it!', {
@@ -66,17 +61,16 @@ async function submitRequestForm(): Promise<void> {
 
   isSubmittingRequest.value = true
   try {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) {
-      toast.error('Please sign in first')
-      return
-    }
-
-    await supabase.from('integration_requests').insert({
-      user_id: user.id,
-      integration_name: requestFormData.value.integration.trim(),
-      request_type: 'request',
+    const response = await fetch(`${API_BASE}/integration-requests`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({
+        integration_name: requestFormData.value.integration.trim(),
+        request_type: 'request',
+      }),
     })
+    if (!response.ok) throw new Error('Failed')
 
     requestedIntegrations.value.add('custom')
     showRequestForm.value = false

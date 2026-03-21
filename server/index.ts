@@ -1108,6 +1108,17 @@ async function ensureDbInitialized() {
       )
     `)
 
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS integration_requests (
+        id SERIAL PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        integration_name TEXT NOT NULL,
+        request_type TEXT NOT NULL DEFAULT 'notify',
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(user_id, integration_name)
+      )
+    `)
+
     // Create indexes
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_plans_user_id ON plans(user_id)`)
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_customers_user_id ON customers(user_id)`)
@@ -1130,6 +1141,69 @@ async function ensureDbInitialized() {
         connected_at TIMESTAMPTZ DEFAULT NOW(),
         last_synced_at TIMESTAMPTZ,
         UNIQUE(user_id, provider)
+      )
+    `)
+
+    // Team / Organization tables
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS organizations (
+        id SERIAL PRIMARY KEY,
+        name TEXT NOT NULL DEFAULT 'My Team',
+        owner_visitor_id TEXT NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `)
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS organization_members (
+        id SERIAL PRIMARY KEY,
+        org_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        visitor_id TEXT,
+        invited_email TEXT,
+        invite_token TEXT UNIQUE,
+        role TEXT NOT NULL DEFAULT 'viewer' CHECK (role IN ('admin', 'viewer')),
+        status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'active')),
+        joined_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `)
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS visitor_org_map (
+        visitor_id TEXT PRIMARY KEY,
+        org_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `)
+
+    // Referral system tables
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS referral_codes (
+        id SERIAL PRIMARY KEY,
+        user_id TEXT NOT NULL UNIQUE,
+        code TEXT NOT NULL UNIQUE,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS referrals (
+        id SERIAL PRIMARY KEY,
+        referrer_user_id TEXT NOT NULL,
+        referred_user_id TEXT NOT NULL UNIQUE,
+        referral_code TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending',
+        credited_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS referral_credits (
+        id SERIAL PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        credit_type TEXT NOT NULL DEFAULT 'ai_insight',
+        amount INTEGER NOT NULL DEFAULT 1,
+        source_referral_id INTEGER REFERENCES referrals(id),
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )
     `)
 
@@ -2811,6 +2885,463 @@ app.get('/integrations/anthropic/status', ensureVisitor, async (req: AuthRequest
   } catch (err) {
     console.error('Anthropic status error:', err)
     res.status(500).json({ error: 'Failed to check Anthropic status' })
+  }
+})
+
+// =============================================================================
+// REFERRAL SYSTEM
+// =============================================================================
+
+// GET /referral/code - Get or create a referral code for the current user
+app.get('/referral/code', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  try {
+    const visitorId = req.visitorId!
+    // Check if user already has a code
+    const existing = await pool.query(
+      `SELECT code FROM referral_codes WHERE user_id = $1`,
+      [visitorId]
+    )
+    if (existing.rows.length > 0) {
+      return res.json({ code: existing.rows[0].code })
+    }
+    // Generate a unique code
+    const code = crypto.randomUUID().replace(/-/g, '').substring(0, 8)
+    await pool.query(
+      `INSERT INTO referral_codes (user_id, code) VALUES ($1, $2)`,
+      [visitorId, code]
+    )
+    res.json({ code })
+  } catch (err) {
+    console.error('Referral code error:', err)
+    res.status(500).json({ error: 'Failed to get referral code' })
+  }
+})
+
+// POST /referral/record - Record that the current user was referred by a code
+app.post('/referral/record', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  try {
+    const visitorId = req.visitorId!
+    const { code } = req.body
+    if (!code || typeof code !== 'string') {
+      return res.status(400).json({ error: 'Referral code is required' })
+    }
+    // Check if this user was already referred
+    const existingReferral = await pool.query(
+      `SELECT id FROM referrals WHERE referred_user_id = $1`,
+      [visitorId]
+    )
+    if (existingReferral.rows.length > 0) {
+      return res.json({ success: true, already_recorded: true })
+    }
+    // Look up the referral code
+    const codeResult = await pool.query(
+      `SELECT user_id FROM referral_codes WHERE code = $1`,
+      [code]
+    )
+    if (codeResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Invalid referral code' })
+    }
+    const referrerUserId = codeResult.rows[0].user_id
+    // Don't allow self-referral
+    if (referrerUserId === visitorId) {
+      return res.status(400).json({ error: 'Cannot use your own referral code' })
+    }
+    // Record the referral
+    await pool.query(
+      `INSERT INTO referrals (referrer_user_id, referred_user_id, referral_code, status)
+       VALUES ($1, $2, $3, 'pending')`,
+      [referrerUserId, visitorId, code]
+    )
+    res.json({ success: true })
+  } catch (err) {
+    console.error('Record referral error:', err)
+    res.status(500).json({ error: 'Failed to record referral' })
+  }
+})
+
+// GET /referral/stats - Get referral statistics for the current user
+app.get('/referral/stats', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  try {
+    const visitorId = req.visitorId!
+
+    // Get or create referral code
+    let codeResult = await pool.query(
+      `SELECT code FROM referral_codes WHERE user_id = $1`,
+      [visitorId]
+    )
+    if (codeResult.rows.length === 0) {
+      const code = crypto.randomUUID().replace(/-/g, '').substring(0, 8)
+      await pool.query(
+        `INSERT INTO referral_codes (user_id, code) VALUES ($1, $2)`,
+        [visitorId, code]
+      )
+      codeResult = { rows: [{ code }] } as any
+    }
+    const code = codeResult.rows[0].code
+
+    // Count referrals by status
+    const statsResult = await pool.query(
+      `SELECT
+         COUNT(*)::int AS total_referrals,
+         COUNT(*) FILTER (WHERE status = 'converted')::int AS converted_referrals,
+         COUNT(*) FILTER (WHERE status = 'pending')::int AS pending_referrals
+       FROM referrals WHERE referrer_user_id = $1`,
+      [visitorId]
+    )
+
+    // Count credits earned
+    const creditsResult = await pool.query(
+      `SELECT COALESCE(SUM(amount), 0)::int AS credits_earned
+       FROM referral_credits WHERE user_id = $1`,
+      [visitorId]
+    )
+
+    const stats = statsResult.rows[0]
+    res.json({
+      code,
+      total_referrals: stats.total_referrals,
+      converted_referrals: stats.converted_referrals,
+      pending_referrals: stats.pending_referrals,
+      credits_earned: creditsResult.rows[0].credits_earned,
+    })
+  } catch (err) {
+    console.error('Referral stats error:', err)
+    res.status(500).json({ error: 'Failed to get referral stats' })
+  }
+})
+
+// Integration requests (notify me / request integration)
+app.post('/integration-requests', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  try {
+    const { integration_name, request_type } = req.body
+    if (!integration_name) {
+      return res.status(400).json({ error: 'integration_name is required' })
+    }
+    await pool.query(
+      `INSERT INTO integration_requests (user_id, integration_name, request_type)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (user_id, integration_name) DO NOTHING`,
+      [req.visitorId, integration_name, request_type || 'notify']
+    )
+    res.json({ success: true })
+  } catch (error) {
+    console.error('Integration request error:', error)
+    res.status(500).json({ error: 'Failed to save request' })
+  }
+})
+
+// =============================================================================
+// TEAM / ORGANIZATION
+// =============================================================================
+
+// Helper: get or create org for a visitor
+async function getOrCreateOrg(visitorId: string) {
+  // Check if visitor already has an org
+  const mapResult = await pool.query(
+    'SELECT org_id FROM visitor_org_map WHERE visitor_id = $1',
+    [visitorId]
+  )
+  if (mapResult.rows.length > 0) {
+    const orgId = mapResult.rows[0].org_id
+    const orgResult = await pool.query('SELECT * FROM organizations WHERE id = $1', [orgId])
+    return orgResult.rows[0]
+  }
+
+  // Create new org
+  const orgResult = await pool.query(
+    'INSERT INTO organizations (name, owner_visitor_id) VALUES ($1, $2) RETURNING *',
+    ['My Team', visitorId]
+  )
+  const org = orgResult.rows[0]
+
+  // Map visitor to org
+  await pool.query(
+    'INSERT INTO visitor_org_map (visitor_id, org_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+    [visitorId, org.id]
+  )
+
+  // Add visitor as admin member
+  await pool.query(
+    `INSERT INTO organization_members (org_id, visitor_id, role, status, joined_at)
+     VALUES ($1, $2, 'admin', 'active', NOW())`,
+    [org.id, visitorId]
+  )
+
+  return org
+}
+
+// GET /team - get current user's org info and members
+app.get('/team', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  try {
+    const visitorId = req.visitorId!
+    const org = await getOrCreateOrg(visitorId)
+
+    const membersResult = await pool.query(
+      'SELECT * FROM organization_members WHERE org_id = $1 ORDER BY created_at ASC',
+      [org.id]
+    )
+
+    // Find current user's role
+    const myMember = membersResult.rows.find((m: any) => m.visitor_id === visitorId)
+    const myRole = myMember?.role || 'viewer'
+
+    res.json({
+      org,
+      members: membersResult.rows,
+      my_role: myRole,
+    })
+  } catch (err) {
+    console.error('GET /team error:', err)
+    res.status(500).json({ error: 'Failed to load team info' })
+  }
+})
+
+// PATCH /team/name - rename the org
+app.patch('/team/name', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  try {
+    const visitorId = req.visitorId!
+    const { name } = req.body
+    if (!name || typeof name !== 'string') {
+      return res.status(400).json({ error: 'Name is required' })
+    }
+
+    const org = await getOrCreateOrg(visitorId)
+
+    // Check admin
+    const memberResult = await pool.query(
+      'SELECT role FROM organization_members WHERE org_id = $1 AND visitor_id = $2',
+      [org.id, visitorId]
+    )
+    if (!memberResult.rows.length || memberResult.rows[0].role !== 'admin') {
+      return res.status(403).json({ error: 'Only admins can rename the team' })
+    }
+
+    await pool.query('UPDATE organizations SET name = $1 WHERE id = $2', [name, org.id])
+    res.json({ success: true })
+  } catch (err) {
+    console.error('PATCH /team/name error:', err)
+    res.status(500).json({ error: 'Failed to rename team' })
+  }
+})
+
+// POST /team/invite - create an invite
+app.post('/team/invite', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  try {
+    const visitorId = req.visitorId!
+    const { email, role } = req.body
+
+    const org = await getOrCreateOrg(visitorId)
+
+    // Check admin
+    const memberResult = await pool.query(
+      'SELECT role FROM organization_members WHERE org_id = $1 AND visitor_id = $2',
+      [org.id, visitorId]
+    )
+    if (!memberResult.rows.length || memberResult.rows[0].role !== 'admin') {
+      return res.status(403).json({ error: 'Only admins can invite members' })
+    }
+
+    const validRole = role === 'admin' ? 'admin' : 'viewer'
+    const inviteToken = crypto.randomUUID()
+
+    await pool.query(
+      `INSERT INTO organization_members (org_id, invited_email, invite_token, role, status)
+       VALUES ($1, $2, $3, $4, 'pending')`,
+      [org.id, email || null, inviteToken, validRole]
+    )
+
+    res.json({ success: true, invite_token: inviteToken })
+  } catch (err) {
+    console.error('POST /team/invite error:', err)
+    res.status(500).json({ error: 'Failed to create invite' })
+  }
+})
+
+// GET /team/invite/:token - get invite info (no auth required)
+app.get('/team/invite/:token', async (req: Request, res: Response) => {
+  try {
+    const { token } = req.params
+    const result = await pool.query(
+      `SELECT om.invited_email, om.role, o.name AS org_name
+       FROM organization_members om
+       JOIN organizations o ON o.id = om.org_id
+       WHERE om.invite_token = $1 AND om.status = 'pending'`,
+      [token]
+    )
+
+    if (!result.rows.length) {
+      return res.status(404).json({ error: 'Invite not found or already used' })
+    }
+
+    const row = result.rows[0]
+    res.json({
+      org_name: row.org_name,
+      invited_email: row.invited_email,
+      role: row.role,
+    })
+  } catch (err) {
+    console.error('GET /team/invite/:token error:', err)
+    res.status(500).json({ error: 'Failed to get invite info' })
+  }
+})
+
+// POST /team/join/:token - accept an invite
+app.post('/team/join/:token', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  try {
+    const visitorId = req.visitorId!
+    const { token } = req.params
+
+    const result = await pool.query(
+      `SELECT om.*, o.id AS organization_id
+       FROM organization_members om
+       JOIN organizations o ON o.id = om.org_id
+       WHERE om.invite_token = $1 AND om.status = 'pending'`,
+      [token]
+    )
+
+    if (!result.rows.length) {
+      return res.status(404).json({ error: 'Invite not found or already used' })
+    }
+
+    const invite = result.rows[0]
+
+    // Update invite to active
+    await pool.query(
+      `UPDATE organization_members
+       SET visitor_id = $1, status = 'active', joined_at = NOW(), invite_token = NULL
+       WHERE id = $2`,
+      [visitorId, invite.id]
+    )
+
+    // Map visitor to org (overwrite any existing mapping)
+    await pool.query(
+      `INSERT INTO visitor_org_map (visitor_id, org_id) VALUES ($1, $2)
+       ON CONFLICT (visitor_id) DO UPDATE SET org_id = $2`,
+      [visitorId, invite.organization_id]
+    )
+
+    res.json({ success: true, org_id: String(invite.organization_id), role: invite.role })
+  } catch (err) {
+    console.error('POST /team/join/:token error:', err)
+    res.status(500).json({ error: 'Failed to accept invite' })
+  }
+})
+
+// PATCH /team/members/:id - update member role
+app.patch('/team/members/:id', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  try {
+    const visitorId = req.visitorId!
+    const memberId = req.params.id
+    const { role } = req.body
+
+    if (!role || !['admin', 'viewer'].includes(role)) {
+      return res.status(400).json({ error: 'Invalid role' })
+    }
+
+    const org = await getOrCreateOrg(visitorId)
+
+    // Check admin
+    const adminCheck = await pool.query(
+      'SELECT role FROM organization_members WHERE org_id = $1 AND visitor_id = $2',
+      [org.id, visitorId]
+    )
+    if (!adminCheck.rows.length || adminCheck.rows[0].role !== 'admin') {
+      return res.status(403).json({ error: 'Only admins can change roles' })
+    }
+
+    // Update the target member (must be in same org)
+    const updateResult = await pool.query(
+      'UPDATE organization_members SET role = $1 WHERE id = $2 AND org_id = $3 RETURNING id',
+      [role, memberId, org.id]
+    )
+
+    if (!updateResult.rows.length) {
+      return res.status(404).json({ error: 'Member not found' })
+    }
+
+    res.json({ success: true })
+  } catch (err) {
+    console.error('PATCH /team/members/:id error:', err)
+    res.status(500).json({ error: 'Failed to update role' })
+  }
+})
+
+// DELETE /team/members/:id - remove a member
+app.delete('/team/members/:id', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  try {
+    const visitorId = req.visitorId!
+    const memberId = req.params.id
+
+    const org = await getOrCreateOrg(visitorId)
+
+    // Check admin
+    const adminCheck = await pool.query(
+      'SELECT role FROM organization_members WHERE org_id = $1 AND visitor_id = $2',
+      [org.id, visitorId]
+    )
+    if (!adminCheck.rows.length || adminCheck.rows[0].role !== 'admin') {
+      return res.status(403).json({ error: 'Only admins can remove members' })
+    }
+
+    // Get the member to remove
+    const memberResult = await pool.query(
+      'SELECT * FROM organization_members WHERE id = $1 AND org_id = $2',
+      [memberId, org.id]
+    )
+    if (!memberResult.rows.length) {
+      return res.status(404).json({ error: 'Member not found' })
+    }
+
+    const member = memberResult.rows[0]
+
+    // Don't allow removing yourself
+    if (member.visitor_id === visitorId) {
+      return res.status(400).json({ error: 'Cannot remove yourself' })
+    }
+
+    // Remove visitor-org mapping if they have one
+    if (member.visitor_id) {
+      await pool.query(
+        'DELETE FROM visitor_org_map WHERE visitor_id = $1 AND org_id = $2',
+        [member.visitor_id, org.id]
+      )
+    }
+
+    await pool.query('DELETE FROM organization_members WHERE id = $1', [memberId])
+    res.json({ success: true })
+  } catch (err) {
+    console.error('DELETE /team/members/:id error:', err)
+    res.status(500).json({ error: 'Failed to remove member' })
+  }
+})
+
+// GET /team/my-role - get current user's role
+app.get('/team/my-role', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  try {
+    const visitorId = req.visitorId!
+
+    const mapResult = await pool.query(
+      'SELECT org_id FROM visitor_org_map WHERE visitor_id = $1',
+      [visitorId]
+    )
+
+    if (!mapResult.rows.length) {
+      return res.json({ role: 'admin', org_id: '' })
+    }
+
+    const orgId = mapResult.rows[0].org_id
+    const memberResult = await pool.query(
+      'SELECT role FROM organization_members WHERE org_id = $1 AND visitor_id = $2',
+      [orgId, visitorId]
+    )
+
+    res.json({
+      role: memberResult.rows.length ? memberResult.rows[0].role : 'viewer',
+      org_id: String(orgId),
+    })
+  } catch (err) {
+    console.error('GET /team/my-role error:', err)
+    res.status(500).json({ error: 'Failed to get role' })
   }
 })
 

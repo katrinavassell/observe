@@ -14,22 +14,11 @@
  * @module api/client
  */
 
-import { supabase } from '@/lib/supabase'
-
 /** Base URL for all API requests (proxied to backend in dev, serverless in prod) */
 const API_BASE = '/api'
 
 /**
- * Get the current Supabase session token for authenticated API calls.
- */
-async function getAuthToken(): Promise<string | null> {
-  const { data: { session } } = await supabase.auth.getSession()
-  return session?.access_token || null
-}
-
-/**
  * Generic HTTP request helper with JSON handling and error management.
- * Automatically includes Supabase auth token for authenticated endpoints.
  *
  * @template T - Expected response type
  * @param endpoint - API endpoint path (without base URL)
@@ -43,21 +32,15 @@ async function request<T>(
 ): Promise<T> {
   const url = `${API_BASE}${endpoint}`
 
-  // Get auth token for Supabase Edge Functions
-  const token = await getAuthToken()
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...(options.headers as Record<string, string>),
   }
 
-  // Add Authorization header if we have a token
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`
-  }
-
   const response = await fetch(url, {
     ...options,
     headers,
+    credentials: 'include',
   })
 
   if (!response.ok) {
