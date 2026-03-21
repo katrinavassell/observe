@@ -93,10 +93,11 @@ export async function tansoListCustomerEntitlements(customerReferenceId: string)
 // Subscriptions
 // =============================================================================
 
-export async function tansoCreateSubscription(customerReferenceId: string, planId: string) {
+export async function tansoCreateSubscription(customerReferenceId: string, planId: string, gracePeriod = 7) {
   return apiPost('/api/v1/client/subscriptions', {
     customerReferenceId,
     planId,
+    gracePeriod,
   })
 }
 

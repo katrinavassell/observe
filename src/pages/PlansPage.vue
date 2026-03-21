@@ -18,10 +18,11 @@ const subscribeMutation = useMutation({
   mutationFn: (planId: string) => tansoSubscribe(planId),
   onSuccess: (data: any) => {
     if (data.checkoutUrl) {
-      window.open(data.checkoutUrl, '_blank')
+      // Redirect to Stripe checkout (full page, not popup)
+      window.location.href = data.checkoutUrl
       return
     }
-    toast.success('Subscription created successfully!')
+    toast.success('Plan updated successfully!')
     queryClient.invalidateQueries({ queryKey: ['tanso-status'] })
   },
   onError: (error: Error) => {

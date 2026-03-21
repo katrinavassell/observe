@@ -2927,44 +2927,48 @@ app.post('/tanso/subscribe', ensureVisitor, async (req: AuthRequest, res: Respon
       // Fetch updated customer to get new subscription state
       const updated = await tansoGetCustomer(visitorId)
       subscription = updated?.subscriptions?.find((s: any) => s.isActive)
-
-      // Plan-change doesn't return an invoice — fetch the latest DUE invoice
-      try {
-        const invoices = await tansoListCustomerInvoices(visitorId)
-        const items = invoices?.items ?? invoices
-        if (Array.isArray(items)) {
-          invoice = items.find((inv: any) => inv.status === 'DUE' && inv.amount > 0)
-        }
-      } catch (invErr) {
-        console.error('Failed to fetch invoices after plan change:', invErr)
-      }
     } else {
       const result = await tansoCreateSubscription(visitorId, planId)
       subscription = result?.subscription ?? result
-      invoice = result?.invoice
     }
 
-    // For paid plans, create a Stripe Checkout session
-    if (invoice?.id && invoice?.amount > 0) {
+    // Fetch the most recent unpaid invoice (matches reference app pattern)
+    try {
+      const invoices = await tansoListCustomerInvoices(visitorId)
+      const items = Array.isArray(invoices) ? invoices : invoices?.items ?? []
+      invoice = items
+        .filter((inv: any) => inv.status !== 'PAID')
+        .sort((a: any, b: any) => new Date(b.dueDate || b.createdAt || 0).getTime() - new Date(a.dueDate || a.createdAt || 0).getTime())[0]
+    } catch (invErr) {
+      console.error('Failed to fetch invoices:', invErr)
+    }
+
+    if (!invoice?.id) {
+      // No unpaid invoice — subscription is already active
+      return res.json({ success: true, subscription })
+    }
+
+    // For paid plans, create a Stripe Checkout session and redirect
+    if (invoice.amount > 0) {
       try {
         const checkout = await tansoCreateCheckoutSession(invoice.id)
-        return res.json({ success: true, subscription, checkoutUrl: checkout.url })
+        if (checkout?.url) {
+          return res.json({ success: true, subscription, checkoutUrl: checkout.url })
+        }
       } catch (checkoutErr) {
         console.error('Stripe checkout session error:', checkoutErr)
-        // Stripe not configured — mark invoice as paid directly (demo mode)
-        try {
-          await tansoMarkInvoicePaid(invoice.id)
-        } catch (_) { /* best effort */ }
-        return res.status(500).json({ error: 'Subscription created but payment setup failed. Please try again.' })
       }
-    }
-
-    // Free plan or no invoice — mark as paid to activate subscription
-    if (invoice?.id) {
+      // Stripe not configured — fall back to mark-paid (demo mode)
       try {
         await tansoMarkInvoicePaid(invoice.id)
       } catch (_) { /* best effort */ }
+      return res.json({ success: true, subscription })
     }
+
+    // Free plan ($0 invoice) — mark as paid to activate subscription
+    try {
+      await tansoMarkInvoicePaid(invoice.id)
+    } catch (_) { /* best effort */ }
 
     res.json({ success: true, subscription })
   } catch (err) {
