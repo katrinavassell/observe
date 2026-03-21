@@ -31,6 +31,16 @@ const PgStore = pgSession(session)
 
 app.use(express.json({ limit: '2mb' }))
 
+// Ensure DB tables exist before anything else (critical for serverless cold starts)
+app.use(async (_req: Request, _res: Response, next: NextFunction) => {
+  try {
+    await ensureDbInitialized()
+    next()
+  } catch (error) {
+    next(error)
+  }
+})
+
 if (!process.env.SESSION_SECRET) {
   throw new Error('SESSION_SECRET environment variable is required')
 }
@@ -1116,15 +1126,6 @@ async function ensureDbInitialized() {
   }
 }
 
-// Middleware to ensure DB is initialized on every request (for serverless)
-app.use(async (_req: Request, _res: Response, next: NextFunction) => {
-  try {
-    await ensureDbInitialized()
-    next()
-  } catch (error) {
-    next(error)
-  }
-})
 
 // =============================================================================
 // STRIPE NATIVE INTEGRATION
