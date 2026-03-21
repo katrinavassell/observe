@@ -19,7 +19,7 @@ import {
   CheckCircle,
   X,
 } from 'lucide-vue-next'
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, Button } from '@/components/ui'
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, Button, Badge } from '@/components/ui'
 import * as api from '@/lib/api'
 import {
   validateFileSize,
@@ -251,30 +251,36 @@ async function handleDisconnectAnthropic(): Promise<void> {
               </svg>
             </div>
             <div>
-              <p class="font-medium">OpenAI</p>
-              <p class="text-xs text-muted-foreground">
-                {{ isOpenAIConnected ? 'Connected' : 'Pull monthly usage and token costs' }}
-              </p>
+              <div class="flex items-center gap-2">
+                <p class="font-medium">OpenAI</p>
+                <Badge
+                  v-if="isOpenAIConnected"
+                  variant="outline"
+                  class="text-green-600 border-green-600/30 bg-green-500/5"
+                >
+                  <CheckCircle class="h-3 w-3 mr-1" />
+                  Connected
+                </Badge>
+              </div>
+              <p class="text-xs text-muted-foreground">Pull monthly usage and token costs</p>
             </div>
           </div>
-          <div v-if="!isOpenAIConnected">
+          <div class="flex items-center gap-2">
             <Button
+              v-if="isOpenAIConnected"
+              variant="ghost"
+              size="sm"
+              @click="handleDisconnectOpenAI"
+            >
+              Disconnect
+            </Button>
+            <Button
+              v-else
               variant="outline"
               size="sm"
               @click="handleConnectOpenAI"
             >
               Connect
-            </Button>
-          </div>
-          <div v-else class="flex items-center gap-2">
-            <CheckCircle class="h-5 w-5 text-green-500" />
-            <Button
-              variant="ghost"
-              size="sm"
-              class="text-xs text-muted-foreground"
-              @click="handleDisconnectOpenAI"
-            >
-              Disconnect
             </Button>
           </div>
         </div>
@@ -286,30 +292,36 @@ async function handleDisconnectAnthropic(): Promise<void> {
               <span class="text-lg font-semibold text-[#D4A574]">A</span>
             </div>
             <div>
-              <p class="font-medium">Anthropic</p>
-              <p class="text-xs text-muted-foreground">
-                {{ isAnthropicConnected ? 'Connected' : 'Pull monthly usage and token costs' }}
-              </p>
+              <div class="flex items-center gap-2">
+                <p class="font-medium">Anthropic</p>
+                <Badge
+                  v-if="isAnthropicConnected"
+                  variant="outline"
+                  class="text-green-600 border-green-600/30 bg-green-500/5"
+                >
+                  <CheckCircle class="h-3 w-3 mr-1" />
+                  Connected
+                </Badge>
+              </div>
+              <p class="text-xs text-muted-foreground">Pull monthly usage and token costs</p>
             </div>
           </div>
-          <div v-if="!isAnthropicConnected">
+          <div class="flex items-center gap-2">
             <Button
+              v-if="isAnthropicConnected"
+              variant="ghost"
+              size="sm"
+              @click="handleDisconnectAnthropic"
+            >
+              Disconnect
+            </Button>
+            <Button
+              v-else
               variant="outline"
               size="sm"
               @click="handleConnectAnthropic"
             >
               Connect
-            </Button>
-          </div>
-          <div v-else class="flex items-center gap-2">
-            <CheckCircle class="h-5 w-5 text-green-500" />
-            <Button
-              variant="ghost"
-              size="sm"
-              class="text-xs text-muted-foreground"
-              @click="handleDisconnectAnthropic"
-            >
-              Disconnect
             </Button>
           </div>
         </div>

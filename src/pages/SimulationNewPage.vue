@@ -2,7 +2,7 @@
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/vue-query'
-import { getFeatures, createSimulation, updateSimulation } from '@/lib/api'
+import { getFeatures, createSimulation, updateSimulation, getUsageLimits } from '@/lib/api'
 import type { PricingChangeType, SimulationScenario } from '@/types/simulation'
 import {
   ArrowLeft,
@@ -14,7 +14,7 @@ import {
   Loader2,
 } from 'lucide-vue-next'
 import { toast } from 'vue-sonner'
-import { Button, Input, Select, Label, Card, CardContent } from '@/components/ui'
+import { Button, Input, Select, Label, Card, CardContent, Badge } from '@/components/ui'
 
 const router = useRouter()
 const queryClient = useQueryClient()
@@ -53,6 +53,22 @@ const scenarios = ref<ScenarioForm[]>([
 const { data: features } = useQuery({
   queryKey: ['features'],
   queryFn: getFeatures,
+})
+
+// Fetch usage limits
+const { data: usageLimits } = useQuery({
+  queryKey: ['usage-limits'],
+  queryFn: getUsageLimits,
+})
+
+const simulationsAllowed = computed(() => {
+  if (!usageLimits.value?.configured) return true
+  return usageLimits.value.simulations?.allowed !== false
+})
+
+const simulationsUsage = computed(() => {
+  if (!usageLimits.value?.configured) return null
+  return usageLimits.value.simulations?.usage ?? null
 })
 
 const featureKeys = computed(() => {
@@ -154,8 +170,13 @@ async function runSimulation() {
     queryClient.invalidateQueries({ queryKey: ['simulations'] })
     toast.success('Simulation completed')
     router.push(`/simulations/${sim.id}`)
-  } catch (error) {
-    toast.error('Failed to run simulation')
+  } catch (error: any) {
+    if (error?.message?.includes('403')) {
+      toast.error('Simulation limit reached. Upgrade to create more simulations.')
+      queryClient.invalidateQueries({ queryKey: ['usage-limits'] })
+    } else {
+      toast.error('Failed to run simulation')
+    }
     console.error(error)
   } finally {
     isSubmitting.value = false
@@ -177,6 +198,19 @@ async function runSimulation() {
       </Button>
       <h1 class="text-2xl font-semibold tracking-tight">New Simulation</h1>
       <p class="text-sm text-muted-foreground mt-1">Model the impact of pricing changes before rolling them out</p>
+      <div v-if="simulationsUsage" class="mt-2">
+        <Badge variant="secondary" class="text-xs">
+          {{ simulationsUsage.used }} of {{ simulationsUsage.limit }} simulations used
+        </Badge>
+      </div>
+    </div>
+
+    <!-- Usage limit banner -->
+    <div
+      v-if="!simulationsAllowed"
+      class="rounded-lg border border-yellow-200 bg-yellow-50 p-4 text-sm text-yellow-800"
+    >
+      You've used all {{ simulationsUsage?.limit ?? '' }} simulations. Upgrade to create more.
     </div>
 
     <!-- Step indicator -->
@@ -423,7 +457,7 @@ async function runSimulation() {
 
       <Button
         v-if="step === totalSteps"
-        :disabled="isSubmitting"
+        :disabled="isSubmitting || !simulationsAllowed"
         :loading="isSubmitting"
         class="gap-2"
         @click="runSimulation"

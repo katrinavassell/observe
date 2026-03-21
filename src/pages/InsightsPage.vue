@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/vue-query'
-import { listInsights, generateInsights, clearInsights } from '@/lib/api'
+import { listInsights, generateInsights, clearInsights, getUsageLimits } from '@/lib/api'
 import type { AiInsight } from '@/lib/api'
 import {
   Sparkles,
@@ -35,7 +35,12 @@ const generateMutation = useMutation({
     toast.success(`Generated ${data.insights.length} insights via ${source}`)
   },
   onError: (error: Error) => {
-    toast.error(error.message || 'Failed to generate insights')
+    if (error.message?.includes('403')) {
+      toast.error('Insight generation limit reached. Upgrade to generate more.')
+      queryClient.invalidateQueries({ queryKey: ['usage-limits'] })
+    } else {
+      toast.error(error.message || 'Failed to generate insights')
+    }
   },
 })
 
@@ -45,6 +50,22 @@ const clearMutation = useMutation({
     queryClient.invalidateQueries({ queryKey: ['insights'] })
     toast.success('Insights cleared')
   },
+})
+
+// Fetch usage limits
+const { data: usageLimits } = useQuery({
+  queryKey: ['usage-limits'],
+  queryFn: getUsageLimits,
+})
+
+const insightsAllowed = computed(() => {
+  if (!usageLimits.value?.configured) return true
+  return usageLimits.value.ai_insights?.allowed !== false
+})
+
+const insightsUsage = computed(() => {
+  if (!usageLimits.value?.configured) return null
+  return usageLimits.value.ai_insights?.usage ?? null
 })
 
 function severityIcon(severity: string) {
@@ -132,6 +153,9 @@ function navigateToContext(insight: AiInsight) {
         </p>
       </div>
       <div class="flex items-center gap-2">
+        <span v-if="insightsUsage" class="text-xs text-muted-foreground mr-1">
+          {{ insightsUsage.used }} of {{ insightsUsage.limit }} insights used
+        </span>
         <button
           v-if="insights && insights.length > 0"
           class="inline-flex items-center gap-1.5 rounded-md border px-3 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
@@ -143,14 +167,22 @@ function navigateToContext(insight: AiInsight) {
         </button>
         <button
           class="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors"
-          :disabled="generateMutation.isPending.value"
+          :disabled="generateMutation.isPending.value || !insightsAllowed"
           @click="generateMutation.mutate()"
         >
           <Loader2 v-if="generateMutation.isPending.value" class="h-4 w-4 animate-spin" />
           <Sparkles v-else class="h-4 w-4" />
-          {{ generateMutation.isPending.value ? 'Analyzing...' : 'Generate Insights' }}
+          {{ !insightsAllowed ? 'Limit Reached' : generateMutation.isPending.value ? 'Analyzing...' : 'Generate Insights' }}
         </button>
       </div>
+    </div>
+
+    <!-- Usage limit banner -->
+    <div
+      v-if="!insightsAllowed"
+      class="rounded-lg border border-yellow-200 bg-yellow-50 p-4 text-sm text-yellow-800"
+    >
+      You've used all {{ insightsUsage?.limit ?? '' }} insight generations. Upgrade to generate more.
     </div>
 
     <!-- Cost transparency -->
@@ -185,12 +217,12 @@ function navigateToContext(insight: AiInsight) {
       </p>
       <button
         class="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors"
-        :disabled="generateMutation.isPending.value"
+        :disabled="generateMutation.isPending.value || !insightsAllowed"
         @click="generateMutation.mutate()"
       >
         <Loader2 v-if="generateMutation.isPending.value" class="h-4 w-4 animate-spin" />
         <Sparkles v-else class="h-4 w-4" />
-        {{ generateMutation.isPending.value ? 'Analyzing...' : 'Generate Insights' }}
+        {{ !insightsAllowed ? 'Limit Reached' : generateMutation.isPending.value ? 'Analyzing...' : 'Generate Insights' }}
       </button>
     </div>
 

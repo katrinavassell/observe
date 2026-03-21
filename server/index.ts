@@ -596,6 +596,8 @@ app.post('/data/sample', ensureVisitor, async (req: AuthRequest, res: Response) 
     )
 
     await client.query('COMMIT')
+    // Convert referral if this user was referred and just loaded data
+    convertReferralIfPending(req.visitorId!)
     res.json({ success: true, message: 'Sample data loaded' })
   } catch (error) {
     await client.query('ROLLBACK')
@@ -742,6 +744,7 @@ app.post('/data/upload/costs', ensureVisitor, async (req: AuthRequest, res: Resp
     )
 
     await client.query('COMMIT')
+    convertReferralIfPending(req.visitorId!)
     trackTansoUsage(req.visitorId!, 'csv_upload', 'csv_upload_costs')
     res.json({ success: true, count: records.length })
   } catch (error) {
@@ -814,6 +817,7 @@ app.post('/data/upload/usage', ensureVisitor, async (req: AuthRequest, res: Resp
     )
 
     await client.query('COMMIT')
+    convertReferralIfPending(req.visitorId!)
     trackTansoUsage(req.visitorId!, 'csv_upload', 'csv_upload_usage')
     res.json({ success: true, count: records.length })
   } catch (error) {
@@ -890,9 +894,10 @@ app.post('/data/upload/revenue', ensureVisitor, async (req: AuthRequest, res: Re
     )
 
     await client.query('COMMIT')
+    convertReferralIfPending(req.visitorId!)
     trackTansoUsage(req.visitorId!, 'csv_upload', 'csv_upload_revenue')
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       counts: {
         customers: customers?.length || 0,
         plans: plans?.length || 0,
@@ -1351,6 +1356,7 @@ app.post('/stripe/sync', ensureVisitor, async (req: AuthRequest, res: Response) 
     )
 
     await client.query('COMMIT')
+    convertReferralIfPending(req.visitorId!)
 
     res.json({
       success: true,
@@ -1869,8 +1875,20 @@ app.get('/simulations', ensureVisitor, async (req: AuthRequest, res: Response) =
 
 // POST /simulations — create a new simulation
 app.post('/simulations', ensureVisitor, async (req: AuthRequest, res: Response) => {
-  const access = await checkTansoFeatureAccess(req.visitorId!, 'simulation_run')
-  if (!access.allowed) return res.status(403).json({ error: access.reason || 'Simulation limit reached. Upgrade your plan.' })
+  const visitorId = req.visitorId!
+
+  // Tanso entitlement check (fail open)
+  if (isTansoConfigured()) {
+    try {
+      const entitlement = await tansoCheckEntitlement(visitorId, 'simulations')
+      if (entitlement && entitlement.isAllowed === false) {
+        return res.status(403).json({ error: 'Simulation limit reached', usage: entitlement.usage })
+      }
+    } catch (err) {
+      console.error('Tanso entitlement check error (simulations):', err)
+    }
+  }
+
   try {
     const { name, scenarios, time_range } = req.body
     if (!name) {
@@ -1881,10 +1899,27 @@ app.post('/simulations', ensureVisitor, async (req: AuthRequest, res: Response) 
       `INSERT INTO simulations (user_id, name, scenarios, time_range, status)
        VALUES ($1, $2, $3, $4, 'draft')
        RETURNING *`,
-      [req.visitorId, name, JSON.stringify(scenarios || []), time_range ? JSON.stringify(time_range) : null]
+      [visitorId, name, JSON.stringify(scenarios || []), time_range ? JSON.stringify(time_range) : null]
     )
 
     const row = result.rows[0]
+
+    // Track usage in Tanso (fail open)
+    if (isTansoConfigured()) {
+      try {
+        await tansoIngestEvent({
+          eventIdempotencyKey: crypto.randomUUID(),
+          eventName: 'simulation_created',
+          occurredAt: new Date().toISOString(),
+          customerReferenceId: visitorId,
+          featureKey: 'simulations',
+          usageUnits: '1',
+        })
+      } catch (err) {
+        console.error('Tanso usage tracking error (simulations):', err)
+      }
+    }
+
     res.json({
       ...row,
       scenarios: row.scenarios || [],
@@ -2257,6 +2292,20 @@ app.get('/insights', ensureVisitor, async (req: AuthRequest, res: Response) => {
 
 // POST /insights/generate — generate AI insights from observe_events data
 app.post('/insights/generate', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  const visitorId = req.visitorId!
+
+  // Tanso entitlement check (fail open)
+  if (isTansoConfigured()) {
+    try {
+      const entitlement = await tansoCheckEntitlement(visitorId, 'ai_insights')
+      if (entitlement && entitlement.isAllowed === false) {
+        return res.status(403).json({ error: 'AI insights limit reached', usage: entitlement.usage })
+      }
+    } catch (err) {
+      console.error('Tanso entitlement check error (ai_insights):', err)
+    }
+  }
+
   try {
     // Gather summary data from observe_events
     const [featureRes, customerRes, modelRes, overallRes] = await Promise.all([
@@ -2510,8 +2559,24 @@ Return ONLY the JSON array, no markdown or explanation.`
     await pool.query(
       `INSERT INTO observe_events (user_id, customer_id, feature_key, event_name, cost_amount, cost_unit, source, granularity)
        VALUES ($1, 'system', 'ai_insights', 'insight_generated', $2, 'usd', 'system', 'event')`,
-      [req.visitorId, costUsd]
+      [visitorId, costUsd]
     )
+
+    // Track usage in Tanso (fail open)
+    if (isTansoConfigured()) {
+      try {
+        await tansoIngestEvent({
+          eventIdempotencyKey: crypto.randomUUID(),
+          eventName: 'insights_generated',
+          occurredAt: new Date().toISOString(),
+          customerReferenceId: visitorId,
+          featureKey: 'ai_insights',
+          usageUnits: '1',
+        })
+      } catch (err) {
+        console.error('Tanso usage tracking error (ai_insights):', err)
+      }
+    }
 
     res.json({
       insights: storedInsights,
@@ -2533,6 +2598,25 @@ app.delete('/insights', ensureVisitor, async (req: AuthRequest, res: Response) =
   } catch (error) {
     console.error('Clear insights error:', error)
     res.status(500).json({ error: 'Failed to clear insights' })
+  }
+})
+
+// GET /usage/limits — return current usage for simulations and ai_insights
+app.get('/usage/limits', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  if (!isTansoConfigured()) return res.json({ configured: false })
+  const visitorId = req.visitorId!
+  try {
+    const [sims, insights] = await Promise.all([
+      tansoCheckEntitlement(visitorId, 'simulations'),
+      tansoCheckEntitlement(visitorId, 'ai_insights'),
+    ])
+    res.json({
+      configured: true,
+      simulations: { allowed: sims.isAllowed, usage: sims.usage },
+      ai_insights: { allowed: insights.isAllowed, usage: insights.usage },
+    })
+  } catch {
+    res.json({ configured: false })
   }
 })
 
@@ -2755,20 +2839,109 @@ app.post('/integrations/openai/connect', ensureVisitor, async (req: AuthRequest,
 
     // Store the connection
     const keyPrefix = api_key.substring(0, 8) + '...'
+
+    // Try to fetch and sync usage data
+    let hasUsageAccess = false
+    let totalCostSynced = 0
+    let eventsSynced = 0
+
+    try {
+      const now = Math.floor(Date.now() / 1000)
+      const thirtyDaysAgo = now - 30 * 24 * 60 * 60
+
+      const usageResponse = await fetch(
+        `https://api.openai.com/v1/organization/usage/completions?start_time=${thirtyDaysAgo}&end_time=${now}&bucket_width=1d`,
+        { headers: { 'Authorization': `Bearer ${api_key}` } }
+      )
+
+      if (usageResponse.ok) {
+        hasUsageAccess = true
+        const usageData = await usageResponse.json() as {
+          data?: Array<{
+            results?: Array<{
+              snapshot_id?: string;
+              input_tokens?: number;
+              output_tokens?: number;
+            }>;
+            start_time?: number;
+          }>;
+        }
+
+        const openaiPricing: Record<string, { input: number; output: number }> = {
+          'gpt-4o': { input: 2.5, output: 10.0 },
+          'gpt-4o-mini': { input: 0.15, output: 0.6 },
+          'gpt-4': { input: 30.0, output: 60.0 },
+          'gpt-3.5-turbo': { input: 0.5, output: 1.5 },
+          'o1': { input: 15.0, output: 60.0 },
+          'o1-mini': { input: 3.0, output: 12.0 },
+          'text-embedding-3-small': { input: 0.02, output: 0 },
+        }
+        const defaultPricing = { input: 2.5, output: 10.0 }
+
+        if (usageData.data && Array.isArray(usageData.data)) {
+          for (const bucket of usageData.data) {
+            const bucketTime = bucket.start_time ? new Date(bucket.start_time * 1000).toISOString() : new Date().toISOString()
+
+            if (bucket.results && Array.isArray(bucket.results)) {
+              for (const result of bucket.results) {
+                const modelName = result.snapshot_id || 'unknown'
+                const inputTokens = result.input_tokens || 0
+                const outputTokens = result.output_tokens || 0
+
+                // Find matching pricing by checking if model name starts with a known prefix
+                let pricing = defaultPricing
+                for (const [key, value] of Object.entries(openaiPricing)) {
+                  if (modelName.startsWith(key)) {
+                    pricing = value
+                    break
+                  }
+                }
+
+                const cost = (inputTokens * pricing.input + outputTokens * pricing.output) / 1_000_000
+
+                if (cost > 0) {
+                  await pool.query(
+                    `INSERT INTO observe_events (user_id, customer_id, feature_key, event_name, timestamp, cost_amount, cost_unit, revenue_amount, usage_units, model, model_provider, source, granularity)
+                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+                    [visitorId, 'system', 'openai_usage', 'cost', bucketTime, cost, 'usd', 0, inputTokens + outputTokens, modelName, 'openai', 'openai', 'daily']
+                  )
+                  totalCostSynced += cost
+                  eventsSynced++
+                }
+              }
+            }
+          }
+        }
+
+        // Update has_usage_access and last_synced_at
+        if (eventsSynced > 0) {
+          await pool.query(
+            `INSERT INTO user_data_status (user_id, data_mode) VALUES ($1, $2) ON CONFLICT (user_id) DO UPDATE SET data_mode = $2, updated_at = NOW()`,
+            [visitorId, 'user']
+          )
+        }
+      } else if (usageResponse.status === 403) {
+        // No admin access - skip usage sync, still store the connection
+        console.log(`OpenAI usage API returned 403 for user ${visitorId} - no admin access`)
+      }
+    } catch (syncErr) {
+      console.error('OpenAI usage sync error (connection will still succeed):', syncErr)
+    }
+
     await pool.query(
       `INSERT INTO integrations (user_id, provider, api_key_prefix, has_usage_access, connected_at)
-       VALUES ($1, 'openai', $2, false, NOW())
+       VALUES ($1, 'openai', $2, $3, NOW())
        ON CONFLICT (user_id, provider)
-       DO UPDATE SET api_key_prefix = $2, connected_at = NOW()`,
-      [visitorId, keyPrefix]
+       DO UPDATE SET api_key_prefix = $2, has_usage_access = $3, connected_at = NOW()`,
+      [visitorId, keyPrefix, hasUsageAccess]
     )
 
     res.json({
       success: true,
       message: 'OpenAI connected successfully',
-      has_usage_access: false,
-      cost_synced: 0,
-      months_synced: 0,
+      has_usage_access: hasUsageAccess,
+      cost_synced: Math.round(totalCostSynced * 100) / 100,
+      months_synced: eventsSynced > 0 ? 1 : 0,
     })
   } catch (err) {
     console.error('OpenAI connect error:', err)
@@ -2850,20 +3023,106 @@ app.post('/integrations/anthropic/connect', ensureVisitor, async (req: AuthReque
 
     // Store the connection
     const keyPrefix = api_key.substring(0, 10) + '...'
+
+    // Try to fetch and sync usage data
+    let hasUsageAccess = false
+    let totalCostSynced = 0
+    let eventsSynced = 0
+
+    try {
+      const today = new Date()
+      const thirtyDaysAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000)
+      const todayISO = today.toISOString().split('T')[0]
+      const thirtyDaysAgoISO = thirtyDaysAgo.toISOString().split('T')[0]
+
+      const usageResponse = await fetch(
+        `https://api.anthropic.com/v1/organizations/usage?start_date=${thirtyDaysAgoISO}&end_date=${todayISO}`,
+        {
+          headers: {
+            'x-api-key': api_key,
+            'anthropic-version': '2023-06-01',
+          },
+        }
+      )
+
+      if (usageResponse.ok) {
+        hasUsageAccess = true
+        const usageData = await usageResponse.json() as {
+          data?: Array<{
+            model?: string;
+            input_tokens?: number;
+            output_tokens?: number;
+            date?: string;
+          }>;
+        }
+
+        const anthropicPricing: Record<string, { input: number; output: number }> = {
+          'claude-3-5-sonnet': { input: 3.0, output: 15.0 },
+          'claude-3-5-haiku': { input: 0.8, output: 4.0 },
+          'claude-3-opus': { input: 15.0, output: 75.0 },
+          'claude-3-haiku': { input: 0.25, output: 1.25 },
+        }
+        const defaultPricing = { input: 3.0, output: 15.0 }
+
+        if (usageData.data && Array.isArray(usageData.data)) {
+          for (const entry of usageData.data) {
+            const modelName = entry.model || 'unknown'
+            const inputTokens = entry.input_tokens || 0
+            const outputTokens = entry.output_tokens || 0
+            const entryDate = entry.date ? new Date(entry.date).toISOString() : new Date().toISOString()
+
+            // Find matching pricing by checking if model name starts with a known prefix
+            let pricing = defaultPricing
+            for (const [key, value] of Object.entries(anthropicPricing)) {
+              if (modelName.startsWith(key)) {
+                pricing = value
+                break
+              }
+            }
+
+            const cost = (inputTokens * pricing.input + outputTokens * pricing.output) / 1_000_000
+
+            if (cost > 0) {
+              await pool.query(
+                `INSERT INTO observe_events (user_id, customer_id, feature_key, event_name, timestamp, cost_amount, cost_unit, revenue_amount, usage_units, model, model_provider, source, granularity)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+                [visitorId, 'system', 'anthropic_usage', 'cost', entryDate, cost, 'usd', 0, inputTokens + outputTokens, modelName, 'anthropic', 'anthropic', 'daily']
+              )
+              totalCostSynced += cost
+              eventsSynced++
+            }
+          }
+        }
+
+        // Update data_mode to 'user' if we synced any data
+        if (eventsSynced > 0) {
+          await pool.query(
+            `INSERT INTO user_data_status (user_id, data_mode) VALUES ($1, $2) ON CONFLICT (user_id) DO UPDATE SET data_mode = $2, updated_at = NOW()`,
+            [visitorId, 'user']
+          )
+        }
+      } else if (usageResponse.status === 403) {
+        // No admin access - skip usage sync, still store the connection
+        console.log(`Anthropic usage API returned 403 for user ${visitorId} - no admin access`)
+      }
+    } catch (syncErr) {
+      console.error('Anthropic usage sync error (connection will still succeed):', syncErr)
+    }
+
     await pool.query(
       `INSERT INTO integrations (user_id, provider, api_key_prefix, has_usage_access, connected_at)
-       VALUES ($1, 'anthropic', $2, false, NOW())
+       VALUES ($1, 'anthropic', $2, $3, NOW())
        ON CONFLICT (user_id, provider)
-       DO UPDATE SET api_key_prefix = $2, connected_at = NOW()`,
-      [visitorId, keyPrefix]
+       DO UPDATE SET api_key_prefix = $2, has_usage_access = $3, connected_at = NOW()`,
+      [visitorId, keyPrefix, hasUsageAccess]
     )
 
     res.json({
       success: true,
       message: 'Anthropic connected successfully',
-      has_usage_access: false,
-      cost_synced: 0,
-      months_synced: 0,
+      has_usage_access: hasUsageAccess,
+      cost_synced: Math.round(totalCostSynced * 100) / 100,
+      months_synced: eventsSynced > 0 ? 1 : 0,
     })
   } catch (err) {
     console.error('Anthropic connect error:', err)
@@ -2913,6 +3172,31 @@ app.post('/integrations/anthropic/disconnect', ensureVisitor, async (req: AuthRe
 // =============================================================================
 // REFERRAL SYSTEM
 // =============================================================================
+
+// Helper: convert a pending referral to 'converted' and grant a credit to the referrer
+async function convertReferralIfPending(visitorId: string): Promise<void> {
+  try {
+    // Find the pending referral where this user is the referred party
+    const result = await pool.query(
+      `UPDATE referrals SET status = 'converted', credited_at = NOW()
+       WHERE referred_user_id = $1 AND status = 'pending'
+       RETURNING id, referrer_user_id`,
+      [visitorId]
+    )
+    if (result.rows.length === 0) return
+
+    const { id: referralId, referrer_user_id } = result.rows[0]
+    // Grant 1 AI insight credit to the referrer
+    await pool.query(
+      `INSERT INTO referral_credits (user_id, credit_type, amount, source_referral_id)
+       VALUES ($1, 'ai_insight', 1, $2)`,
+      [referrer_user_id, referralId]
+    )
+  } catch (err) {
+    // Non-critical — don't fail the data load
+    console.error('Referral conversion error:', err)
+  }
+}
 
 // GET /referral/code - Get or create a referral code for the current user
 app.get('/referral/code', ensureVisitor, async (req: AuthRequest, res: Response) => {

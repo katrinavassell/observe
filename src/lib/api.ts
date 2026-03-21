@@ -635,6 +635,24 @@ export async function clearInsights(): Promise<{ success: boolean }> {
   return request('/insights', { method: 'DELETE' })
 }
 
+// =============================================================================
+// USAGE LIMITS
+// =============================================================================
+
+export interface UsageLimits {
+  configured: boolean
+  simulations?: { allowed: boolean; usage?: { used: number; limit: number; remaining: number } }
+  ai_insights?: { allowed: boolean; usage?: { used: number; limit: number; remaining: number } }
+}
+
+export async function getUsageLimits(): Promise<UsageLimits> {
+  try {
+    return await request('/usage/limits')
+  } catch {
+    return { configured: false }
+  }
+}
+
 export interface TansoPlan {
   id: string
   key: string
