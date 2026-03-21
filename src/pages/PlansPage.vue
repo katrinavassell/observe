@@ -18,7 +18,7 @@ const subscribeMutation = useMutation({
   mutationFn: (planId: string) => tansoSubscribe(planId),
   onSuccess: (data: any) => {
     if (data.checkoutUrl) {
-      window.location.href = data.checkoutUrl
+      window.open(data.checkoutUrl, '_blank')
       return
     }
     toast.success('Subscription created successfully!')

@@ -52,9 +52,10 @@ export function useAuth() {
     // Auto-subscribe new users to the free plan
     try {
       const { plans } = await api.tansoGetPlans()
-      const freePlan = plans.find(p => p.key === 'free')
-      if (freePlan) {
-        await api.tansoSubscribe(freePlan.id)
+      const entry = plans.find((p: any) => ((p as any).plan?.key || p.key) === 'free')
+      const freePlanId = (entry as any)?.plan?.id || entry?.id
+      if (freePlanId) {
+        await api.tansoSubscribe(freePlanId)
       }
     } catch (e) {
       logger.error('Failed to auto-subscribe to free plan', e)
