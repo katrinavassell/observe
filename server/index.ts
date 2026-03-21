@@ -1358,6 +1358,9 @@ app.post('/stripe/sync', ensureVisitor, async (req: AuthRequest, res: Response) 
     await client.query('COMMIT')
     convertReferralIfPending(req.visitorId!)
 
+    // Track Stripe sync usage in Tanso
+    trackTansoUsage(req.visitorId!, 'stripe_sync', 'stripe_data_synced')
+
     res.json({
       success: true,
       synced: {
@@ -1881,7 +1884,7 @@ app.post('/simulations', ensureVisitor, async (req: AuthRequest, res: Response) 
   if (isTansoConfigured()) {
     try {
       const entitlement = await tansoCheckEntitlement(visitorId, 'simulations')
-      if (entitlement && entitlement.isAllowed === false) {
+      if (entitlement && entitlement.allowed === false) {
         return res.status(403).json({ error: 'Simulation limit reached', usage: entitlement.usage })
       }
     } catch (err) {
@@ -2298,7 +2301,7 @@ app.post('/insights/generate', ensureVisitor, async (req: AuthRequest, res: Resp
   if (isTansoConfigured()) {
     try {
       const entitlement = await tansoCheckEntitlement(visitorId, 'ai_insights')
-      if (entitlement && entitlement.isAllowed === false) {
+      if (entitlement && entitlement.allowed === false) {
         return res.status(403).json({ error: 'AI insights limit reached', usage: entitlement.usage })
       }
     } catch (err) {
@@ -2612,8 +2615,8 @@ app.get('/usage/limits', ensureVisitor, async (req: AuthRequest, res: Response) 
     ])
     res.json({
       configured: true,
-      simulations: { allowed: sims.isAllowed, usage: sims.usage },
-      ai_insights: { allowed: insights.isAllowed, usage: insights.usage },
+      simulations: { allowed: sims.allowed !== false, usage: sims.usage },
+      ai_insights: { allowed: insights.allowed !== false, usage: insights.usage },
     })
   } catch {
     res.json({ configured: false })
@@ -2656,16 +2659,19 @@ async function getOrCreateTansoCustomer(visitorId: string, email?: string): Prom
   }
 }
 
-async function checkTansoFeatureAccess(visitorId: string, featureKey: string): Promise<{ allowed: boolean; reason?: string; usage?: any }> {
+async function checkTansoFeatureAccess(visitorId: string, featureKey: string): Promise<{ allowed: boolean; reason?: string; usage?: number; limit?: number; remaining?: number }> {
   if (!isTansoConfigured()) return { allowed: true }
   try {
     const tansoId = await getOrCreateTansoCustomer(visitorId)
     if (!tansoId) return { allowed: true }
     const result = await tansoCheckEntitlement(visitorId, featureKey)
+    const usageData = result?.usage
     return {
       allowed: result?.allowed !== false,
       reason: result?.reason,
-      usage: result?.usage,
+      usage: usageData?.used ?? usageData?.currentUsage ?? 0,
+      limit: usageData?.limit ?? usageData?.usageLimit ?? 0,
+      remaining: usageData?.remaining ?? usageData?.remainingQuota ?? null,
     }
   } catch (err) {
     console.error('Tanso entitlement check error:', err)
@@ -2936,6 +2942,9 @@ app.post('/integrations/openai/connect', ensureVisitor, async (req: AuthRequest,
       [visitorId, keyPrefix, hasUsageAccess]
     )
 
+    // Track OpenAI sync usage in Tanso
+    trackTansoUsage(visitorId, 'openai_sync', 'openai_connected')
+
     res.json({
       success: true,
       message: 'OpenAI connected successfully',
@@ -3117,6 +3126,9 @@ app.post('/integrations/anthropic/connect', ensureVisitor, async (req: AuthReque
       [visitorId, keyPrefix, hasUsageAccess]
     )
 
+    // Track Anthropic sync usage in Tanso
+    trackTansoUsage(visitorId, 'anthropic_sync', 'anthropic_connected')
+
     res.json({
       success: true,
       message: 'Anthropic connected successfully',
@@ -3258,6 +3270,10 @@ app.post('/referral/record', ensureVisitor, async (req: AuthRequest, res: Respon
        VALUES ($1, $2, $3, 'pending')`,
       [referrerUserId, visitorId, code]
     )
+
+    // Track referral usage in Tanso for both referrer and referred user
+    trackTansoUsage(referrerUserId, 'referrals', 'referral_shared')
+
     res.json({ success: true })
   } catch (err) {
     console.error('Record referral error:', err)
@@ -3383,17 +3399,29 @@ app.get('/team', ensureVisitor, async (req: AuthRequest, res: Response) => {
     const org = await getOrCreateOrg(visitorId)
 
     const membersResult = await pool.query(
-      'SELECT * FROM organization_members WHERE org_id = $1 ORDER BY created_at ASC',
+      `SELECT om.*, a.email AS account_email, a.name AS account_name
+       FROM organization_members om
+       LEFT JOIN accounts a ON a.visitor_id = om.visitor_id
+       WHERE om.org_id = $1
+       ORDER BY om.created_at ASC`,
       [org.id]
     )
 
+    // Merge account email into invited_email for display if not already set
+    const members = membersResult.rows.map((m: any) => ({
+      ...m,
+      invited_email: m.invited_email || m.account_email || null,
+      account_name: undefined,
+      account_email: undefined,
+    }))
+
     // Find current user's role
-    const myMember = membersResult.rows.find((m: any) => m.visitor_id === visitorId)
+    const myMember = members.find((m: any) => m.visitor_id === visitorId)
     const myRole = myMember?.role || 'viewer'
 
     res.json({
       org,
-      members: membersResult.rows,
+      members,
       my_role: myRole,
     })
   } catch (err) {
@@ -3409,6 +3437,9 @@ app.patch('/team/name', ensureVisitor, async (req: AuthRequest, res: Response) =
     const { name } = req.body
     if (!name || typeof name !== 'string') {
       return res.status(400).json({ error: 'Name is required' })
+    }
+    if (name.trim().length > 100) {
+      return res.status(400).json({ error: 'Name must be 100 characters or fewer' })
     }
 
     const org = await getOrCreateOrg(visitorId)
@@ -3448,12 +3479,30 @@ app.post('/team/invite', ensureVisitor, async (req: AuthRequest, res: Response) 
     }
 
     const validRole = role === 'admin' ? 'admin' : 'viewer'
+    const normalizedEmail = email ? email.trim().toLowerCase() : null
+
+    // Prevent duplicate invites for the same email
+    if (normalizedEmail) {
+      const existing = await pool.query(
+        `SELECT id, status FROM organization_members WHERE org_id = $1 AND LOWER(invited_email) = $2`,
+        [org.id, normalizedEmail]
+      )
+      if (existing.rows.length > 0) {
+        const match = existing.rows[0]
+        if (match.status === 'active') {
+          return res.status(409).json({ error: 'This person is already a team member' })
+        }
+        // Replace the stale pending invite
+        await pool.query('DELETE FROM organization_members WHERE id = $1', [match.id])
+      }
+    }
+
     const inviteToken = crypto.randomUUID()
 
     await pool.query(
       `INSERT INTO organization_members (org_id, invited_email, invite_token, role, status)
        VALUES ($1, $2, $3, $4, 'pending')`,
-      [org.id, email || null, inviteToken, validRole]
+      [org.id, normalizedEmail, inviteToken, validRole]
     )
 
     res.json({ success: true, invite_token: inviteToken })
@@ -3553,6 +3602,25 @@ app.patch('/team/members/:id', ensureVisitor, async (req: AuthRequest, res: Resp
     )
     if (!adminCheck.rows.length || adminCheck.rows[0].role !== 'admin') {
       return res.status(403).json({ error: 'Only admins can change roles' })
+    }
+
+    // Prevent demoting yourself if you're the last admin
+    const targetMember = await pool.query(
+      'SELECT * FROM organization_members WHERE id = $1 AND org_id = $2',
+      [memberId, org.id]
+    )
+    if (!targetMember.rows.length) {
+      return res.status(404).json({ error: 'Member not found' })
+    }
+
+    if (targetMember.rows[0].visitor_id === visitorId && role !== 'admin') {
+      const adminCount = await pool.query(
+        "SELECT COUNT(*) FROM organization_members WHERE org_id = $1 AND role = 'admin' AND status = 'active'",
+        [org.id]
+      )
+      if (parseInt(adminCount.rows[0].count) <= 1) {
+        return res.status(400).json({ error: 'Cannot demote yourself — you are the only admin' })
+      }
     }
 
     // Update the target member (must be in same org)

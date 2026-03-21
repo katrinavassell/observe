@@ -19,7 +19,7 @@ import {
 
 const router = useRouter()
 const statusFilter = ref<'all' | SimulationStatus>('all')
-const simRun = useEntitlement('simulation_run')
+const simRun = useEntitlement('simulations')
 
 const { data: simulations, isLoading, isError } = useQuery({
   queryKey: ['simulations'],
