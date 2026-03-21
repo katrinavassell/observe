@@ -41,6 +41,7 @@ async function apiPost(url: string, body: any) {
 
 function refresh() {
   queryClient.invalidateQueries({ queryKey: ['tanso-status'] })
+  queryClient.invalidateQueries({ queryKey: ['tanso-invoices'] })
 }
 
 const isConfigured = computed(() => statusData.value?.configured ?? false)
@@ -481,7 +482,7 @@ async function handleCancelDowngrade() {
                   {{ inv.createdAt ? new Date(inv.createdAt).toLocaleDateString() : '—' }}
                 </td>
                 <td class="py-3 px-4">
-                  ${{ (inv.amount / 100).toFixed(2) }}
+                  ${{ typeof inv.amount === 'number' ? inv.amount.toFixed(2) : inv.amount }}
                 </td>
                 <td class="py-3 px-4">
                   <span

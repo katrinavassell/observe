@@ -6,6 +6,7 @@ import { Pool } from '@neondatabase/serverless'
 import crypto from 'crypto'
 import bcrypt from 'bcryptjs'
 import { getUncachableStripeClient } from './stripe-client.js'
+import { apiKeyStore } from './api-key-store.js'
 import {
   tansoListPlans,
   tansoListFeatures,
@@ -2810,8 +2811,6 @@ async function trackTansoUsage(visitorId: string, featureKey: string, eventName:
 // =============================================================================
 // API Key Management (per-session Tanso API keys)
 // =============================================================================
-
-import { apiKeyStore } from './api-key-store.js'
 
 app.post('/tanso/key', ensureVisitor, async (req: AuthRequest, res: Response) => {
   try {

@@ -17,7 +17,6 @@ const planPrice = Number(route.query.planPrice) || 0
 const planDescription = route.query.planDescription as string || ''
 const planId = route.query.planId as string
 const hasExistingSub = route.query.hasExistingSubscription === 'true'
-const existingSubId = route.query.existingSubscriptionId as string || ''
 
 async function apiPost(url: string, body: any) {
   const res = await fetch(`/api${url}`, {
