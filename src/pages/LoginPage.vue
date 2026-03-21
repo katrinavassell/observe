@@ -227,14 +227,6 @@ const highlights = [
             >
               {{ isRegisterMode ? 'Already have an account? Sign in' : "Don't have an account? Sign up" }}
             </button>
-            <div>
-              <router-link
-                to="/"
-                class="text-xs text-muted-foreground/60 hover:text-muted-foreground underline-offset-4 hover:underline"
-              >
-                Continue without an account
-              </router-link>
-            </div>
           </div>
         </CardContent>
       </Card>

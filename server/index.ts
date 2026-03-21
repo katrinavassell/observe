@@ -688,7 +688,7 @@ app.delete('/data/clear/usage', ensureVisitor, async (req: AuthRequest, res: Res
 
 // Upload cost records
 app.post('/data/upload/costs', ensureVisitor, async (req: AuthRequest, res: Response) => {
-  const access = await checkTansoFeatureAccess(req.visitorId!, 'csv_upload')
+  const access = await checkTansoFeatureAccess(req.visitorId!, 'csv_upload', req.accountEmail)
   if (!access.allowed) return res.status(403).json({ error: access.reason || 'Upload limit reached. Upgrade your plan.' })
   const client = await pool.connect()
   try {
@@ -759,7 +759,7 @@ app.post('/data/upload/costs', ensureVisitor, async (req: AuthRequest, res: Resp
 
 // Upload usage records
 app.post('/data/upload/usage', ensureVisitor, async (req: AuthRequest, res: Response) => {
-  const access = await checkTansoFeatureAccess(req.visitorId!, 'csv_upload')
+  const access = await checkTansoFeatureAccess(req.visitorId!, 'csv_upload', req.accountEmail)
   if (!access.allowed) return res.status(403).json({ error: access.reason || 'Upload limit reached. Upgrade your plan.' })
   const client = await pool.connect()
   try {
@@ -832,7 +832,7 @@ app.post('/data/upload/usage', ensureVisitor, async (req: AuthRequest, res: Resp
 
 // Upload revenue data (customers, plans, subscriptions)
 app.post('/data/upload/revenue', ensureVisitor, async (req: AuthRequest, res: Response) => {
-  const access = await checkTansoFeatureAccess(req.visitorId!, 'csv_upload')
+  const access = await checkTansoFeatureAccess(req.visitorId!, 'csv_upload', req.accountEmail)
   if (!access.allowed) return res.status(403).json({ error: access.reason || 'Upload limit reached. Upgrade your plan.' })
   const client = await pool.connect()
   try {
@@ -2636,34 +2636,57 @@ async function getOrCreateTansoCustomer(visitorId: string, email?: string): Prom
 
     try {
       const customer = await tansoGetCustomer(visitorId)
-      if (customer?.id) {
+      const customerId = customer?.id || customer?.subscriptions?.[0]?.customer?.id || customer?.externalClientCustomerId
+      if (customerId) {
         await pool.query(
           'INSERT INTO tanso_customers (visitor_id, tanso_customer_id, email) VALUES ($1, $2, $3) ON CONFLICT (visitor_id) DO UPDATE SET tanso_customer_id = $2',
-          [visitorId, customer.id, email || null]
+          [visitorId, customerId, email || customer?.email || null]
         )
-        return customer.id
+        return customerId
       }
-    } catch {}
-
-    const created = await tansoCreateCustomer(visitorId, email || `${visitorId}@anonymous.tanso`, undefined)
-    const tansoId = created?.id || created?.customer?.id || null
-    if (tansoId) {
-      await pool.query(
-        'INSERT INTO tanso_customers (visitor_id, tanso_customer_id, email) VALUES ($1, $2, $3) ON CONFLICT (visitor_id) DO UPDATE SET tanso_customer_id = $2',
-        [visitorId, tansoId, email || null]
-      )
+    } catch (fetchErr) {
+      console.warn('Tanso customer fetch failed for', visitorId, fetchErr instanceof Error ? fetchErr.message : fetchErr)
     }
-    return tansoId
+
+    if (!email) {
+      console.error('Tanso customer creation skipped: no email provided for visitor', visitorId)
+      return null
+    }
+    try {
+      const created = await tansoCreateCustomer(visitorId, email, undefined)
+      const tansoId = created?.id || created?.customer?.id || null
+      if (tansoId) {
+        await pool.query(
+          'INSERT INTO tanso_customers (visitor_id, tanso_customer_id, email) VALUES ($1, $2, $3) ON CONFLICT (visitor_id) DO UPDATE SET tanso_customer_id = $2',
+          [visitorId, tansoId, email || null]
+        )
+      }
+      return tansoId
+    } catch (createErr: any) {
+      // 409 = customer already exists in Tanso — retry fetch
+      if (createErr?.message?.includes('409')) {
+        const retryCustomer = await tansoGetCustomer(visitorId)
+        const retryId = retryCustomer?.id || retryCustomer?.subscriptions?.[0]?.customer?.id || retryCustomer?.externalClientCustomerId
+        if (retryId) {
+          await pool.query(
+            'INSERT INTO tanso_customers (visitor_id, tanso_customer_id, email) VALUES ($1, $2, $3) ON CONFLICT (visitor_id) DO UPDATE SET tanso_customer_id = $2, email = $3',
+            [visitorId, retryId, email]
+          )
+          return retryId
+        }
+      }
+      throw createErr
+    }
   } catch (err) {
     console.error('Tanso customer lookup/create error:', err)
     return null
   }
 }
 
-async function checkTansoFeatureAccess(visitorId: string, featureKey: string): Promise<{ allowed: boolean; reason?: string; usage?: number; limit?: number; remaining?: number }> {
+async function checkTansoFeatureAccess(visitorId: string, featureKey: string, email?: string): Promise<{ allowed: boolean; reason?: string; usage?: number; limit?: number; remaining?: number }> {
   if (!isTansoConfigured()) return { allowed: true }
   try {
-    const tansoId = await getOrCreateTansoCustomer(visitorId)
+    const tansoId = await getOrCreateTansoCustomer(visitorId, email)
     if (!tansoId) return { allowed: true }
     const result = await tansoCheckEntitlement(visitorId, featureKey)
     const usageData = result?.usage
@@ -2706,21 +2729,21 @@ app.get('/tanso/status', ensureVisitor, async (req: AuthRequest, res: Response) 
 
   try {
     const plans = await tansoListPlans()
-    plansResult = Array.isArray(plans) ? plans : plans?.plans || []
+    plansResult = Array.isArray(plans) ? plans : plans?.items || plans?.plans || []
   } catch (err) {
     console.error('Tanso status: plans fetch failed:', err instanceof Error ? err.message : err)
     healthy = false
   }
 
   try {
-    await getOrCreateTansoCustomer(visitorId)
+    await getOrCreateTansoCustomer(visitorId, req.accountEmail)
   } catch (err) {
     console.error('Tanso status: customer setup failed:', err instanceof Error ? err.message : err)
   }
 
   try {
     const ent = await tansoListCustomerEntitlements(visitorId)
-    entitlements = Array.isArray(ent) ? ent : ent?.entitlements || []
+    entitlements = Array.isArray(ent) ? ent : ent?.items || ent?.entitlements || []
   } catch (err) {
     console.error('Tanso status: entitlements fetch failed:', err instanceof Error ? err.message : err)
   }
@@ -2744,7 +2767,7 @@ app.get('/tanso/plans', ensureVisitor, async (_req: AuthRequest, res: Response) 
   try {
     if (!isTansoConfigured()) return res.json({ plans: [], configured: false })
     const plans = await tansoListPlans()
-    res.json({ plans: Array.isArray(plans) ? plans : plans?.plans || [], configured: true })
+    res.json({ plans: Array.isArray(plans) ? plans : plans?.items || plans?.plans || [], configured: true })
   } catch (err) {
     console.error('Tanso list plans error:', err)
     res.json({ plans: [], configured: false })
@@ -2755,7 +2778,7 @@ app.get('/tanso/features', ensureVisitor, async (_req: AuthRequest, res: Respons
   try {
     if (!isTansoConfigured()) return res.json({ features: [], configured: false })
     const features = await tansoListFeatures()
-    res.json({ features: Array.isArray(features) ? features : features?.features || [], configured: true })
+    res.json({ features: Array.isArray(features) ? features : features?.items || features?.features || [], configured: true })
   } catch (err) {
     console.error('Tanso list features error:', err)
     res.json({ features: [], configured: false })
@@ -2766,10 +2789,10 @@ app.get('/tanso/entitlements', ensureVisitor, async (req: AuthRequest, res: Resp
   try {
     if (!isTansoConfigured()) return res.json({ entitlements: [], configured: false })
     const visitorId = req.visitorId!
-    await getOrCreateTansoCustomer(visitorId)
+    await getOrCreateTansoCustomer(visitorId, req.accountEmail)
     const entitlements = await tansoListCustomerEntitlements(visitorId)
     res.json({
-      entitlements: Array.isArray(entitlements) ? entitlements : entitlements?.entitlements || [],
+      entitlements: Array.isArray(entitlements) ? entitlements : entitlements?.items || entitlements?.entitlements || [],
       configured: true,
     })
   } catch (err) {
@@ -2782,7 +2805,7 @@ app.get('/tanso/subscription', ensureVisitor, async (req: AuthRequest, res: Resp
   try {
     if (!isTansoConfigured()) return res.json({ customer: null, configured: false })
     const visitorId = req.visitorId!
-    await getOrCreateTansoCustomer(visitorId)
+    await getOrCreateTansoCustomer(visitorId, req.accountEmail)
     const customer = await tansoGetCustomer(visitorId)
     res.json({ customer, configured: true })
   } catch (err) {
@@ -2797,7 +2820,7 @@ app.post('/tanso/subscribe', ensureVisitor, async (req: AuthRequest, res: Respon
     const visitorId = req.visitorId!
     const { planId } = req.body
     if (!planId) return res.status(400).json({ error: 'planId is required' })
-    await getOrCreateTansoCustomer(visitorId)
+    await getOrCreateTansoCustomer(visitorId, req.accountEmail)
     const result = await tansoCreateSubscription(visitorId, planId)
 
     // For paid plans, create a Stripe Checkout session
@@ -2823,7 +2846,7 @@ app.get('/tanso/check/:featureKey', ensureVisitor, async (req: AuthRequest, res:
   try {
     const visitorId = req.visitorId!
     const { featureKey } = req.params
-    const result = await checkTansoFeatureAccess(visitorId, featureKey)
+    const result = await checkTansoFeatureAccess(visitorId, featureKey, req.accountEmail)
     res.json(result)
   } catch (err) {
     console.error('Tanso check error:', err)

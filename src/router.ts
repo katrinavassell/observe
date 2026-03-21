@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { useAuth } from '@/composables/useAuth'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -128,6 +129,14 @@ const router = createRouter({
       meta: { noLayout: true },
     },
   ],
+})
+
+router.beforeEach((to) => {
+  if (to.meta?.noLayout) return // allow login/signup pages
+  const { isLoggedIn, isInitialized } = useAuth()
+  if (isInitialized.value && !isLoggedIn.value) {
+    return { name: 'signup' }
+  }
 })
 
 export default router
