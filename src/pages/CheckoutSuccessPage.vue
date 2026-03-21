@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { CheckCircle, Loader2, ArrowRight } from 'lucide-vue-next'
 import { tansoGetStatus } from '@/lib/api'
@@ -10,23 +10,23 @@ const router = useRouter()
 
 const planName = (route.query.plan as string) || 'Your Plan'
 const isActivating = ref(true)
+let cancelled = false
 
 async function pollEntitlements() {
   const maxAttempts = 12
   const pollInterval = 500
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    if (cancelled) return
+
     try {
       const status = await tansoGetStatus()
       const customer = status?.customer
       const activeSub = customer?.subscriptions?.find((s: any) => s.isActive)
 
-      if (activeSub) {
-        // Check that entitlements are populated
-        if (status.entitlements?.length > 0) {
-          isActivating.value = false
-          return
-        }
+      if (activeSub && status.entitlements?.length > 0) {
+        isActivating.value = false
+        return
       }
     } catch (err) {
       console.warn('Entitlement poll error:', err)
@@ -36,8 +36,10 @@ async function pollEntitlements() {
   }
 
   // Timeout — proceed anyway
-  console.warn('Entitlement polling timed out, proceeding')
-  isActivating.value = false
+  if (!cancelled) {
+    console.warn('Entitlement polling timed out, proceeding')
+    isActivating.value = false
+  }
 }
 
 function goToDashboard() {
@@ -53,6 +55,10 @@ function goToDashboard() {
 
 onMounted(() => {
   pollEntitlements()
+})
+
+onUnmounted(() => {
+  cancelled = true
 })
 </script>
 

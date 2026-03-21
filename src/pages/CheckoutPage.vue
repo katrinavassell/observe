@@ -39,8 +39,10 @@ async function processCheckout() {
     return
   }
 
+  // Clear any stale upgrade flag
+  localStorage.removeItem('is_upgrade')
+
   try {
-    // For upgrades, mark as upgrade for the success page
     if (hasExistingSub) {
       localStorage.setItem('is_upgrade', 'true')
       statusMessage.value = 'Upgrading your plan...'
@@ -118,7 +120,7 @@ onMounted(() => {
             <p class="text-sm text-red-600">{{ error }}</p>
             <div class="flex gap-3">
               <Button variant="outline" @click="router.push('/plans')">Back to Plans</Button>
-              <Button @click="isProcessing = true; error = null; processCheckout()">Try Again</Button>
+              <Button :disabled="isProcessing" @click="isProcessing = true; error = null; processCheckout()">Try Again</Button>
             </div>
           </div>
         </CardContent>

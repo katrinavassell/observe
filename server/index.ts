@@ -210,6 +210,7 @@ app.post('/auth/login', ensureVisitor, async (req: AuthRequest, res: Response) =
 })
 
 app.post('/auth/logout', (req: AuthRequest, res: Response) => {
+  apiKeyStore.delete(req.session.id)
   req.session.destroy((err) => {
     if (err) {
       console.error('Logout error:', err)
@@ -3067,12 +3068,30 @@ app.post('/tanso/subscribe', ensureVisitor, async (req: AuthRequest, res: Respon
   }
 })
 
+// Verify the subscription belongs to the current user
+async function verifySubscriptionOwnership(visitorId: string, subscriptionId: string): Promise<boolean> {
+  try {
+    const customer = await tansoGetCustomer(visitorId)
+    return customer?.subscriptions?.some((s: any) => s.id === subscriptionId) ?? false
+  } catch (_) {
+    return false
+  }
+}
+
 // Cancel subscription (supports IMMEDIATELY or END_OF_PERIOD)
 app.post('/tanso/cancel', ensureVisitor, async (req: AuthRequest, res: Response) => {
   try {
     if (!isTansoConfigured()) return res.status(503).json({ error: 'Billing not configured' })
     const { subscriptionId, cancelMode = 'IMMEDIATELY' } = req.body
     if (!subscriptionId) return res.status(400).json({ error: 'subscriptionId is required' })
+    if (cancelMode !== 'IMMEDIATELY' && cancelMode !== 'END_OF_PERIOD') {
+      return res.status(400).json({ error: 'cancelMode must be IMMEDIATELY or END_OF_PERIOD' })
+    }
+
+    // Verify ownership
+    if (!await verifySubscriptionOwnership(req.visitorId!, subscriptionId)) {
+      return res.status(403).json({ error: 'Subscription not found' })
+    }
 
     // Cancel any scheduled plan changes first to avoid conflicting states
     try {
@@ -3094,6 +3113,10 @@ app.post('/tanso/reactivate', ensureVisitor, async (req: AuthRequest, res: Respo
     const { subscriptionId } = req.body
     if (!subscriptionId) return res.status(400).json({ error: 'subscriptionId is required' })
 
+    if (!await verifySubscriptionOwnership(req.visitorId!, subscriptionId)) {
+      return res.status(403).json({ error: 'Subscription not found' })
+    }
+
     await tansoCancelScheduledCancellation(subscriptionId)
     res.json({ success: true })
   } catch (err) {
@@ -3108,6 +3131,10 @@ app.post('/tanso/cancel-scheduled-changes', ensureVisitor, async (req: AuthReque
     if (!isTansoConfigured()) return res.status(503).json({ error: 'Billing not configured' })
     const { subscriptionId } = req.body
     if (!subscriptionId) return res.status(400).json({ error: 'subscriptionId is required' })
+
+    if (!await verifySubscriptionOwnership(req.visitorId!, subscriptionId)) {
+      return res.status(403).json({ error: 'Subscription not found' })
+    }
 
     await tansoCancelScheduledPlanChanges(subscriptionId)
     res.json({ success: true })
