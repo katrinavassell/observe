@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/vue-query'
-import { Check, Zap, Loader2, AlertCircle, X, ArrowDown, RotateCcw, XCircle, Calendar } from 'lucide-vue-next'
-import { tansoGetStatus, tansoSubscribe } from '@/lib/api'
+import { useQuery, useQueryClient } from '@tanstack/vue-query'
+import { useRouter } from 'vue-router'
+import { Check, Zap, Loader2, AlertCircle, X, ArrowDown, RotateCcw, XCircle, Calendar, FileText } from 'lucide-vue-next'
+import { tansoGetStatus, tansoGetInvoices } from '@/lib/api'
 import { toast } from 'vue-sonner'
 
 const queryClient = useQueryClient()
+const router = useRouter()
 const isPending = ref(false)
 
 const { data: statusData, isLoading } = useQuery({
@@ -14,6 +16,14 @@ const { data: statusData, isLoading } = useQuery({
   retry: 1,
   retryDelay: 2000,
 })
+
+const { data: invoiceData } = useQuery({
+  queryKey: ['tanso-invoices'],
+  queryFn: tansoGetInvoices,
+  retry: 1,
+})
+
+const invoices = computed(() => invoiceData.value?.invoices || [])
 
 async function apiPost(url: string, body: any) {
   const res = await fetch(`/api${url}`, {
@@ -109,9 +119,13 @@ function getUsagePercent(e: any) {
 }
 
 async function handleSubscribe(planId: string) {
+  const targetPlan = plans.value.find((p: any) => p.id === planId)
+  const targetPrice = targetPlan?.priceAmount ?? 0
+  const isDowngrade = currentSub.value?.isActive && targetPrice < currentPlanPrice.value
+
+  // Clear any pending states first (matches reference app Pricing.tsx)
   isPending.value = true
   try {
-    // Clear any pending cancellation or downgrade first (matches reference app Pricing.tsx)
     if (currentSub.value?.id) {
       if (hasScheduledCancellation.value) {
         await apiPost('/tanso/reactivate', { subscriptionId: currentSub.value.id })
@@ -121,21 +135,23 @@ async function handleSubscribe(planId: string) {
       }
     }
 
-    const data = await apiPost('/tanso/subscribe', { planId })
-
-    if (data.checkoutUrl) {
-      window.location.href = data.checkoutUrl
-      return
-    }
-
-    if (data.changeType === 'downgrade') {
+    if (isDowngrade) {
+      // Downgrade — scheduled for end of period, no checkout needed
+      await apiPost('/tanso/subscribe', { planId })
       toast.success('Downgrade scheduled for end of billing period')
-    } else if (data.changeType === 'upgrade') {
-      toast.success('Plan upgraded successfully!')
+      refresh()
     } else {
-      toast.success('Plan updated successfully!')
+      // Upgrade or new subscription — redirect to checkout page
+      const params = new URLSearchParams({
+        planId,
+        planName: targetPlan?.name || 'Plan',
+        planPrice: String(targetPrice),
+        planDescription: targetPlan?.description || '',
+        hasExistingSubscription: String(!!currentSub.value?.isActive),
+        existingSubscriptionId: currentSub.value?.id || '',
+      })
+      router.push(`/checkout?${params.toString()}`)
     }
-    refresh()
   } catch (error: unknown) {
     toast.error(error instanceof Error ? error.message : 'Failed to change plan')
   } finally {
@@ -437,6 +453,51 @@ async function handleCancelDowngrade() {
               </tbody>
             </table>
           </div>
+        </div>
+      </div>
+
+      <!-- Invoice History -->
+      <div v-if="invoices.length > 0" class="max-w-3xl space-y-4">
+        <h3 class="text-base font-semibold flex items-center gap-2">
+          <FileText class="h-4 w-4" />
+          Invoice History
+        </h3>
+        <div class="rounded-xl border overflow-hidden">
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="border-b bg-muted/50">
+                <th class="text-left py-3 px-4 font-medium text-muted-foreground">Date</th>
+                <th class="text-left py-3 px-4 font-medium text-muted-foreground">Amount</th>
+                <th class="text-left py-3 px-4 font-medium text-muted-foreground">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="inv in invoices"
+                :key="inv.id"
+                class="border-b last:border-0"
+              >
+                <td class="py-3 px-4">
+                  {{ inv.createdAt ? new Date(inv.createdAt).toLocaleDateString() : '—' }}
+                </td>
+                <td class="py-3 px-4">
+                  ${{ (inv.amount / 100).toFixed(2) }}
+                </td>
+                <td class="py-3 px-4">
+                  <span
+                    :class="[
+                      'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium',
+                      inv.status === 'PAID' ? 'bg-emerald-50 text-emerald-700' :
+                      inv.status === 'PAST_DUE' ? 'bg-red-50 text-red-700' :
+                      'bg-amber-50 text-amber-700'
+                    ]"
+                  >
+                    {{ inv.status }}
+                  </span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </div>
 

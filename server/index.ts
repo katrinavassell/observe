@@ -2807,6 +2807,67 @@ async function trackTansoUsage(visitorId: string, featureKey: string, eventName:
   }
 }
 
+// =============================================================================
+// API Key Management (per-session Tanso API keys)
+// =============================================================================
+
+import { apiKeyStore } from './api-key-store.js'
+
+app.post('/tanso/key', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  try {
+    let { apiKey } = req.body
+    if (!apiKey || typeof apiKey !== 'string') {
+      return res.status(400).json({ error: 'API key is required' })
+    }
+    // Strip "Bearer " prefix if present
+    apiKey = apiKey.replace(/^Bearer\s+/i, '').trim()
+    if (!apiKey.startsWith('sk_') && !apiKey.startsWith('ts_')) {
+      return res.status(400).json({ error: 'Invalid API key format (must start with sk_ or ts_)' })
+    }
+    apiKeyStore.set(req.session.id, apiKey)
+    res.json({ success: true, message: 'API key set for this session' })
+  } catch (err) {
+    console.error('Set API key error:', err)
+    res.status(500).json({ error: 'Failed to set API key' })
+  }
+})
+
+app.get('/tanso/key/status', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  const hasSessionKey = apiKeyStore.has(req.session.id)
+  const hasEnvKey = !!process.env.TANSO_API_KEY
+  res.json({
+    hasApiKey: hasSessionKey || hasEnvKey,
+    environment: hasSessionKey ? 'session' : hasEnvKey ? 'environment' : 'none',
+  })
+})
+
+app.delete('/tanso/key', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  apiKeyStore.delete(req.session.id)
+  res.json({ success: true })
+})
+
+// =============================================================================
+// Tanso Invoices
+// =============================================================================
+
+app.get('/tanso/invoices', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!isTansoConfigured()) return res.json({ invoices: [], configured: false })
+    const visitorId = req.visitorId!
+    await getOrCreateTansoCustomer(visitorId, req.accountEmail)
+    const invoices = await tansoListCustomerInvoices(visitorId)
+    const items = Array.isArray(invoices) ? invoices : invoices?.items ?? []
+    res.json({ invoices: items, configured: true })
+  } catch (err) {
+    console.error('Tanso invoices error:', err)
+    res.json({ invoices: [], configured: false })
+  }
+})
+
+// =============================================================================
+// Tanso Status & Plans
+// =============================================================================
+
 app.get('/tanso/status', ensureVisitor, async (req: AuthRequest, res: Response) => {
   if (!isTansoConfigured()) return res.json({ plans: [], entitlements: [], customer: null, configured: false })
 

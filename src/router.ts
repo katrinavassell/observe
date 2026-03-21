@@ -118,6 +118,16 @@ const router = createRouter({
       component: () => import('@/pages/PlansPage.vue'),
     },
     {
+      path: '/checkout',
+      name: 'checkout',
+      component: () => import('@/pages/CheckoutPage.vue'),
+    },
+    {
+      path: '/checkout/success',
+      name: 'checkout-success',
+      component: () => import('@/pages/CheckoutSuccessPage.vue'),
+    },
+    {
       path: '/team',
       name: 'team',
       component: () => import('@/pages/TeamSettingsPage.vue'),

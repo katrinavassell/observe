@@ -720,6 +720,34 @@ export async function tansoCheckFeature(featureKey: string): Promise<TansoEntitl
   return request(`/tanso/check/${featureKey}`)
 }
 
+// Invoice types and API
+export interface TansoInvoice {
+  id: string
+  status: string
+  amount: number
+  currency: string
+  dueDate?: string
+  createdAt?: string
+  paidAt?: string
+}
+
+export async function tansoGetInvoices(): Promise<{ invoices: TansoInvoice[]; configured: boolean }> {
+  return request('/tanso/invoices')
+}
+
+// API key management
+export async function tansoSetApiKey(apiKey: string): Promise<{ success: boolean }> {
+  return request('/tanso/key', { method: 'POST', body: JSON.stringify({ apiKey }) })
+}
+
+export async function tansoGetApiKeyStatus(): Promise<{ hasApiKey: boolean; environment: string }> {
+  return request('/tanso/key/status')
+}
+
+export async function tansoClearApiKey(): Promise<{ success: boolean }> {
+  return request('/tanso/key', { method: 'DELETE' })
+}
+
 export interface Account {
   id: number
   email: string
