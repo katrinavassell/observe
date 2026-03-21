@@ -2628,6 +2628,21 @@ app.get('/usage/limits', ensureVisitor, async (req: AuthRequest, res: Response) 
 // TANSO MONETIZATION
 // =============================================================================
 
+function flattenEntitlements(raw: any): any[] {
+  if (Array.isArray(raw)) {
+    // Could be [{ subscriptionId, entitlements: [...] }] or already flat [{ featureKey, allowed }]
+    if (raw.length > 0 && raw[0]?.entitlements) {
+      return raw.flatMap((sub: any) => sub.entitlements || [])
+    }
+    return raw
+  }
+  const items = raw?.items || raw?.entitlements || []
+  if (Array.isArray(items) && items.length > 0 && items[0]?.entitlements) {
+    return items.flatMap((sub: any) => sub.entitlements || [])
+  }
+  return items
+}
+
 async function getOrCreateTansoCustomer(visitorId: string, email?: string): Promise<string | null> {
   if (!isTansoConfigured()) return null
   try {
@@ -2743,7 +2758,7 @@ app.get('/tanso/status', ensureVisitor, async (req: AuthRequest, res: Response) 
 
   try {
     const ent = await tansoListCustomerEntitlements(visitorId)
-    entitlements = Array.isArray(ent) ? ent : ent?.items || ent?.entitlements || []
+    entitlements = flattenEntitlements(ent)
   } catch (err) {
     console.error('Tanso status: entitlements fetch failed:', err instanceof Error ? err.message : err)
   }
@@ -2792,7 +2807,7 @@ app.get('/tanso/entitlements', ensureVisitor, async (req: AuthRequest, res: Resp
     await getOrCreateTansoCustomer(visitorId, req.accountEmail)
     const entitlements = await tansoListCustomerEntitlements(visitorId)
     res.json({
-      entitlements: Array.isArray(entitlements) ? entitlements : entitlements?.items || entitlements?.entitlements || [],
+      entitlements: flattenEntitlements(entitlements),
       configured: true,
     })
   } catch (err) {

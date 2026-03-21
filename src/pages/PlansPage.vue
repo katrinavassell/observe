@@ -59,6 +59,20 @@ const currentPlanKey = computed(() => {
   return null
 })
 
+const meteredEntitlements = computed(() =>
+  entitlements.value.filter((e: any) => e.usageLimit || e.currentUsage != null)
+)
+
+const featureLabelMap: Record<string, string> = {
+  ai_insights: 'AI Insights',
+  simulations: 'Simulations',
+  csv_upload: 'CSV Uploads',
+  saas_metrics: 'SaaS Metrics',
+}
+function featureLabel(key: string) {
+  return featureLabelMap[key] || key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+}
+
 const freePlan = computed(() => plans.value.find((p: any) => p.key === 'free'))
 const proPlan = computed(() => plans.value.find((p: any) => p.key === 'pro'))
 
@@ -108,17 +122,17 @@ function handleSubscribe(planId: string) {
     </template>
 
     <template v-else>
-      <!-- Usage tracking (only gated features) -->
-      <div v-if="entitlements.length > 0" class="space-y-4">
+      <!-- Usage tracking (only metered features with limits) -->
+      <div v-if="meteredEntitlements.length > 0" class="space-y-4">
         <h2 class="text-lg font-semibold">Your Usage</h2>
         <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <div
-            v-for="e in entitlements"
+            v-for="e in meteredEntitlements"
             :key="e.featureKey"
             class="rounded-xl border bg-card p-5"
           >
             <div class="flex items-center justify-between mb-3">
-              <span class="text-sm font-medium">{{ e.featureName || e.featureKey }}</span>
+              <span class="text-sm font-medium">{{ e.featureName || featureLabel(e.featureKey) }}</span>
               <span
                 :class="[
                   'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium',
@@ -142,10 +156,6 @@ function handleSubscribe(planId: string) {
                   :style="{ width: getUsagePercent(e) + '%' }"
                 />
               </div>
-            </div>
-            <div v-else class="text-xs text-muted-foreground">
-              <Check class="h-3.5 w-3.5 inline mr-1 text-emerald-500" />
-              Unlimited access
             </div>
           </div>
         </div>
