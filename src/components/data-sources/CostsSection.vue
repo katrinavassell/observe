@@ -192,6 +192,21 @@ function handleOpenAIConnected(): void {
   isOpenAIConnected.value = true
 }
 
+async function handleDisconnectOpenAI(): Promise<void> {
+  try {
+    const response = await fetch('/api/integrations/openai/disconnect', {
+      method: 'POST',
+      credentials: 'include',
+    })
+    if (response.ok) {
+      isOpenAIConnected.value = false
+      toast.success('OpenAI disconnected')
+    }
+  } catch {
+    toast.error('Failed to disconnect')
+  }
+}
+
 function handleConnectAnthropic(): void {
   showAnthropicModal.value = true
 }
@@ -200,7 +215,20 @@ function handleAnthropicConnected(): void {
   isAnthropicConnected.value = true
 }
 
-// AI integrations default to not connected until explicitly set up
+async function handleDisconnectAnthropic(): Promise<void> {
+  try {
+    const response = await fetch('/api/integrations/anthropic/disconnect', {
+      method: 'POST',
+      credentials: 'include',
+    })
+    if (response.ok) {
+      isAnthropicConnected.value = false
+      toast.success('Anthropic disconnected')
+    }
+  } catch {
+    toast.error('Failed to disconnect')
+  }
+}
 </script>
 
 <template>
@@ -229,15 +257,26 @@ function handleAnthropicConnected(): void {
               </p>
             </div>
           </div>
-          <Button
-            v-if="!isOpenAIConnected"
-            variant="outline"
-            size="sm"
-            @click="handleConnectOpenAI"
-          >
-            Connect
-          </Button>
-          <CheckCircle v-else class="h-5 w-5 text-green-500" />
+          <div v-if="!isOpenAIConnected">
+            <Button
+              variant="outline"
+              size="sm"
+              @click="handleConnectOpenAI"
+            >
+              Connect
+            </Button>
+          </div>
+          <div v-else class="flex items-center gap-2">
+            <CheckCircle class="h-5 w-5 text-green-500" />
+            <Button
+              variant="ghost"
+              size="sm"
+              class="text-xs text-muted-foreground"
+              @click="handleDisconnectOpenAI"
+            >
+              Disconnect
+            </Button>
+          </div>
         </div>
 
         <!-- Anthropic -->
@@ -253,15 +292,26 @@ function handleAnthropicConnected(): void {
               </p>
             </div>
           </div>
-          <Button
-            v-if="!isAnthropicConnected"
-            variant="outline"
-            size="sm"
-            @click="handleConnectAnthropic"
-          >
-            Connect
-          </Button>
-          <CheckCircle v-else class="h-5 w-5 text-green-500" />
+          <div v-if="!isAnthropicConnected">
+            <Button
+              variant="outline"
+              size="sm"
+              @click="handleConnectAnthropic"
+            >
+              Connect
+            </Button>
+          </div>
+          <div v-else class="flex items-center gap-2">
+            <CheckCircle class="h-5 w-5 text-green-500" />
+            <Button
+              variant="ghost"
+              size="sm"
+              class="text-xs text-muted-foreground"
+              @click="handleDisconnectAnthropic"
+            >
+              Disconnect
+            </Button>
+          </div>
         </div>
 
         <!-- Divider -->

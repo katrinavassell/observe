@@ -2804,6 +2804,17 @@ app.get('/integrations/openai/status', ensureVisitor, async (req: AuthRequest, r
   }
 })
 
+// POST /integrations/openai/disconnect - Disconnect OpenAI
+app.post('/integrations/openai/disconnect', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  try {
+    await pool.query('DELETE FROM integrations WHERE user_id = $1 AND provider = $2', [req.visitorId, 'openai'])
+    res.json({ success: true })
+  } catch (err) {
+    console.error('OpenAI disconnect error:', err)
+    res.status(500).json({ error: 'Failed to disconnect' })
+  }
+})
+
 // POST /integrations/anthropic/connect - Validate Anthropic API key and store connection
 app.post('/integrations/anthropic/connect', ensureVisitor, async (req: AuthRequest, res: Response) => {
   try {
@@ -2885,6 +2896,17 @@ app.get('/integrations/anthropic/status', ensureVisitor, async (req: AuthRequest
   } catch (err) {
     console.error('Anthropic status error:', err)
     res.status(500).json({ error: 'Failed to check Anthropic status' })
+  }
+})
+
+// POST /integrations/anthropic/disconnect - Disconnect Anthropic
+app.post('/integrations/anthropic/disconnect', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  try {
+    await pool.query('DELETE FROM integrations WHERE user_id = $1 AND provider = $2', [req.visitorId, 'anthropic'])
+    res.json({ success: true })
+  } catch (err) {
+    console.error('Anthropic disconnect error:', err)
+    res.status(500).json({ error: 'Failed to disconnect' })
   }
 })
 
