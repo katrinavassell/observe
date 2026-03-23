@@ -193,9 +193,9 @@ function navigateToContext(insight: AiInsight) {
       <span>
         Last run: {{ generateMutation.data.value.source === 'openai' ? 'OpenAI gpt-4o-mini' : 'Local analysis' }}
       </span>
-      <span v-if="generateMutation.data.value.tokens_used > 0">
+      <span v-if="generateMutation.data.value?.tokens_used && generateMutation.data.value.tokens_used > 0">
         · {{ generateMutation.data.value.tokens_used.toLocaleString() }} tokens
-        · ${{ generateMutation.data.value.cost_usd.toFixed(4) }}
+        · ${{ generateMutation.data.value.cost_usd?.toFixed(4) ?? '0.0000' }}
       </span>
     </div>
 

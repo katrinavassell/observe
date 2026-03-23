@@ -1,25 +1,30 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import { useQuery } from '@tanstack/vue-query'
+import { computed, reactive } from 'vue'
+import { useQuery, useQueryClient } from '@tanstack/vue-query'
 import { useRouter } from 'vue-router'
 import { getFeatures } from '@/lib/api'
-import { Layers } from 'lucide-vue-next'
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui'
+import { Layers, AlertCircle, Plug, ChevronDown, ChevronRight } from 'lucide-vue-next'
+import { Card, CardHeader, CardTitle, CardContent, Skeleton, Button } from '@/components/ui'
+import { formatCurrency } from '@/lib/format'
 
 const router = useRouter()
+const queryClient = useQueryClient()
 
 const { data: features, isLoading, isError } = useQuery({
   queryKey: ['features'],
   queryFn: getFeatures,
 })
 
-function formatCurrency(val: number) {
-  if (val === 0) return '$0.00'
-  if (val >= 1000) return `$${(val / 1000).toFixed(1)}k`
-  if (val >= 0.01) return `$${val.toFixed(2)}`
-  const formatted = val.toFixed(4)
-  const trimmed = formatted.replace(/0+$/, '')
-  return `$${trimmed.endsWith('.') ? trimmed + '00' : trimmed}`
+const expandedBands = reactive<Record<string, boolean>>({
+  high: true,
+  profitable: true,
+  low: true,
+  negative: true,
+  unknown: true,
+})
+
+function toggleBand(band: string) {
+  expandedBands[band] = !expandedBands[band]
 }
 
 function marginBand(margin: number | null): 'negative' | 'low' | 'profitable' | 'high' | 'unknown' {
@@ -53,6 +58,17 @@ const featuresByBand = computed(() => {
   }
   return result
 })
+
+function bandTotal(band: string) {
+  const items = featuresByBand.value[band]
+  if (!items || items.length === 0) return { revenue: 0, cost: 0, events: 0, customers: 0 }
+  return {
+    revenue: items.reduce((s, f) => s + f.total_revenue, 0),
+    cost: items.reduce((s, f) => s + f.total_cost, 0),
+    events: items.reduce((s, f) => s + f.event_count, 0),
+    customers: new Set(items.flatMap(() => [])).size, // individual counts shown per row
+  }
+}
 
 const maxRevenue = computed(() => {
   if (!features.value || features.value.length === 0) return 1
@@ -105,12 +121,34 @@ function goToDetail(key: string) {
       </div>
     </div>
 
-    <!-- Loading / Error / Empty -->
-    <div v-if="isLoading" class="p-8 text-center text-muted-foreground text-sm">Loading features…</div>
-    <div v-else-if="isError" class="p-8 text-center text-destructive text-sm">Failed to load features.</div>
-    <div v-else-if="!features || features.length === 0" class="p-12 text-center text-muted-foreground text-sm">
-      <Layers class="h-10 w-10 mx-auto mb-3 opacity-30" />
-      No feature data yet. Load sample data to see feature economics.
+    <!-- Loading -->
+    <div v-if="isLoading" class="space-y-4">
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div v-for="i in 4" :key="i" class="rounded-lg border bg-card p-4">
+          <Skeleton class="h-3 w-20 mb-2" />
+          <Skeleton class="h-7 w-16" />
+        </div>
+      </div>
+      <Card>
+        <CardContent class="py-6 space-y-3">
+          <Skeleton v-for="i in 5" :key="i" class="h-10 w-full" />
+        </CardContent>
+      </Card>
+    </div>
+    <!-- Error -->
+    <div v-else-if="isError" class="flex flex-col items-center justify-center py-24 text-center">
+      <AlertCircle class="h-10 w-10 text-muted-foreground mb-4" />
+      <p class="text-muted-foreground mb-4">Failed to load features.</p>
+      <Button @click="queryClient.invalidateQueries({ queryKey: ['features'] })">Try Again</Button>
+    </div>
+    <!-- Empty -->
+    <div v-else-if="!features || features.length === 0" class="flex flex-col items-center justify-center py-16 text-center">
+      <Layers class="h-10 w-10 text-muted-foreground/40 mb-3" />
+      <p class="text-muted-foreground mb-4">No feature data yet. Load sample data to see feature economics.</p>
+      <Button variant="outline" @click="router.push('/data-sources')">
+        <Plug class="h-4 w-4 mr-2" />
+        Import Data
+      </Button>
     </div>
 
     <!-- Feature List by Band -->
@@ -121,10 +159,19 @@ function goToDetail(key: string) {
       <CardContent class="space-y-8 pb-6">
         <template v-for="band in orderedBands" :key="band">
           <div v-if="featuresByBand[band] && featuresByBand[band].length > 0">
-            <h3 class="text-sm font-semibold text-muted-foreground mb-3 px-1">
+            <button
+              class="flex items-center gap-2 text-sm font-semibold text-muted-foreground mb-3 px-1 hover:text-foreground transition-colors w-full text-left"
+              @click="toggleBand(band)"
+            >
+              <ChevronDown v-if="expandedBands[band]" class="h-4 w-4 shrink-0" />
+              <ChevronRight v-else class="h-4 w-4 shrink-0" />
               {{ bandConfig[band].label }}
-            </h3>
-            <div class="space-y-1">
+              <span class="text-xs font-normal ml-1">({{ featuresByBand[band].length }})</span>
+              <span class="ml-auto text-xs font-normal tabular-nums">
+                {{ formatCurrency(bandTotal(band).revenue) }} rev / {{ formatCurrency(bandTotal(band).cost) }} cost
+              </span>
+            </button>
+            <div v-show="expandedBands[band]" class="space-y-1">
               <div
                 v-for="f in featuresByBand[band]"
                 :key="f.feature_key"
@@ -132,15 +179,23 @@ function goToDetail(key: string) {
                 @click="goToDetail(f.feature_key)"
               >
                 <div class="w-32 sm:w-48 font-medium text-sm truncate">{{ f.feature_key }}</div>
-                
+
                 <div class="flex-1 h-3 bg-muted rounded-full overflow-hidden hidden sm:block">
                   <div
                     class="h-full bg-foreground rounded-full"
                     :style="{ width: `${(f.total_revenue / maxRevenue) * 100}%` }"
                   />
                 </div>
-                
+
                 <div class="flex items-center gap-4 sm:gap-8 justify-end ml-auto">
+                  <div class="text-right w-14 sm:w-16 hidden sm:block">
+                    <div class="text-sm tabular-nums text-muted-foreground">{{ f.event_count.toLocaleString() }}</div>
+                    <div class="text-[10px] sm:text-xs text-muted-foreground">Events</div>
+                  </div>
+                  <div class="text-right w-14 sm:w-16 hidden sm:block">
+                    <div class="text-sm tabular-nums text-muted-foreground">{{ f.customer_count }}</div>
+                    <div class="text-[10px] sm:text-xs text-muted-foreground">Customers</div>
+                  </div>
                   <div class="text-right w-16 sm:w-20">
                     <div class="text-sm font-semibold tabular-nums">{{ formatCurrency(f.total_revenue) }}</div>
                     <div class="text-[10px] sm:text-xs text-muted-foreground">Revenue</div>

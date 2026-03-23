@@ -3,8 +3,9 @@ import { ref, computed } from 'vue'
 import { useQuery } from '@tanstack/vue-query'
 import { useRouter } from 'vue-router'
 import { getEvents, getEventsByCustomer, getEventsByModel, getFeatures, type ObserveEvent } from '@/lib/api'
-import { Activity, ChevronRight, ChevronLeft, X } from 'lucide-vue-next'
+import { Activity, ChevronRight, ChevronLeft, X, Plug } from 'lucide-vue-next'
 import MarginBadge from '@/components/shared/MarginBadge.vue'
+import SourceBadge from '@/components/shared/SourceBadge.vue'
 import { Select, Input, Button, Skeleton } from '@/components/ui'
 
 const router = useRouter()
@@ -19,9 +20,12 @@ const currentPage = ref(0)
 const PAGE_SIZE = 50
 
 const SOURCES = [
-  { value: 'sample', label: 'Sample Data' },
+  { value: 'sdk', label: 'SDK' },
   { value: 'csv', label: 'CSV Upload' },
   { value: 'stripe', label: 'Stripe Sync' },
+  { value: 'openai', label: 'OpenAI' },
+  { value: 'anthropic', label: 'Anthropic' },
+  { value: 'sample', label: 'Sample Data' },
 ]
 
 const query = computed(() => ({
@@ -107,6 +111,7 @@ function resetPage() { currentPage.value = 0 }
 
 function formatCost(val: number | null) {
   if (val === null) return '—'
+  if (val === 0) return '$0'
   return `$${val.toFixed(4)}`
 }
 
@@ -240,8 +245,25 @@ function goToCustomer(id: string) { router.push(`/customers/${id}`) }
           
           <tbody v-else-if="!eventsData || eventsData.events.length === 0" class="divide-y divide-border">
             <tr>
-              <td colspan="10" class="px-4 py-12 text-center text-muted-foreground">
-                No events found. Adjust your filters or load sample data.
+              <td colspan="10" class="px-4 py-12 text-center">
+                <template v-if="hasFilters">
+                  <p class="text-muted-foreground mb-3">No events match these filters.</p>
+                  <Button variant="outline" size="sm" @click="clearFilters">Clear Filters</Button>
+                </template>
+                <template v-else>
+                  <Activity class="h-8 w-8 mx-auto text-muted-foreground/40 mb-3" />
+                  <p class="text-sm font-medium mb-1">No events yet</p>
+                  <p class="text-xs text-muted-foreground mb-3 max-w-sm mx-auto">
+                    Events appear when you send data via the SDK, connect an AI provider, or upload CSVs.
+                    The fastest path: add 3 lines to your backend.
+                  </p>
+                  <div class="flex gap-2 justify-center">
+                    <Button variant="outline" size="sm" @click="router.push('/data-sources')">
+                      <Plug class="h-3.5 w-3.5 mr-1.5" />
+                      Get Started
+                    </Button>
+                  </div>
+                </template>
               </td>
             </tr>
           </tbody>
@@ -286,9 +308,8 @@ function goToCustomer(id: string) { router.push(`/customers/${id}`) }
                 <span v-else class="text-muted-foreground text-sm">—</span>
               </td>
               <td class="px-4 py-3">
-                <span v-if="event.source" class="text-xs bg-muted text-muted-foreground px-2 py-0.5 rounded-md border">
-                  {{ event.source }}
-                </span>
+                <SourceBadge v-if="event.is_inferred" source="" :is-inferred="true" />
+                <SourceBadge v-else-if="event.source" :source="event.source" />
                 <span v-else class="text-muted-foreground text-sm">—</span>
               </td>
               <td class="px-4 py-3 text-right text-xs text-muted-foreground tabular-nums">

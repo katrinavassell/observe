@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { useQuery } from '@tanstack/vue-query'
+import { useQuery, useQueryClient } from '@tanstack/vue-query'
 import { getCustomerDetail } from '@/lib/api'
-import { ArrowLeft, ChevronRight } from 'lucide-vue-next'
+import { formatCurrency } from '@/lib/format'
+import { ArrowLeft, ChevronRight, AlertCircle } from 'lucide-vue-next'
 import MarginBadge from '@/components/shared/MarginBadge.vue'
+import SourceBadge from '@/components/shared/SourceBadge.vue'
 import { Bar } from 'vue-chartjs'
 import {
   Chart as ChartJS,
@@ -20,6 +22,7 @@ ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend)
 
 const route = useRoute()
 const router = useRouter()
+const queryClient = useQueryClient()
 
 const customerId = computed(() => route.params.id as string)
 
@@ -62,11 +65,6 @@ const chartOptions = {
   },
 }
 
-function formatCurrency(val: number) {
-  if (val >= 1000) return `$${(val / 1000).toFixed(1)}k`
-  if (val >= 1) return `$${val.toFixed(2)}`
-  return `$${val.toFixed(4)}`
-}
 
 function formatDate(ts: string) {
   return new Date(ts).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })
@@ -100,7 +98,14 @@ function mrr() {
       </button>
 
       <div v-if="isLoading" class="text-muted-foreground text-sm">Loading customer…</div>
-      <div v-else-if="isError" class="text-destructive text-sm">Failed to load customer data.</div>
+      <div v-else-if="isError" class="flex flex-col items-center justify-center py-16 text-center">
+        <AlertCircle class="h-10 w-10 text-muted-foreground mb-4" />
+        <p class="text-muted-foreground mb-4">Failed to load customer data.</p>
+        <button
+          class="inline-flex items-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
+          @click="queryClient.invalidateQueries({ queryKey: ['customer-detail', customerId] })"
+        >Try Again</button>
+      </div>
 
       <template v-else-if="detail">
         <div class="flex items-start justify-between">
@@ -208,8 +213,10 @@ function mrr() {
                 <tr>
                   <th class="px-4 py-2.5 text-left font-medium">Time</th>
                   <th class="px-4 py-2.5 text-left font-medium">Feature</th>
+                  <th class="px-4 py-2.5 text-left font-medium">Model</th>
                   <th class="px-4 py-2.5 text-right font-medium">Cost</th>
                   <th class="px-4 py-2.5 text-right font-medium">Margin</th>
+                  <th class="px-4 py-2.5 text-right font-medium">Source</th>
                 </tr>
               </thead>
               <tbody class="divide-y">
@@ -225,9 +232,16 @@ function mrr() {
                     </button>
                     <span v-else class="text-muted-foreground text-xs">—</span>
                   </td>
+                  <td class="px-4 py-2">
+                    <span v-if="ev.model" class="font-mono text-[11px] bg-muted px-1.5 py-0.5 rounded">{{ ev.model }}</span>
+                    <span v-else class="text-muted-foreground text-xs">—</span>
+                  </td>
                   <td class="px-4 py-2 text-right tabular-nums text-xs">{{ ev.cost_amount !== null ? `$${ev.cost_amount.toFixed(4)}` : '—' }}</td>
                   <td class="px-4 py-2 text-right">
                     <MarginBadge :margin="marginForEvent(ev.cost_amount, ev.revenue_amount)" />
+                  </td>
+                  <td class="px-4 py-2 text-right">
+                    <SourceBadge v-if="ev.source" :source="ev.source" :is-inferred="ev.is_inferred" />
                   </td>
                 </tr>
               </tbody>

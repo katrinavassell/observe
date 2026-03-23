@@ -1,5 +1,4 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import { useAuth } from '@/composables/useAuth'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -141,9 +140,12 @@ const router = createRouter({
   ],
 })
 
+// Auth guard — import the refs directly to avoid composable lifecycle issues
+import { useAuth } from '@/composables/useAuth'
+const { isLoggedIn, isInitialized } = useAuth()
+
 router.beforeEach((to) => {
-  if (to.meta?.noLayout) return // allow login/signup pages
-  const { isLoggedIn, isInitialized } = useAuth()
+  if (to.meta?.noLayout) return
   if (isInitialized.value && !isLoggedIn.value) {
     return { name: 'signup' }
   }

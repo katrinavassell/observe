@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { useQuery } from '@tanstack/vue-query'
+import { useQuery, useQueryClient } from '@tanstack/vue-query'
 import { getFeatureDetail } from '@/lib/api'
-import { ArrowLeft, ChevronRight } from 'lucide-vue-next'
+import { formatCurrency } from '@/lib/format'
+import { ArrowLeft, ChevronRight, AlertCircle } from 'lucide-vue-next'
 import MarginBadge from '@/components/shared/MarginBadge.vue'
 import { Bar, Line } from 'vue-chartjs'
 import {
@@ -22,6 +23,7 @@ ChartJS.register(CategoryScale, LinearScale, BarElement, LineElement, PointEleme
 
 const route = useRoute()
 const router = useRouter()
+const queryClient = useQueryClient()
 
 const featureKey = computed(() => route.params.key as string)
 
@@ -101,11 +103,6 @@ const timeseriesOptions = {
   },
 }
 
-function formatCurrency(val: number) {
-  if (val >= 1000) return `$${(val / 1000).toFixed(1)}k`
-  if (val >= 1) return `$${val.toFixed(2)}`
-  return `$${val.toFixed(4)}`
-}
 
 function formatDate(ts: string) {
   return new Date(ts).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })
@@ -139,7 +136,14 @@ function marginForEvent(cost: number | null, revenue: number | null): number | n
     </div>
 
     <div v-if="isLoading" class="p-8 text-center text-muted-foreground text-sm">Loading feature data…</div>
-    <div v-else-if="isError" class="p-8 text-center text-destructive text-sm">Failed to load feature data.</div>
+    <div v-else-if="isError" class="flex flex-col items-center justify-center py-16 text-center">
+      <AlertCircle class="h-10 w-10 text-muted-foreground mb-4" />
+      <p class="text-muted-foreground mb-4">Failed to load feature data.</p>
+      <button
+        class="inline-flex items-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
+        @click="queryClient.invalidateQueries({ queryKey: ['feature', featureKey] })"
+      >Try Again</button>
+    </div>
 
     <template v-else-if="feature">
       <!-- Stats -->

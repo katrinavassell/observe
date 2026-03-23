@@ -183,25 +183,64 @@ watch(dataMode, () => {
         <MarginOverviewCard :data="monthlyMrrData" />
       </template>
 
-      <!-- No Data State -->
+      <!-- No Data State — minimize time to first insight -->
       <template v-else>
-        <Card>
-          <CardContent class="py-12 text-center">
-            <p class="text-lg font-medium mb-2">No Data Available</p>
-            <p class="text-sm text-muted-foreground mb-6">
-              Try the demo to explore Tanso with realistic data, or import your own.
-            </p>
-            <div class="flex items-center justify-center gap-3">
-              <Button @click="enterDemoMode" :disabled="isLoadingDemo">
-                <FlaskConical class="h-4 w-4 mr-2" />
-                {{ isLoadingDemo ? 'Loading Demo...' : 'Try Demo' }}
-              </Button>
-              <Button variant="outline" @click="router.push('/data-sources')">
-                Import Data
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+        <div class="space-y-4 max-w-2xl mx-auto">
+          <div class="text-center mb-6">
+            <h2 class="text-lg font-semibold mb-1">See where your AI spend goes</h2>
+            <p class="text-sm text-muted-foreground">Pick the fastest path to your first insight</p>
+          </div>
+
+          <!-- Option 1: Demo (instant) -->
+          <Card class="cursor-pointer hover:border-primary/50 transition-colors" @click="enterDemoMode">
+            <CardContent class="py-4 flex items-center gap-4">
+              <div class="flex items-center justify-center w-10 h-10 rounded-lg bg-amber-100 text-amber-700 shrink-0">
+                <FlaskConical class="h-5 w-5" />
+              </div>
+              <div class="flex-1 min-w-0">
+                <div class="text-sm font-medium">Try with demo data</div>
+                <div class="text-xs text-muted-foreground">Explore the full dashboard instantly with realistic sample data</div>
+              </div>
+              <Badge variant="secondary" class="shrink-0 text-[10px]">~5 sec</Badge>
+            </CardContent>
+          </Card>
+
+          <!-- Option 2: SDK (2 min) -->
+          <Card class="cursor-pointer hover:border-primary/50 transition-colors" @click="router.push('/data-sources')">
+            <CardContent class="py-4 flex items-center gap-4">
+              <div class="flex items-center justify-center w-10 h-10 rounded-lg bg-green-100 text-green-700 shrink-0 font-mono text-xs font-bold">{}</div>
+              <div class="flex-1 min-w-0">
+                <div class="text-sm font-medium">Add the SDK to your backend</div>
+                <div class="text-xs text-muted-foreground">3 lines of code → per-feature, per-model cost breakdown. No billing changes.</div>
+              </div>
+              <Badge variant="secondary" class="shrink-0 text-[10px]">~2 min</Badge>
+            </CardContent>
+          </Card>
+
+          <!-- Option 3: Connect provider (5 min) -->
+          <Card class="cursor-pointer hover:border-primary/50 transition-colors" @click="router.push('/data-sources')">
+            <CardContent class="py-4 flex items-center gap-4">
+              <div class="flex items-center justify-center w-10 h-10 rounded-lg bg-blue-100 text-blue-700 shrink-0 text-xs font-bold">API</div>
+              <div class="flex-1 min-w-0">
+                <div class="text-sm font-medium">Connect OpenAI or Anthropic</div>
+                <div class="text-xs text-muted-foreground">Paste your API key → automatic cost sync for the last 30 days</div>
+              </div>
+              <Badge variant="secondary" class="shrink-0 text-[10px]">~5 min</Badge>
+            </CardContent>
+          </Card>
+
+          <!-- Option 4: CSV -->
+          <Card class="cursor-pointer hover:border-primary/50 transition-colors" @click="router.push('/data-sources')">
+            <CardContent class="py-4 flex items-center gap-4">
+              <div class="flex items-center justify-center w-10 h-10 rounded-lg bg-gray-100 text-gray-700 shrink-0 text-xs font-bold">CSV</div>
+              <div class="flex-1 min-w-0">
+                <div class="text-sm font-medium">Upload cost & revenue CSVs</div>
+                <div class="text-xs text-muted-foreground">Bulk import historical data from any source</div>
+              </div>
+              <Badge variant="secondary" class="shrink-0 text-[10px]">~10 min</Badge>
+            </CardContent>
+          </Card>
+        </div>
       </template>
     </main>
   </div>

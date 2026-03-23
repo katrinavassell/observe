@@ -69,6 +69,10 @@ async function processCheckout() {
 }
 
 onMounted(() => {
+  if (!planId) {
+    router.replace('/plans')
+    return
+  }
   processCheckout()
 })
 </script>

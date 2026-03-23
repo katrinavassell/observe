@@ -8,16 +8,21 @@ import {
   getEventsByModel,
   getEventsByCustomer,
   getCustomerDetail,
+  getSourceBreakdown,
+  getMarginAlerts,
 } from '@/lib/api'
-import type { CustomerDetail } from '@/lib/api'
-import { AlertCircle, ChevronDown } from 'lucide-vue-next'
+import type { CustomerDetail, MarginAlert } from '@/lib/api'
+import { AlertCircle, AlertTriangle, ChevronDown, Plug, Database } from 'lucide-vue-next'
+import SourceBadge from '@/components/shared/SourceBadge.vue'
 import {
   Card,
   CardHeader,
   CardTitle,
   CardContent,
   Skeleton,
+  Button,
 } from '@/components/ui'
+import { formatCurrency as fmt, formatPct as fmtPct, computeMargin } from '@/lib/format'
 
 const router = useRouter()
 const queryClient = useQueryClient()
@@ -59,6 +64,16 @@ const {
 } = useQuery({
   queryKey: ['events-by-customer'],
   queryFn: getEventsByCustomer,
+})
+
+const { data: sourceBreakdown } = useQuery({
+  queryKey: ['source-breakdown'],
+  queryFn: getSourceBreakdown,
+})
+
+const { data: marginAlertsData } = useQuery({
+  queryKey: ['margin-alerts'],
+  queryFn: getMarginAlerts,
 })
 
 const isLoading = computed(
@@ -184,30 +199,14 @@ async function toggleCustomer(id: string) {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Formatting helpers
-// ---------------------------------------------------------------------------
-function fmt(val: number): string {
-  if (val >= 1000) return `$${(val / 1000).toFixed(1)}k`
-  if (val >= 1) return `$${val.toFixed(2)}`
-  return `$${val.toFixed(4)}`
-}
-
-function fmtPct(val: number | null): string {
-  if (val === null || val === undefined) return '\u2014'
-  return `${val.toFixed(0)}%`
-}
-
-function computeMargin(revenue: number, cost: number): number | null {
-  if (revenue === 0) return null
-  return ((revenue - cost) / revenue) * 100
-}
+// formatCurrency (as fmt), fmtPct, computeMargin imported from @/lib/format
 
 function retry() {
   queryClient.invalidateQueries({ queryKey: ['metrics-summary'] })
   queryClient.invalidateQueries({ queryKey: ['events-by-feature'] })
   queryClient.invalidateQueries({ queryKey: ['events-by-model'] })
   queryClient.invalidateQueries({ queryKey: ['events-by-customer'] })
+  queryClient.invalidateQueries({ queryKey: ['margin-alerts'] })
 }
 </script>
 
@@ -236,7 +235,7 @@ function retry() {
     <!-- Loading state -->
     <div v-else-if="isLoading">
       <!-- Skeleton summary cards -->
-      <div class="grid grid-cols-4 gap-4 mb-6">
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
         <Card v-for="i in 4" :key="i" class="p-6">
           <Skeleton class="h-4 w-24 mb-2" />
           <Skeleton class="h-8 w-20" />
@@ -256,7 +255,7 @@ function retry() {
     <!-- Data loaded -->
     <template v-else>
       <!-- 1. Summary cards -->
-      <div class="grid grid-cols-4 gap-4 mb-6">
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
         <Card class="p-6">
           <div class="text-sm font-medium text-muted-foreground">Total MRR</div>
           <div v-if="summary?.mrr != null" class="text-3xl font-semibold tabular-nums mt-1">
@@ -290,12 +289,74 @@ function retry() {
         </Card>
       </div>
 
+      <!-- Data Sources breakdown -->
+      <Card v-if="sourceBreakdown?.sources?.length" class="mb-6">
+        <CardContent class="py-4 px-6">
+          <div class="flex items-center gap-2 mb-3">
+            <Database class="h-4 w-4 text-muted-foreground" />
+            <span class="text-sm font-medium">Data Sources</span>
+            <span class="text-xs text-muted-foreground ml-auto">{{ sourceBreakdown.total_events.toLocaleString() }} events</span>
+          </div>
+          <div class="flex flex-wrap gap-3">
+            <div
+              v-for="src in sourceBreakdown.sources"
+              :key="src.source"
+              class="flex items-center gap-2"
+            >
+              <SourceBadge :source="src.source" :is-inferred="src.source === 'inferred'" />
+              <span class="text-xs tabular-nums text-muted-foreground">
+                {{ src.event_count.toLocaleString() }}
+                <span v-if="sourceBreakdown.total_events > 0" class="opacity-60">
+                  ({{ Math.round(src.event_count / sourceBreakdown.total_events * 100) }}%)
+                </span>
+              </span>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <!-- Margin Alerts -->
+      <Card v-if="marginAlertsData?.alerts?.length" class="mb-6">
+        <CardContent class="py-4 px-6">
+          <div class="flex items-center gap-2 mb-3">
+            <AlertTriangle class="h-4 w-4 text-amber-500" />
+            <span class="text-sm font-medium">Margin Alerts</span>
+            <span class="text-xs text-muted-foreground ml-auto">{{ marginAlertsData.alerts.length }} alert{{ marginAlertsData.alerts.length === 1 ? '' : 's' }}</span>
+          </div>
+          <div class="space-y-2">
+            <div
+              v-for="(alert, idx) in marginAlertsData.alerts"
+              :key="idx"
+              class="flex items-start gap-3 rounded-md border px-3 py-2"
+              :class="alert.severity === 'critical' ? 'border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950' : 'border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950'"
+            >
+              <AlertCircle v-if="alert.severity === 'critical'" class="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
+              <AlertTriangle v-else class="h-4 w-4 text-amber-500 mt-0.5 shrink-0" />
+              <div class="min-w-0">
+                <div class="text-sm font-medium">{{ alert.title }}</div>
+                <div class="text-xs text-muted-foreground">{{ alert.description }}</div>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       <!-- Empty state -->
       <div
         v-if="!hasData || (!featureData?.length && !customerData?.length)"
-        class="text-center py-16 text-muted-foreground"
+        class="flex flex-col items-center justify-center py-16 text-center max-w-md mx-auto"
       >
-        Load sample data or import your own to see analytics here.
+        <Database class="h-10 w-10 text-muted-foreground/40 mb-3" />
+        <p class="text-sm font-medium mb-1">No analytics data yet</p>
+        <p class="text-xs text-muted-foreground mb-4">
+          Revenue, cost, and margin breakdowns appear here once you have event data flowing in via the SDK, CSV upload, or provider integrations.
+        </p>
+        <div class="flex gap-3">
+          <Button variant="outline" size="sm" @click="router.push('/data-sources')">
+            <Plug class="h-3.5 w-3.5 mr-1.5" />
+            Data Sources
+          </Button>
+        </div>
       </div>
 
       <template v-else>
@@ -380,8 +441,13 @@ function retry() {
               >
                 <!-- Customer row -->
                 <div
+                  role="button"
+                  tabindex="0"
+                  :aria-expanded="expandedIds.has(c.customer_id)"
                   class="flex items-center justify-between hover:bg-muted/50 transition-colors rounded-md px-3 py-3 -mx-1 cursor-pointer"
                   @click="toggleCustomer(c.customer_id)"
+                  @keydown.enter="toggleCustomer(c.customer_id)"
+                  @keydown.space.prevent="toggleCustomer(c.customer_id)"
                 >
                   <div class="min-w-0">
                     <div class="font-medium">{{ c.customer_name }}</div>

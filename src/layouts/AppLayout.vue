@@ -18,7 +18,9 @@ import {
   Eye,
   LogIn,
   LogOut,
+  Sparkles,
 } from 'lucide-vue-next'
+import ErrorBoundary from '@/components/shared/ErrorBoundary.vue'
 import { useDemoMode } from '@/composables/useDemoMode'
 import { useTeam } from '@/composables/useTeam'
 import { useAuth } from '@/composables/useAuth'
@@ -35,9 +37,9 @@ onMounted(() => {
 const navItems = computed(() => [
   {
     path: '/',
-    label: 'Pricing',
+    label: 'Overview',
     icon: DollarSign,
-    description: 'Margin analysis & plan health',
+    description: 'Pricing analyzer & margin health',
   },
   {
     path: '/analytics',
@@ -68,6 +70,7 @@ const navItems = computed(() => [
     label: 'Customers',
     icon: Users,
     description: 'Customer profiles & usage',
+    dividerBefore: true,
   },
   {
     path: '/simulations',
@@ -76,22 +79,16 @@ const navItems = computed(() => [
     description: 'What-if pricing scenarios',
   },
   {
+    path: '/insights',
+    label: 'Insights',
+    icon: Sparkles,
+    description: 'AI-powered analysis of your data',
+  },
+  {
     path: '/data-sources',
     label: 'Data Sources',
     icon: Plug,
     description: 'Connect integrations or upload files',
-  },
-  {
-    path: '/referrals',
-    label: 'Referrals',
-    icon: Gift,
-    description: 'Invite colleagues, earn AI credits',
-  },
-  {
-    path: '/plans',
-    label: 'Plans & Billing',
-    icon: CreditCard,
-    description: 'View your plan and usage',
   },
 ])
 
@@ -121,7 +118,7 @@ function isActive(path: string) {
             <template v-for="(item, idx) in navItems" :key="item.path">
               <!-- Section dividers -->
               <div
-                v-if="item.path === '/customers' || item.path === '/insights'"
+                v-if="item.dividerBefore"
                 class="h-px bg-sidebar-border mx-2 my-2"
               />
               <router-link
@@ -172,6 +169,7 @@ function isActive(path: string) {
             </div>
             <button
               @click="logout"
+              aria-label="Sign out"
               class="ml-2 p-1.5 rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
               title="Sign out"
             >
@@ -220,7 +218,9 @@ function isActive(path: string) {
       </div>
 
       <div class="p-6">
-        <slot />
+        <ErrorBoundary>
+          <slot />
+        </ErrorBoundary>
       </div>
     </main>
   </div>

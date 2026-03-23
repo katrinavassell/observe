@@ -3,6 +3,7 @@ import { ref, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/vue-query'
 import { getSimulation, updateSimulation } from '@/lib/api'
+import { formatCurrency } from '@/lib/format'
 import { getSimulationStatusColor, getSimulationStatusLabel } from '@/types/simulation'
 import MarginBadge from '@/components/shared/MarginBadge.vue'
 import TrendIndicator from '@/components/shared/TrendIndicator.vue'
@@ -54,11 +55,6 @@ function formatDate(ts: string) {
   return new Date(ts).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
-function formatCurrency(val: number) {
-  if (val >= 1000) return `$${(val / 1000).toFixed(1)}k`
-  if (val >= 1) return `$${val.toFixed(2)}`
-  return `$${val.toFixed(4)}`
-}
 
 function churnRiskClass(risk: string) {
   switch (risk) {

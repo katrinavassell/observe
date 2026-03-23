@@ -11,7 +11,7 @@
 
 import { ref, watch, onMounted, onUnmounted } from 'vue'
 import { toast } from 'vue-sonner'
-import { TrendingUp, FlaskConical, Eye } from 'lucide-vue-next'
+import { TrendingUp, FlaskConical, Eye, Key, Copy, Trash2, Plus } from 'lucide-vue-next'
 import { Card, CardContent, Button } from '@/components/ui'
 import {
   RevenueSection,
@@ -30,7 +30,11 @@ import {
   clearRevenueData,
   clearCostData,
   clearUsageData,
+  createSdkKey,
+  listSdkKeys,
+  revokeSdkKey,
 } from '@/lib/api'
+import type { SdkKey } from '@/lib/api'
 
 const { isViewer } = useTeam()
 
@@ -89,6 +93,64 @@ const isSyncing = ref(false)
 /** Component refs */
 const revenueSectionRef = ref<InstanceType<typeof RevenueSection> | null>(null)
 
+const ingestUrl = typeof window !== 'undefined' ? `${window.location.origin}/api/events/ingest` : '/api/events/ingest'
+
+/** SDK API Key state */
+const sdkKeys = ref<SdkKey[]>([])
+const showKeyGenerator = ref(false)
+const newKeyName = ref('')
+const isGeneratingKey = ref(false)
+const generatedKey = ref<string | null>(null)
+const keyCopied = ref(false)
+
+async function loadSdkKeys() {
+  try {
+    sdkKeys.value = await listSdkKeys()
+  } catch {
+    // silently fail - keys list is not critical
+  }
+}
+
+async function handleGenerateKey() {
+  isGeneratingKey.value = true
+  try {
+    const result = await createSdkKey(newKeyName.value || undefined)
+    generatedKey.value = result.key
+    newKeyName.value = ''
+    await loadSdkKeys()
+  } catch (error) {
+    toast.error('Failed to generate API key', {
+      description: error instanceof Error ? error.message : 'Please try again.',
+    })
+  } finally {
+    isGeneratingKey.value = false
+  }
+}
+
+async function handleRevokeKey(id: number) {
+  try {
+    await revokeSdkKey(id)
+    sdkKeys.value = sdkKeys.value.filter(k => k.id !== id)
+    toast.success('API key revoked')
+  } catch (error) {
+    toast.error('Failed to revoke key', {
+      description: error instanceof Error ? error.message : 'Please try again.',
+    })
+  }
+}
+
+function copyKeyToClipboard() {
+  if (!generatedKey.value) return
+  navigator.clipboard.writeText(generatedKey.value)
+  keyCopied.value = true
+  setTimeout(() => { keyCopied.value = false }, 2000)
+}
+
+function dismissGeneratedKey() {
+  generatedKey.value = null
+  showKeyGenerator.value = false
+}
+
 // =============================================================================
 // LIFECYCLE - Check Stripe status and auto-sync
 // =============================================================================
@@ -102,6 +164,7 @@ onMounted(async () => {
   } catch {
     isStripeConnected.value = false
   }
+  loadSdkKeys()
 })
 
 onUnmounted(() => {
@@ -376,7 +439,7 @@ watch(
     <div>
       <h1 class="text-2xl font-semibold">Data Sources</h1>
       <p class="text-muted-foreground">
-        Connect your data to see pricing insights
+        Track AI costs per customer, feature, and model
       </p>
     </div>
 
@@ -440,15 +503,184 @@ watch(
       </div>
     </div>
 
-    <UsageLimitBanner
-      v-if="!isDemoMode && !isViewer && csvUpload.hasLimit.value"
-      feature-label="CSV Uploads"
-      :allowed="csvUpload.allowed.value"
-      :usage="csvUpload.usage.value"
-      :limit="csvUpload.limit.value"
-      :usage-percent="csvUpload.usagePercent.value"
-      :bar-color="csvUpload.barColor.value"
-      :has-limit="csvUpload.hasLimit.value"
+    <!-- SDK Integration Section — PRIMARY integration, shown first -->
+    <Card v-if="!isDemoMode" class="border-green-200/50">
+      <CardContent class="p-6 space-y-5">
+        <div>
+          <div class="flex items-center gap-2 mb-1">
+            <div class="flex items-center justify-center w-8 h-8 rounded-lg bg-green-100 text-green-700 text-xs font-bold">{}</div>
+            <h2 class="font-semibold">SDK Integration</h2>
+            <span class="ml-auto text-[10px] font-medium bg-green-100 text-green-700 px-2 py-0.5 rounded-full">Observe-only</span>
+          </div>
+          <p class="text-sm text-muted-foreground">
+            Add 3 lines of code to see exactly where your AI spend goes. No billing changes required.
+          </p>
+        </div>
+
+        <!-- API Key Management -->
+        <div v-if="!isViewer">
+          <div class="flex items-center justify-between mb-2">
+            <h3 class="text-xs font-semibold text-muted-foreground uppercase tracking-wider">API Keys</h3>
+            <Button v-if="!showKeyGenerator && !generatedKey" variant="outline" size="sm" class="h-7 text-xs" @click="showKeyGenerator = true">
+              <Plus class="h-3 w-3 mr-1" />
+              Generate API Key
+            </Button>
+          </div>
+
+          <!-- Key generator inline UI -->
+          <div v-if="showKeyGenerator && !generatedKey" class="rounded-lg border bg-muted/30 p-4 mb-3 space-y-3">
+            <div class="flex gap-2">
+              <input
+                v-model="newKeyName"
+                type="text"
+                placeholder="Key name (optional, e.g. 'production')"
+                class="flex-1 h-8 rounded-md border bg-background px-3 text-sm"
+                @keydown.enter="handleGenerateKey"
+              />
+              <Button size="sm" class="h-8" :disabled="isGeneratingKey" @click="handleGenerateKey">
+                <Key class="h-3 w-3 mr-1" />
+                {{ isGeneratingKey ? 'Generating...' : 'Generate' }}
+              </Button>
+              <Button variant="ghost" size="sm" class="h-8" @click="showKeyGenerator = false">Cancel</Button>
+            </div>
+          </div>
+
+          <!-- Generated key display (show once) -->
+          <div v-if="generatedKey" class="rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-700 p-4 mb-3 space-y-2">
+            <div class="flex items-center gap-2 text-xs font-medium text-amber-800 dark:text-amber-300">
+              <Key class="h-3 w-3" />
+              Save this key — you won't see it again
+            </div>
+            <div class="flex items-center gap-2">
+              <code class="flex-1 text-xs font-mono bg-background border rounded px-3 py-2 select-all break-all">{{ generatedKey }}</code>
+              <Button variant="outline" size="sm" class="h-8 shrink-0" @click="copyKeyToClipboard">
+                <Copy class="h-3 w-3 mr-1" />
+                {{ keyCopied ? 'Copied!' : 'Copy' }}
+              </Button>
+            </div>
+            <Button variant="ghost" size="sm" class="h-7 text-xs" @click="dismissGeneratedKey">Done</Button>
+          </div>
+
+          <!-- Existing keys list -->
+          <div v-if="sdkKeys.length > 0" class="space-y-1.5 mb-3">
+            <div v-for="key in sdkKeys" :key="key.id" class="flex items-center justify-between rounded-md border bg-card px-3 py-2 text-xs">
+              <div class="flex items-center gap-3">
+                <code class="font-mono text-muted-foreground">{{ key.key_prefix }}...</code>
+                <span v-if="key.name" class="text-foreground">{{ key.name }}</span>
+                <span class="text-muted-foreground">{{ new Date(key.created_at).toLocaleDateString() }}</span>
+              </div>
+              <Button variant="ghost" size="sm" class="h-6 w-6 p-0 text-muted-foreground hover:text-destructive" @click="handleRevokeKey(key.id)">
+                <Trash2 class="h-3 w-3" />
+              </Button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Quick Start — PostHog-style minimal snippet -->
+        <div>
+          <div class="flex items-center gap-2 mb-2">
+            <h3 class="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Quick start</h3>
+            <span class="text-[10px] text-muted-foreground">~ 2 minutes</span>
+          </div>
+          <div class="rounded-md bg-zinc-950 border border-zinc-800 p-4 font-mono text-xs leading-relaxed overflow-x-auto">
+            <pre class="whitespace-pre text-zinc-100"><span class="text-zinc-500">// Add after any AI API call. That's it.</span>
+<span class="text-emerald-400">await</span> fetch(<span class="text-amber-300">'{{ ingestUrl }}'</span>, {
+  method: <span class="text-amber-300">'POST'</span>,
+  headers: { <span class="text-amber-300">'Content-Type'</span>: <span class="text-amber-300">'application/json'</span>,
+             <span class="text-amber-300">'Authorization'</span>: <span class="text-amber-300">'Bearer {{ sdkKeys.length > 0 ? sdkKeys[0].key_prefix + "..." : "YOUR_API_KEY" }}'</span> },
+  body: JSON.stringify({ events: [{
+    <span class="text-sky-300">eventName</span>: <span class="text-amber-300">'chat_completion'</span>,
+    <span class="text-sky-300">customerReferenceId</span>: userId,
+    <span class="text-sky-300">featureKey</span>: <span class="text-amber-300">'ai_summarization'</span>,
+    <span class="text-sky-300">costAmount</span>: <span class="text-purple-300">0.24</span>,
+    <span class="text-sky-300">model</span>: <span class="text-amber-300">'gpt-4o'</span>,
+  }]})
+})</pre>
+          </div>
+          <p class="text-[11px] text-muted-foreground mt-2">
+            3 required fields: <span class="font-mono">eventName</span>, <span class="font-mono">customerReferenceId</span>, <span class="font-mono">featureKey</span>. Everything else is optional — we auto-detect the provider from the model name and enrich revenue from Stripe.
+          </p>
+        </div>
+
+        <!-- Full example with comments -->
+        <details class="group">
+          <summary class="text-xs font-medium text-muted-foreground cursor-pointer hover:text-foreground transition-colors">
+            Show full example with all options ▾
+          </summary>
+          <div class="mt-2 rounded-md bg-muted/60 border p-4 font-mono text-xs leading-relaxed overflow-x-auto">
+            <pre class="whitespace-pre"><span class="text-muted-foreground">// Full example — wrap your AI API call</span>
+const response = await openai.chat.completions.create({ ... })
+
+await fetch('{{ ingestUrl }}', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'Authorization': 'Bearer {{ sdkKeys.length > 0 ? sdkKeys[0].key_prefix + "..." : "YOUR_API_KEY" }}'
+  },
+  body: JSON.stringify({ events: [{
+    eventName: 'chat_completion',
+    customerReferenceId: 'cus_123',  <span class="text-muted-foreground">// your customer ID</span>
+    featureKey: 'ai_summarization',  <span class="text-muted-foreground">// which feature used it</span>
+    costAmount: 0.24,                <span class="text-muted-foreground">// cost in USD</span>
+    model: 'gpt-4o',                 <span class="text-muted-foreground">// auto-detects provider</span>
+    usageUnits: 1500,                <span class="text-muted-foreground">// tokens, requests, etc.</span>
+    revenueAmount: 0.50,             <span class="text-muted-foreground">// or auto-enriched from Stripe</span>
+    eventIdempotencyKey: 'evt_abc',  <span class="text-muted-foreground">// prevents duplicates on retry</span>
+    meta: { session: 'sess_xyz' },   <span class="text-muted-foreground">// any extra context</span>
+  }]})
+})</pre>
+          </div>
+        </details>
+
+        <!-- Step 2: What you get -->
+        <div>
+          <h3 class="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">2. What you get</h3>
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div class="rounded-lg border bg-card p-3">
+              <div class="text-xs font-medium mb-1">Per-feature costs</div>
+              <div class="text-[11px] text-muted-foreground">See which features (summarization, search, image gen) cost the most</div>
+            </div>
+            <div class="rounded-lg border bg-card p-3">
+              <div class="text-xs font-medium mb-1">Per-model breakdown</div>
+              <div class="text-[11px] text-muted-foreground">Compare GPT-4o vs Claude vs embeddings costs. Provider auto-detected</div>
+            </div>
+            <div class="rounded-lg border bg-card p-3">
+              <div class="text-xs font-medium mb-1">Historical backfill</div>
+              <div class="text-[11px] text-muted-foreground">SDK patterns auto-split old CSV/API data into per-feature estimates</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Required vs optional fields -->
+        <div>
+          <h3 class="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Event fields</h3>
+          <div class="text-xs space-y-1.5">
+            <div class="flex gap-2"><span class="font-mono bg-muted px-1.5 py-0.5 rounded text-[11px] shrink-0">eventName</span><span class="text-red-500 text-[10px]">required</span><span class="text-muted-foreground">What happened ("chat_completion", "image_generated")</span></div>
+            <div class="flex gap-2"><span class="font-mono bg-muted px-1.5 py-0.5 rounded text-[11px] shrink-0">customerReferenceId</span><span class="text-red-500 text-[10px]">required</span><span class="text-muted-foreground">Your customer identifier</span></div>
+            <div class="flex gap-2"><span class="font-mono bg-muted px-1.5 py-0.5 rounded text-[11px] shrink-0">featureKey</span><span class="text-red-500 text-[10px]">required</span><span class="text-muted-foreground">Which product feature ("ai_summarization", "search")</span></div>
+            <div class="flex gap-2"><span class="font-mono bg-muted px-1.5 py-0.5 rounded text-[11px] shrink-0">costAmount</span><span class="text-muted-foreground/60 text-[10px]">optional</span><span class="text-muted-foreground">Cost in USD</span></div>
+            <div class="flex gap-2"><span class="font-mono bg-muted px-1.5 py-0.5 rounded text-[11px] shrink-0">model</span><span class="text-muted-foreground/60 text-[10px]">optional</span><span class="text-muted-foreground">Model name — provider auto-detected (claude-* → Anthropic, gpt-* → OpenAI)</span></div>
+            <div class="flex gap-2"><span class="font-mono bg-muted px-1.5 py-0.5 rounded text-[11px] shrink-0">usageUnits</span><span class="text-muted-foreground/60 text-[10px]">optional</span><span class="text-muted-foreground">Tokens, requests, or any quantity</span></div>
+            <div class="flex gap-2"><span class="font-mono bg-muted px-1.5 py-0.5 rounded text-[11px] shrink-0">revenueAmount</span><span class="text-muted-foreground/60 text-[10px]">optional</span><span class="text-muted-foreground">Revenue for this event — auto-enriched from Stripe if missing</span></div>
+            <div class="flex gap-2"><span class="font-mono bg-muted px-1.5 py-0.5 rounded text-[11px] shrink-0">eventIdempotencyKey</span><span class="text-muted-foreground/60 text-[10px]">optional</span><span class="text-muted-foreground">Unique key for dedup on retry</span></div>
+          </div>
+        </div>
+
+        <div class="text-[11px] text-muted-foreground border-t pt-3">
+          Batch up to 1,000 events per request. All data tagged as <span class="font-mono bg-green-100 text-green-700 px-1 py-0.5 rounded">SDK</span> in the dashboard.
+        </div>
+      </CardContent>
+    </Card>
+
+    <!-- AI Provider Connections (hidden in demo mode) -->
+    <CostsSection
+      v-if="!isDemoMode"
+      :file="costsFile"
+      :is-loading-sample="isLoadingCosts"
+      :readonly="isViewer"
+      @file-uploaded="handleCostsFileUploaded"
+      @file-cleared="handleCostsFileCleared"
+      @use-sample="handleUseSampleCosts"
     />
 
     <!-- Revenue Section (hidden in demo mode) -->
@@ -468,15 +700,15 @@ watch(
       @all-files-cleared="handleRevenueFilesCleared"
     />
 
-    <!-- Costs Section (hidden in demo mode) -->
-    <CostsSection
-      v-if="!isDemoMode"
-      :file="costsFile"
-      :is-loading-sample="isLoadingCosts"
-      :readonly="isViewer"
-      @file-uploaded="handleCostsFileUploaded"
-      @file-cleared="handleCostsFileCleared"
-      @use-sample="handleUseSampleCosts"
+    <UsageLimitBanner
+      v-if="!isDemoMode && !isViewer && csvUpload.hasLimit.value"
+      feature-label="CSV Uploads"
+      :allowed="csvUpload.allowed.value"
+      :usage="csvUpload.usage.value"
+      :limit="csvUpload.limit.value"
+      :usage-percent="csvUpload.usagePercent.value"
+      :bar-color="csvUpload.barColor.value"
+      :has-limit="csvUpload.hasLimit.value"
     />
 
     <!-- Usage Section (hidden in demo mode) -->

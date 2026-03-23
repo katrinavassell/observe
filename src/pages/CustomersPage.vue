@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { useQuery } from '@tanstack/vue-query'
+import { useQuery, useQueryClient } from '@tanstack/vue-query'
 import { useRouter } from 'vue-router'
 import { getCustomers, getEventsByCustomer } from '@/lib/api'
-import { Users, ChevronRight, Search } from 'lucide-vue-next'
+import { Users, ChevronRight, Search, AlertCircle, Plug } from 'lucide-vue-next'
 import MarginBadge from '@/components/shared/MarginBadge.vue'
-import { Input, Select } from '@/components/ui'
+import { Input, Select, Skeleton, Button, Card, CardContent } from '@/components/ui'
 
 const router = useRouter()
+const queryClient = useQueryClient()
 const search = ref('')
 const segmentFilter = ref('__all__')
 
@@ -102,25 +103,44 @@ function segmentClass(segment: string | null) {
         @update:model-value="segmentFilter = $event"
       />
 
-      <button
+      <Button
         v-if="search || (segmentFilter && segmentFilter !== '__all__')"
-        class="text-xs text-muted-foreground hover:text-foreground underline"
+        variant="ghost"
+        size="sm"
+        class="text-muted-foreground hover:text-foreground"
         @click="search = ''; segmentFilter = '__all__'"
       >
         Clear
-      </button>
+      </Button>
     </div>
 
+    <!-- Loading -->
+    <Card v-if="isLoading">
+      <CardContent class="py-6 space-y-3">
+        <Skeleton v-for="i in 8" :key="i" class="h-12 w-full" />
+      </CardContent>
+    </Card>
+    <!-- Error -->
+    <div v-else-if="isError" class="flex flex-col items-center justify-center py-24 text-center">
+      <AlertCircle class="h-10 w-10 text-muted-foreground mb-4" />
+      <p class="text-muted-foreground mb-4">Failed to load customers.</p>
+      <Button @click="queryClient.invalidateQueries({ queryKey: ['customers'] })">Try Again</Button>
+    </div>
+    <!-- Empty -->
+    <div v-else-if="filtered.length === 0" class="flex flex-col items-center justify-center py-16 text-center">
+      <Users class="h-10 w-10 text-muted-foreground/40 mb-3" />
+      <p v-if="search || (segmentFilter && segmentFilter !== '__all__')" class="text-muted-foreground mb-4">No customers matching your filters.</p>
+      <template v-else>
+        <p class="text-muted-foreground mb-4">No customers yet. Load sample data or sync an integration.</p>
+        <Button variant="outline" @click="router.push('/data-sources')">
+          <Plug class="h-4 w-4 mr-2" />
+          Import Data
+        </Button>
+      </template>
+    </div>
     <!-- Table -->
-    <div class="rounded-lg border bg-card overflow-hidden">
-      <div v-if="isLoading" class="p-8 text-center text-muted-foreground text-sm">Loading customers…</div>
-      <div v-else-if="isError" class="p-8 text-center text-destructive text-sm">Failed to load customers.</div>
-      <div v-else-if="filtered.length === 0" class="p-8 text-center text-muted-foreground text-sm">
-        <Users class="h-8 w-8 mx-auto mb-2 opacity-40" />
-        <span v-if="search || (segmentFilter && segmentFilter !== '__all__')">No customers matching your filters</span>
-        <span v-else>No customers yet. Load sample data or sync an integration.</span>
-      </div>
-      <table v-else class="w-full text-sm">
+    <div v-else class="rounded-lg border bg-card overflow-hidden">
+      <table class="w-full text-sm">
         <thead class="bg-muted/50 text-muted-foreground">
           <tr>
             <th class="px-4 py-3 text-left font-medium">Name</th>

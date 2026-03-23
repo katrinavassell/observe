@@ -3,6 +3,7 @@ import { ref, computed } from 'vue'
 import { useQuery } from '@tanstack/vue-query'
 import { useRouter } from 'vue-router'
 import { listSimulations, getOpportunities } from '@/lib/api'
+import { formatCurrency } from '@/lib/format'
 import type { SimulationStatus } from '@/types/simulation'
 import { getSimulationStatusColor, getSimulationStatusLabel } from '@/types/simulation'
 import { useEntitlement } from '@/composables/useEntitlement'
@@ -52,11 +53,6 @@ function formatDate(ts: string) {
   return new Date(ts).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
-function formatCurrency(val: number) {
-  if (val >= 1000) return `$${(val / 1000).toFixed(1)}k`
-  if (val >= 1) return `$${val.toFixed(2)}`
-  return `$${val.toFixed(4)}`
-}
 </script>
 
 <template>

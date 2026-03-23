@@ -101,18 +101,42 @@ function featureLabel(key: string) {
 const freePlan = computed(() => plans.value.find((p: any) => p.key === 'free'))
 const proPlan = computed(() => plans.value.find((p: any) => p.key === 'pro'))
 
-const featureRows = computed(() => [
-  { label: 'AI Insights', key: 'ai_insights', free: '3 / month', pro: 'Unlimited', highlight: true },
-  { label: 'Simulations', key: 'simulations', free: '2 / month', pro: 'Unlimited', highlight: true },
-  { label: 'SaaS Metrics Dashboard', key: 'saas_metrics', free: true, pro: true },
-  { label: 'Plan Health Analysis', key: 'plan_health', free: true, pro: true },
-  { label: 'Usage Anomaly Detection', key: 'usage_anomalies', free: true, pro: true },
-  { label: 'Negative Margin Analysis', key: 'negative_margin', free: true, pro: true },
-  { label: 'Stripe Connection', key: 'stripe_connection', free: true, pro: true },
-  { label: 'AI Provider Connection', key: 'ai_provider_connection', free: true, pro: true },
-  { label: 'CSV Uploads', key: 'csv_upload', free: true, pro: true },
-  { label: 'Sample Data', key: 'sample_data', free: true, pro: true },
-])
+function formatFeatureLimit(feature: any): string | boolean {
+  if (!feature) return true
+  if (feature.pricingType === 'usage_based' && feature.pricing) {
+    const maxUsage = feature.pricing.maxUsage ?? feature.pricing.max_usage
+    if (maxUsage == null) return 'Unlimited'
+    const unit = feature.pricing.unitLabel || feature.pricing.usage_unit_type || ''
+    return `${maxUsage}${unit ? ` ${unit}` : ''} / month`
+  }
+  return true // included = boolean access
+}
+
+// Build a map of featureKey -> feature object per plan
+function planFeatureMap(plan: any): Record<string, any> {
+  const features = plan?.features || []
+  const map: Record<string, any> = {}
+  for (const f of features) map[f.key] = f
+  return map
+}
+
+const featureRows = computed(() => {
+  const freeFeatures = planFeatureMap(freePlan.value)
+  const proFeatures = planFeatureMap(proPlan.value)
+  const allFeatures = freePlan.value?.features || proPlan.value?.features || []
+  return allFeatures.map((f: any) => {
+    const freeVal = formatFeatureLimit(freeFeatures[f.key])
+    const proVal = formatFeatureLimit(proFeatures[f.key])
+    const highlight = typeof freeVal === 'string' || typeof proVal === 'string'
+    return {
+      label: f.name || featureLabel(f.key),
+      key: f.key,
+      free: freeVal,
+      pro: proVal,
+      highlight,
+    }
+  })
+})
 
 function getUsagePercent(e: any) {
   if (!e.usageLimit || e.usageLimit === 0) return 0
@@ -324,8 +348,8 @@ async function handleCancelDowngrade() {
             </div>
             <p class="text-sm text-muted-foreground mt-1">{{ freePlan.description }}</p>
             <div class="mt-4 mb-6">
-              <span class="text-4xl font-bold tracking-tight">$0</span>
-              <span class="text-sm text-muted-foreground ml-1">forever</span>
+              <span class="text-4xl font-bold tracking-tight">${{ freePlan.priceAmount ?? 0 }}</span>
+              <span class="text-sm text-muted-foreground ml-1">{{ freePlan.priceAmount ? '/ month' : 'forever' }}</span>
             </div>
             <!-- On Pro → show downgrade button -->
             <button
@@ -380,7 +404,7 @@ async function handleCancelDowngrade() {
             </div>
             <p class="text-sm text-muted-foreground mt-1">{{ proPlan.description }}</p>
             <div class="mt-4 mb-6">
-              <span class="text-4xl font-bold tracking-tight">$12</span>
+              <span class="text-4xl font-bold tracking-tight">${{ proPlan.priceAmount }}</span>
               <span class="text-sm text-muted-foreground ml-1">/ month</span>
             </div>
             <!-- Not on Pro → upgrade button -->
