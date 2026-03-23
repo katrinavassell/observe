@@ -5,6 +5,10 @@ import pgSession from 'connect-pg-simple'
 import { Pool } from '@neondatabase/serverless'
 import crypto from 'crypto'
 import bcrypt from 'bcryptjs'
+import helmet from 'helmet'
+import cors from 'cors'
+import rateLimit from 'express-rate-limit'
+import { z } from 'zod'
 import { getUncachableStripeClient } from './stripe-client.js'
 import { apiKeyStore } from './api-key-store.js'
 import {
@@ -23,6 +27,7 @@ import {
   tansoListCustomerInvoices,
   tansoMarkInvoicePaid,
   tansoCreateCheckoutSession,
+  tansoAdminGetFeatureRule,
   isTansoConfigured,
 } from './tanso-client.js'
 
@@ -38,6 +43,36 @@ const pool = new Pool({
 const PgStore = pgSession(session)
 
 app.use(express.json({ limit: '2mb' }))
+
+// Security headers
+app.use(helmet())
+
+// CORS — restrict to known origins
+const allowedOrigins = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(',')
+  : ['http://localhost:5000', 'http://localhost:5173']
+app.use(cors({
+  origin: allowedOrigins,
+  credentials: true,
+}))
+
+// Rate limiting
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 20, // 20 attempts per window
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many attempts, please try again later' },
+})
+const apiLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 60, // 60 requests per minute
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests, please slow down' },
+})
+app.use('/auth/', authLimiter)
+app.use('/api/', apiLimiter)
 
 // Ensure DB tables exist before anything else (critical for serverless cold starts)
 app.use(async (_req: Request, _res: Response, next: NextFunction) => {
@@ -64,11 +99,12 @@ app.use(session({
   secret: process.env.SESSION_SECRET,
   resave: false,
   saveUninitialized: false,
+  name: 'pa.sid',
   cookie: {
     secure: process.env.NODE_ENV === 'production',
     httpOnly: true,
     sameSite: 'lax',
-    maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days for anonymous users
+    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
   },
 }))
 
@@ -108,6 +144,169 @@ async function ensureVisitor(req: AuthRequest, res: Response, next: NextFunction
     res.status(500).json({ error: 'Session error' })
   }
 }
+
+// ─── OpenAI-compatible proxy ───────────────────────────────────────────────
+// Users swap their base URL to route through this proxy. Requests are forwarded
+// to OpenAI transparently while logging cost/usage as observe_events.
+
+const OPENAI_MODEL_PRICING: Record<string, { input: number; output?: number }> = {
+  'gpt-4o':                    { input: 2.50,  output: 10.00 },
+  'gpt-4o-mini':               { input: 0.15,  output: 0.60 },
+  'gpt-4':                     { input: 30.00, output: 60.00 },
+  'o1':                        { input: 15.00, output: 60.00 },
+  'text-embedding-3-small':    { input: 0.02 },
+  'text-embedding-3-large':    { input: 0.13 },
+}
+
+function calculateCost(model: string, inputTokens: number, outputTokens: number): number {
+  const pricing = OPENAI_MODEL_PRICING[model]
+  if (!pricing) return 0
+  const inputCost = (inputTokens / 1_000_000) * pricing.input
+  const outputCost = pricing.output ? (outputTokens / 1_000_000) * pricing.output : 0
+  return Math.round((inputCost + outputCost) * 1_000_000) / 1_000_000
+}
+
+async function resolveProxyUserId(tansoKey: string): Promise<string | null> {
+  const keyHash = crypto.createHash('sha256').update(tansoKey).digest('hex')
+  const result = await pool.query(
+    'SELECT user_id FROM sdk_api_keys WHERE key_hash = $1 AND revoked_at IS NULL',
+    [keyHash]
+  )
+  if (result.rows.length === 0) return null
+  pool.query('UPDATE sdk_api_keys SET last_used_at = NOW() WHERE key_hash = $1', [keyHash]).catch(() => {})
+  return result.rows[0].user_id
+}
+
+async function logProxyEvent(
+  userId: string,
+  model: string,
+  inputTokens: number,
+  outputTokens: number,
+  cost: number,
+  customerId: string,
+  featureKey: string,
+): Promise<void> {
+  await pool.query(
+    `INSERT INTO observe_events (
+      user_id, customer_id, feature_key, event_name, timestamp,
+      cost_amount, cost_unit, revenue_amount, usage_units,
+      model, model_provider, source, granularity, is_inferred
+    ) VALUES ($1, $2, $3, 'cost', NOW(), $4, 'usd', 0, $5, $6, 'openai', 'proxy', 'event', false)`,
+    [userId, customerId, featureKey, cost, inputTokens + outputTokens, model]
+  )
+}
+
+// GET /v1/models — proxy to OpenAI
+app.get('/v1/models', async (req: Request, res: Response) => {
+  try {
+    const authHeader = req.headers.authorization
+    if (!authHeader) {
+      return res.status(401).json({ error: { message: 'Missing Authorization header', type: 'auth_error' } })
+    }
+    const response = await fetch('https://api.openai.com/v1/models', {
+      headers: { 'Authorization': authHeader },
+    })
+    const data = await response.json()
+    res.status(response.status).json(data)
+  } catch (error) {
+    console.error('GET /v1/models proxy error:', error)
+    res.status(502).json({ error: { message: 'Failed to reach OpenAI', type: 'proxy_error' } })
+  }
+})
+
+// POST /v1/chat/completions — proxy + log
+app.post('/v1/chat/completions', async (req: Request, res: Response) => {
+  try {
+    const authHeader = req.headers.authorization
+    if (!authHeader) {
+      return res.status(401).json({ error: { message: 'Missing Authorization header (OpenAI key)', type: 'auth_error' } })
+    }
+
+    const tansoKey = req.headers['x-tanso-key'] as string | undefined
+    const customerId = (req.headers['x-tanso-customer'] as string) || 'unknown'
+    const featureKey = (req.headers['x-tanso-feature'] as string) || 'chat_completions'
+
+    let userId: string | null = null
+    if (tansoKey) {
+      userId = await resolveProxyUserId(tansoKey)
+    }
+
+    // Forward to OpenAI
+    const openaiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': authHeader,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(req.body),
+    })
+
+    const data = await openaiResponse.json() as Record<string, unknown>
+    res.status(openaiResponse.status).json(data)
+
+    // Log the event asynchronously (don't block the response)
+    if (userId && openaiResponse.ok && data.usage) {
+      const usage = data.usage as { prompt_tokens?: number; completion_tokens?: number }
+      const model = (data.model as string) || req.body.model || 'unknown'
+      const inputTokens = usage.prompt_tokens || 0
+      const outputTokens = usage.completion_tokens || 0
+      const cost = calculateCost(model, inputTokens, outputTokens)
+      logProxyEvent(userId, model, inputTokens, outputTokens, cost, customerId, featureKey).catch(err =>
+        console.error('Proxy event logging failed:', err)
+      )
+    }
+  } catch (error) {
+    console.error('POST /v1/chat/completions proxy error:', error)
+    res.status(502).json({ error: { message: 'Failed to reach OpenAI', type: 'proxy_error' } })
+  }
+})
+
+// POST /v1/embeddings — proxy + log
+app.post('/v1/embeddings', async (req: Request, res: Response) => {
+  try {
+    const authHeader = req.headers.authorization
+    if (!authHeader) {
+      return res.status(401).json({ error: { message: 'Missing Authorization header (OpenAI key)', type: 'auth_error' } })
+    }
+
+    const tansoKey = req.headers['x-tanso-key'] as string | undefined
+    const customerId = (req.headers['x-tanso-customer'] as string) || 'unknown'
+    const featureKey = (req.headers['x-tanso-feature'] as string) || 'embeddings'
+
+    let userId: string | null = null
+    if (tansoKey) {
+      userId = await resolveProxyUserId(tansoKey)
+    }
+
+    const openaiResponse = await fetch('https://api.openai.com/v1/embeddings', {
+      method: 'POST',
+      headers: {
+        'Authorization': authHeader,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(req.body),
+    })
+
+    const data = await openaiResponse.json() as Record<string, unknown>
+    res.status(openaiResponse.status).json(data)
+
+    // Log — embeddings only have input tokens
+    if (userId && openaiResponse.ok && data.usage) {
+      const usage = data.usage as { prompt_tokens?: number; total_tokens?: number }
+      const model = (data.model as string) || req.body.model || 'unknown'
+      const inputTokens = usage.prompt_tokens || usage.total_tokens || 0
+      const cost = calculateCost(model, inputTokens, 0)
+      logProxyEvent(userId, model, inputTokens, 0, cost, customerId, featureKey).catch(err =>
+        console.error('Proxy event logging failed:', err)
+      )
+    }
+  } catch (error) {
+    console.error('POST /v1/embeddings proxy error:', error)
+    res.status(502).json({ error: { message: 'Failed to reach OpenAI', type: 'proxy_error' } })
+  }
+})
+
+// ─── End proxy ─────────────────────────────────────────────────────────────
 
 app.get('/session/init', ensureVisitor, async (req: AuthRequest, res: Response) => {
   res.json({
@@ -695,6 +894,47 @@ app.delete('/data/clear/usage', ensureVisitor, async (req: AuthRequest, res: Res
 })
 
 // Upload cost records
+// Upload validation schemas
+const costRecordSchema = z.object({
+  month: z.string().regex(/^\d{4}-\d{2}$/, 'month must be YYYY-MM format'),
+  cost: z.number({ coerce: true }).nonnegative(),
+  customer_id: z.string().optional(),
+  provider: z.string().optional(),
+})
+const usageRecordSchema = z.object({
+  month: z.string().regex(/^\d{4}-\d{2}$/, 'month must be YYYY-MM format'),
+  customer_id: z.string().optional(),
+  metric: z.string().optional(),
+  metric_key: z.string().optional(),
+  value: z.number({ coerce: true }).optional(),
+  metric_value: z.number({ coerce: true }).optional(),
+  limit: z.number({ coerce: true }).optional(),
+  metric_limit: z.number({ coerce: true }).optional(),
+})
+const revenueUploadSchema = z.object({
+  customers: z.array(z.object({
+    customer_id: z.string(),
+    name: z.string(),
+    email: z.string().optional(),
+    segment: z.string().optional(),
+  })).optional(),
+  plans: z.array(z.object({
+    plan_id: z.string(),
+    name: z.string(),
+    price_amount: z.number({ coerce: true }),
+    interval_months: z.number().optional(),
+  })).optional(),
+  subscriptions: z.array(z.object({
+    subscription_id: z.string(),
+    customer_id: z.string(),
+    plan_id: z.string(),
+    is_active: z.boolean().optional(),
+    mrr_override: z.number({ coerce: true }).optional(),
+    current_period_start: z.string().optional(),
+    current_period_end: z.string().optional(),
+  })).optional(),
+})
+
 app.post('/data/upload/costs', ensureVisitor, async (req: AuthRequest, res: Response) => {
   const access = await checkTansoFeatureAccess(req.visitorId!, 'csv_upload', req.accountEmail)
   if (!access.allowed) return res.status(403).json({ error: access.reason || 'Upload limit reached. Upgrade your plan.' })
@@ -706,6 +946,10 @@ app.post('/data/upload/costs', ensureVisitor, async (req: AuthRequest, res: Resp
     }
     if (records.length > 10000) {
       return res.status(400).json({ error: 'Too many records. Maximum 10,000 per upload.' })
+    }
+    const parseResult = z.array(costRecordSchema).safeParse(records)
+    if (!parseResult.success) {
+      return res.status(400).json({ error: 'Invalid record format', details: parseResult.error.issues.slice(0, 5) })
     }
 
     await client.query('BEGIN')
@@ -733,8 +977,8 @@ app.post('/data/upload/costs', ensureVisitor, async (req: AuthRequest, res: Resp
         costPlaceholders.push(`($${costIdx++}, $${costIdx++}, $${costIdx++}, $${costIdx++}, $${costIdx++}, $${costIdx++})`)
         costValues.push(req.visitorId, record.customer_id || null, record.provider || 'infrastructure', record.cost, periodStart, periodEndStr)
 
-        eventPlaceholders.push(`($${eventIdx++}, $${eventIdx++}, $${eventIdx++}, 'cost', $${eventIdx++}, $${eventIdx++}, 'usd', 'csv', 'monthly_aggregate')`)
-        eventValues.push(req.visitorId, record.customer_id || '_aggregate', record.provider || 'infrastructure', new Date(`${record.month}-01`).toISOString(), record.cost)
+        eventPlaceholders.push(`($${eventIdx++}, $${eventIdx++}, $${eventIdx++}, 'cost', $${eventIdx++}, $${eventIdx++}, 'usd', 'csv', 'monthly_aggregate', $${eventIdx++})`)
+        eventValues.push(req.visitorId, record.customer_id || '_aggregate', record.provider || 'infrastructure', new Date(`${record.month}-01`).toISOString(), record.cost, record.provider || null)
       }
 
       await client.query(
@@ -742,7 +986,7 @@ app.post('/data/upload/costs', ensureVisitor, async (req: AuthRequest, res: Resp
         costValues
       )
       await client.query(
-        `INSERT INTO observe_events (user_id, customer_id, feature_key, event_name, timestamp, cost_amount, cost_unit, source, granularity) VALUES ${eventPlaceholders.join(', ')}`,
+        `INSERT INTO observe_events (user_id, customer_id, feature_key, event_name, timestamp, cost_amount, cost_unit, source, granularity, model_provider) VALUES ${eventPlaceholders.join(', ')}`,
         eventValues
       )
     }
@@ -777,6 +1021,10 @@ app.post('/data/upload/usage', ensureVisitor, async (req: AuthRequest, res: Resp
     }
     if (records.length > 10000) {
       return res.status(400).json({ error: 'Too many records. Maximum 10,000 per upload.' })
+    }
+    const parseResult = z.array(usageRecordSchema).safeParse(records)
+    if (!parseResult.success) {
+      return res.status(400).json({ error: 'Invalid record format', details: parseResult.error.issues.slice(0, 5) })
     }
 
     await client.query('BEGIN')
@@ -844,10 +1092,14 @@ app.post('/data/upload/revenue', ensureVisitor, async (req: AuthRequest, res: Re
   if (!access.allowed) return res.status(403).json({ error: access.reason || 'Upload limit reached. Upgrade your plan.' })
   const client = await pool.connect()
   try {
-    const { customers, plans, subscriptions } = req.body
+    const parseResult = revenueUploadSchema.safeParse(req.body)
+    if (!parseResult.success) {
+      return res.status(400).json({ error: 'Invalid revenue data format', details: parseResult.error.issues.slice(0, 5) })
+    }
+    const { customers, plans, subscriptions } = parseResult.data
 
     await client.query('BEGIN')
-    
+
     // Clear existing revenue data
     await client.query('DELETE FROM subscriptions WHERE user_id = $1', [req.visitorId])
     await client.query('DELETE FROM customers WHERE user_id = $1', [req.visitorId])
@@ -944,6 +1196,34 @@ app.get('/metrics/summary', ensureVisitor, async (req: AuthRequest, res: Respons
   } catch (error) {
     console.error('Get metrics error:', error)
     res.status(500).json({ error: 'Failed to get metrics' })
+  }
+})
+
+// GET /metrics/source-breakdown — event counts and costs by data source
+app.get('/metrics/source-breakdown', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  try {
+    const result = await pool.query(
+      `SELECT source, is_inferred,
+              COUNT(*) as event_count,
+              COALESCE(SUM(cost_amount), 0) as total_cost,
+              COALESCE(SUM(revenue_amount), 0) as total_revenue
+       FROM observe_events
+       WHERE user_id = $1
+       GROUP BY source, is_inferred
+       ORDER BY total_cost DESC`,
+      [req.visitorId]
+    )
+    const sources = result.rows.map((r: { source: string; is_inferred: boolean; event_count: string; total_cost: string; total_revenue: string }) => ({
+      source: r.is_inferred ? 'inferred' : r.source,
+      event_count: parseInt(r.event_count),
+      total_cost: parseFloat(r.total_cost) || 0,
+      total_revenue: parseFloat(r.total_revenue) || 0,
+    }))
+    const total_events = sources.reduce((s: number, r: { event_count: number }) => s + r.event_count, 0)
+    res.json({ sources, total_events })
+  } catch (error) {
+    console.error('Get source breakdown error:', error)
+    res.status(500).json({ error: 'Failed to get source breakdown' })
   }
 })
 
@@ -1141,6 +1421,33 @@ async function ensureDbInitialized() {
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_cost_records_user_id ON cost_records(user_id)`)
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_observe_events_user_ts ON observe_events(user_id, timestamp DESC)`)
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_observe_events_user_feature ON observe_events(user_id, feature_key)`)
+
+    // Inference metadata columns on observe_events
+    await pool.query(`ALTER TABLE observe_events ADD COLUMN IF NOT EXISTS is_inferred BOOLEAN NOT NULL DEFAULT false`)
+    await pool.query(`ALTER TABLE observe_events ADD COLUMN IF NOT EXISTS inference_method TEXT`)
+    await pool.query(`ALTER TABLE observe_events ADD COLUMN IF NOT EXISTS inference_confidence NUMERIC(3,2)`)
+    await pool.query(`ALTER TABLE observe_events ADD COLUMN IF NOT EXISTS inferred_from_source TEXT`)
+    await pool.query(`ALTER TABLE observe_events ADD COLUMN IF NOT EXISTS original_event_id INTEGER`)
+    await pool.query(`ALTER TABLE observe_events ADD COLUMN IF NOT EXISTS idempotency_key TEXT`)
+    await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_observe_events_idempotency ON observe_events(user_id, idempotency_key) WHERE idempotency_key IS NOT NULL`)
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_observe_events_inferred ON observe_events(user_id, is_inferred) WHERE is_inferred = true`)
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_observe_events_source ON observe_events(user_id, source)`)
+
+    // Inference profiles table — stores learned distribution patterns from SDK data
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS inference_profiles (
+        id SERIAL PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        profile_type TEXT NOT NULL,
+        scope_key TEXT NOT NULL,
+        distribution JSONB NOT NULL DEFAULT '{}',
+        sample_count INTEGER NOT NULL DEFAULT 0,
+        time_window_start TIMESTAMPTZ,
+        time_window_end TIMESTAMPTZ,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(user_id, profile_type, scope_key)
+      )
+    `)
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_insights_user ON ai_insights(user_id, created_at DESC)`)
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_simulations_user_created ON simulations(user_id, created_at DESC)`)
 
@@ -1231,6 +1538,39 @@ async function ensureDbInitialized() {
       ALTER TABLE referral_credits ADD COLUMN IF NOT EXISTS stripe_promo_id TEXT
     `)
 
+    // SDK API keys table for programmatic event ingestion
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS sdk_api_keys (
+        id SERIAL PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        key_hash TEXT NOT NULL UNIQUE,
+        key_prefix TEXT NOT NULL,
+        name TEXT NOT NULL DEFAULT 'default',
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        last_used_at TIMESTAMPTZ,
+        revoked_at TIMESTAMPTZ
+      )
+    `)
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_sdk_api_keys_hash ON sdk_api_keys(key_hash) WHERE revoked_at IS NULL`)
+
+    // Proxy response cache table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS proxy_cache (
+        id SERIAL PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        cache_key TEXT NOT NULL,
+        model TEXT NOT NULL,
+        request_hash TEXT NOT NULL,
+        response_body JSONB NOT NULL,
+        tokens_saved INTEGER DEFAULT 0,
+        cost_saved NUMERIC(12,4) DEFAULT 0,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        expires_at TIMESTAMPTZ,
+        UNIQUE(user_id, cache_key)
+      )
+    `)
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_proxy_cache_lookup ON proxy_cache(user_id, cache_key) WHERE expires_at > NOW() OR expires_at IS NULL`)
+
     dbInitialized = true
   } catch (error) {
     console.error('Failed to connect to database:', error)
@@ -1256,12 +1596,21 @@ app.get('/stripe/status', ensureVisitor, async (_req: AuthRequest, res: Response
         || account.id,
     })
   } catch (error) {
-    res.json({ connected: false, error: error instanceof Error ? error.message : 'Not connected' })
+    console.error('Stripe status check error:', error)
+    res.json({ connected: false, error: 'Not connected' })
   }
 })
 
 // Sync data from Stripe into the user's session
-app.post('/stripe/sync', ensureVisitor, async (req: AuthRequest, res: Response) => {
+const expensiveLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests, please try again in a minute' },
+})
+
+app.post('/stripe/sync', ensureVisitor, expensiveLimiter, async (req: AuthRequest, res: Response) => {
   const client = await pool.connect()
   try {
     const stripe = await getUncachableStripeClient()
@@ -1391,7 +1740,8 @@ app.post('/stripe/sync', ensureVisitor, async (req: AuthRequest, res: Response) 
   } catch (error) {
     await client.query('ROLLBACK')
     console.error('Stripe sync error:', error)
-    res.status(500).json({ error: error instanceof Error ? error.message : 'Stripe sync failed' })
+    console.error('Stripe sync error:', error)
+    res.status(500).json({ error: 'Stripe sync failed' })
   } finally {
     client.release()
   }
@@ -1573,6 +1923,428 @@ app.get('/events/by-model', ensureVisitor, async (req: AuthRequest, res: Respons
   } catch (error) {
     console.error('Get events/by-model error:', error)
     res.status(500).json({ error: 'Failed to get model aggregations' })
+  }
+})
+
+// =============================================================================
+// ANALYTICS — PER-CUSTOMER P&L & MARGIN ALERTS
+// =============================================================================
+
+// GET /analytics/customer-pnl — per-customer profit & loss, sorted by margin ascending (worst first)
+app.get('/analytics/customer-pnl', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.visitorId!
+
+    const result = await pool.query(
+      `SELECT oe.customer_id,
+              COALESCE(c.name, oe.customer_id) as customer_name,
+              COUNT(*) as event_count,
+              COALESCE(SUM(oe.revenue_amount), 0) as total_revenue,
+              COALESCE(SUM(oe.cost_amount), 0) as total_cost
+       FROM observe_events oe
+       LEFT JOIN customers c ON oe.user_id = c.user_id AND oe.customer_id = c.customer_id
+       WHERE oe.user_id = $1 AND oe.customer_id IS NOT NULL
+       GROUP BY oe.customer_id, c.name
+       ORDER BY total_revenue - total_cost ASC`,
+      [userId]
+    )
+
+    const subResult = await pool.query(
+      `SELECT s.customer_id, COALESCE(SUM(COALESCE(s.mrr_override, p.price_amount)), 0) as sub_revenue
+       FROM subscriptions s
+       LEFT JOIN plans p ON s.user_id = p.user_id AND s.plan_id = p.plan_id
+       WHERE s.user_id = $1 AND s.is_active = true
+       GROUP BY s.customer_id`,
+      [userId]
+    )
+    const subRevenueMap: Record<string, number> = {}
+    for (const row of subResult.rows) {
+      subRevenueMap[row.customer_id] = parseFloat(row.sub_revenue) || 0
+    }
+
+    const topFeatureResult = await pool.query(
+      `SELECT DISTINCT ON (customer_id) customer_id, feature_key, SUM(cost_amount) as feat_cost
+       FROM observe_events
+       WHERE user_id = $1 AND customer_id IS NOT NULL AND feature_key IS NOT NULL
+       GROUP BY customer_id, feature_key
+       ORDER BY customer_id, feat_cost DESC`,
+      [userId]
+    )
+    const topFeatureMap: Record<string, string> = {}
+    for (const row of topFeatureResult.rows) {
+      topFeatureMap[row.customer_id] = row.feature_key
+    }
+
+    const customers = result.rows.map(row => {
+      const eventRevenue = parseFloat(row.total_revenue) || 0
+      const subRevenue = subRevenueMap[row.customer_id] || 0
+      const totalRevenue = eventRevenue + subRevenue
+      const totalCost = parseFloat(row.total_cost) || 0
+      const marginPct = totalRevenue > 0 ? Math.round(((totalRevenue - totalCost) / totalRevenue) * 100) : (totalCost > 0 ? -100 : null)
+
+      return {
+        customer_id: row.customer_id,
+        customer_name: row.customer_name,
+        total_revenue: totalRevenue,
+        total_cost: totalCost,
+        margin_pct: marginPct,
+        event_count: parseInt(row.event_count),
+        unprofitable: marginPct !== null && marginPct < 0,
+        top_cost_feature: topFeatureMap[row.customer_id] || null,
+      }
+    })
+
+    customers.sort((a, b) => (a.margin_pct ?? -Infinity) - (b.margin_pct ?? -Infinity))
+
+    res.json({ customers })
+  } catch (error) {
+    console.error('GET /analytics/customer-pnl error:', error)
+    res.status(500).json({ error: 'Failed to get customer P&L' })
+  }
+})
+
+// GET /analytics/margin-alerts — scan for margin alert conditions
+app.get('/analytics/margin-alerts', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.visitorId!
+    const alerts: Array<{ type: string; severity: string; title: string; description: string; entity_id: string | null; metric_value: number | null }> = []
+
+    // 1. Customers with negative margin
+    const custResult = await pool.query(
+      `SELECT oe.customer_id, COALESCE(c.name, oe.customer_id) as customer_name,
+              COALESCE(SUM(oe.revenue_amount), 0) as total_revenue,
+              COALESCE(SUM(oe.cost_amount), 0) as total_cost
+       FROM observe_events oe
+       LEFT JOIN customers c ON oe.user_id = c.user_id AND oe.customer_id = c.customer_id
+       WHERE oe.user_id = $1 AND oe.customer_id IS NOT NULL
+       GROUP BY oe.customer_id, c.name
+       HAVING COALESCE(SUM(oe.cost_amount), 0) > COALESCE(SUM(oe.revenue_amount), 0)`,
+      [userId]
+    )
+    for (const row of custResult.rows) {
+      const rev = parseFloat(row.total_revenue) || 0
+      const cost = parseFloat(row.total_cost) || 0
+      const margin = rev > 0 ? Math.round(((rev - cost) / rev) * 100) : -100
+      alerts.push({
+        type: 'negative_margin_customer',
+        severity: 'critical',
+        title: `${row.customer_name} is unprofitable`,
+        description: `Cost $${cost.toFixed(2)} exceeds revenue $${rev.toFixed(2)} (margin: ${margin}%)`,
+        entity_id: row.customer_id,
+        metric_value: margin,
+      })
+    }
+
+    // 2. Features where cost > revenue
+    const featResult = await pool.query(
+      `SELECT feature_key,
+              COALESCE(SUM(cost_amount), 0) as total_cost,
+              COALESCE(SUM(revenue_amount), 0) as total_revenue
+       FROM observe_events
+       WHERE user_id = $1 AND feature_key IS NOT NULL
+       GROUP BY feature_key
+       HAVING COALESCE(SUM(cost_amount), 0) > COALESCE(SUM(revenue_amount), 0)`,
+      [userId]
+    )
+    for (const row of featResult.rows) {
+      const cost = parseFloat(row.total_cost) || 0
+      const rev = parseFloat(row.total_revenue) || 0
+      alerts.push({
+        type: 'unprofitable_feature',
+        severity: 'warning',
+        title: `Feature "${row.feature_key}" is losing money`,
+        description: `Cost $${cost.toFixed(2)} exceeds revenue $${rev.toFixed(2)}`,
+        entity_id: row.feature_key,
+        metric_value: rev > 0 ? Math.round(((rev - cost) / rev) * 100) : -100,
+      })
+    }
+
+    // 3. Models where cost increased >20% vs previous period (current 30d vs prior 30d)
+    const modelResult = await pool.query(
+      `SELECT model,
+              COALESCE(SUM(CASE WHEN timestamp >= NOW() - INTERVAL '30 days' THEN cost_amount ELSE 0 END), 0) as current_cost,
+              COALESCE(SUM(CASE WHEN timestamp >= NOW() - INTERVAL '60 days' AND timestamp < NOW() - INTERVAL '30 days' THEN cost_amount ELSE 0 END), 0) as prior_cost
+       FROM observe_events
+       WHERE user_id = $1 AND model IS NOT NULL AND timestamp >= NOW() - INTERVAL '60 days'
+       GROUP BY model
+       HAVING COALESCE(SUM(CASE WHEN timestamp >= NOW() - INTERVAL '60 days' AND timestamp < NOW() - INTERVAL '30 days' THEN cost_amount ELSE 0 END), 0) > 0`,
+      [userId]
+    )
+    for (const row of modelResult.rows) {
+      const current = parseFloat(row.current_cost) || 0
+      const prior = parseFloat(row.prior_cost) || 0
+      if (prior > 0 && current > prior * 1.2) {
+        const pctIncrease = Math.round(((current - prior) / prior) * 100)
+        alerts.push({
+          type: 'model_cost_spike',
+          severity: 'warning',
+          title: `Model "${row.model}" cost up ${pctIncrease}%`,
+          description: `Cost increased from $${prior.toFixed(2)} to $${current.toFixed(2)} vs previous 30 days`,
+          entity_id: row.model,
+          metric_value: pctIncrease,
+        })
+      }
+    }
+
+    // 4. Customers spending >50% of subscription on AI costs
+    const subSpendResult = await pool.query(
+      `SELECT oe.customer_id, COALESCE(c.name, oe.customer_id) as customer_name,
+              COALESCE(SUM(oe.cost_amount), 0) as total_cost
+       FROM observe_events oe
+       LEFT JOIN customers c ON oe.user_id = c.user_id AND oe.customer_id = c.customer_id
+       WHERE oe.user_id = $1 AND oe.customer_id IS NOT NULL
+       GROUP BY oe.customer_id, c.name`,
+      [userId]
+    )
+    const subRevMap: Record<string, number> = {}
+    const subRows = await pool.query(
+      `SELECT s.customer_id, COALESCE(SUM(COALESCE(s.mrr_override, p.price_amount)), 0) as sub_revenue
+       FROM subscriptions s
+       LEFT JOIN plans p ON s.user_id = p.user_id AND s.plan_id = p.plan_id
+       WHERE s.user_id = $1 AND s.is_active = true
+       GROUP BY s.customer_id`,
+      [userId]
+    )
+    for (const row of subRows.rows) {
+      subRevMap[row.customer_id] = parseFloat(row.sub_revenue) || 0
+    }
+    for (const row of subSpendResult.rows) {
+      const cost = parseFloat(row.total_cost) || 0
+      const subRev = subRevMap[row.customer_id] || 0
+      if (subRev > 0 && cost > subRev * 0.5) {
+        const pct = Math.round((cost / subRev) * 100)
+        alerts.push({
+          type: 'high_cost_ratio',
+          severity: pct >= 100 ? 'critical' : 'warning',
+          title: `${row.customer_name} AI costs are ${pct}% of subscription`,
+          description: `AI costs $${cost.toFixed(2)} vs subscription revenue $${subRev.toFixed(2)}`,
+          entity_id: row.customer_id,
+          metric_value: pct,
+        })
+      }
+    }
+
+    // Sort: critical first, then warning
+    alerts.sort((a, b) => (a.severity === 'critical' ? 0 : 1) - (b.severity === 'critical' ? 0 : 1))
+
+    res.json({ alerts })
+  } catch (error) {
+    console.error('GET /analytics/margin-alerts error:', error)
+    res.status(500).json({ error: 'Failed to get margin alerts' })
+  }
+})
+
+// =============================================================================
+// SDK API KEY MANAGEMENT
+// =============================================================================
+
+// POST /sdk-keys — Generate a new SDK API key
+app.post('/sdk-keys', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.visitorId!
+    const name = typeof req.body?.name === 'string' ? req.body.name.trim().slice(0, 100) : null
+
+    const rawKey = 'sk_live_' + crypto.randomBytes(16).toString('hex')
+    const keyHash = crypto.createHash('sha256').update(rawKey).digest('hex')
+    const keyPrefix = rawKey.slice(0, 12)
+
+    await pool.query(
+      'INSERT INTO sdk_api_keys (user_id, key_hash, key_prefix, name) VALUES ($1, $2, $3, $4)',
+      [userId, keyHash, keyPrefix, name]
+    )
+
+    res.json({ key: rawKey, prefix: keyPrefix, name })
+  } catch (error) {
+    console.error('POST /sdk-keys error:', error)
+    res.status(500).json({ error: 'Failed to create API key' })
+  }
+})
+
+// GET /sdk-keys — List all active SDK API keys
+app.get('/sdk-keys', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.visitorId!
+    const result = await pool.query(
+      'SELECT id, key_prefix, name, created_at, last_used_at FROM sdk_api_keys WHERE user_id = $1 AND revoked_at IS NULL ORDER BY created_at DESC',
+      [userId]
+    )
+    res.json(result.rows)
+  } catch (error) {
+    console.error('GET /sdk-keys error:', error)
+    res.status(500).json({ error: 'Failed to list API keys' })
+  }
+})
+
+// DELETE /sdk-keys/:id — Revoke an SDK API key (soft delete)
+app.delete('/sdk-keys/:id', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.visitorId!
+    const keyId = parseInt(req.params.id, 10)
+    if (isNaN(keyId)) {
+      return res.status(400).json({ error: 'Invalid key ID' })
+    }
+
+    const result = await pool.query(
+      'UPDATE sdk_api_keys SET revoked_at = NOW() WHERE id = $1 AND user_id = $2 AND revoked_at IS NULL',
+      [keyId, userId]
+    )
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'Key not found' })
+    }
+
+    res.json({ success: true })
+  } catch (error) {
+    console.error('DELETE /sdk-keys/:id error:', error)
+    res.status(500).json({ error: 'Failed to revoke API key' })
+  }
+})
+
+// POST /events/ingest — SDK batch event ingestion
+app.post('/events/ingest', apiLimiter, async (req: Request, res: Response) => {
+  try {
+    let userId: string | null = null
+
+    // Auth: Bearer token first, then session fallback
+    const authHeader = req.headers.authorization
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.slice(7).trim()
+      if (token) {
+        const keyHash = crypto.createHash('sha256').update(token).digest('hex')
+        const keyResult = await pool.query(
+          'SELECT user_id FROM sdk_api_keys WHERE key_hash = $1 AND revoked_at IS NULL',
+          [keyHash]
+        )
+        if (keyResult.rows.length > 0) {
+          userId = keyResult.rows[0].user_id
+          // Update last_used_at
+          pool.query('UPDATE sdk_api_keys SET last_used_at = NOW() WHERE key_hash = $1', [keyHash]).catch(() => {})
+        }
+      }
+    }
+
+    // Fallback to session-based auth
+    if (!userId) {
+      const authReq = req as AuthRequest
+      if (authReq.session?.visitorId) {
+        userId = authReq.session.visitorId
+      }
+    }
+
+    if (!userId) {
+      return res.status(401).json({ error: 'Authentication required. Provide a Bearer token or use a session.' })
+    }
+
+    const { events } = req.body
+    if (!Array.isArray(events) || events.length === 0) {
+      return res.status(400).json({ error: 'Request body must contain a non-empty "events" array.' })
+    }
+    if (events.length > 1000) {
+      return res.status(400).json({ error: 'Batch size exceeds maximum of 1000 events.' })
+    }
+
+    const errors: Array<{ index: number; error: string }> = []
+    const validEvents: Array<{
+      eventName: string
+      customerReferenceId: string
+      featureKey: string
+      timestamp?: string
+      costAmount?: number
+      costUnit?: string
+      revenueAmount?: number
+      usageUnits?: number
+      model?: string
+      modelProvider?: string
+      properties?: Record<string, unknown>
+      idempotencyKey?: string
+    }> = []
+
+    for (let i = 0; i < events.length; i++) {
+      const evt = events[i]
+      const missing: string[] = []
+      if (!evt.eventName) missing.push('eventName')
+      if (!evt.customerReferenceId) missing.push('customerReferenceId')
+      if (!evt.featureKey) missing.push('featureKey')
+      if (missing.length > 0) {
+        errors.push({ index: i, error: `Missing required fields: ${missing.join(', ')}` })
+        continue
+      }
+      validEvents.push(evt)
+    }
+
+    if (validEvents.length === 0) {
+      return res.json({ accepted: 0, rejected: errors.length, errors })
+    }
+
+    // Enrich model_provider from model name if missing
+    function inferModelProvider(model: string | undefined): string | null {
+      if (!model) return null
+      const m = model.toLowerCase()
+      if (m.startsWith('claude-')) return 'anthropic'
+      if (m.startsWith('gpt-')) return 'openai'
+      if (m.startsWith('dall-e-')) return 'openai'
+      if (m.startsWith('gemini-')) return 'google'
+      if (m.startsWith('text-embedding-')) return 'openai'
+      return null
+    }
+
+    // Build batch insert
+    const values: unknown[] = []
+    const placeholders: string[] = []
+    let paramIdx = 1
+
+    for (const evt of validEvents) {
+      const provider = evt.modelProvider || inferModelProvider(evt.model)
+      const ts = evt.timestamp || new Date().toISOString()
+      const props = evt.properties ? JSON.stringify(evt.properties) : '{}'
+
+      placeholders.push(
+        `($${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, 'sdk', 'event', false, $${paramIdx++})`
+      )
+      values.push(
+        userId,
+        evt.customerReferenceId,
+        evt.featureKey,
+        evt.eventName,
+        ts,
+        evt.costAmount ?? 0,
+        evt.costUnit ?? 'usd',
+        evt.revenueAmount ?? 0,
+        evt.usageUnits ?? 0,
+        evt.model ?? null,
+        provider,
+        evt.idempotencyKey ?? null
+      )
+    }
+
+    const insertQuery = `
+      INSERT INTO observe_events (
+        user_id, customer_id, feature_key, event_name, timestamp,
+        cost_amount, cost_unit, revenue_amount, usage_units,
+        model, model_provider, source, granularity, is_inferred, idempotency_key
+      ) VALUES ${placeholders.join(', ')}
+      ON CONFLICT (user_id, idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING
+    `
+
+    const result = await pool.query(insertQuery, values)
+    const inserted = result.rowCount ?? 0
+    const deduped = validEvents.length - inserted
+
+    res.json({
+      accepted: inserted,
+      rejected: errors.length + deduped,
+      errors,
+    })
+
+    // Auto-trigger inference profile learning in the background (fire-and-forget)
+    if (inserted > 0) {
+      computeInferenceProfiles(userId).catch(err =>
+        console.error('Auto inference profile update failed:', err)
+      )
+    }
+  } catch (error) {
+    console.error('POST /events/ingest error:', error)
+    res.status(500).json({ error: 'Failed to ingest events' })
   }
 })
 
@@ -2313,7 +3085,7 @@ app.get('/insights', ensureVisitor, async (req: AuthRequest, res: Response) => {
 })
 
 // POST /insights/generate — generate AI insights from observe_events data
-app.post('/insights/generate', ensureVisitor, async (req: AuthRequest, res: Response) => {
+app.post('/insights/generate', ensureVisitor, expensiveLimiter, async (req: AuthRequest, res: Response) => {
   const visitorId = req.visitorId!
 
   // Tanso entitlement check (fail open)
@@ -2556,7 +3328,7 @@ Return ONLY the JSON array, no markdown or explanation.`
     }
 
     // Store insights
-    const storedInsights = []
+    const storedInsights: any[] = []
     for (const insight of insights) {
       const result = await pool.query(
         `INSERT INTO ai_insights (user_id, insight_type, title, description, severity, feature_key, customer_id, tokens_used, cost_usd)
@@ -2909,10 +3681,34 @@ app.get('/tanso/status', ensureVisitor, async (req: AuthRequest, res: Response) 
     console.error('Tanso status: customer fetch failed:', err instanceof Error ? err.message : err)
   }
 
+  // Fetch feature rules for each plan-feature combo (limits, pricing model, etc.)
+  const featureRules: Record<string, Record<string, any>> = {}
+  try {
+    const rulePromises: Promise<void>[] = []
+    for (const planData of plansResult) {
+      const plan = planData.plan || planData
+      const features = planData.features || plan.features || []
+      if (!plan.id) continue
+      featureRules[plan.id] = {}
+      for (const feature of features) {
+        if (!feature.id) continue
+        rulePromises.push(
+          tansoAdminGetFeatureRule(plan.id, feature.id)
+            .then((rule: any) => { featureRules[plan.id][feature.key || feature.id] = rule })
+            .catch(() => { /* rule not found — feature is boolean/unlimited */ })
+        )
+      }
+    }
+    await Promise.all(rulePromises)
+  } catch (err) {
+    console.error('Tanso status: feature rules fetch failed:', err instanceof Error ? err.message : err)
+  }
+
   res.json({
     plans: plansResult,
     entitlements,
     customer,
+    featureRules,
     configured: true,
     healthy,
   })
@@ -2992,11 +3788,11 @@ app.post('/tanso/subscribe', ensureVisitor, async (req: AuthRequest, res: Respon
 
     // ── PLAN CHANGE (upgrade or downgrade) ──
     if (activeSub) {
-      const currentPrice = activeSub.plan?.priceAmount ?? 0
+      const currentPrice = Number(activeSub.plan?.priceAmount ?? 0)
       const plans = await tansoListPlans()
       const planItems = Array.isArray(plans) ? plans : plans?.items ?? plans?.plans ?? []
       const targetPlan = planItems.find((p: any) => (p.plan?.id ?? p.id) === planId)
-      const targetPrice = targetPlan?.plan?.priceAmount ?? targetPlan?.priceAmount ?? 0
+      const targetPrice = Number(targetPlan?.plan?.priceAmount ?? targetPlan?.priceAmount ?? 0)
 
       if (targetPrice > currentPrice) {
         // UPGRADE — apply plan change, then handle payment if needed
@@ -3035,16 +3831,23 @@ app.post('/tanso/subscribe', ensureVisitor, async (req: AuthRequest, res: Respon
     // ── NEW SUBSCRIPTION ──
     const result = await tansoCreateSubscription(visitorId, planId)
     const subscription = result?.subscription ?? result
-    const invoice = result?.invoice
 
-    if (!invoice?.id) {
+    // Fetch invoices separately (reference: SaaSSubscriptionSite Checkout.tsx)
+    // The create-subscription response may not include the invoice directly
+    const invoices = await tansoListCustomerInvoices(visitorId)
+    const invoiceItems = Array.isArray(invoices) ? invoices : invoices?.items ?? []
+    const unpaidInvoice = invoiceItems
+      .filter((inv: any) => inv.status !== 'PAID')
+      .sort((a: any, b: any) => new Date(b.dueDate || b.createdAt || 0).getTime() - new Date(a.dueDate || a.createdAt || 0).getTime())[0]
+
+    if (!unpaidInvoice?.id) {
       return res.json({ success: true, subscription })
     }
 
     // Paid plan — must go through Stripe checkout
-    if (invoice.amount > 0) {
+    if (unpaidInvoice.amount > 0) {
       try {
-        const checkout = await tansoCreateCheckoutSession(invoice.id)
+        const checkout = await tansoCreateCheckoutSession(unpaidInvoice.id)
         if (checkout?.url) {
           return res.json({ success: true, subscription, checkoutUrl: checkout.url })
         }
@@ -3058,7 +3861,7 @@ app.post('/tanso/subscribe', ensureVisitor, async (req: AuthRequest, res: Respon
     }
 
     // Free plan ($0 invoice) — mark as paid to activate
-    try { await tansoMarkInvoicePaid(invoice.id) } catch (_) { /* best effort */ }
+    try { await tansoMarkInvoicePaid(unpaidInvoice.id) } catch (_) { /* best effort */ }
     res.json({ success: true, subscription })
   } catch (err) {
     console.error('Tanso subscribe error:', err)
@@ -3344,22 +4147,14 @@ app.post('/integrations/anthropic/connect', ensureVisitor, async (req: AuthReque
       return res.status(400).json({ error: 'api_key is required' })
     }
 
-    // Validate key by calling Anthropic messages endpoint with minimal body
-    const validationResponse = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
+    // Validate key by checking auth against the models endpoint (no token cost)
+    const validationResponse = await fetch('https://api.anthropic.com/v1/models', {
       headers: {
         'x-api-key': api_key,
         'anthropic-version': '2023-06-01',
-        'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        model: 'claude-3-haiku-20240307',
-        max_tokens: 1,
-        messages: [{ role: 'user', content: 'hi' }],
-      }),
     })
 
-    // A valid key will return 200 or a non-401 status
     if (validationResponse.status === 401 || validationResponse.status === 403) {
       return res.status(400).json({
         success: false,
@@ -4088,6 +4883,457 @@ app.get('/team/my-role', ensureVisitor, async (req: AuthRequest, res: Response) 
     res.status(500).json({ error: 'Failed to get role' })
   }
 })
+
+// ─── Inference Engine ───────────────────────────────────────────────────────
+
+async function computeInferenceProfiles(userId: string): Promise<number> {
+  const result = await pool.query(
+    `SELECT model_provider, feature_key,
+            COUNT(*)::int as event_count,
+            SUM(cost_amount)::numeric as total_cost
+     FROM observe_events
+     WHERE user_id = $1 AND source = 'sdk' AND model_provider IS NOT NULL
+     GROUP BY model_provider, feature_key`,
+    [userId]
+  )
+
+  if (result.rows.length === 0) return 0
+
+  // Group by provider, compute distribution ratios based on cost
+  const providerData: Record<string, { features: Record<string, number>, totalCost: number, totalCount: number }> = {}
+  for (const row of result.rows) {
+    const provider = row.model_provider
+    if (!providerData[provider]) {
+      providerData[provider] = { features: {}, totalCost: 0, totalCount: 0 }
+    }
+    const cost = parseFloat(row.total_cost) || 0
+    providerData[provider].features[row.feature_key] = cost
+    providerData[provider].totalCost += cost
+    providerData[provider].totalCount += row.event_count
+  }
+
+  let profilesUpdated = 0
+  for (const [provider, data] of Object.entries(providerData)) {
+    const distribution: Record<string, number> = {}
+    if (data.totalCost > 0) {
+      for (const [feature, cost] of Object.entries(data.features)) {
+        distribution[feature] = Math.round((cost / data.totalCost) * 10000) / 10000
+      }
+    } else {
+      const featureCount = Object.keys(data.features).length
+      for (const feature of Object.keys(data.features)) {
+        distribution[feature] = Math.round((1 / featureCount) * 10000) / 10000
+      }
+    }
+
+    const windowResult = await pool.query(
+      `SELECT MIN(timestamp) as window_start, MAX(timestamp) as window_end
+       FROM observe_events
+       WHERE user_id = $1 AND source = 'sdk' AND model_provider = $2`,
+      [userId, provider]
+    )
+
+    await pool.query(
+      `INSERT INTO inference_profiles (user_id, profile_type, scope_key, distribution, sample_count, time_window_start, time_window_end)
+       VALUES ($1, 'feature_distribution', $2, $3, $4, $5, $6)
+       ON CONFLICT (user_id, profile_type, scope_key) DO UPDATE SET
+         distribution = EXCLUDED.distribution,
+         sample_count = EXCLUDED.sample_count,
+         time_window_start = EXCLUDED.time_window_start,
+         time_window_end = EXCLUDED.time_window_end,
+         created_at = NOW()`,
+      [userId, provider, JSON.stringify(distribution), data.totalCount,
+       windowResult.rows[0]?.window_start, windowResult.rows[0]?.window_end]
+    )
+    profilesUpdated++
+  }
+
+  return profilesUpdated
+}
+
+function getConfidence(sampleCount: number): number {
+  if (sampleCount >= 50) return 0.85
+  if (sampleCount >= 10) return 0.65
+  return 0.40
+}
+
+async function applyInference(userId: string): Promise<{ rows_inferred: number, rows_split: number }> {
+  const coarseRows = await pool.query(
+    `SELECT id, customer_id, feature_key, event_name, timestamp, cost_amount, cost_unit,
+            revenue_amount, usage_units, model, model_provider, source, granularity, properties
+     FROM observe_events
+     WHERE user_id = $1
+       AND source IN ('csv', 'openai', 'anthropic')
+       AND granularity IN ('monthly_aggregate', 'daily')
+       AND is_inferred = false
+       AND (properties->>'inference_status') IS NULL`,
+    [userId]
+  )
+
+  if (coarseRows.rows.length === 0) return { rows_inferred: 0, rows_split: 0 }
+
+  const profiles = await pool.query(
+    `SELECT scope_key, distribution, sample_count
+     FROM inference_profiles
+     WHERE user_id = $1 AND profile_type = 'feature_distribution'`,
+    [userId]
+  )
+
+  if (profiles.rows.length === 0) return { rows_inferred: 0, rows_split: 0 }
+
+  const profileMap: Record<string, { distribution: Record<string, number>, sample_count: number }> = {}
+  for (const p of profiles.rows) {
+    profileMap[p.scope_key] = { distribution: p.distribution, sample_count: p.sample_count }
+  }
+
+  let rowsInferred = 0
+  let rowsSplit = 0
+
+  const client = await pool.connect()
+  try {
+    await client.query('BEGIN')
+
+    for (const row of coarseRows.rows) {
+      // Match by model_provider or by feature_key that matches a provider name
+      const provider = row.model_provider || row.feature_key
+      const profile = profileMap[provider]
+      if (!profile) continue
+
+      const distribution = profile.distribution
+      const featureKeys = Object.keys(distribution)
+      if (featureKeys.length === 0) continue
+
+      const confidence = getConfidence(profile.sample_count)
+      const originalCost = parseFloat(row.cost_amount) || 0
+      const originalRevenue = parseFloat(row.revenue_amount) || 0
+      const originalUsage = parseFloat(row.usage_units) || 0
+      const properties = row.properties || {}
+
+      // Save originals, zero out amounts, mark as split_source
+      const updatedProperties = {
+        ...properties,
+        original_cost_amount: originalCost,
+        original_revenue_amount: originalRevenue,
+        inference_status: 'split_source'
+      }
+
+      await client.query(
+        `UPDATE observe_events
+         SET cost_amount = 0, revenue_amount = 0, properties = $1
+         WHERE id = $2`,
+        [JSON.stringify(updatedProperties), row.id]
+      )
+      rowsSplit++
+
+      // Insert child rows proportionally
+      for (const [featureKey, ratio] of Object.entries(distribution)) {
+        const childCost = Math.round(originalCost * ratio * 10000) / 10000
+        const childRevenue = Math.round(originalRevenue * ratio * 10000) / 10000
+        const childUsage = Math.round(originalUsage * ratio * 10000) / 10000
+
+        await client.query(
+          `INSERT INTO observe_events
+           (user_id, customer_id, feature_key, event_name, timestamp, cost_amount, cost_unit,
+            revenue_amount, usage_units, model, model_provider, source, granularity, properties,
+            is_inferred, inference_method, inference_confidence, inferred_from_source, original_event_id)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
+                   true, 'proportional', $15, $16, $17)`,
+          [
+            userId, row.customer_id, featureKey, row.event_name, row.timestamp,
+            childCost, row.cost_unit, childRevenue, childUsage,
+            row.model, row.model_provider || provider, row.source, row.granularity,
+            JSON.stringify({ inferred_from_profile: provider }),
+            confidence, row.source, row.id
+          ]
+        )
+        rowsInferred++
+      }
+    }
+
+    await client.query('COMMIT')
+  } catch (err) {
+    await client.query('ROLLBACK')
+    throw err
+  } finally {
+    client.release()
+  }
+
+  return { rows_inferred: rowsInferred, rows_split: rowsSplit }
+}
+
+app.post('/inference/run', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.visitorId!
+    const profilesUpdated = await computeInferenceProfiles(userId)
+    const { rows_inferred, rows_split } = await applyInference(userId)
+    res.json({ profiles_updated: profilesUpdated, rows_inferred, rows_split })
+  } catch (err) {
+    console.error('POST /inference/run error:', err)
+    res.status(500).json({ error: 'Inference run failed' })
+  }
+})
+
+app.get('/inference/profiles', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  try {
+    const result = await pool.query(
+      `SELECT id, profile_type, scope_key, distribution, sample_count,
+              time_window_start, time_window_end, created_at
+       FROM inference_profiles
+       WHERE user_id = $1
+       ORDER BY created_at DESC`,
+      [req.visitorId]
+    )
+    res.json(result.rows)
+  } catch (err) {
+    console.error('GET /inference/profiles error:', err)
+    res.status(500).json({ error: 'Failed to fetch inference profiles' })
+  }
+})
+
+// ============================================================
+// Anthropic Proxy — POST /anthropic/v1/messages
+// Users swap their base URL to route through this proxy.
+// We forward to Anthropic, calculate cost, and log an observe_event.
+// ============================================================
+
+const ANTHROPIC_MODEL_PRICING: Record<string, { input: number; output: number }> = {
+  'claude-sonnet-4': { input: 3, output: 15 },
+  'claude-3-5-sonnet': { input: 3, output: 15 },
+  'claude-3-5-haiku': { input: 0.80, output: 4 },
+  'claude-3-opus': { input: 15, output: 75 },
+  'claude-3-haiku': { input: 0.25, output: 1.25 },
+}
+
+function matchAnthropicModel(model: string): { input: number; output: number } | null {
+  // Exact match first
+  if (ANTHROPIC_MODEL_PRICING[model]) return ANTHROPIC_MODEL_PRICING[model]
+  // Prefix match (e.g. "claude-3-5-sonnet-20241022" -> "claude-3-5-sonnet")
+  for (const key of Object.keys(ANTHROPIC_MODEL_PRICING)) {
+    if (model.startsWith(key)) return ANTHROPIC_MODEL_PRICING[key]
+  }
+  return null
+}
+
+app.post('/anthropic/v1/messages', async (req: Request, res: Response) => {
+  try {
+    // 1. Read required headers
+    const anthropicApiKey = req.headers['x-api-key'] as string | undefined
+    const anthropicVersion = req.headers['anthropic-version'] as string | undefined
+    const tansoKey = req.headers['x-tanso-key'] as string | undefined
+
+    if (!anthropicApiKey) {
+      return res.status(401).json({ error: 'Missing x-api-key header (Anthropic API key)' })
+    }
+    if (!anthropicVersion) {
+      return res.status(400).json({ error: 'Missing anthropic-version header' })
+    }
+    if (!tansoKey) {
+      return res.status(400).json({ error: 'Missing X-Tanso-Key header (SDK key for attribution)' })
+    }
+
+    // 2. Resolve Tanso SDK key to user
+    const keyHash = crypto.createHash('sha256').update(tansoKey).digest('hex')
+    const keyResult = await pool.query(
+      'SELECT user_id FROM sdk_api_keys WHERE key_hash = $1 AND revoked_at IS NULL',
+      [keyHash]
+    )
+    if (keyResult.rows.length === 0) {
+      return res.status(401).json({ error: 'Invalid or revoked X-Tanso-Key' })
+    }
+    const userId = keyResult.rows[0].user_id
+
+    // Update last_used_at (fire-and-forget)
+    pool.query('UPDATE sdk_api_keys SET last_used_at = NOW() WHERE key_hash = $1', [keyHash]).catch(() => {})
+
+    // 3. Read optional attribution headers
+    const tansoCustomer = req.headers['x-tanso-customer'] as string | undefined
+    const tansoFeature = req.headers['x-tanso-feature'] as string | undefined
+
+    // 4. Forward to Anthropic
+    const anthropicResponse = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': anthropicApiKey,
+        'anthropic-version': anthropicVersion,
+      },
+      body: JSON.stringify(req.body),
+    })
+
+    const responseBody = await anthropicResponse.json() as Record<string, unknown>
+
+    // 5. Calculate cost and log event (only on success)
+    if (anthropicResponse.ok && responseBody.usage) {
+      const usage = responseBody.usage as { input_tokens?: number; output_tokens?: number }
+      const model = (responseBody.model as string) || (req.body.model as string) || 'unknown'
+      const pricing = matchAnthropicModel(model)
+
+      const inputTokens = usage.input_tokens ?? 0
+      const outputTokens = usage.output_tokens ?? 0
+
+      let costAmount = 0
+      if (pricing) {
+        costAmount = (inputTokens * pricing.input + outputTokens * pricing.output) / 1_000_000
+      }
+
+      // Log observe_event (fire-and-forget)
+      pool.query(
+        `INSERT INTO observe_events (
+          user_id, customer_id, feature_key, event_name, timestamp,
+          cost_amount, cost_unit, revenue_amount, usage_units,
+          model, model_provider, source, granularity, is_inferred
+        ) VALUES ($1, $2, $3, $4, NOW(), $5, 'usd', 0, $6, $7, 'anthropic', 'proxy', 'event', false)`,
+        [
+          userId,
+          tansoCustomer || 'unknown',
+          tansoFeature || 'anthropic-proxy',
+          'llm_call',
+          costAmount,
+          inputTokens + outputTokens,
+          model,
+        ]
+      ).catch(err => console.error('Anthropic proxy: failed to log event:', err))
+    }
+
+    // 6. Return response unchanged
+    res.status(anthropicResponse.status).json(responseBody)
+  } catch (error) {
+    console.error('POST /anthropic/v1/messages error:', error)
+    res.status(500).json({ error: 'Anthropic proxy request failed' })
+  }
+})
+
+// =============================================================================
+// PROXY RESPONSE CACHING
+// =============================================================================
+
+interface CacheResult {
+  hit: boolean
+  response?: any
+  tokens_saved?: number
+}
+
+function computeCacheKey(userId: string, model: string, messages: any): string {
+  const payload = JSON.stringify({ model, messages })
+  return crypto.createHash('sha256').update(userId + ':' + payload).digest('hex')
+}
+
+function estimateTokens(responseBody: any): number {
+  const usage = responseBody?.usage
+  if (usage) {
+    return (usage.completion_tokens || 0) + (usage.prompt_tokens || 0)
+      || (usage.output_tokens || 0) + (usage.input_tokens || 0)
+  }
+  // Rough estimate from response text length
+  const text = JSON.stringify(responseBody)
+  return Math.ceil(text.length / 4)
+}
+
+async function tryCache(req: Request, userId: string): Promise<CacheResult> {
+  const cacheHeader = req.headers['x-tanso-cache']
+  if (!cacheHeader || cacheHeader !== 'true') {
+    return { hit: false }
+  }
+
+  const body = req.body || {}
+  const model = body.model || 'unknown'
+  const messages = body.messages || body.input || ''
+  const cacheKey = computeCacheKey(userId, model, messages)
+
+  // Look up cache
+  const result = await pool.query(
+    `SELECT response_body, tokens_saved FROM proxy_cache
+     WHERE user_id = $1 AND cache_key = $2
+       AND (expires_at IS NULL OR expires_at > NOW())`,
+    [userId, cacheKey]
+  )
+
+  if (result.rows.length > 0) {
+    const row = result.rows[0]
+    return { hit: true, response: row.response_body, tokens_saved: row.tokens_saved }
+  }
+
+  return { hit: false }
+}
+
+async function storeInCache(userId: string, model: string, messages: any, responseBody: any, ttlSeconds?: number): Promise<void> {
+  const cacheKey = computeCacheKey(userId, model, messages)
+  const requestHash = crypto.createHash('sha256').update(JSON.stringify(messages)).digest('hex')
+  const tokensSaved = estimateTokens(responseBody)
+  const expiresAt = ttlSeconds
+    ? new Date(Date.now() + ttlSeconds * 1000).toISOString()
+    : new Date(Date.now() + 3600 * 1000).toISOString() // default 1 hour
+
+  await pool.query(
+    `INSERT INTO proxy_cache (user_id, cache_key, model, request_hash, response_body, tokens_saved, expires_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
+     ON CONFLICT (user_id, cache_key) DO UPDATE SET
+       response_body = EXCLUDED.response_body,
+       tokens_saved = EXCLUDED.tokens_saved,
+       expires_at = EXCLUDED.expires_at,
+       created_at = NOW()`,
+    [userId, cacheKey, model, requestHash, JSON.stringify(responseBody), tokensSaved, expiresAt]
+  )
+}
+
+async function logCacheHitEvent(userId: string, model: string, tokensSaved: number): Promise<void> {
+  await pool.query(
+    `INSERT INTO observe_events (user_id, event_name, model, source, cost_amount, usage_units, properties)
+     VALUES ($1, 'cache_hit', $2, 'cache', 0, $3, '{"cached": true}')`,
+    [userId, model, tokensSaved]
+  )
+}
+
+// Cache stats endpoint
+app.get('/cache/stats', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.visitorId
+
+    const [cacheEntries, hitStats, savings] = await Promise.all([
+      pool.query(
+        `SELECT COUNT(*) as count FROM proxy_cache
+         WHERE user_id = $1 AND (expires_at IS NULL OR expires_at > NOW())`,
+        [userId]
+      ),
+      pool.query(
+        `SELECT
+           COUNT(*) FILTER (WHERE properties->>'cached' = 'true') as total_hits
+         FROM observe_events
+         WHERE user_id = $1 AND source = 'cache'`,
+        [userId]
+      ),
+      pool.query(
+        `SELECT
+           COALESCE(SUM(tokens_saved), 0) as tokens_saved,
+           COALESCE(SUM(cost_saved), 0) as cost_saved
+         FROM proxy_cache
+         WHERE user_id = $1`,
+        [userId]
+      ),
+    ])
+
+    // Count misses from observe_events with source='proxy' (logged by proxy routes)
+    const missResult = await pool.query(
+      `SELECT COUNT(*) as total_misses FROM observe_events
+       WHERE user_id = $1 AND source = 'proxy' AND (properties->>'cached' IS NULL OR properties->>'cached' = 'false')`,
+      [userId]
+    )
+
+    res.json({
+      total_hits: parseInt(hitStats.rows[0]?.total_hits || '0'),
+      total_misses: parseInt(missResult.rows[0]?.total_misses || '0'),
+      tokens_saved: parseInt(savings.rows[0]?.tokens_saved || '0'),
+      cost_saved: parseFloat(savings.rows[0]?.cost_saved || '0'),
+      cache_entries: parseInt(cacheEntries.rows[0]?.count || '0'),
+    })
+  } catch (err) {
+    console.error('GET /cache/stats error:', err)
+    res.status(500).json({ error: 'Failed to fetch cache stats' })
+  }
+})
+
+// Export caching utilities for use by proxy routes
+export { tryCache, storeInCache, logCacheHitEvent, estimateTokens }
 
 // Local dev: start server directly
 if (!process.env.VERCEL) {

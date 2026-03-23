@@ -102,7 +102,8 @@ export interface Subscription {
 }
 
 export async function getSubscriptions(): Promise<Subscription[]> {
-  return request('/subscriptions')
+  const res = await request<{ data: Subscription[]; total: number; limit: number; offset: number }>('/subscriptions')
+  return res.data
 }
 
 export interface Plan {
@@ -127,6 +128,15 @@ export interface MetricsSummary {
 
 export async function getMetricsSummary(): Promise<MetricsSummary> {
   return request('/metrics/summary')
+}
+
+export interface SourceBreakdown {
+  sources: Array<{ source: string; event_count: number; total_cost: number; total_revenue: number }>
+  total_events: number
+}
+
+export async function getSourceBreakdown(): Promise<SourceBreakdown> {
+  return request('/metrics/source-breakdown')
 }
 
 // Upload endpoints
@@ -260,6 +270,7 @@ export interface ObserveEvent {
   model_provider: string | null
   source: string | null
   granularity: string | null
+  is_inferred: boolean
   properties: Record<string, unknown> | null
   created_at: string
 }
@@ -434,6 +445,76 @@ export async function getModels(): Promise<ModelSummary[]> {
 
 export async function getCustomerDetail(id: string): Promise<CustomerDetail> {
   return request(`/customers/${encodeURIComponent(id)}`)
+}
+
+// =============================================================================
+// SDK EVENT INGESTION
+// =============================================================================
+
+export interface IngestEvent {
+  eventName: string
+  customerReferenceId: string
+  featureKey: string
+  timestamp?: string
+  costAmount?: number
+  costUnit?: string
+  revenueAmount?: number
+  usageUnits?: number
+  model?: string
+  modelProvider?: string
+  properties?: Record<string, unknown>
+  idempotencyKey?: string
+}
+
+export interface IngestResponse {
+  accepted: number
+  rejected: number
+  errors: Array<{ index: number; error: string }>
+}
+
+export async function ingestEvents(events: IngestEvent[], apiKey?: string): Promise<IngestResponse> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (apiKey) {
+    headers['Authorization'] = `Bearer ${apiKey}`
+  }
+  return request('/events/ingest', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ events }),
+  })
+}
+
+// =============================================================================
+// SDK API KEY MANAGEMENT
+// =============================================================================
+
+export interface SdkKey {
+  id: number
+  key_prefix: string
+  name: string | null
+  created_at: string
+  last_used_at: string | null
+}
+
+export interface CreateSdkKeyResponse {
+  key: string
+  prefix: string
+  name: string | null
+}
+
+export async function createSdkKey(name?: string): Promise<CreateSdkKeyResponse> {
+  return request('/sdk-keys', {
+    method: 'POST',
+    body: JSON.stringify({ name: name || null }),
+  })
+}
+
+export async function listSdkKeys(): Promise<SdkKey[]> {
+  return request('/sdk-keys')
+}
+
+export async function revokeSdkKey(id: number): Promise<{ success: boolean }> {
+  return request(`/sdk-keys/${id}`, { method: 'DELETE' })
 }
 
 // =============================================================================
@@ -618,15 +699,49 @@ export async function getReferralStats(): Promise<ReferralStats> {
   return request('/referral/stats')
 }
 
+// =============================================================================
+// ANALYTICS — CUSTOMER P&L & MARGIN ALERTS
+// =============================================================================
+
+export interface CustomerPnl {
+  customer_id: string
+  customer_name: string
+  total_revenue: number
+  total_cost: number
+  margin_pct: number | null
+  event_count: number
+  unprofitable: boolean
+  top_cost_feature: string | null
+}
+
+export interface MarginAlert {
+  type: string
+  severity: 'critical' | 'warning'
+  title: string
+  description: string
+  entity_id: string | null
+  metric_value: number | null
+}
+
+export async function getCustomerPnl(): Promise<{ customers: CustomerPnl[] }> {
+  return request('/analytics/customer-pnl')
+}
+
+export async function getMarginAlerts(): Promise<{ alerts: MarginAlert[] }> {
+  return request('/analytics/margin-alerts')
+}
+
 export interface AiInsight {
   id: string
-  type: string
+  insight_type: string
   severity: string
   title: string
   description: string
   feature_key: string | null
   customer_id: string | null
   metric_value: number | null
+  tokens_used: number | null
+  cost_usd: number | null
   created_at: string
 }
 
@@ -634,7 +749,7 @@ export async function listInsights(): Promise<AiInsight[]> {
   return request('/insights')
 }
 
-export async function generateInsights(): Promise<{ insights: AiInsight[]; source: string }> {
+export async function generateInsights(): Promise<{ insights: AiInsight[]; source: string; tokens_used: number; cost_usd: number }> {
   return request('/insights/generate', { method: 'POST' })
 }
 
