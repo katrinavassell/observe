@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useQuery } from '@tanstack/vue-query'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { getEvents, getEventsByCustomer, getEventsByModel, getFeatures, type ObserveEvent } from '@/lib/api'
 import { Activity, ChevronRight, ChevronLeft, X, Plug } from 'lucide-vue-next'
 import MarginBadge from '@/components/shared/MarginBadge.vue'
@@ -9,11 +9,13 @@ import SourceBadge from '@/components/shared/SourceBadge.vue'
 import { Select, Input, Button, Skeleton } from '@/components/ui'
 
 const router = useRouter()
+const route = useRoute()
 
-const selectedFeature = ref<string | undefined>()
-const selectedCustomer = ref<string | undefined>()
-const selectedModel = ref<string | undefined>()
-const selectedSource = ref<string | undefined>()
+// Initialize filters from URL query params (e.g., navigating from ModelsPage with ?model=gpt-4o)
+const selectedFeature = ref<string | undefined>(route.query.feature as string | undefined)
+const selectedCustomer = ref<string | undefined>(route.query.customer as string | undefined)
+const selectedModel = ref<string | undefined>(route.query.model as string | undefined)
+const selectedSource = ref<string | undefined>(route.query.source as string | undefined)
 const dateFrom = ref<string | undefined>()
 const dateTo = ref<string | undefined>()
 const currentPage = ref(0)

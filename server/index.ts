@@ -1740,7 +1740,6 @@ app.post('/stripe/sync', ensureVisitor, expensiveLimiter, async (req: AuthReques
   } catch (error) {
     await client.query('ROLLBACK')
     console.error('Stripe sync error:', error)
-    console.error('Stripe sync error:', error)
     res.status(500).json({ error: 'Stripe sync failed' })
   } finally {
     client.release()
