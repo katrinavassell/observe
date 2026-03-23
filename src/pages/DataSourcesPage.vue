@@ -164,7 +164,7 @@ onMounted(async () => {
   } catch {
     isStripeConnected.value = false
   }
-  loadSdkKeys()
+  await loadSdkKeys()
 })
 
 onUnmounted(() => {
