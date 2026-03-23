@@ -340,7 +340,6 @@ async function handleStripeConnected(accountName: string): Promise<void> {
   if (!syncIntervalId) {
     syncIntervalId = setInterval(async () => {
       if (isStripeConnected.value && !isSyncing.value) {
-        console.log('[Stripe] Background sync triggered')
         await handleStripeSync()
       }
     }, SYNC_INTERVAL_MS)
