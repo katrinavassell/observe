@@ -1,126 +1,221 @@
-# Tanso
+# Observe
 
-See exactly where your AI spend goes. Track costs per customer, feature, and model with 3 lines of code.
+**AI cost observability that connects cost to revenue to margin.**
 
-```js
-await fetch('https://your-tanso-instance.com/api/events/ingest', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer YOUR_API_KEY' },
-  body: JSON.stringify({ events: [{
-    eventName: 'chat_completion',
-    customerReferenceId: userId,
-    featureKey: 'ai_summarization',
-    costAmount: 0.24,
-    model: 'gpt-4o',
-  }]})
-})
-```
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
+[![Docker](https://img.shields.io/docker/pulls/tanso/observe)](https://hub.docker.com/r/tanso/observe)
 
-That's it. Every AI API call gets tracked with cost, customer, feature, and model attribution. Open the dashboard and see where your money is going.
+---
 
-## What you get
+## Why this exists
 
-- **Per-feature costs** -- which features (summarization, search, image gen) cost the most
-- **Per-model breakdown** -- compare GPT-4o vs Claude vs embeddings costs
-- **Per-customer margins** -- see which customers are profitable and which are underwater
-- **Margin alerts** -- spot negative-margin features before they sink you
-- **Pricing simulations** -- model what happens when you change prices
+Helicone shows you what your AI calls cost. That's it. You still have to answer the questions that actually matter: which features are unprofitable? Which customers cost more to serve than they pay? What happens to margins if you raise prices on one plan?
 
-## Quick start
+Observe closes that loop. It tracks AI cost at the feature and customer level, joins it with your revenue data, and gives you margin-by-feature breakdowns, per-customer profitability, and a simulation engine to model pricing changes before you ship them.
 
-### 1. Run the dashboard
+If you're running an AI product and you're losing money on a subset of customers or features, Observe shows you exactly where and by how much.
+
+---
+
+## Features
+
+| Feature | What it does |
+|---|---|
+| **OpenAI + Anthropic proxy** | Swap one URL, get automatic cost logging for all chat and embedding calls |
+| **SDK event ingestion** | Send cost + revenue + usage events from your backend in a single HTTP call |
+| **Feature-level economics** | See cost, revenue, margin %, and margin trend per feature key |
+| **Per-customer profitability** | Identify customers where your cost-to-serve exceeds what they pay |
+| **AI model breakdown** | Cost and volume by model (gpt-4o, claude-sonnet, etc.) |
+| **Pricing simulations** | Model a price change across a customer segment, see revenue impact and churn risk |
+| **AI insights** | AI-generated recommendations about margin compression and pricing opportunities |
+| **Stripe sync** | Import customers, subscriptions, and invoices directly from your Stripe account |
+| **CSV upload** | Upload cost, usage, and revenue data without any API integration |
+| **Sample data** | Explore with a realistic pre-populated dataset — no credentials needed |
+
+---
+
+## Quickstart
+
+### Docker (recommended)
 
 ```bash
-git clone https://github.com/katrinavassell/metrics-onboarding.git
-cd metrics-onboarding
+git clone https://github.com/tanso/observe.git
+cd observe
+docker compose up
+```
+
+Dashboard: `http://localhost:5173` | API: `http://localhost:3001`
+
+Set a real session secret before any non-local deployment:
+
+```bash
+SESSION_SECRET=your-secret docker compose up
+```
+
+### npm (local development)
+
+**Prerequisites:** Node.js 20+, PostgreSQL 16+
+
+```bash
+git clone https://github.com/tanso/observe.git
+cd observe
 npm install
-cp .env.example .env  # Edit with your DATABASE_URL
+```
+
+Create a `.env` file:
+
+```env
+DATABASE_URL=postgresql://user:password@localhost:5432/observe
+SESSION_SECRET=any-random-string-at-least-32-chars
+```
+
+```bash
 npm run dev
 ```
 
-Dashboard runs at `http://localhost:5000`, API at `http://localhost:3001`.
+The database schema is created automatically on first start.
 
-### 2. Try the demo
+---
 
-Click **Try Demo** on the Data Sources page to load realistic sample data -- 5 customers across Starter, Pro, and Enterprise plans with AI cost data across multiple models.
+## Proxy setup (one line)
 
-### 3. Connect your data
+Point your OpenAI or Anthropic client at your Observe instance. Your API key goes in the auth header as normal. Observe forwards the request transparently and logs the cost in the background.
 
-**Option A: SDK (recommended)** -- Add the snippet above after your AI API calls. Generate an API key from Data Sources > SDK Integration.
+### OpenAI
 
-**Option B: OpenAI/Anthropic direct** -- Paste your API key and Tanso auto-pulls usage costs. Go to Data Sources > AI Costs > Connect.
+```python
+from openai import OpenAI
 
-**Option C: CSV upload** -- Upload cost CSVs for any provider. Templates provided.
+client = OpenAI(
+    api_key="sk-...",
+    base_url="http://localhost:3001/v1",     # swap this line
+)
 
-## Environment variables
-
-```env
-# Required
-DATABASE_URL=postgresql://user:password@localhost:5432/tanso
-SESSION_SECRET=any-random-string
-
-# Optional
-OPENAI_API_KEY=sk-...          # For AI Insights feature
-TANSO_API_KEY=...              # For entitlement tracking
-TANSO_ACCOUNT_ID=...           # Tanso account
+response = client.chat.completions.create(
+    model="gpt-4o-mini",
+    messages=[{"role": "user", "content": "Hello"}],
+    extra_headers={
+        "x-tanso-key":      "obs_...",       # your Observe SDK key
+        "x-tanso-customer": "cus_acme",
+        "x-tanso-feature":  "chat",
+    },
+)
 ```
 
-## Tech stack
+### Anthropic
 
-| Layer | Tech |
-|-------|------|
-| Frontend | Vue 3, TypeScript, Vite, Tailwind CSS |
-| Components | shadcn-vue (Radix), Chart.js |
-| State | TanStack Vue Query |
-| Backend | Express, PostgreSQL (Neon) |
-| Auth | Session-based (connect-pg-simple) |
+```python
+import anthropic
 
-## Project structure
-
-```
-src/
-  pages/           # Route components (Analytics, Events, Features, Models, Customers, ...)
-  components/
-    ui/             # Design system (Button, Card, Input, Select, Skeleton, ...)
-    data-sources/   # Import workflows (Revenue, Costs, Usage sections)
-    integrations/   # API key modals (Stripe, OpenAI, Anthropic)
-    shared/         # MarginBadge, SourceBadge, ErrorBoundary
-  composables/      # useAuth, useDataMode, useDemoMode, useTeam, useEntitlement
-  lib/
-    api.ts          # API client
-    format.ts       # Shared formatting (currency, percentages)
-    validation.ts   # Input validation
-
-server/
-  index.ts          # Express server -- all API routes
-  tanso-client.ts   # Tanso API client
+client = anthropic.Anthropic(
+    api_key="sk-ant-...",
+    base_url="http://localhost:3001",         # swap this line
+)
 ```
 
-## SDK event fields
+**Supported proxy endpoints:**
 
-| Field | Required | Description |
-|-------|----------|-------------|
-| `eventName` | yes | What happened (`chat_completion`, `image_generated`) |
-| `customerReferenceId` | yes | Your customer ID |
-| `featureKey` | yes | Which product feature (`ai_summarization`, `search`) |
-| `costAmount` | no | Cost in USD |
-| `model` | no | Model name -- provider auto-detected (`gpt-*` -> OpenAI, `claude-*` -> Anthropic) |
-| `usageUnits` | no | Tokens, requests, or any quantity |
-| `revenueAmount` | no | Revenue for this event (auto-enriched from Stripe if missing) |
-| `eventIdempotencyKey` | no | Unique key for dedup on retry |
+| Endpoint | Proxied to |
+|---|---|
+| `POST /v1/chat/completions` | OpenAI chat completions |
+| `POST /v1/embeddings` | OpenAI embeddings |
+| `POST /v1/messages` | Anthropic messages |
 
-Batch up to 1,000 events per request.
+Without `x-tanso-key`, the request is still proxied but no event is logged. The proxy never blocks or modifies your request.
 
-## Docker
+---
+
+## SDK event ingestion
+
+For providers without proxy support, or when you need to attach revenue data, send events directly. Generate an SDK key under **Data Sources > API Keys** in the dashboard.
 
 ```bash
-docker compose up
+curl -X POST http://localhost:3001/events/ingest \
+  -H "Authorization: Bearer obs_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "events": [{
+      "eventName":           "inference",
+      "customerReferenceId": "cus_acme",
+      "featureKey":          "pdf_summarization",
+      "costAmount":          0.0042,
+      "revenueAmount":       0.02,
+      "model":               "claude-sonnet-4-20250514"
+    }]
+  }'
 ```
+
+**Event fields:**
+
+| Field | Required | Description |
+|---|---|---|
+| `eventName` | yes | e.g. `"inference"`, `"api_call"` |
+| `customerReferenceId` | yes | Your customer identifier |
+| `featureKey` | yes | Feature this event belongs to |
+| `costAmount` | no | Cost in USD |
+| `revenueAmount` | no | Revenue attributed to this event |
+| `usageUnits` | no | Unit count (tokens, requests, pages) |
+| `model` | no | Model name |
+| `properties` | no | Arbitrary metadata |
+| `idempotencyKey` | no | Deduplicate retries |
+
+Batch limit: 1000 events per request. Invalid events are rejected individually — valid ones still accepted.
+
+---
+
+## Architecture
+
+```
+Browser (Vue 3 SPA)
+        |
+        v
+Express API  (port 3001)
+  |-- /v1/*                  OpenAI + Anthropic proxy
+  |-- /events/ingest         SDK event ingestion
+  |-- /api/events/*          Query events by feature, customer, model
+  |-- /api/simulations/*     Pricing simulation engine
+  |-- /api/insights/*        AI-generated insights
+        |
+        v
+PostgreSQL (observe_events)
+```
+
+All data — proxy, SDK, Stripe, CSV — lands in a single `observe_events` table with the same schema. Margin queries aggregate from this one table.
+
+| Layer | Technology |
+|---|---|
+| Frontend | Vue 3, TypeScript, Vite, Tailwind CSS, Chart.js |
+| Backend | Express 5, Node.js 20 |
+| Database | PostgreSQL 16 |
+
+---
+
+## Migrating from Helicone?
+
+Change your `base_url` from `https://oai.helicone.ai/v1` to your Observe instance. The `Authorization` header format is unchanged. Helicone-property headers (`helicone-property-*`) are automatically captured as event properties.
+
+**What Observe adds:**
+- Revenue data — connect Stripe or send revenue events to get margin, not just cost
+- Feature-level P&L — tag calls with `x-tanso-feature` to see per-feature economics
+- Pricing simulations — model price changes before shipping them
+- Self-hosted — data stays in your own Postgres
+
+**Importing Helicone data:** export request logs as CSV, then use **Data Sources > Upload CSV** in the dashboard.
+
+---
 
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md).
 
+```bash
+npm run test        # run tests
+npm run typecheck   # type-check
+npm run lint        # lint
+```
+
+---
+
 ## License
 
-Apache 2.0 -- see [LICENSE](LICENSE).
+Apache 2.0. See [LICENSE](LICENSE).
