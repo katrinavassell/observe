@@ -3172,6 +3172,198 @@ app.get('/simulations/opportunities', ensureVisitor, async (req: AuthRequest, re
   }
 })
 
+// POST /simulations/suggest — AI-generated simulation scenarios based on user data
+// NOTE: Must come BEFORE /simulations/:id to avoid matching 'suggest' as an :id
+app.post('/simulations/suggest', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  try {
+    // Gather the user's observe_events data (same queries as insights)
+    const [featureRes, customerRes] = await Promise.all([
+      pool.query(
+        `SELECT feature_key,
+           COUNT(*) as event_count,
+           COALESCE(SUM(cost_amount), 0) as total_cost,
+           COALESCE(SUM(revenue_amount), 0) as total_revenue,
+           COALESCE(SUM(usage_units), 0) as total_usage
+         FROM observe_events WHERE user_id = $1 AND feature_key IS NOT NULL
+         GROUP BY feature_key ORDER BY total_cost DESC`,
+        [req.visitorId]
+      ),
+      pool.query(
+        `SELECT oe.customer_id, c.name as customer_name, c.segment,
+           COALESCE(SUM(oe.cost_amount), 0) as total_cost,
+           COALESCE(SUM(oe.revenue_amount), 0) as total_revenue
+         FROM observe_events oe
+         LEFT JOIN customers c ON oe.user_id = c.user_id AND oe.customer_id = c.customer_id
+         WHERE oe.user_id = $1
+         GROUP BY oe.customer_id, c.name, c.segment ORDER BY total_revenue DESC LIMIT 10`,
+        [req.visitorId]
+      ),
+    ])
+
+    if (featureRes.rows.length === 0) {
+      return res.status(400).json({ error: 'No data available to suggest simulations. Add events first.' })
+    }
+
+    // Build data summary
+    const featureLines = featureRes.rows.map((r: Record<string, string>) => {
+      const cost = parseFloat(r.total_cost) || 0
+      const revenue = parseFloat(r.total_revenue) || 0
+      const margin = revenue > 0 ? Math.round(((revenue - cost) / revenue) * 100) : -100
+      return `- ${r.feature_key}: cost=$${cost.toFixed(2)}, revenue=$${revenue.toFixed(2)}, margin=${margin}%, ${r.event_count} events`
+    }).join('\n')
+
+    const customerLines = customerRes.rows.map((r: Record<string, string>) => {
+      const cost = parseFloat(r.total_cost) || 0
+      const revenue = parseFloat(r.total_revenue) || 0
+      return `- ${r.customer_name || r.customer_id} (${r.segment || 'unknown'}): cost=$${cost.toFixed(2)}, revenue=$${revenue.toFixed(2)}`
+    }).join('\n')
+
+    const featureKeys = featureRes.rows.map((r: Record<string, string>) => r.feature_key)
+
+    const prompt = `You are an AI SaaS pricing strategist. Based on the data below, suggest a simulation with 2-3 scenarios the user can run to optimize their pricing.
+
+Feature Data:
+${featureLines}
+
+Customer Data:
+${customerLines}
+
+Available feature_keys: ${JSON.stringify(featureKeys)}
+
+Return a JSON object with these fields:
+- name: a short simulation name (e.g. "Margin Recovery Q1")
+- rationale: 1-2 sentences explaining WHY these scenarios make sense given the data
+- scenarios: array of 2-3 scenarios, each with:
+  - name: short scenario name (e.g. "Conservative +10%")
+  - description: 1 sentence explaining this scenario's strategy
+  - changes: array of pricing changes, each with:
+    - feature_key: must be one of the available feature_keys listed above
+    - change_type: one of "percentage_increase", "percentage_decrease", "flat_increase", "flat_decrease", "new_price"
+    - change_value: a positive number
+
+Design scenarios that represent different risk levels:
+1. A conservative/safe option (small adjustments)
+2. A moderate option (meaningful changes)
+3. An aggressive option (bigger bets for higher margin)
+
+Focus on features with poor margins or high cost. Be specific with numbers.
+Return ONLY the JSON object, no markdown or explanation.`
+
+    const openaiKey = process.env.OPENAI_API_KEY
+    let suggestion: {
+      name: string
+      rationale: string
+      scenarios: Array<{
+        name: string
+        description: string
+        changes: Array<{ feature_key: string; change_type: string; change_value: number }>
+      }>
+    }
+
+    if (openaiKey) {
+      const openaiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${openaiKey}`,
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini',
+          messages: [{ role: 'user', content: prompt }],
+          temperature: 0.4,
+          max_tokens: 1500,
+        }),
+      })
+
+      if (!openaiResponse.ok) {
+        const errBody = await openaiResponse.text()
+        console.error('OpenAI API error (suggest):', errBody)
+        return res.status(502).json({ error: 'AI service unavailable. Check your OpenAI API key.' })
+      }
+
+      const completion = await openaiResponse.json() as {
+        choices: Array<{ message: { content: string } }>
+      }
+      const content = completion.choices[0]?.message?.content || '{}'
+
+      try {
+        const cleaned = content.replace(/^```json?\n?/i, '').replace(/\n?```$/i, '').trim()
+        suggestion = JSON.parse(cleaned)
+      } catch {
+        console.error('Failed to parse OpenAI suggestion response:', content)
+        return res.status(502).json({ error: 'AI returned invalid response. Try again.' })
+      }
+    } else {
+      // Local fallback: heuristic-based suggestions
+      const scenarios: typeof suggestion.scenarios = []
+
+      // Sort features by margin (worst first)
+      const features = featureRes.rows.map((r: Record<string, string>) => {
+        const cost = parseFloat(r.total_cost) || 0
+        const revenue = parseFloat(r.total_revenue) || 0
+        const margin = revenue > 0 ? ((revenue - cost) / revenue) * 100 : -100
+        return { key: r.feature_key, cost, revenue, margin }
+      }).sort((a, b) => a.margin - b.margin)
+
+      const worstFeatures = features.filter(f => f.margin < 50).slice(0, 3)
+      if (worstFeatures.length === 0) worstFeatures.push(features[0])
+
+      scenarios.push({
+        name: 'Conservative (+10%)',
+        description: 'Small price increases on underperforming features to improve margins safely.',
+        changes: worstFeatures.map(f => ({
+          feature_key: f.key,
+          change_type: 'percentage_increase',
+          change_value: 10,
+        })),
+      })
+
+      scenarios.push({
+        name: 'Moderate (+20%)',
+        description: 'Meaningful price adjustments targeting features with the worst margins.',
+        changes: worstFeatures.map(f => ({
+          feature_key: f.key,
+          change_type: 'percentage_increase',
+          change_value: 20,
+        })),
+      })
+
+      scenarios.push({
+        name: 'Aggressive (+35%)',
+        description: 'Bold repricing to reach healthy margins, may increase churn risk.',
+        changes: worstFeatures.map(f => ({
+          feature_key: f.key,
+          change_type: 'percentage_increase',
+          change_value: 35,
+        })),
+      })
+
+      const worstNames = worstFeatures.map(f => f.key).join(', ')
+      suggestion = {
+        name: 'Margin Optimization',
+        rationale: `Features with the lowest margins (${worstNames}) are candidates for price increases. These three scenarios let you compare conservative vs aggressive approaches.`,
+        scenarios,
+      }
+    }
+
+    // Validate that suggested feature_keys actually exist in the user's data
+    const validKeys = new Set(featureKeys)
+    for (const scenario of suggestion.scenarios) {
+      scenario.changes = scenario.changes.filter(c => validKeys.has(c.feature_key))
+    }
+    suggestion.scenarios = suggestion.scenarios.filter(s => s.changes.length > 0)
+
+    if (suggestion.scenarios.length === 0) {
+      return res.status(400).json({ error: 'Could not generate valid scenarios from your data.' })
+    }
+
+    res.json(suggestion)
+  } catch (error) {
+    console.error('Suggest simulation error:', error)
+    res.status(500).json({ error: 'Failed to generate simulation suggestion' })
+  }
+})
+
 // GET /simulations — list all simulations
 app.get('/simulations', ensureVisitor, async (req: AuthRequest, res: Response) => {
   try {

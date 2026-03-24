@@ -684,6 +684,24 @@ export async function getOpportunities(): Promise<PricingOpportunity[]> {
   return request('/simulations/opportunities')
 }
 
+export interface SimulationSuggestion {
+  name: string
+  rationale: string
+  scenarios: Array<{
+    name: string
+    description: string
+    changes: Array<{
+      feature_key: string
+      change_type: string
+      change_value: number
+    }>
+  }>
+}
+
+export async function suggestSimulation(): Promise<SimulationSuggestion> {
+  return request('/simulations/suggest', { method: 'POST' })
+}
+
 // REFERRAL SYSTEM
 // =============================================================================
 

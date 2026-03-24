@@ -2,7 +2,7 @@
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/vue-query'
-import { getFeatures, createSimulation, updateSimulation, getUsageLimits } from '@/lib/api'
+import { getFeatures, createSimulation, updateSimulation, getUsageLimits, suggestSimulation } from '@/lib/api'
 import type { PricingChangeType, SimulationScenario } from '@/types/simulation'
 import {
   ArrowLeft,
@@ -12,6 +12,7 @@ import {
   Check,
   Play,
   Loader2,
+  Sparkles,
 } from 'lucide-vue-next'
 import { toast } from 'vue-sonner'
 import { Button, Input, Select, Label, Card, CardContent, Badge } from '@/components/ui'
@@ -130,6 +131,41 @@ function prevStep() {
   if (step.value > 1) step.value--
 }
 
+// AI Suggest
+const isSuggesting = ref(false)
+const suggestRationale = ref('')
+
+async function handleSuggest() {
+  isSuggesting.value = true
+  suggestRationale.value = ''
+  try {
+    const suggestion = await suggestSimulation()
+
+    // Pre-fill the wizard
+    simName.value = suggestion.name
+    suggestRationale.value = suggestion.rationale
+    scenarios.value = suggestion.scenarios.map((s, i) => ({
+      id: 'sc-ai-' + Date.now() + '-' + i,
+      name: s.name,
+      description: s.description,
+      changes: s.changes.map(c => ({
+        feature_key: c.feature_key,
+        change_type: c.change_type as PricingChangeType,
+        change_value: c.change_value,
+      })),
+    }))
+
+    // Jump to step 2 so they can see the pre-filled scenarios
+    step.value = 2
+    toast.success('AI suggested scenarios are ready to review')
+  } catch (error: any) {
+    toast.error(error?.message || 'Failed to generate suggestion')
+    console.error(error)
+  } finally {
+    isSuggesting.value = false
+  }
+}
+
 // Submit
 const isSubmitting = ref(false)
 
@@ -243,6 +279,40 @@ async function runSimulation() {
 
     <!-- Step 1: Define -->
     <div v-if="step === 1" class="space-y-4">
+      <!-- AI Suggest CTA -->
+      <Card class="border-primary/30 bg-primary/[0.02]">
+        <CardContent class="p-5">
+          <div class="flex items-start justify-between gap-4">
+            <div class="space-y-1">
+              <div class="text-sm font-semibold flex items-center gap-1.5">
+                <Sparkles class="h-4 w-4 text-primary" />
+                Not sure where to start?
+              </div>
+              <p class="text-xs text-muted-foreground leading-relaxed">
+                AI will analyze your cost and revenue data, then create 2-3 ready-to-run scenarios targeting your lowest-margin features.
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              class="shrink-0 gap-1.5 border-primary/30 text-primary hover:bg-primary hover:text-primary-foreground"
+              :disabled="isSuggesting"
+              @click="handleSuggest"
+            >
+              <Loader2 v-if="isSuggesting" class="h-3.5 w-3.5 animate-spin" />
+              <Sparkles v-else class="h-3.5 w-3.5" />
+              {{ isSuggesting ? 'Analyzing...' : 'Suggest with AI' }}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      <div class="flex items-center gap-3 text-xs text-muted-foreground">
+        <div class="flex-1 h-px bg-border" />
+        <span>or configure manually</span>
+        <div class="flex-1 h-px bg-border" />
+      </div>
+
       <Card>
         <CardContent class="p-5 space-y-4">
           <div>
@@ -278,6 +348,15 @@ async function runSimulation() {
 
     <!-- Step 2: Scenarios -->
     <div v-if="step === 2" class="space-y-4">
+      <!-- AI rationale banner -->
+      <div
+        v-if="suggestRationale"
+        class="rounded-lg border border-primary/20 bg-primary/[0.03] px-4 py-3 text-sm text-muted-foreground flex items-start gap-2"
+      >
+        <Sparkles class="h-4 w-4 text-primary shrink-0 mt-0.5" />
+        <span>{{ suggestRationale }}</span>
+      </div>
+
       <Card
         v-for="(scenario, sIdx) in scenarios"
         :key="scenario.id"
