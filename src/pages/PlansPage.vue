@@ -110,7 +110,7 @@ function formatFeatureLimit(feature: any): string | boolean {
   if (feature.pricingType === 'usage_based' && feature.pricing) {
     const maxUsage = feature.pricing.maxUsage ?? feature.pricing.max_usage
     if (maxUsage == null) return 'Unlimited'
-    const unit = feature.pricing.unitLabel || feature.pricing.usage_unit_type || ''
+    const unit = (feature.pricing.unitLabel || feature.pricing.usage_unit_type || '').replace(/_/g, ' ')
     return `${maxUsage}${unit ? ` ${unit}` : ''} / month`
   }
   return true // included = boolean access

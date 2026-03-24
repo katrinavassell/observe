@@ -14,7 +14,6 @@ async function clearSampleData(db: { query: (text: string, params: unknown[]) =>
   await db.query("DELETE FROM subscriptions WHERE user_id = $1 AND subscription_id LIKE 'sub_%'", [userId])
   await db.query("DELETE FROM customers WHERE user_id = $1 AND customer_id LIKE 'cus_%'", [userId])
   await db.query("DELETE FROM plans WHERE user_id = $1 AND plan_id IN ('starter', 'pro', 'enterprise')", [userId])
-  await db.query("DELETE FROM simulations WHERE user_id = $1 AND name LIKE '%Sample%'", [userId])
 }
 
 export function createIntegrationsRoutes(
