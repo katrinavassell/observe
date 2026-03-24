@@ -137,6 +137,11 @@ const router = createRouter({
       component: () => import('@/pages/CheckoutSuccessPage.vue'),
     },
     {
+      path: '/admin/pricing',
+      name: 'admin-pricing',
+      component: () => import('@/pages/AdminPricingPage.vue'),
+    },
+    {
       path: '/team',
       name: 'team',
       component: () => import('@/pages/TeamSettingsPage.vue'),
