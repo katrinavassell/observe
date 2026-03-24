@@ -1,18 +1,22 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { useQuery, useQueryClient } from '@tanstack/vue-query'
+import { useRouter } from 'vue-router'
 import { toast } from 'vue-sonner'
-import { Bell, Plus, Trash2, Loader2 } from 'lucide-vue-next'
+import { Bell, Plus, Trash2, Loader2, Lock, Zap } from 'lucide-vue-next'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, Button } from '@/components/ui'
 import { listAlertRules, createAlertRule, updateAlertRule, deleteAlertRule } from '@/lib/api'
 import type { AlertRule } from '@/lib/api'
 
+const router = useRouter()
 const queryClient = useQueryClient()
 
 const { data, isLoading } = useQuery({
   queryKey: ['alert-rules'],
   queryFn: listAlertRules,
 })
+
+const isGated = computed(() => data.value?.gated === true)
 
 const showForm = ref(false)
 const isSubmitting = ref(false)
@@ -113,11 +117,30 @@ async function handleDelete(id: number) {
         <h1 class="text-2xl font-semibold tracking-tight">Cost Alerts</h1>
         <p class="text-muted-foreground text-sm">Get emailed when costs spike or margins drop</p>
       </div>
-      <Button v-if="!showForm" @click="showForm = true">
+      <Button v-if="!showForm && !isGated" @click="showForm = true">
         <Plus class="h-4 w-4 mr-2" />
         New Alert
       </Button>
     </div>
+
+    <!-- Upgrade prompt -->
+    <Card v-if="isGated" class="border-primary/20 bg-primary/[0.02]">
+      <CardContent class="flex items-center justify-between py-5">
+        <div class="flex items-center gap-3">
+          <div class="rounded-lg bg-primary/10 p-2">
+            <Lock class="h-5 w-5 text-primary" />
+          </div>
+          <div>
+            <p class="text-sm font-medium">Cost alerts are a Growth feature</p>
+            <p class="text-xs text-muted-foreground">Get emailed when costs spike or margins drop below your thresholds.</p>
+          </div>
+        </div>
+        <Button size="sm" @click="router.push('/plans')">
+          <Zap class="h-4 w-4 mr-1" />
+          Upgrade
+        </Button>
+      </CardContent>
+    </Card>
 
     <!-- Create form -->
     <Card v-if="showForm">

@@ -884,7 +884,7 @@ export interface AlertRule {
   created_at: string
 }
 
-export async function listAlertRules(): Promise<{ rules: AlertRule[] }> {
+export async function listAlertRules(): Promise<{ rules: AlertRule[]; gated?: boolean }> {
   return request('/alerts')
 }
 

@@ -124,17 +124,22 @@ export async function checkAlerts(pool: Pool, userId: string) {
   }
 }
 
-export function createAlertRoutes(pool: Pool, ensureVisitor: any) {
+export function createAlertRoutes(
+  pool: Pool,
+  ensureVisitor: any,
+  deps: { checkTansoFeatureAccess: (visitorId: string, featureKey: string, email?: string) => Promise<{ allowed: boolean; reason?: string }> }
+) {
   const router = Router()
+  const { checkTansoFeatureAccess } = deps
 
-  // List alert rules
+  // List alert rules (+ entitlement status)
   router.get('/alerts', ensureVisitor, async (req: AuthRequest, res: Response) => {
     try {
-      const { rows } = await pool.query(
-        'SELECT * FROM alert_rules WHERE user_id = $1 ORDER BY created_at DESC',
-        [req.visitorId]
-      )
-      res.json({ rules: rows })
+      const [{ rows }, access] = await Promise.all([
+        pool.query('SELECT * FROM alert_rules WHERE user_id = $1 ORDER BY created_at DESC', [req.visitorId]),
+        checkTansoFeatureAccess(req.visitorId!, 'cost_alerts', req.accountEmail),
+      ])
+      res.json({ rules: rows, gated: !access.allowed })
     } catch (err) {
       console.error('GET /alerts error:', err)
       res.status(500).json({ error: 'Failed to list alerts' })
@@ -144,6 +149,8 @@ export function createAlertRoutes(pool: Pool, ensureVisitor: any) {
   // Create alert rule
   router.post('/alerts', ensureVisitor, async (req: AuthRequest, res: Response) => {
     try {
+      const access = await checkTansoFeatureAccess(req.visitorId!, 'cost_alerts', req.accountEmail)
+      if (!access.allowed) return res.status(403).json({ error: 'Cost alerts require the Growth plan. Upgrade to create alerts.' })
       const parsed = alertRuleSchema.parse(req.body)
       const { rows } = await pool.query(
         `INSERT INTO alert_rules (user_id, name, metric, operator, threshold, email, cooldown_minutes)

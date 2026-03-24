@@ -166,7 +166,7 @@ app.use(createDataRoutes(pool, ensureVisitor, { checkTansoFeatureAccess, trackTa
 app.use(createTansoRoutes(pool, ensureVisitor, { checkTansoFeatureAccess }))
 // app.use(createTeamRoutes(pool, ensureVisitor))
 app.use(createIntegrationsRoutes(pool, ensureVisitor, { trackTansoUsage, convertReferralIfPending }))
-app.use(createAlertRoutes(pool, ensureVisitor))
+app.use(createAlertRoutes(pool, ensureVisitor, { checkTansoFeatureAccess }))
 
 // ─── OpenAI-compatible proxy ───────────────────────────────────────────────
 // Users swap their base URL to route through this proxy. Requests are forwarded
