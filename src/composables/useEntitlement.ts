@@ -11,7 +11,7 @@ export function useEntitlement(featureKey: string) {
   })
 
   const allowed = computed(() => {
-    if (isError.value || !data.value) return true
+    if (isError.value || !data.value) return false
     return data.value.allowed
   })
 

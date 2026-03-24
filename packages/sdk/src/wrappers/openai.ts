@@ -18,12 +18,22 @@ function estimateCost(model: string, promptTokens: number, completionTokens: num
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
+function isStreamResponse(response: any): boolean {
+  return response && (typeof response[Symbol.asyncIterator] === 'function' || typeof response.iterator === 'function');
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function wrapOpenAI(client: any, observe: TansoObserve, defaults?: WrapDefaults): void {
   const original = client.chat.completions.create.bind(client.chat.completions);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   client.chat.completions.create = async function (...args: any[]) {
     const response = await original(...args);
+
+    // Skip tracking for streaming responses — usage data is not available on the stream object
+    if (isStreamResponse(response)) {
+      return response;
+    }
 
     try {
       const model: string = response.model ?? '';
@@ -46,8 +56,8 @@ export function wrapOpenAI(client: any, observe: TansoObserve, defaults?: WrapDe
           completionTokens,
         },
       });
-    } catch {
-      // Never throw to user code
+    } catch (err) {
+      observe['options']?.onError?.(err instanceof Error ? err : new Error(String(err)));
     }
 
     return response;

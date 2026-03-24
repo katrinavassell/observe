@@ -1181,6 +1181,7 @@ app.post('/data/upload/usage', ensureVisitor, async (req: AuthRequest, res: Resp
     }
 
     await client.query('BEGIN')
+    await clearSampleData(client, req.visitorId!)
     await client.query('DELETE FROM usage_records WHERE user_id = $1', [req.visitorId])
     await client.query("DELETE FROM observe_events WHERE user_id = $1 AND event_name = 'usage'", [req.visitorId])
 
@@ -1221,7 +1222,6 @@ app.post('/data/upload/usage', ensureVisitor, async (req: AuthRequest, res: Resp
       )
     }
 
-    await clearSampleData(client, req.visitorId!)
     await client.query(
       'UPDATE user_data_status SET data_mode = $2, updated_at = NOW() WHERE user_id = $1',
       [req.visitorId, 'user']
@@ -1254,6 +1254,7 @@ app.post('/data/upload/revenue', ensureVisitor, async (req: AuthRequest, res: Re
     const { customers, plans, subscriptions } = parseResult.data
 
     await client.query('BEGIN')
+    await clearSampleData(client, req.visitorId!)
 
     // Clear existing revenue data
     await client.query('DELETE FROM subscriptions WHERE user_id = $1', [req.visitorId])
@@ -1304,7 +1305,6 @@ app.post('/data/upload/revenue', ensureVisitor, async (req: AuthRequest, res: Re
       }
     }
 
-    await clearSampleData(client, req.visitorId!)
     await client.query(
       'UPDATE user_data_status SET data_mode = $2, updated_at = NOW() WHERE user_id = $1',
       [req.visitorId, 'user']
@@ -1384,8 +1384,15 @@ app.get('/metrics/source-breakdown', ensureVisitor, async (req: AuthRequest, res
 })
 
 let dbInitialized = false
+let dbInitPromise: Promise<void> | null = null
 async function ensureDbInitialized() {
   if (dbInitialized) return
+  if (!dbInitPromise) {
+    dbInitPromise = _doDbInit().then(() => { dbInitialized = true }).catch(err => { dbInitPromise = null; throw err })
+  }
+  return dbInitPromise
+}
+async function _doDbInit() {
   try {
     await pool.query('SELECT 1')
     console.log('Database connection verified')
@@ -1771,7 +1778,6 @@ async function ensureDbInitialized() {
       console.error('Sample data cleanup error (non-fatal):', err)
     }
 
-    dbInitialized = true
   } catch (error) {
     console.error('Failed to connect to database:', error)
     throw error
@@ -2887,7 +2893,7 @@ app.get('/customers/:id', ensureVisitor, async (req: AuthRequest, res: Response)
         [req.visitorId, id]
       ),
       pool.query(
-        `SELECT * FROM observe_events WHERE user_id = $1 AND customer_id = $2 ORDER BY timestamp DESC LIMIT 50`,
+        `SELECT * FROM observe_events WHERE user_id = $1 AND customer_id = $2 AND source != 'sample' ORDER BY timestamp DESC LIMIT 50`,
         [req.visitorId, id]
       ),
       pool.query(
@@ -2895,7 +2901,7 @@ app.get('/customers/:id', ensureVisitor, async (req: AuthRequest, res: Response)
            COALESCE(SUM(cost_amount), 0) as total_cost,
            COALESCE(SUM(revenue_amount), 0) as total_revenue,
            COALESCE(SUM(usage_units), 0) as total_usage
-         FROM observe_events WHERE user_id = $1 AND customer_id = $2 AND feature_key IS NOT NULL
+         FROM observe_events WHERE user_id = $1 AND customer_id = $2 AND feature_key IS NOT NULL AND source != 'sample'
          GROUP BY feature_key ORDER BY total_cost DESC`,
         [req.visitorId, id]
       ),
@@ -4511,11 +4517,21 @@ app.post('/integrations/openai/connect', ensureVisitor, async (req: AuthRequest,
 
         // Update has_usage_access and last_synced_at
         if (eventsSynced > 0) {
-          await clearSampleData(pool, visitorId)
-          await pool.query(
-            `INSERT INTO user_data_status (user_id, data_mode) VALUES ($1, $2) ON CONFLICT (user_id) DO UPDATE SET data_mode = $2, updated_at = NOW()`,
-            [visitorId, 'user']
-          )
+          const txClient = await pool.connect()
+          try {
+            await txClient.query('BEGIN')
+            await clearSampleData(txClient, visitorId)
+            await txClient.query(
+              `INSERT INTO user_data_status (user_id, data_mode) VALUES ($1, $2) ON CONFLICT (user_id) DO UPDATE SET data_mode = $2, updated_at = NOW()`,
+              [visitorId, 'user']
+            )
+            await txClient.query('COMMIT')
+          } catch (err) {
+            await txClient.query('ROLLBACK').catch(e => console.error('ROLLBACK failed:', e))
+            console.error('clearSampleData failed during OpenAI sync:', err)
+          } finally {
+            txClient.release()
+          }
         }
       } else if (usageResponse.status === 403) {
         // No admin access - skip usage sync, still store the connection
@@ -4671,11 +4687,21 @@ app.post('/integrations/anthropic/connect', ensureVisitor, async (req: AuthReque
 
         // Update data_mode to 'user' if we synced any data
         if (eventsSynced > 0) {
-          await clearSampleData(pool, visitorId)
-          await pool.query(
-            `INSERT INTO user_data_status (user_id, data_mode) VALUES ($1, $2) ON CONFLICT (user_id) DO UPDATE SET data_mode = $2, updated_at = NOW()`,
-            [visitorId, 'user']
-          )
+          const txClient = await pool.connect()
+          try {
+            await txClient.query('BEGIN')
+            await clearSampleData(txClient, visitorId)
+            await txClient.query(
+              `INSERT INTO user_data_status (user_id, data_mode) VALUES ($1, $2) ON CONFLICT (user_id) DO UPDATE SET data_mode = $2, updated_at = NOW()`,
+              [visitorId, 'user']
+            )
+            await txClient.query('COMMIT')
+          } catch (err) {
+            await txClient.query('ROLLBACK').catch(e => console.error('ROLLBACK failed:', e))
+            console.error('clearSampleData failed during Anthropic sync:', err)
+          } finally {
+            txClient.release()
+          }
         }
       } else if (usageResponse.status === 403) {
         // No admin access - skip usage sync, still store the connection

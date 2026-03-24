@@ -14,7 +14,7 @@ import type {
 } from './types.ts'
 
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Origin': Deno.env.get('ALLOWED_ORIGIN') || 'https://app.tansohq.com',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
@@ -34,17 +34,6 @@ serve(async (req: Request) => {
       )
     }
 
-    // Parse request body
-    const body: EdgeFunctionRequest = await req.json()
-    const { userId, pricingModel } = body
-
-    if (!userId || !pricingModel) {
-      return new Response(
-        JSON.stringify({ success: false, error: { code: 'INVALID_REQUEST', message: 'Missing required fields (userId, pricingModel)' } }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
-    }
-
     // Create Supabase client with auth token
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
     const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!
@@ -53,6 +42,27 @@ serve(async (req: Request) => {
         headers: { Authorization: authHeader },
       },
     })
+
+    // Extract userId from JWT instead of trusting client-provided value
+    const { data: { user }, error: userError } = await supabase.auth.getUser()
+    if (userError || !user) {
+      return new Response(
+        JSON.stringify({ success: false, error: { code: 'UNAUTHORIZED', message: 'Invalid or expired token' } }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    // Parse request body
+    const body: EdgeFunctionRequest = await req.json()
+    const { pricingModel } = body
+    const userId = user.id
+
+    if (!pricingModel) {
+      return new Response(
+        JSON.stringify({ success: false, error: { code: 'INVALID_REQUEST', message: 'Missing required field (pricingModel)' } }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
 
     // Fetch subscriptions, customers, and plans separately (avoids FK constraint issues)
     const { data: subscriptions, error: subsError } = await supabase

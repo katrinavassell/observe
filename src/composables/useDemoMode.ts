@@ -27,12 +27,12 @@ export function useDemoMode() {
   async function exitDemoMode() {
     try {
       await clearSample()
-    } catch (error) {
-      logger.error('Failed to exit demo mode', error)
-    } finally {
       isDemoActive.value = false
       sessionStorage.removeItem('demo_mode')
       router.push('/data-sources')
+    } catch (error) {
+      logger.error('Failed to exit demo mode', error)
+      throw error
     }
   }
 

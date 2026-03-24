@@ -9,6 +9,30 @@ type CheckTansoFeatureAccessFn = (visitorId: string, featureKey: string, email?:
 type TrackTansoUsageFn = (visitorId: string, featureKey: string, eventName: string) => void
 type ConvertReferralFn = (visitorId: string) => Promise<void>
 
+// Clear sample/demo data when transitioning to real user data
+// Uses exact sample IDs to avoid deleting real Stripe data (sub_*, cus_* prefixes match real Stripe IDs)
+const SAMPLE_SUBSCRIPTION_IDS = ['sub_001', 'sub_002', 'sub_003', 'sub_004', 'sub_005']
+const SAMPLE_CUSTOMER_IDS = ['cus_001', 'cus_002', 'cus_003', 'cus_004', 'cus_005']
+const SAMPLE_PLAN_IDS = ['starter', 'pro', 'enterprise']
+
+async function clearSampleData(db: { query: (text: string, params: unknown[]) => Promise<unknown> }, userId: string): Promise<void> {
+  await db.query("DELETE FROM observe_events WHERE user_id = $1 AND source = 'sample'", [userId])
+  await db.query("DELETE FROM cost_records WHERE user_id = $1 AND cost_type = 'ai_inference' AND customer_id IS NULL AND period_start IS NOT NULL", [userId])
+  await db.query(
+    `DELETE FROM subscriptions WHERE user_id = $1 AND subscription_id = ANY($2)`,
+    [userId, SAMPLE_SUBSCRIPTION_IDS]
+  )
+  await db.query(
+    `DELETE FROM customers WHERE user_id = $1 AND customer_id = ANY($2)`,
+    [userId, SAMPLE_CUSTOMER_IDS]
+  )
+  await db.query(
+    `DELETE FROM plans WHERE user_id = $1 AND plan_id = ANY($2)`,
+    [userId, SAMPLE_PLAN_IDS]
+  )
+  await db.query("DELETE FROM simulations WHERE user_id = $1 AND name LIKE '%Sample%'", [userId])
+}
+
 // Upload validation schemas
 const costRecordSchema = z.object({
   month: z.string().regex(/^\d{4}-\d{2}$/, 'month must be YYYY-MM format'),
@@ -601,6 +625,7 @@ export function createDataRoutes(
         )
       }
 
+      await clearSampleData(client, req.visitorId!)
       await client.query(
         'UPDATE user_data_status SET data_mode = $2, updated_at = NOW() WHERE user_id = $1',
         [req.visitorId, 'user']
@@ -677,6 +702,7 @@ export function createDataRoutes(
         )
       }
 
+      await clearSampleData(client, req.visitorId!)
       await client.query(
         'UPDATE user_data_status SET data_mode = $2, updated_at = NOW() WHERE user_id = $1',
         [req.visitorId, 'user']
@@ -758,6 +784,7 @@ export function createDataRoutes(
         }
       }
 
+      await clearSampleData(client, req.visitorId!)
       await client.query(
         'UPDATE user_data_status SET data_mode = $2, updated_at = NOW() WHERE user_id = $1',
         [req.visitorId, 'user']
@@ -964,6 +991,7 @@ export function createDataRoutes(
         )
       }
 
+      await clearSampleData(client, req.visitorId!)
       await client.query(
         'INSERT INTO user_data_status (user_id, data_mode) VALUES ($1, $2) ON CONFLICT (user_id) DO UPDATE SET data_mode = $2, updated_at = NOW()',
         [req.visitorId, 'user']

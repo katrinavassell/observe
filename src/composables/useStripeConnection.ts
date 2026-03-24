@@ -159,6 +159,6 @@ export function useStripeConnection() {
     // Legacy compat aliases
     validateApiKey: async (_key: string) => ({ isValid: true, mode: 'test' as const }),
     validation: computed(() => isConnected.value ? { isValid: true, accountName: accountName.value, mode: 'test' as const } : null),
-    isValidating: ref(false),
+    isValidating: computed(() => isCheckingStatus.value),
   }
 }

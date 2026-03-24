@@ -169,8 +169,8 @@ export function createCheckTansoFeatureAccess(pool: Pool) {
           const hasFeature = features.some((f: any) => f.key === featureKey)
           return { allowed: hasFeature, reason: hasFeature ? undefined : 'Feature not in plan (fallback)' }
         }
-      } catch (_) { /* fallback also failed — fail open */ }
-      return { allowed: true }
+      } catch (fallbackErr) { console.error('Tanso entitlement fallback also failed:', fallbackErr) }
+      return { allowed: false, reason: 'Entitlement service unavailable' }
     }
   }
 }
@@ -594,7 +594,7 @@ export function createTansoRoutes(
       res.json(result)
     } catch (err) {
       console.error('Tanso check error:', err)
-      res.json({ allowed: true })
+      res.json({ allowed: false, reason: 'Entitlement check failed' })
     }
   })
 

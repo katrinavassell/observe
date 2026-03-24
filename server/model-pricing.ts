@@ -162,9 +162,14 @@ async function refreshCache(pool: Pg.Pool): Promise<void> {
 
 // ─── Read ───────────────────────────────────────────────────────────────────
 
+let refreshPromise: Promise<void> | null = null
+
 export async function getAllPricing(pool: Pg.Pool): Promise<ModelPrice[]> {
   if (Date.now() - cacheLoadedAt > CACHE_TTL_MS) {
-    await refreshCache(pool)
+    if (!refreshPromise) {
+      refreshPromise = refreshCache(pool).finally(() => { refreshPromise = null })
+    }
+    await refreshPromise
   }
   return pricingCache
 }

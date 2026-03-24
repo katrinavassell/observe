@@ -1,5 +1,6 @@
 export function formatCurrency(val: number | null | undefined): string {
   if (val === null || val === undefined) return '—'
+  if (val < 0) return `-${formatCurrency(-val)}`
   if (val === 0) return '$0'
   if (val >= 1000) return `$${(val / 1000).toFixed(1)}k`
   if (val >= 0.01) return `$${val.toFixed(2)}`
