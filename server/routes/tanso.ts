@@ -58,8 +58,16 @@ async function autoSubscribeToFreePlan(customerReferenceId: string): Promise<voi
 
     const result = await tansoCreateSubscription(customerReferenceId, freePlanId)
     // Mark the $0 invoice as paid to activate the subscription
-    if (result?.invoice?.id) {
-      await tansoMarkInvoicePaid(result.invoice.id)
+    let invoiceId = result?.invoice?.id
+    if (!invoiceId) {
+      // Invoice may not be nested in the response -- fetch separately
+      const invoices = await tansoListCustomerInvoices(customerReferenceId)
+      const items = Array.isArray(invoices) ? invoices : (invoices as any)?.items ?? []
+      const unpaid = items.find((inv: any) => inv.status !== 'PAID')
+      invoiceId = unpaid?.id
+    }
+    if (invoiceId) {
+      await tansoMarkInvoicePaid(invoiceId)
     }
     console.log('Auto-subscribed', customerReferenceId, 'to free plan')
   } catch (err) {
@@ -174,28 +182,7 @@ export function createCheckTansoFeatureAccess(pool: Pool) {
   }
 }
 
-const ADMIN_EMAIL = 'tansoadmin@tansohq.com'
-let cachedAdminVisitorId: string | null = null
-
-export function createTrackTansoUsage(pool: Pool) {
-  // Resolve admin visitor_id once and cache it
-  async function getAdminVisitorId(): Promise<string | null> {
-    if (cachedAdminVisitorId) return cachedAdminVisitorId
-    try {
-      const result = await pool.query(
-        'SELECT visitor_id FROM accounts WHERE LOWER(email) = $1 LIMIT 1',
-        [ADMIN_EMAIL]
-      )
-      if (result.rows[0]?.visitor_id) {
-        cachedAdminVisitorId = result.rows[0].visitor_id
-        return cachedAdminVisitorId
-      }
-    } catch (err) {
-      console.error('Failed to resolve admin visitor_id:', err)
-    }
-    return null
-  }
-
+export function createTrackTansoUsage(pool: Pool, getAdminVisitorId: () => Promise<string | null>) {
   return function trackTansoUsage(visitorId: string, featureKey: string, eventName: string) {
     if (!isTansoConfigured()) return
     const occurredAt = new Date().toISOString()

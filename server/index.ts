@@ -134,9 +134,30 @@ app.use(session({
 const ensureVisitor = createEnsureVisitor(pool)
 app.use(createAuthRoutes(pool, ensureVisitor))
 
+// ─── Admin visitor ID (shared by proxy dual-write + Tanso usage tracking) ──
+const ADMIN_EMAIL = 'tansoadmin@tansohq.com'
+let cachedAdminVisitorId: string | null = null
+
+async function getAdminVisitorId(): Promise<string | null> {
+  if (cachedAdminVisitorId) return cachedAdminVisitorId
+  try {
+    const result = await pool.query(
+      'SELECT visitor_id FROM accounts WHERE LOWER(email) = $1 LIMIT 1',
+      [ADMIN_EMAIL]
+    )
+    if (result.rows[0]?.visitor_id) {
+      cachedAdminVisitorId = result.rows[0].visitor_id
+      return cachedAdminVisitorId
+    }
+  } catch (err) {
+    console.error('Failed to resolve admin visitor_id:', err)
+  }
+  return null
+}
+
 // ─── Shared Tanso helpers (used by multiple route modules) ─────────────────
 const checkTansoFeatureAccess = createCheckTansoFeatureAccess(pool)
-const trackTansoUsage = createTrackTansoUsage(pool)
+const trackTansoUsage = createTrackTansoUsage(pool, getAdminVisitorId)
 const convertReferralIfPending = createConvertReferralIfPending(pool)
 
 // ─── Extracted route modules ───────────────────────────────────────────────
@@ -295,6 +316,12 @@ async function logProxyEvent(
   requestBody?: Record<string, unknown> | null,
   responseBody?: Record<string, unknown> | null,
 ): Promise<void> {
+  const propsJson = JSON.stringify(properties)
+  const reqJson = requestBody ? JSON.stringify(requestBody) : null
+  const resJson = responseBody ? JSON.stringify(responseBody) : null
+  const totalTokens = inputTokens + outputTokens
+
+  // 1. Log for the user
   await pool.query(
     `INSERT INTO observe_events (
       user_id, customer_id, feature_key, event_name, timestamp,
@@ -302,10 +329,23 @@ async function logProxyEvent(
       model, model_provider, source, granularity, is_inferred, properties,
       request_body, response_body
     ) VALUES ($1, $2, $3, 'cost', NOW(), $4, 'usd', 0, $5, $6, $7, 'proxy', 'event', false, $8, $9, $10)`,
-    [userId, customerId, featureKey, cost, inputTokens + outputTokens, model, provider, JSON.stringify(properties),
-     requestBody ? JSON.stringify(requestBody) : null, responseBody ? JSON.stringify(responseBody) : null]
+    [userId, customerId, featureKey, cost, totalTokens, model, provider, propsJson, reqJson, resJson]
   )
   checkAlerts(pool, userId).catch(err => console.error('checkAlerts error (proxy event):', err))
+
+  // 2. Mirror to admin account so tansoadmin@tansohq.com sees all activity
+  getAdminVisitorId().then(adminId => {
+    if (!adminId || adminId === userId) return
+    pool.query(
+      `INSERT INTO observe_events (
+        user_id, customer_id, feature_key, event_name, timestamp,
+        cost_amount, cost_unit, revenue_amount, usage_units,
+        model, model_provider, source, granularity, is_inferred, properties,
+        request_body, response_body
+      ) VALUES ($1, $2, $3, 'cost', NOW(), $4, 'usd', 0, $5, $6, $7, 'proxy', 'event', false, $8, $9, $10)`,
+      [adminId, customerId, featureKey, cost, totalTokens, model, provider, propsJson, reqJson, resJson]
+    ).catch(err => console.error('Admin proxy event mirror error:', err))
+  }).catch(err => console.error('Admin proxy mirror error:', err))
 }
 
 // GET /v1/models — proxy to OpenAI
@@ -4034,18 +4074,14 @@ app.delete('/insights', ensureVisitor, async (req: AuthRequest, res: Response) =
   }
 })
 
-// GET /usage/limits — return current usage for simulations and ai_insights
+// GET /usage/limits — return current usage for ai_insights
 app.get('/usage/limits', ensureVisitor, async (req: AuthRequest, res: Response) => {
   if (!isTansoConfigured()) return res.json({ configured: false })
   const visitorId = req.visitorId!
   try {
-    const [sims, insights] = await Promise.all([
-      tansoCheckEntitlement(visitorId, 'simulations'),
-      tansoCheckEntitlement(visitorId, 'ai_insights'),
-    ])
+    const insights = await tansoCheckEntitlement(visitorId, 'ai_insights')
     res.json({
       configured: true,
-      simulations: { allowed: sims.allowed !== false, usage: sims.usage },
       ai_insights: { allowed: insights.allowed !== false, usage: insights.usage },
     })
   } catch {
@@ -4090,8 +4126,15 @@ async function autoSubscribeToFreePlan(customerReferenceId: string): Promise<voi
 
     const result = await tansoCreateSubscription(customerReferenceId, freePlanId)
     // Mark the $0 invoice as paid to activate the subscription
-    if (result?.invoice?.id) {
-      await tansoMarkInvoicePaid(result.invoice.id)
+    let invoiceId = result?.invoice?.id
+    if (!invoiceId) {
+      const invoices = await tansoListCustomerInvoices(customerReferenceId)
+      const items = Array.isArray(invoices) ? invoices : (invoices as any)?.items ?? []
+      const unpaid = items.find((inv: any) => inv.status !== 'PAID')
+      invoiceId = unpaid?.id
+    }
+    if (invoiceId) {
+      await tansoMarkInvoicePaid(invoiceId)
     }
     console.log('Auto-subscribed', customerReferenceId, 'to free plan')
   } catch (err) {

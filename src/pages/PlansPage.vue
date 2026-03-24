@@ -97,16 +97,13 @@ const meteredEntitlements = computed(() =>
 
 const featureLabelMap: Record<string, string> = {
   ai_insights: 'AI Insights',
-  simulations: 'Simulations',
-  csv_upload: 'CSV Uploads',
-  saas_metrics: 'SaaS Metrics',
 }
 function featureLabel(key: string) {
   return featureLabelMap[key] || key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
 }
 
 const freePlan = computed(() => plans.value.find((p: any) => p.key === 'free'))
-const proPlan = computed(() => plans.value.find((p: any) => p.key === 'pro'))
+const growthPlan = computed(() => plans.value.find((p: any) => p.key === 'growth'))
 
 function formatFeatureLimit(feature: any): string | boolean {
   if (!feature) return true
@@ -129,8 +126,8 @@ function planFeatureMap(plan: any): Record<string, any> {
 
 const featureRows = computed(() => {
   const freeFeatures = planFeatureMap(freePlan.value)
-  const proFeatures = planFeatureMap(proPlan.value)
-  const allFeatures = freePlan.value?.features || proPlan.value?.features || []
+  const proFeatures = planFeatureMap(growthPlan.value)
+  const allFeatures = freePlan.value?.features || growthPlan.value?.features || []
   const rows = allFeatures.map((f: any) => {
     const freeVal = formatFeatureLimit(freeFeatures[f.key])
     const proVal = formatFeatureLimit(proFeatures[f.key])
@@ -353,7 +350,7 @@ async function handleCancelDowngrade() {
       </div>
 
       <!-- Plan cards -->
-      <div v-if="freePlan && proPlan" class="space-y-8">
+      <div v-if="freePlan && growthPlan" class="space-y-8">
         <div class="grid gap-6 sm:grid-cols-2 max-w-3xl">
           <!-- Free card -->
           <div
@@ -378,7 +375,7 @@ async function handleCancelDowngrade() {
             </div>
             <!-- On Pro → show downgrade button -->
             <button
-              v-if="currentPlanKey === 'pro' && !hasScheduledCancellation"
+              v-if="currentPlanKey === 'growth' && !hasScheduledCancellation"
               class="w-full rounded-lg border border-border bg-card px-4 py-2.5 text-sm font-medium text-foreground hover:bg-muted transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
               :disabled="isPending"
               @click="handleSubscribe(freePlan.id)"
@@ -409,38 +406,38 @@ async function handleCancelDowngrade() {
           <div
             :class="[
               'rounded-xl border-2 p-6 flex flex-col relative',
-              currentPlanKey === 'pro' ? 'border-success/40 bg-success/5' : 'border-primary bg-card shadow-md'
+              currentPlanKey === 'growth' ? 'border-success/40 bg-success/5' : 'border-primary bg-card shadow-md'
             ]"
           >
             <div
-              v-if="currentPlanKey !== 'pro'"
+              v-if="currentPlanKey !== 'growth'"
               class="absolute -top-3 left-1/2 -translate-x-1/2 inline-flex items-center rounded-full bg-primary px-3 py-0.5 text-xs font-semibold text-primary-foreground tracking-wide"
             >
               RECOMMENDED
             </div>
             <div class="flex items-center justify-between">
-              <h3 class="text-lg font-semibold">Pro</h3>
+              <h3 class="text-lg font-semibold">Growth</h3>
               <span
-                v-if="currentPlanKey === 'pro'"
+                v-if="currentPlanKey === 'growth'"
                 class="inline-flex items-center rounded-full bg-success/10 text-success px-2.5 py-0.5 text-xs font-medium"
               >
                 Current
               </span>
             </div>
-            <p class="text-sm text-muted-foreground mt-1">{{ proPlan.description }}</p>
+            <p class="text-sm text-muted-foreground mt-1">{{ growthPlan.description }}</p>
             <div class="mt-4 mb-6">
-              <span class="text-4xl font-bold tracking-tight">${{ proPlan.priceAmount }}</span>
+              <span class="text-4xl font-bold tracking-tight">${{ growthPlan.priceAmount }}</span>
               <span class="text-sm text-muted-foreground ml-1">/ month</span>
             </div>
             <!-- Not on Pro → upgrade button -->
             <button
-              v-if="currentPlanKey !== 'pro'"
+              v-if="currentPlanKey !== 'growth'"
               class="w-full rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
               :disabled="isPending"
-              @click="handleSubscribe(proPlan.id)"
+              @click="handleSubscribe(growthPlan.id)"
             >
               <Zap class="h-4 w-4" />
-              Upgrade to Pro
+              Upgrade to Growth
             </button>
             <!-- On Pro → current plan + cancel option -->
             <template v-else>
@@ -475,7 +472,7 @@ async function handleCancelDowngrade() {
                   <th class="text-left py-3 px-4 font-medium text-muted-foreground w-1/2">Feature</th>
                   <th class="text-center py-3 px-4 font-medium text-muted-foreground w-1/4">Free</th>
                   <th class="text-center py-3 px-4 font-medium w-1/4">
-                    <span class="inline-flex items-center gap-1 text-primary">Pro</span>
+                    <span class="inline-flex items-center gap-1 text-primary">Growth</span>
                   </th>
                 </tr>
               </thead>
