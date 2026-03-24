@@ -2111,16 +2111,32 @@ app.get('/events', ensureVisitor, async (req: AuthRequest, res: Response) => {
   }
 })
 
+// Source priority: proxy/sdk data wins over csv for the same (model, customer, feature, day).
+// CSV rows are excluded when a higher-priority source already covers that slot.
+const SOURCE_PRIORITY_CTE = `
+  WITH ranked AS (
+    SELECT *,
+      ROW_NUMBER() OVER (
+        PARTITION BY user_id, COALESCE(model,''), COALESCE(customer_id,''), COALESCE(feature_key,''), date_trunc('day', timestamp)
+        ORDER BY CASE source WHEN 'proxy' THEN 1 WHEN 'sdk' THEN 2 WHEN 'csv' THEN 3 WHEN 'sample' THEN 4 ELSE 5 END
+      ) AS _src_rank
+    FROM observe_events
+    WHERE user_id = $1
+  ),
+  deduped AS (SELECT * FROM ranked WHERE _src_rank = 1)
+`
+
 // GET /events/by-feature — aggregate events grouped by feature_key
 app.get('/events/by-feature', ensureVisitor, async (req: AuthRequest, res: Response) => {
   try {
     const result = await pool.query(
-      `SELECT feature_key, COUNT(*) as event_count,
+      `${SOURCE_PRIORITY_CTE}
+       SELECT feature_key, COUNT(*) as event_count,
          COALESCE(SUM(cost_amount), 0) as total_cost,
          COALESCE(SUM(revenue_amount), 0) as total_revenue,
          COALESCE(SUM(usage_units), 0) as total_usage,
          MAX(timestamp) as last_seen
-       FROM observe_events WHERE user_id = $1 AND feature_key IS NOT NULL
+       FROM deduped WHERE feature_key IS NOT NULL
        GROUP BY feature_key ORDER BY total_cost DESC`,
       [req.visitorId]
     )
@@ -2147,14 +2163,14 @@ app.get('/events/by-feature', ensureVisitor, async (req: AuthRequest, res: Respo
 app.get('/events/by-customer', ensureVisitor, async (req: AuthRequest, res: Response) => {
   try {
     const result = await pool.query(
-      `SELECT oe.customer_id, c.name as customer_name, COUNT(*) as event_count,
-         COALESCE(SUM(oe.cost_amount), 0) as total_cost,
-         COALESCE(SUM(oe.revenue_amount), 0) as total_revenue,
-         MAX(oe.timestamp) as last_seen
-       FROM observe_events oe
-       LEFT JOIN customers c ON oe.user_id = c.user_id AND oe.customer_id = c.customer_id
-       WHERE oe.user_id = $1
-       GROUP BY oe.customer_id, c.name ORDER BY total_cost DESC`,
+      `${SOURCE_PRIORITY_CTE}
+       SELECT d.customer_id, c.name as customer_name, COUNT(*) as event_count,
+         COALESCE(SUM(d.cost_amount), 0) as total_cost,
+         COALESCE(SUM(d.revenue_amount), 0) as total_revenue,
+         MAX(d.timestamp) as last_seen
+       FROM deduped d
+       LEFT JOIN customers c ON d.user_id = c.user_id AND d.customer_id = c.customer_id
+       GROUP BY d.customer_id, c.name ORDER BY total_cost DESC`,
       [req.visitorId]
     )
     res.json(result.rows.map(row => {
@@ -2180,12 +2196,13 @@ app.get('/events/by-customer', ensureVisitor, async (req: AuthRequest, res: Resp
 app.get('/events/by-model', ensureVisitor, async (req: AuthRequest, res: Response) => {
   try {
     const result = await pool.query(
-      `SELECT model, model_provider, COUNT(*) as event_count,
+      `${SOURCE_PRIORITY_CTE}
+       SELECT model, model_provider, COUNT(*) as event_count,
          COALESCE(SUM(cost_amount), 0) as total_cost,
          COALESCE(SUM(revenue_amount), 0) as total_revenue,
          COALESCE(SUM(usage_units), 0) as total_usage,
          MAX(timestamp) as last_seen
-       FROM observe_events WHERE user_id = $1 AND model IS NOT NULL
+       FROM deduped WHERE model IS NOT NULL
        GROUP BY model, model_provider ORDER BY total_cost DESC`,
       [req.visitorId]
     )

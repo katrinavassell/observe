@@ -2,7 +2,6 @@
 import { ref } from 'vue'
 import { ChevronDown, ChevronRight, Download, ExternalLink } from 'lucide-vue-next'
 import { Button } from '@/components/ui'
-import { downloadTemplate } from '@/api/client'
 
 interface Guide {
   id: string
@@ -116,71 +115,54 @@ const guides: Guide[] = [
   },
 ]
 
-// Column requirements by data type
+// Column requirements by data type — matches server Zod schemas in routes/data.ts
 const columnInfo: Record<string, { required: string[]; optional: string[]; descriptions: Record<string, string> }> = {
-  accounts: {
-    required: ['account_id', 'company_name'],
-    optional: ['domain', 'email', 'segment', 'industry', 'plan_tier', 'arr'],
+  costs: {
+    required: ['month', 'cost'],
+    optional: ['provider', 'customer_id'],
     descriptions: {
-      account_id: 'Unique identifier for each customer',
-      company_name: 'Customer or company name',
-      domain: 'Company website (helps with matching)',
-      email: 'Primary contact email',
-      segment: 'e.g., SMB, Mid-Market, Enterprise',
-      arr: 'Annual Recurring Revenue in dollars',
-    },
-  },
-  subscriptions: {
-    required: ['subscription_id', 'customer_id'],
-    optional: ['plan_name', 'amount', 'status', 'start_date', 'billing_interval'],
-    descriptions: {
-      subscription_id: 'Unique subscription identifier',
-      customer_id: 'Links to an account_id',
-      plan_name: 'Name of the pricing plan',
-      amount: 'Monthly or annual amount',
-      status: 'active, canceled, past_due',
+      month: 'YYYY-MM format, e.g. 2024-12',
+      cost: 'Total cost in dollars for the month',
+      provider: 'AI provider name, e.g. openai, anthropic',
+      customer_id: 'Customer this cost belongs to',
     },
   },
   usage: {
-    required: ['customer_id', 'metric_key', 'metric_value'],
-    optional: ['timestamp', 'aggregation_type'],
+    required: ['month'],
+    optional: ['customer_id', 'metric', 'value', 'limit'],
     descriptions: {
-      customer_id: 'Links to an account_id',
-      metric_key: 'e.g., api_calls, storage_gb, seats',
-      metric_value: 'Numeric value for the metric',
-      timestamp: 'When the metric was recorded',
+      month: 'YYYY-MM format, e.g. 2024-12',
+      customer_id: 'Customer this usage belongs to',
+      metric: 'Metric name, e.g. api_calls, tokens',
+      value: 'Numeric usage value',
+      limit: 'Usage limit or cap',
     },
   },
-  invoices: {
-    required: ['invoice_id', 'customer_id', 'amount'],
-    optional: ['net_amount', 'currency', 'status', 'invoice_date'],
+  revenue: {
+    required: ['customer_id', 'name'],
+    optional: ['email', 'segment', 'plan_id', 'plan_name', 'price_amount'],
     descriptions: {
-      invoice_id: 'Unique invoice identifier',
-      customer_id: 'Links to an account_id',
-      amount: 'Invoice total',
-      status: 'paid, pending, failed',
+      customer_id: 'Unique customer identifier',
+      name: 'Customer or company name',
+      email: 'Primary contact email',
+      segment: 'e.g., SMB, Mid-Market, Enterprise',
+      plan_id: 'Plan identifier',
+      plan_name: 'Display name of the plan',
+      price_amount: 'Monthly price in dollars',
     },
   },
 }
 
-const currentColumnInfo = columnInfo[props.dataType] ?? columnInfo.accounts ?? {
+const currentColumnInfo = columnInfo[props.dataType] ?? columnInfo.costs ?? {
   required: [],
   optional: [],
   descriptions: {},
 }
 
-async function handleDownloadTemplate() {
-  try {
-    const blob = await downloadTemplate(props.dataType)
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `${props.dataType}_template.csv`
-    a.click()
-    URL.revokeObjectURL(url)
-  } catch (error) {
-    console.error('Failed to download template:', error)
-  }
+const emit = defineEmits<{ downloadTemplate: [dataType: string] }>()
+
+function handleDownloadTemplate() {
+  emit('downloadTemplate', props.dataType)
 }
 </script>
 

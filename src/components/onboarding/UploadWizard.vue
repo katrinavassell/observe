@@ -19,7 +19,6 @@ import FileDropzone from '@/components/ui/file-dropzone.vue'
 import ColumnMapper from './ColumnMapper.vue'
 import ImportGuide from './ImportGuide.vue'
 import {
-  downloadTemplate,
   validateColumns,
   createProject,
   uploadFile,
@@ -30,7 +29,7 @@ const queryClient = useQueryClient()
 
 // Wizard state
 const currentStep = ref(1)
-const selectedTypes = ref<string[]>(['accounts'])
+const selectedTypes = ref<string[]>(['costs'])
 const files = ref<Record<string, File>>({})
 const validations = ref<Record<string, ColumnValidation>>({})
 const customMappings = ref<Record<string, Record<string, string>>>({})
@@ -43,65 +42,46 @@ const showQuickStart = ref(true)
 // Column mapping modal state
 const mappingTypeId = ref<string | null>(null)
 
-// Data types
+// Data types — columns match the server-side Zod schemas in routes/data.ts
 const dataTypes = [
   {
-    id: 'accounts',
-    name: 'Accounts',
-    desc: 'Customer accounts with company info',
+    id: 'costs',
+    name: 'Costs',
+    desc: 'AI provider costs by month',
     required: true,
-    columns: ['account_id', 'company_name', 'domain', 'segment', 'arr'],
+    columns: ['month', 'cost', 'provider', 'customer_id'],
+    template: `month,cost,provider,customer_id\n2024-12,3200,openai,cust_001\n2024-11,2800,anthropic,cust_001`,
     sources: [
-      { name: 'Stripe', path: 'Customers → Export' },
-      { name: 'Salesforce', path: 'Reports → Accounts' },
-      { name: 'HubSpot', path: 'Contacts → Companies → Export' },
-    ],
-  },
-  {
-    id: 'subscriptions',
-    name: 'Subscriptions',
-    desc: 'Plan and billing information (ARR/MRR)',
-    required: false,
-    columns: ['subscription_id', 'customer_id', 'plan_name', 'amount', 'status'],
-    sources: [
-      { name: 'Stripe', path: 'Subscriptions → Export' },
-      { name: 'Chargebee', path: 'Subscriptions → Export' },
-    ],
-  },
-  {
-    id: 'invoices',
-    name: 'Invoices',
-    desc: 'Payment history and invoice details',
-    required: false,
-    columns: ['invoice_id', 'customer_id', 'amount', 'status', 'invoice_date'],
-    sources: [
-      { name: 'Stripe', path: 'Invoices → Export' },
-      { name: 'QuickBooks', path: 'Reports → Sales → Invoices' },
+      { name: 'OpenAI', path: 'Settings → Billing → Usage → Export' },
+      { name: 'Anthropic', path: 'Console → Usage → Export CSV' },
     ],
   },
   {
     id: 'usage',
     name: 'Usage',
-    desc: 'API calls, storage, seats metrics',
+    desc: 'API calls, tokens, and other metrics',
     required: false,
-    columns: ['customer_id', 'metric_key', 'metric_value'],
+    columns: ['month', 'customer_id', 'metric', 'value', 'limit'],
+    template: `month,customer_id,metric,value,limit\n2024-12,cust_001,api_calls,8500,10000\n2024-12,cust_001,tokens,9500000,10000000`,
     sources: [
       { name: 'Your database', path: 'Export usage metrics per customer' },
     ],
   },
   {
-    id: 'users',
-    name: 'Users',
-    desc: 'Team members per account',
+    id: 'revenue',
+    name: 'Revenue',
+    desc: 'Customers, plans, and subscriptions',
     required: false,
-    columns: ['user_id', 'account_id', 'email', 'role'],
+    columns: ['customer_id', 'name', 'email', 'segment', 'plan_id', 'plan_name', 'price_amount'],
+    template: `customer_id,name,email,segment,plan_id,plan_name,price_amount\ncust_001,Acme Corp,billing@acme.com,Enterprise,plan_pro,Pro,99.00`,
     sources: [
-      { name: 'Your database', path: 'Export user list with account IDs' },
+      { name: 'Stripe', path: 'Customers → Export' },
+      { name: 'Chargebee', path: 'Subscriptions → Export' },
     ],
   },
 ]
 
-const canProceedStep1 = computed(() => selectedTypes.value.includes('accounts'))
+const canProceedStep1 = computed(() => selectedTypes.value.includes('costs'))
 const canProceedStep2 = computed(() => {
   return selectedTypes.value.every(type => {
     const file = files.value[type]
@@ -130,7 +110,7 @@ const allUploadsComplete = computed(() => {
 })
 
 function toggleType(typeId: string) {
-  if (typeId === 'accounts') return // Can't deselect accounts
+  if (typeId === 'costs') return // Can't deselect costs
 
   const index = selectedTypes.value.indexOf(typeId)
   if (index >= 0) {
@@ -142,18 +122,16 @@ function toggleType(typeId: string) {
   }
 }
 
-async function handleDownloadTemplate(typeId: string) {
-  try {
-    const blob = await downloadTemplate(typeId)
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `${typeId}_template.csv`
-    a.click()
-    URL.revokeObjectURL(url)
-  } catch (error) {
-    console.error('Failed to download template:', error)
-  }
+function handleDownloadTemplate(typeId: string) {
+  const dataType = dataTypes.find(d => d.id === typeId)
+  if (!dataType?.template) return
+  const blob = new Blob([dataType.template], { type: 'text/csv' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `${typeId}_template.csv`
+  a.click()
+  URL.revokeObjectURL(url)
 }
 
 async function handleFileSelect(typeId: string, file: File) {
@@ -494,7 +472,7 @@ function goToDashboard() {
 
           <!-- Import Guide (collapsible) -->
           <div class="border-t pt-4">
-            <ImportGuide :data-type="selectedTypes[0] || 'accounts'" />
+            <ImportGuide :data-type="selectedTypes[0] || 'costs'" @download-template="handleDownloadTemplate" />
           </div>
 
           <div class="flex justify-between pt-4">
