@@ -53,20 +53,7 @@ const {
 } = useDataMode()
 
 
-/** Check if data is stale and needs refresh */
-function isDataStale(): boolean {
-  if (!lastSyncAt.value) return true
-  const lastSync = new Date(lastSyncAt.value).getTime()
-  const now = Date.now()
-  return (now - lastSync) > SYNC_STALE_THRESHOLD_MS
-}
-
 /** Track file state for each section */
-const revenueFiles = ref<{ customers: boolean; subscriptions: boolean; invoices: boolean }>({
-  customers: false,
-  subscriptions: false,
-  invoices: false,
-})
 const costsFile = ref<{ name: string; isSample: boolean } | null>(null)
 const usageFile = ref<{ name: string; isSample: boolean } | null>(null)
 
@@ -178,23 +165,6 @@ async function handleTrySampleData(): Promise<void> {
 /**
  * Load sample revenue data only.
  */
-async function handleUseSampleRevenue(): Promise<void> {
-  isLoadingRevenue.value = true
-  try {
-    await loadSampleData()
-    await refetchDataMode()
-    revenueFiles.value = { customers: true, subscriptions: true, invoices: true }
-    revenueSectionRef.value?.setSampleDataLoaded()
-    toast.success('Sample revenue data loaded!')
-  } catch (error) {
-    toast.error('Failed to load sample revenue data', {
-      description: error instanceof Error ? error.message : 'Please try again.',
-    })
-  } finally {
-    isLoadingRevenue.value = false
-  }
-}
-
 /**
  * Load sample cost data only.
  */
@@ -236,23 +206,6 @@ async function handleUseSampleUsage(): Promise<void> {
 // =============================================================================
 // FILE CHANGE HANDLERS
 // =============================================================================
-
-function handleRevenueFilesChanged(): void {
-  // Revenue files updated - data is auto-saved by the component
-}
-
-async function handleRevenueFilesCleared(): Promise<void> {
-  revenueFiles.value = { customers: false, subscriptions: false, invoices: false }
-  try {
-    await clearRevenueData()
-    await refetchDataMode()
-    toast.success('Revenue data cleared')
-  } catch (error) {
-    toast.error('Failed to clear revenue data', {
-      description: error instanceof Error ? error.message : 'Please try again.',
-    })
-  }
-}
 
 async function handleCostsFileUploaded(file: { name: string; isSample: boolean }): Promise<void> {
   costsFile.value = file
@@ -648,22 +601,6 @@ await fetch('{{ ingestUrl }}', {
 
       </CardContent>
     </Card>
-
-    <!-- Revenue Section -Stripe connection (hidden in demo mode) -->
-    <RevenueSection
-           ref="revenueSectionRef"
-      :is-loading-sample="isLoadingRevenue"
-      :is-stripe-connected="isStripeConnected"
-      :stripe-account-name="stripeAccountName"
-      :is-syncing="isSyncing"
-      :readonly="isViewer"
-      @use-sample="handleUseSampleRevenue"
-      @connect-stripe="handleStripeConnect"
-      @sync-stripe="handleStripeSync"
-      @disconnect-stripe="handleStripeDisconnect"
-      @files-changed="handleRevenueFilesChanged"
-      @all-files-cleared="handleRevenueFilesCleared"
-    />
 
     <!-- SECTION: Import historic data (optional) -->
     <div v-if="true" class="relative mt-4">

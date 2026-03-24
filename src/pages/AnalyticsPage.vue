@@ -198,31 +198,29 @@ const exampleInsights = [
         <h1 class="text-2xl font-semibold tracking-tight">Analytics</h1>
         <p class="text-muted-foreground mt-1">Where your AI spend is going</p>
       </div>
-      <div class="flex gap-2">
-        <div class="relative group">
-          <Button
-            variant="outline"
-            size="sm"
-            @click="insightsOpen = true"
-          >
-            <Sparkles class="h-3.5 w-3.5 mr-1.5" />
-            {{ isDemoMode ? 'Preview AI Insights' : 'AI Insights' }}
-          </Button>
-          <div
-            v-if="!hasData"
-            class="absolute right-0 top-full mt-1 z-10 hidden group-hover:block rounded-md bg-foreground text-background px-3 py-1.5 text-xs whitespace-nowrap shadow-lg"
-          >
-            Upload data to see insights
-          </div>
-        </div>
+      <div class="flex items-center gap-2">
+        <Button
+          v-if="isDemoMode"
+          variant="ghost"
+          size="sm"
+          :disabled="isLoadingDemo"
+          @click="exitDemoMode()"
+        >
+          {{ isLoadingDemo ? 'Loading...' : 'Exit preview' }}
+        </Button>
         <Button
           variant="outline"
           size="sm"
-          :disabled="isLoadingDemo"
-          @click="isDemoMode ? exitDemoMode() : enterDemoMode()"
+          @click="insightsOpen = true"
+          class="relative"
         >
-          <FlaskConical class="h-3.5 w-3.5 mr-1.5" />
-          {{ isLoadingDemo ? 'Loading...' : isDemoMode ? 'Exit Demo' : 'Demo Data' }}
+          <Sparkles class="h-3.5 w-3.5 mr-1.5" />
+          <template v-if="isDemoMode">AI Insights</template>
+          <template v-else-if="totalEvents >= 10">AI Insights</template>
+          <template v-else>
+            AI Insights
+            <span class="ml-1.5 text-[10px] text-muted-foreground font-normal">{{ totalEvents }}/10 events</span>
+          </template>
         </Button>
       </div>
     </div>
@@ -408,14 +406,19 @@ const exampleInsights = [
       class="flex flex-col items-center justify-center py-16 text-center max-w-md mx-auto"
     >
       <Database class="h-10 w-10 text-muted-foreground/40 mb-3" />
-      <p class="text-sm font-medium mb-1">No analytics data yet</p>
+      <p class="text-sm font-medium mb-1">No data yet</p>
       <p class="text-xs text-muted-foreground mb-4">
-        Cost and margin breakdowns appear here once you have event data flowing in via the SDK, CSV upload, or provider integrations.
+        Connect your AI calls to see cost, revenue, and margin breakdowns by feature, model, and customer.
       </p>
-      <Button variant="outline" size="sm" @click="router.push('/data-sources')">
-        <Plug class="h-3.5 w-3.5 mr-1.5" />
-        Data Sources
-      </Button>
+      <div class="flex gap-3">
+        <Button size="sm" :disabled="isLoadingDemo" @click="enterDemoMode()">
+          <FlaskConical class="h-3.5 w-3.5 mr-1.5" />
+          {{ isLoadingDemo ? 'Loading...' : 'Preview with sample data' }}
+        </Button>
+        <Button variant="outline" size="sm" @click="router.push('/data-sources')">
+          Connect your data
+        </Button>
+      </div>
     </div>
 
     <!-- Data loaded -->
