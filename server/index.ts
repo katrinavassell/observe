@@ -281,12 +281,14 @@ app.post('/v1/chat/completions', async (req: Request, res: Response) => {
     }
 
     const { tansoKey, customerId, featureKey: feat, properties } = parseProxyHeaders(req)
-    const featureKey = feat || 'chat_completions'
-
-    let userId: string | null = null
-    if (tansoKey) {
-      userId = await resolveProxyUserId(tansoKey)
+    if (!tansoKey) {
+      return res.status(401).json({ error: { message: 'Missing X-Tanso-Key header', type: 'auth_error' } })
     }
+    const userId = await resolveProxyUserId(tansoKey)
+    if (!userId) {
+      return res.status(401).json({ error: { message: 'Invalid or revoked X-Tanso-Key', type: 'auth_error' } })
+    }
+    const featureKey = feat || 'chat_completions'
 
     // Forward to OpenAI
     const openaiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -327,12 +329,14 @@ app.post('/v1/embeddings', async (req: Request, res: Response) => {
     }
 
     const { tansoKey, customerId, featureKey: feat, properties } = parseProxyHeaders(req)
-    const featureKey = feat || 'embeddings'
-
-    let userId: string | null = null
-    if (tansoKey) {
-      userId = await resolveProxyUserId(tansoKey)
+    if (!tansoKey) {
+      return res.status(401).json({ error: { message: 'Missing X-Tanso-Key header', type: 'auth_error' } })
     }
+    const userId = await resolveProxyUserId(tansoKey)
+    if (!userId) {
+      return res.status(401).json({ error: { message: 'Invalid or revoked X-Tanso-Key', type: 'auth_error' } })
+    }
+    const featureKey = feat || 'embeddings'
 
     const openaiResponse = await fetch('https://api.openai.com/v1/embeddings', {
       method: 'POST',
