@@ -105,8 +105,22 @@ export async function initModelPricing(pool: Pg.Pool): Promise<void> {
     )
   `)
 
+  // Tiered pricing — volume-based discounts per user per model
   await pool.query(`
-    CREATE TABLE IF NOT EXISTS model_pricing_log (
+    CREATE TABLE IF NOT EXISTS user_model_pricing_tiers (
+      id SERIAL PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      model TEXT NOT NULL,
+      min_tokens_million NUMERIC NOT NULL DEFAULT 0,
+      input_cost_per_million NUMERIC NOT NULL,
+      output_cost_per_million NUMERIC NOT NULL DEFAULT 0,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `)
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_user_tiers_lookup ON user_model_pricing_tiers(user_id, model, min_tokens_million)`)
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS model_pricing_log (`
       id SERIAL PRIMARY KEY,
       model TEXT NOT NULL,
       provider TEXT,
@@ -297,6 +311,78 @@ export async function deleteUserModelPricing(pool: Pg.Pool, userId: string, mode
   await pool.query('DELETE FROM user_model_pricing WHERE user_id = $1 AND model = $2', [userId, model])
 }
 
+// ─── Tiered Pricing ─────────────────────────────────────────────────────────
+
+export interface PricingTier {
+  min_tokens_million: number
+  input_cost_per_million: number
+  output_cost_per_million: number
+}
+
+export async function getUserPricingTiers(pool: Pg.Pool, userId: string, model: string): Promise<PricingTier[]> {
+  const { rows } = await pool.query(
+    `SELECT min_tokens_million, input_cost_per_million, output_cost_per_million
+     FROM user_model_pricing_tiers
+     WHERE user_id = $1 AND model = $2
+     ORDER BY min_tokens_million ASC`,
+    [userId, model]
+  )
+  return rows.map(r => ({
+    min_tokens_million: parseFloat(r.min_tokens_million),
+    input_cost_per_million: parseFloat(r.input_cost_per_million),
+    output_cost_per_million: parseFloat(r.output_cost_per_million),
+  }))
+}
+
+export async function setUserPricingTiers(
+  pool: Pg.Pool, userId: string, model: string, tiers: PricingTier[],
+): Promise<void> {
+  // Replace all tiers for this user+model
+  await pool.query('DELETE FROM user_model_pricing_tiers WHERE user_id = $1 AND model = $2', [userId, model])
+  for (const tier of tiers) {
+    await pool.query(
+      `INSERT INTO user_model_pricing_tiers (user_id, model, min_tokens_million, input_cost_per_million, output_cost_per_million)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [userId, model, tier.min_tokens_million, tier.input_cost_per_million, tier.output_cost_per_million]
+    )
+  }
+  await logPricingChange(pool, model, null, 'tiered_pricing', 0, tiers.length, 'user_override', userId)
+}
+
+export async function deleteUserPricingTiers(pool: Pg.Pool, userId: string, model: string): Promise<void> {
+  await pool.query('DELETE FROM user_model_pricing_tiers WHERE user_id = $1 AND model = $2', [userId, model])
+}
+
+/**
+ * Get the monthly cumulative token usage for a user+model (current calendar month).
+ */
+async function getMonthlyTokenUsage(pool: Pg.Pool, userId: string, model: string): Promise<number> {
+  const { rows } = await pool.query(
+    `SELECT COALESCE(SUM(usage_units), 0) AS total_tokens
+     FROM observe_events
+     WHERE user_id = $1 AND model = $2
+       AND timestamp >= date_trunc('month', NOW())`,
+    [userId, model]
+  )
+  return parseFloat(rows[0].total_tokens) || 0
+}
+
+/**
+ * Given tiers and current usage, find which tier applies.
+ */
+function findApplicableTier(tiers: PricingTier[], totalTokens: number): PricingTier | null {
+  if (tiers.length === 0) return null
+  const tokenMillions = totalTokens / 1_000_000
+  // Find the highest tier where min_tokens_million <= current usage
+  let applicable: PricingTier | null = null
+  for (const tier of tiers) {
+    if (tokenMillions >= tier.min_tokens_million) {
+      applicable = tier
+    }
+  }
+  return applicable
+}
+
 // ─── Cost Calculation ───────────────────────────────────────────────────────
 
 export async function calculateCostFromTokens(
@@ -309,9 +395,25 @@ export async function calculateCostFromTokens(
   if (!model || (inputTokens == null && outputTokens == null)) return 0
 
   let pricing: ModelPrice | null = null
+
+  // Priority 1: Check tiered pricing (volume-based)
   if (userId) {
+    const tiers = await getUserPricingTiers(pool, userId, model)
+    if (tiers.length > 0) {
+      const monthlyUsage = await getMonthlyTokenUsage(pool, userId, model)
+      const tier = findApplicableTier(tiers, monthlyUsage)
+      if (tier) {
+        pricing = { model, provider: '', input_cost_per_million: tier.input_cost_per_million, output_cost_per_million: tier.output_cost_per_million }
+      }
+    }
+  }
+
+  // Priority 2: Flat user override
+  if (!pricing && userId) {
     pricing = await getUserModelPricing(pool, userId, model)
   }
+
+  // Priority 3: Global default
   if (!pricing) {
     pricing = await getModelPricing(pool, model)
   }

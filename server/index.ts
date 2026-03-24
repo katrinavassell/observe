@@ -21,7 +21,7 @@ import rateLimit from 'express-rate-limit'
 import { z } from 'zod'
 import { getUncachableStripeClient } from './stripe-client.js'
 import { apiKeyStore } from './api-key-store.js'
-import { initModelPricing, calculateCostFromTokens as calcCostFromDb, getAllPricing, getModelPricing, upsertModelPricing, getUserPricing, upsertUserModelPricing, deleteUserModelPricing, getPricingLog, refreshFromSources } from './model-pricing.js'
+import { initModelPricing, calculateCostFromTokens as calcCostFromDb, getAllPricing, getModelPricing, upsertModelPricing, getUserPricing, upsertUserModelPricing, deleteUserModelPricing, getPricingLog, refreshFromSources, getUserPricingTiers, setUserPricingTiers, deleteUserPricingTiers } from './model-pricing.js'
 import {
   tansoListPlans,
   tansoListFeatures,
@@ -1898,6 +1898,49 @@ app.delete('/pricing/my-overrides/:model', ensureVisitor, async (req: AuthReques
   } catch (error) {
     console.error('DELETE /pricing/my-overrides error:', error)
     res.status(500).json({ error: 'Failed to delete pricing override' })
+  }
+})
+
+// GET /pricing/my-tiers/:model — get tiered pricing for a model
+app.get('/pricing/my-tiers/:model', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  try {
+    const tiers = await getUserPricingTiers(pool, req.visitorId!, req.params.model)
+    res.json({ model: req.params.model, tiers })
+  } catch (error) {
+    console.error('GET /pricing/my-tiers error:', error)
+    res.status(500).json({ error: 'Failed to fetch pricing tiers' })
+  }
+})
+
+// POST /pricing/my-tiers/:model — set tiered pricing for a model
+// Body: { tiers: [{ min_tokens_million: 0, input_cost_per_million: 2.50, output_cost_per_million: 10.00 }, ...] }
+app.post('/pricing/my-tiers/:model', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  try {
+    const { tiers } = req.body
+    if (!Array.isArray(tiers) || tiers.length === 0) {
+      return res.status(400).json({ error: 'tiers array is required with at least one entry' })
+    }
+    for (const tier of tiers) {
+      if (tier.min_tokens_million == null || tier.input_cost_per_million == null) {
+        return res.status(400).json({ error: 'Each tier needs min_tokens_million and input_cost_per_million' })
+      }
+    }
+    await setUserPricingTiers(pool, req.visitorId!, req.params.model, tiers)
+    res.json({ success: true })
+  } catch (error) {
+    console.error('POST /pricing/my-tiers error:', error)
+    res.status(500).json({ error: 'Failed to set pricing tiers' })
+  }
+})
+
+// DELETE /pricing/my-tiers/:model — remove tiered pricing, revert to flat rate
+app.delete('/pricing/my-tiers/:model', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  try {
+    await deleteUserPricingTiers(pool, req.visitorId!, req.params.model)
+    res.json({ success: true })
+  } catch (error) {
+    console.error('DELETE /pricing/my-tiers error:', error)
+    res.status(500).json({ error: 'Failed to delete pricing tiers' })
   }
 })
 
