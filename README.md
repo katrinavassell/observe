@@ -229,13 +229,47 @@ All data — proxy, SDK, Stripe, CSV — lands in a single `observe_events` tabl
 
 ## Migrating from Helicone?
 
-Change your `base_url` from `https://oai.helicone.ai/v1` to your Observe instance. The `Authorization` header format is unchanged. Helicone-property headers (`helicone-property-*`) are automatically captured as event properties.
+Change your `base_url` and key. Your existing Helicone headers work unchanged:
 
-**What Observe adds:**
-- Revenue data — connect Stripe or send revenue events to get margin, not just cost
-- Feature-level P&L — tag calls with `x-tanso-feature` to see per-feature economics
-- Pricing simulations — model price changes before shipping them
-- Self-hosted — data stays in your own Postgres
+```python
+# Before (Helicone)
+client = OpenAI(
+    base_url="https://oai.helicone.ai/v1",
+    default_headers={
+        "Helicone-Auth": "Bearer sk_helicone_...",
+        "Helicone-User-Id": "user_123",
+    }
+)
+
+# After (Observe) — change URL and key, everything else stays
+client = OpenAI(
+    base_url="http://localhost:3001/v1",
+    default_headers={
+        "Helicone-Auth": "Bearer obs_...",    # your Observe SDK key
+        "Helicone-User-Id": "user_123",       # still works
+    }
+)
+```
+
+**Supported Helicone headers:**
+
+| Helicone header | Maps to |
+|---|---|
+| `Helicone-Auth` | Observe SDK key |
+| `Helicone-User-Id` | Customer ID |
+| `Helicone-Session-Id` | Feature key |
+| `Helicone-Property-*` | Event properties |
+
+**What Observe adds over Helicone:**
+
+| | Helicone | Observe |
+|---|---------|---------|
+| Cost tracking | Per-request | Per-request |
+| Revenue tracking | No | Per-feature, per-customer |
+| Margin analysis | No | Real-time P&L per feature |
+| Negative margin alerts | No | Automatic |
+| Pricing simulations | No | Model changes before shipping |
+| Self-host | Yes | Yes (`docker compose up`) |
 
 **Importing Helicone data:** export request logs as CSV, then use **Data Sources > Upload CSV** in the dashboard.
 

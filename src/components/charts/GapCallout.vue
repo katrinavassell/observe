@@ -63,9 +63,9 @@ function handleSeeMargins() {
   emit('see-margins')
 }
 
-function handleInstallTanso() {
-  toast.info('Tanso Core Installation', {
-    description: 'Contact us at kat@tansohq.com to get started with Tanso Core for per-customer cost tracking.',
+function handleDesignPartner() {
+  toast.info('Design Partner Program', {
+    description: "We're looking for SaaS companies to help shape Tanso. Email kat@tansohq.com to join.",
   })
 }
 </script>
@@ -167,10 +167,10 @@ function handleInstallTanso() {
               variant="outline"
               size="sm"
               class="border-amber-400 dark:border-amber-600 text-amber-800 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900/50"
-              @click="handleInstallTanso"
+              @click="handleDesignPartner"
             >
               <ExternalLink class="h-4 w-4 mr-1.5" />
-              Install Tanso Core
+              Become a Design Partner
             </Button>
           </div>
         </div>

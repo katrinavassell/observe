@@ -10,6 +10,7 @@
  */
 
 import { ref, watch, onMounted, onUnmounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { toast } from 'vue-sonner'
 import { TrendingUp, FlaskConical, Eye, Key, Copy, Trash2, Plus } from 'lucide-vue-next'
 import { Card, CardContent, Button } from '@/components/ui'
@@ -36,6 +37,7 @@ import {
 } from '@/lib/api'
 import type { SdkKey } from '@/lib/api'
 
+const router = useRouter()
 const { isViewer } = useTeam()
 
 const csvUpload = useEntitlement('csv_upload')
@@ -198,8 +200,9 @@ async function handleTrySampleData(): Promise<void> {
     revenueSectionRef.value?.setSampleDataLoaded()
 
     toast.success('Sample data loaded!', {
-      description: 'Go to Pricing to see the analysis.',
+      description: 'Redirecting to the analyzer...',
     })
+    setTimeout(() => router.push('/'), 1500)
   } catch (error) {
     toast.error('Failed to load sample data', {
       description: error instanceof Error ? error.message : 'Please try again.',

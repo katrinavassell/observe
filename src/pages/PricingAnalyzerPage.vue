@@ -9,7 +9,7 @@
 
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { RefreshCw, Loader2, FlaskConical } from 'lucide-vue-next'
+import { RefreshCw, Loader2, FlaskConical, Calendar } from 'lucide-vue-next'
 import {
   Card,
   CardContent,
@@ -35,6 +35,7 @@ const router = useRouter()
 
 const isLoading = ref(false)
 const analysisResult = ref<AnalysisResult | null>(null)
+const selectedMonth = ref<string | null>(null)
 const { dataMode, hasData } = useDataMode()
 const { enterDemoMode, isLoadingDemo } = useDemoMode()
 
@@ -42,11 +43,26 @@ const { enterDemoMode, isLoadingDemo } = useDemoMode()
 // COMPUTED
 // =============================================================================
 
-// Transform monthly metrics for charts
+// Available months for the month selector
+const availableMonths = computed(() => {
+  if (!analysisResult.value) return []
+  return analysisResult.value.monthlyMetrics.map(m => ({
+    value: m.month,
+    label: m.monthLabel,
+  }))
+})
+
+// Transform monthly metrics for charts (filtered by selected month)
 const monthlyMrrData = computed(() => {
   if (!analysisResult.value) return []
 
-  return analysisResult.value.monthlyMetrics.map(m => ({
+  let metrics = analysisResult.value.monthlyMetrics
+  if (selectedMonth.value) {
+    const idx = metrics.findIndex(m => m.month === selectedMonth.value)
+    if (idx >= 0) metrics = metrics.slice(0, idx + 1)
+  }
+
+  return metrics.map(m => ({
     month: m.month,
     monthLabel: m.monthLabel,
     mrr: m.mrr,
@@ -145,6 +161,24 @@ watch(dataMode, () => {
               >
                 {{ badge.label }}: {{ badge.value }}
               </Badge>
+            </div>
+
+            <!-- Month Selector -->
+            <div v-if="availableMonths.length > 0" class="flex items-center gap-1.5">
+              <Calendar class="h-4 w-4 text-muted-foreground" />
+              <select
+                :value="selectedMonth || availableMonths[availableMonths.length - 1]?.value"
+                class="h-8 rounded-md border bg-background px-2 text-sm"
+                @change="selectedMonth = ($event.target as HTMLSelectElement).value || null"
+              >
+                <option
+                  v-for="m in availableMonths"
+                  :key="m.value"
+                  :value="m.value"
+                >
+                  {{ m.label }}
+                </option>
+              </select>
             </div>
 
             <!-- Refresh -->
