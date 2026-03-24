@@ -183,8 +183,10 @@ function retry() {
 }
 
 const exampleInsights = [
-  { title: 'ai_summarization has low margin (12%)', description: 'This feature costs $0.82 but only generates $1.80. A 20% price increase would bring margin to a healthier 30%.', severity: 'warning', insight_type: 'pricing_opportunity' },
-  { title: 'dall-e-3 costs 3x more than stable-diffusion-xl', description: 'Image generation uses dall-e-3 for 75% of requests. Switching to stable-diffusion-xl for non-critical use cases could save 60%.', severity: 'info', insight_type: 'cost_optimization' },
+  { title: 'lead_enrichment is underwater (-23% margin)', description: 'This feature costs $4.12 per run but you charge $3.20. Acme Corp alone ran 1,847 enrichments last month. Switching from gpt-4o to gpt-4o-mini for initial scoring would cut cost 70% with <2% accuracy loss.', severity: 'critical', insight_type: 'margin_alert' },
+  { title: 'Enterprise accounts subsidizing SMBs', description: 'Your top 3 enterprise accounts (Stripe, Ramp, Brex) generate 72% of revenue but only 41% of AI costs. SMB accounts average -8% margin. Consider usage-based pricing for the email_personalization feature.', severity: 'warning', insight_type: 'pricing_opportunity' },
+  { title: 'gpt-4o spend up 340% month-over-month', description: 'Email personalization switched from claude-3-haiku to gpt-4o on Mar 12. Cost per email went from $0.003 to $0.018. Output quality improved but margins dropped from 62% to 31%. Consider gpt-4o-mini as a middle ground.', severity: 'warning', insight_type: 'cost_optimization' },
+  { title: 'meeting_prep has 89% margin potential', description: 'This feature runs one Claude call per meeting at $0.02 but users would pay $2+ per prep. Only 12% of accounts use it. Promoting this feature could add $18K ARR at 89% margin.', severity: 'positive', insight_type: 'pricing_opportunity' },
 ]
 </script>
 
@@ -204,7 +206,7 @@ const exampleInsights = [
             @click="insightsOpen = true"
           >
             <Sparkles class="h-3.5 w-3.5 mr-1.5" />
-            AI Insights
+            {{ isDemoMode ? 'Preview AI Insights' : 'AI Insights' }}
           </Button>
           <div
             v-if="!hasData"
@@ -223,14 +225,6 @@ const exampleInsights = [
           {{ isLoadingDemo ? 'Loading...' : isDemoMode ? 'Exit Demo' : 'Demo Data' }}
         </Button>
       </div>
-    </div>
-
-    <!-- Demo mode notice -->
-    <div v-if="isDemoMode" class="flex items-center justify-between rounded-lg bg-muted/50 border border-dashed px-4 py-2">
-      <span class="text-sm text-muted-foreground">You're viewing sample data.</span>
-      <Button variant="ghost" size="sm" :disabled="isLoadingDemo" @click="exitDemoMode">
-        {{ isLoadingDemo ? 'Loading...' : 'Exit Demo' }}
-      </Button>
     </div>
 
     <!-- AI Insights Drawer -->
@@ -259,102 +253,131 @@ const exampleInsights = [
               :style="{ width: `${Math.min(100, (insightsUsage.used / insightsUsage.limit) * 100)}%` }"
             />
           </div>
-          <div v-if="!insightsAllowed" class="flex items-center gap-2 text-xs text-muted-foreground">
-            <Zap class="h-3 w-3 text-primary" />
-            <span>Upgrade to Growth for unlimited insights</span>
-          </div>
-        </div>
-
-        <!-- Demo notice -->
-        <div v-if="isDemoMode" class="rounded-lg bg-muted/50 border border-dashed px-3 py-2 text-xs text-muted-foreground">
-          You're viewing sample data. Insights will reflect demo data.
-        </div>
-
-        <!-- Data confidence -->
-        <div class="rounded-lg border bg-muted/30 p-3 space-y-2">
-          <div class="flex items-center justify-between text-sm">
-            <span class="text-muted-foreground">Data confidence</span>
-            <span class="font-medium" :class="dataConfidence.color">{{ dataConfidence.label }}</span>
-          </div>
-          <div class="h-2 rounded-full bg-muted overflow-hidden">
-            <div
-              class="h-full rounded-full bg-primary transition-all"
-              :style="{ width: `${dataConfidence.pct}%` }"
-            />
-          </div>
-          <p class="text-[11px] text-muted-foreground">
-            {{ totalEvents }} events tracked.
-            {{ totalEvents < 50 ? 'Send more events for better insights.' : totalEvents < 200 ? 'Good start. More data means sharper recommendations.' : 'Strong dataset for reliable insights.' }}
-          </p>
-        </div>
-
-        <!-- Generate button -->
-        <Button
-          class="w-full"
-          :disabled="isGenerating || !insightsAllowed || totalEvents < 10"
-          @click="handleGenerate"
-        >
-          <Sparkles class="h-4 w-4 mr-2" />
-          {{ isGenerating ? 'Analyzing your data...' : totalEvents < 10 ? `Need ${10 - totalEvents} more events` : !insightsAllowed ? 'Limit reached' : 'Generate Insights' }}
-        </Button>
-
-        <div v-if="generateError" class="text-sm text-destructive">{{ generateError }}</div>
-
-        <!-- Insights list -->
-        <div v-if="insightsData && insightsData.length > 0" class="space-y-3">
-          <div class="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Your insights</div>
-          <div
-            v-for="insight in insightsData"
-            :key="insight.id"
-            class="rounded-lg border p-3 space-y-1.5"
-            :class="severityColor(insight.severity)"
-          >
-            <div class="flex items-center gap-2">
-              <span
-                class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium"
-                :class="severityBadge(insight.severity)"
-              >
-                {{ insight.severity }}
-              </span>
-              <span v-if="insight.feature_key" class="font-mono text-[10px] bg-muted px-1.5 py-0.5 rounded">{{ insight.feature_key }}</span>
+          <div class="text-xs text-muted-foreground">
+            <template v-if="insightsUsage.remaining > 0">
+              {{ insightsUsage.remaining }} insight{{ insightsUsage.remaining === 1 ? '' : 's' }} remaining this month
+            </template>
+            <div v-else class="flex items-center gap-2">
+              <Zap class="h-3 w-3 text-primary" />
+              <span>No insights remaining. <router-link to="/plans" class="text-primary hover:underline">Upgrade to Growth</router-link> for unlimited.</span>
             </div>
-            <div class="text-sm font-medium">{{ insight.title }}</div>
-            <div class="text-xs text-muted-foreground">{{ insight.description }}</div>
           </div>
         </div>
 
-        <!-- Empty state with examples -->
-        <div v-else-if="!isGenerating" class="space-y-3">
-          <div class="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Example insights</div>
-          <div
-            v-for="(ex, i) in exampleInsights"
-            :key="i"
-            class="rounded-lg border border-dashed p-3 space-y-1.5 opacity-60"
-          >
-            <span
-              class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium"
-              :class="severityBadge(ex.severity)"
+        <!-- DEMO MODE: hardcoded preview -->
+        <template v-if="isDemoMode">
+          <div class="rounded-lg bg-muted/50 border border-dashed px-3 py-2 text-xs text-muted-foreground">
+            Preview mode. Connect your data to generate real insights.
+          </div>
+
+          <div class="rounded-lg border bg-muted/30 p-3 space-y-2">
+            <div class="flex items-center justify-between text-sm">
+              <span class="text-muted-foreground">Data confidence</span>
+              <span class="font-medium text-success">High</span>
+            </div>
+            <div class="h-2 rounded-full bg-muted overflow-hidden">
+              <div class="h-full rounded-full bg-primary" style="width: 92%" />
+            </div>
+            <p class="text-[11px] text-muted-foreground">2,847 events tracked. Strong dataset for reliable insights.</p>
+          </div>
+
+          <div class="space-y-3">
+            <div
+              v-for="(ex, i) in exampleInsights"
+              :key="i"
+              class="rounded-lg border p-3 space-y-1.5"
+              :class="severityColor(ex.severity)"
             >
-              {{ ex.severity }}
-            </span>
-            <div class="text-sm font-medium">{{ ex.title }}</div>
-            <div class="text-xs text-muted-foreground">{{ ex.description }}</div>
+              <div class="flex items-center gap-2">
+                <span
+                  class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium"
+                  :class="severityBadge(ex.severity)"
+                >
+                  {{ ex.severity }}
+                </span>
+              </div>
+              <div class="text-sm font-medium">{{ ex.title }}</div>
+              <div class="text-xs text-muted-foreground">{{ ex.description }}</div>
+            </div>
           </div>
-          <p class="text-xs text-muted-foreground text-center">
-            These are examples. Click "Generate Insights" to analyze your actual data.
-          </p>
-        </div>
+        </template>
 
-        <!-- Loading state -->
-        <div v-if="isGenerating" class="space-y-3">
-          <div class="flex items-center gap-3 py-4">
+        <!-- REAL MODE -->
+        <template v-else>
+          <!-- Generated insights (show first when they exist) -->
+          <div v-if="insightsData && insightsData.length > 0" class="space-y-3">
+            <div
+              v-for="insight in insightsData"
+              :key="insight.id"
+              class="rounded-lg border p-3 space-y-1.5"
+              :class="severityColor(insight.severity)"
+            >
+              <div class="flex items-center gap-2">
+                <span
+                  class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium"
+                  :class="severityBadge(insight.severity)"
+                >
+                  {{ insight.severity }}
+                </span>
+                <span v-if="insight.feature_key" class="font-mono text-[10px] bg-muted px-1.5 py-0.5 rounded">{{ insight.feature_key }}</span>
+              </div>
+              <div class="text-sm font-medium">{{ insight.title }}</div>
+              <div class="text-xs text-muted-foreground">{{ insight.description }}</div>
+            </div>
+          </div>
+
+          <!-- No insights yet: show what they'll get -->
+          <div v-else-if="!isGenerating" class="space-y-3">
+            <div class="text-xs font-semibold text-muted-foreground uppercase tracking-wider">What you'll get</div>
+            <div
+              v-for="(ex, i) in exampleInsights"
+              :key="i"
+              class="rounded-lg border p-3 space-y-1.5"
+              :class="severityColor(ex.severity)"
+            >
+              <div class="flex items-center gap-2">
+                <span
+                  class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium"
+                  :class="severityBadge(ex.severity)"
+                >
+                  {{ ex.severity }}
+                </span>
+              </div>
+              <div class="text-sm font-medium">{{ ex.title }}</div>
+              <div class="text-xs text-muted-foreground">{{ ex.description }}</div>
+            </div>
+          </div>
+
+          <!-- Loading state -->
+          <div v-if="isGenerating" class="flex items-center gap-3 py-4">
             <div class="h-8 w-8 rounded-full border-2 border-primary border-t-transparent animate-spin" />
             <div>
               <div class="text-sm font-medium">Analyzing your data...</div>
               <div class="text-xs text-muted-foreground">This usually takes 5-10 seconds</div>
             </div>
           </div>
-        </div>
+
+          <!-- Generate button + progress -->
+          <div class="space-y-3 border-t pt-4">
+            <div class="flex items-center justify-between text-xs text-muted-foreground">
+              <span>{{ totalEvents }} events tracked</span>
+              <span v-if="insightsUsage">{{ insightsUsage.remaining }} of {{ insightsUsage.limit }} generations left</span>
+            </div>
+            <Button
+              class="w-full"
+              :disabled="isGenerating || !insightsAllowed || totalEvents < 10"
+              @click="handleGenerate"
+            >
+              <Sparkles class="h-4 w-4 mr-2" />
+              {{ isGenerating ? 'Analyzing...' : totalEvents < 10 ? `Send ${10 - totalEvents} more events to unlock` : !insightsAllowed ? 'Upgrade for more insights' : 'Generate Insights' }}
+            </Button>
+            <div v-if="!insightsAllowed" class="text-center">
+              <router-link to="/plans" class="text-xs text-primary hover:underline">Upgrade to Growth for unlimited</router-link>
+            </div>
+          </div>
+
+          <div v-if="generateError" class="text-sm text-destructive">{{ generateError }}</div>
+        </template>
       </div>
     </Sheet>
 
