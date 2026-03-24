@@ -66,7 +66,7 @@ function bandTotal(band: string) {
     revenue: items.reduce((s, f) => s + f.total_revenue, 0),
     cost: items.reduce((s, f) => s + f.total_cost, 0),
     events: items.reduce((s, f) => s + f.event_count, 0),
-    customers: new Set(items.flatMap(() => [])).size, // individual counts shown per row
+    customers: items.reduce((s, f) => s + (f.customer_count ?? 0), 0),
   }
 }
 

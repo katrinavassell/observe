@@ -97,12 +97,32 @@ const totalCosts = computed(() => {
   return featureData.value.reduce((s, f) => s + f.total_cost, 0)
 })
 
+const totalRevenue = computed(() => {
+  if (!featureData.value) return 0
+  return featureData.value.reduce((s, f) => s + f.total_revenue, 0)
+})
+
+const netMargin = computed(() => totalRevenue.value - totalCosts.value)
+
+const netMarginPct = computed(() => {
+  if (totalRevenue.value === 0) return null
+  return ((totalRevenue.value - totalCosts.value) / totalRevenue.value) * 100
+})
+
 const avgMargin = computed(() => {
   if (!featureData.value) return null
-  const totalRevenue = featureData.value.reduce((s, f) => s + f.total_revenue, 0)
-  const totalCost = featureData.value.reduce((s, f) => s + f.total_cost, 0)
-  if (totalRevenue === 0) return null
-  return ((totalRevenue - totalCost) / totalRevenue) * 100
+  const rev = totalRevenue.value
+  const cost = totalCosts.value
+  if (rev === 0) return null
+  return ((rev - cost) / rev) * 100
+})
+
+const negativeMarginsInfo = computed(() => {
+  if (!featureData.value) return null
+  const negative = featureData.value.filter(f => f.margin_pct !== null && f.margin_pct < 0)
+  if (negative.length === 0) return null
+  const totalLoss = negative.reduce((s, f) => s + (f.total_cost - f.total_revenue), 0)
+  return { count: negative.length, totalLoss }
 })
 
 // ---------------------------------------------------------------------------
@@ -235,8 +255,8 @@ function retry() {
     <!-- Loading state -->
     <div v-else-if="isLoading">
       <!-- Skeleton summary cards -->
-      <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
-        <Card v-for="i in 4" :key="i" class="p-6">
+      <div class="grid grid-cols-2 sm:grid-cols-5 gap-4 mb-6">
+        <Card v-for="i in 5" :key="i" class="p-6">
           <Skeleton class="h-4 w-24 mb-2" />
           <Skeleton class="h-8 w-20" />
         </Card>
@@ -254,8 +274,40 @@ function retry() {
 
     <!-- Data loaded -->
     <template v-else>
+      <!-- Negative margin alert banner -->
+      <div
+        v-if="negativeMarginsInfo"
+        class="flex items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950 px-4 py-3 mb-6"
+      >
+        <AlertTriangle class="h-5 w-5 text-amber-500 shrink-0" />
+        <span class="text-sm font-medium text-amber-800 dark:text-amber-200">
+          {{ negativeMarginsInfo.count }} feature{{ negativeMarginsInfo.count === 1 ? '' : 's' }}
+          {{ negativeMarginsInfo.count === 1 ? 'has' : 'have' }} negative margin totaling
+          {{ fmt(negativeMarginsInfo.totalLoss) }}/mo in losses
+        </span>
+      </div>
+
       <!-- 1. Summary cards -->
-      <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+      <div class="grid grid-cols-2 sm:grid-cols-5 gap-4 mb-6">
+        <Card class="p-6 ring-2" :class="netMargin >= 0 ? 'ring-green-500/30' : 'ring-red-500/30'">
+          <div class="text-sm font-medium text-muted-foreground">Net Margin</div>
+          <div
+            v-if="featureData?.length"
+            class="text-3xl font-bold tabular-nums mt-1"
+            :class="netMargin >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'"
+          >
+            {{ fmt(netMargin) }}
+          </div>
+          <div v-else class="text-3xl font-normal text-muted-foreground mt-1">&mdash;</div>
+          <div
+            v-if="netMarginPct != null"
+            class="text-sm tabular-nums mt-0.5"
+            :class="netMarginPct >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'"
+          >
+            {{ fmtPct(netMarginPct) }}
+          </div>
+        </Card>
+
         <Card class="p-6">
           <div class="text-sm font-medium text-muted-foreground">Total MRR</div>
           <div v-if="summary?.mrr != null" class="text-3xl font-semibold tabular-nums mt-1">

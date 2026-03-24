@@ -4,7 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useQuery, useQueryClient } from '@tanstack/vue-query'
 import { getFeatureDetail } from '@/lib/api'
 import { formatCurrency } from '@/lib/format'
-import { ArrowLeft, ChevronRight, AlertCircle } from 'lucide-vue-next'
+import { ArrowLeft, ChevronRight, AlertCircle, TrendingUp, TrendingDown, Minus } from 'lucide-vue-next'
 import MarginBadge from '@/components/shared/MarginBadge.vue'
 import { Bar, Line } from 'vue-chartjs'
 import {
@@ -104,6 +104,18 @@ const timeseriesOptions = {
 }
 
 
+const marginTrend = computed(() => {
+  if (!feature.value || feature.value.timeseries.length < 2) return null
+  const ts = feature.value.timeseries
+  const current = ts[ts.length - 1]
+  const previous = ts[ts.length - 2]
+  const currentMargin = current.total_revenue === 0 ? null : ((current.total_revenue - current.total_cost) / current.total_revenue) * 100
+  const previousMargin = previous.total_revenue === 0 ? null : ((previous.total_revenue - previous.total_cost) / previous.total_revenue) * 100
+  if (currentMargin === null || previousMargin === null) return null
+  const delta = currentMargin - previousMargin
+  return { delta, direction: delta > 0.5 ? 'up' : delta < -0.5 ? 'down' : 'flat' as 'up' | 'down' | 'flat' }
+})
+
 function formatDate(ts: string) {
   return new Date(ts).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })
 }
@@ -131,7 +143,20 @@ function marginForEvent(cost: number | null, revenue: number | null): number | n
           </h1>
           <p class="text-sm text-muted-foreground mt-1">Feature cost and revenue breakdown</p>
         </div>
-        <MarginBadge v-if="feature" :margin="feature.margin_pct" />
+        <div class="flex items-center gap-3">
+          <div v-if="marginTrend" class="flex items-center gap-1 text-sm font-medium">
+            <TrendingUp v-if="marginTrend.direction === 'up'" class="h-4 w-4 text-green-500" />
+            <TrendingDown v-else-if="marginTrend.direction === 'down'" class="h-4 w-4 text-red-500" />
+            <Minus v-else class="h-4 w-4 text-muted-foreground" />
+            <span
+              :class="marginTrend.direction === 'up' ? 'text-green-600 dark:text-green-400' : marginTrend.direction === 'down' ? 'text-red-600 dark:text-red-400' : 'text-muted-foreground'"
+            >
+              {{ marginTrend.delta > 0 ? '+' : '' }}{{ marginTrend.delta.toFixed(1) }}%
+            </span>
+            <span class="text-xs text-muted-foreground">vs prev month</span>
+          </div>
+          <MarginBadge v-if="feature" :margin="feature.margin_pct" />
+        </div>
       </div>
     </div>
 
