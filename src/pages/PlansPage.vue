@@ -378,6 +378,7 @@ async function handleCancelDowngrade() {
               <li class="flex items-start gap-2 text-sm"><Check class="h-4 w-4 text-success mt-0.5 shrink-0" /> Cost tracking across all models</li>
               <li class="flex items-start gap-2 text-sm"><Check class="h-4 w-4 text-success mt-0.5 shrink-0" /> SDK and proxy integration</li>
               <li class="flex items-start gap-2 text-sm"><Check class="h-4 w-4 text-success mt-0.5 shrink-0" /> CSV data import</li>
+              <li class="flex items-start gap-2 text-sm"><Check class="h-4 w-4 text-success mt-0.5 shrink-0" /> Cost alerts</li>
               <li class="flex items-start gap-2 text-sm"><Check class="h-4 w-4 text-success mt-0.5 shrink-0" /> 3 AI insights per month</li>
             </ul>
 
@@ -439,7 +440,6 @@ async function handleCancelDowngrade() {
               <li class="flex items-start gap-2 text-sm font-medium"><Zap class="h-4 w-4 text-primary mt-0.5 shrink-0" /> Unlimited AI insights</li>
               <li class="flex items-start gap-2 text-sm"><Check class="h-4 w-4 text-success mt-0.5 shrink-0" /> Everything in Free</li>
               <li class="flex items-start gap-2 text-sm"><Check class="h-4 w-4 text-success mt-0.5 shrink-0" /> Priority support</li>
-              <li class="flex items-start gap-2 text-sm"><Check class="h-4 w-4 text-success mt-0.5 shrink-0" /> Cost alerts</li>
             </ul>
 
             <button
