@@ -189,6 +189,51 @@ function parseProxyHeaders(req: Request): {
   return { tansoKey, customerId, featureKey, properties }
 }
 
+// ── Proxy Response Cache ────────────────────────────────────────────────────
+
+function parseCacheHeaders(req: Request): { cacheEnabled: boolean; ttlSeconds: number } {
+  const enabled =
+    req.headers['helicone-cache-enabled'] === 'true' ||
+    req.headers['x-tanso-cache-enabled'] === 'true'
+  const rawTtl =
+    (req.headers['helicone-cache-ttl'] as string | undefined) ||
+    (req.headers['x-tanso-cache-ttl'] as string | undefined)
+  const ttlSeconds = rawTtl ? Math.max(1, parseInt(rawTtl, 10) || 86400) : 86400
+  return { cacheEnabled: enabled, ttlSeconds }
+}
+
+function generateCacheKey(userId: string, model: string, payload: Record<string, unknown>): string {
+  const stable = JSON.stringify(payload, Object.keys(payload).sort())
+  return crypto.createHash('sha256').update(`${userId}:${model}:${stable}`).digest('hex')
+}
+
+async function lookupCache(userId: string, cacheKey: string): Promise<Record<string, unknown> | null> {
+  const result = await pool.query(
+    `SELECT response_body FROM proxy_cache
+     WHERE user_id = $1 AND cache_key = $2
+       AND (expires_at IS NULL OR expires_at > NOW())`,
+    [userId, cacheKey]
+  )
+  return result.rows[0]?.response_body ?? null
+}
+
+async function writeCache(
+  userId: string, cacheKey: string, model: string,
+  responseBody: Record<string, unknown>, ttlSeconds: number,
+  tokensSaved: number, costSaved: number,
+): Promise<void> {
+  await pool.query(
+    `INSERT INTO proxy_cache (user_id, cache_key, model, request_hash, response_body, tokens_saved, cost_saved, expires_at)
+     VALUES ($1, $2, $3, $2, $4, $5, $6, NOW() + ($7 || ' seconds')::INTERVAL)
+     ON CONFLICT (user_id, cache_key) DO UPDATE SET
+       response_body = EXCLUDED.response_body,
+       tokens_saved = proxy_cache.tokens_saved + EXCLUDED.tokens_saved,
+       cost_saved = proxy_cache.cost_saved + EXCLUDED.cost_saved,
+       expires_at = EXCLUDED.expires_at`,
+    [userId, cacheKey, model, responseBody, tokensSaved, costSaved, String(ttlSeconds)]
+  )
+}
+
 // Model pricing is now in the database (model_pricing table) — see model-pricing.ts
 
 function inferModelProvider(model: string | undefined): string | null {
@@ -275,6 +320,21 @@ app.post('/v1/chat/completions', async (req: Request, res: Response) => {
       return res.status(401).json({ error: { message: 'Invalid or revoked X-Tanso-Key', type: 'auth_error' } })
     }
     const featureKey = feat || 'chat_completions'
+    const model = req.body.model || 'unknown'
+    const { cacheEnabled, ttlSeconds } = parseCacheHeaders(req)
+    const isCacheable = cacheEnabled && !req.body.stream && !(req.body.temperature > 0)
+
+    // Cache lookup
+    if (isCacheable) {
+      const cacheKey = generateCacheKey(userId, model, { messages: req.body.messages, model, temperature: req.body.temperature ?? 0 })
+      const cached = await lookupCache(userId, cacheKey)
+      if (cached) {
+        res.set('X-Tanso-Cache', 'HIT')
+        res.status(200).json(cached)
+        logProxyEvent(userId, model, 0, 0, 0, customerId, featureKey, 'openai', { ...properties, cache_hit: 'true' }).catch(() => {})
+        return
+      }
+    }
 
     // Forward to OpenAI
     const openaiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -287,18 +347,25 @@ app.post('/v1/chat/completions', async (req: Request, res: Response) => {
     })
 
     const data = await openaiResponse.json() as Record<string, unknown>
+    if (isCacheable) res.set('X-Tanso-Cache', 'MISS')
     res.status(openaiResponse.status).json(data)
 
-    // Log the event asynchronously (don't block the response)
+    // Log + cache write asynchronously
     if (userId && openaiResponse.ok && data.usage) {
       const usage = data.usage as { prompt_tokens?: number; completion_tokens?: number }
-      const model = (data.model as string) || req.body.model || 'unknown'
+      const respModel = (data.model as string) || model
       const inputTokens = usage.prompt_tokens || 0
       const outputTokens = usage.completion_tokens || 0
-      const cost = await calculateCost(model, inputTokens, outputTokens)
-      logProxyEvent(userId, model, inputTokens, outputTokens, cost, customerId, featureKey, 'openai', properties).catch(err =>
+      const cost = await calculateCost(respModel, inputTokens, outputTokens)
+      logProxyEvent(userId, respModel, inputTokens, outputTokens, cost, customerId, featureKey, 'openai', properties).catch(err =>
         console.error('Proxy event logging failed:', err)
       )
+      if (isCacheable) {
+        const cacheKey = generateCacheKey(userId, model, { messages: req.body.messages, model, temperature: req.body.temperature ?? 0 })
+        writeCache(userId, cacheKey, respModel, data, ttlSeconds, inputTokens + outputTokens, cost).catch(err =>
+          console.error('Cache write failed:', err)
+        )
+      }
     }
   } catch (error) {
     console.error('POST /v1/chat/completions proxy error:', error)
@@ -323,6 +390,21 @@ app.post('/v1/embeddings', async (req: Request, res: Response) => {
       return res.status(401).json({ error: { message: 'Invalid or revoked X-Tanso-Key', type: 'auth_error' } })
     }
     const featureKey = feat || 'embeddings'
+    const model = req.body.model || 'unknown'
+    const { cacheEnabled, ttlSeconds } = parseCacheHeaders(req)
+    const isCacheable = cacheEnabled && !req.body.stream
+
+    // Cache lookup (embeddings are always deterministic)
+    if (isCacheable) {
+      const cacheKey = generateCacheKey(userId, model, { input: req.body.input, model })
+      const cached = await lookupCache(userId, cacheKey)
+      if (cached) {
+        res.set('X-Tanso-Cache', 'HIT')
+        res.status(200).json(cached)
+        logProxyEvent(userId, model, 0, 0, 0, customerId, featureKey, 'openai', { ...properties, cache_hit: 'true' }).catch(() => {})
+        return
+      }
+    }
 
     const openaiResponse = await fetch('https://api.openai.com/v1/embeddings', {
       method: 'POST',
@@ -334,17 +416,24 @@ app.post('/v1/embeddings', async (req: Request, res: Response) => {
     })
 
     const data = await openaiResponse.json() as Record<string, unknown>
+    if (isCacheable) res.set('X-Tanso-Cache', 'MISS')
     res.status(openaiResponse.status).json(data)
 
-    // Log — embeddings only have input tokens
+    // Log + cache write
     if (userId && openaiResponse.ok && data.usage) {
       const usage = data.usage as { prompt_tokens?: number; total_tokens?: number }
-      const model = (data.model as string) || req.body.model || 'unknown'
+      const respModel = (data.model as string) || model
       const inputTokens = usage.prompt_tokens || usage.total_tokens || 0
-      const cost = await calculateCost(model, inputTokens, 0)
-      logProxyEvent(userId, model, inputTokens, 0, cost, customerId, featureKey, 'openai', properties).catch(err =>
+      const cost = await calculateCost(respModel, inputTokens, 0)
+      logProxyEvent(userId, respModel, inputTokens, 0, cost, customerId, featureKey, 'openai', properties).catch(err =>
         console.error('Proxy event logging failed:', err)
       )
+      if (isCacheable) {
+        const cacheKey = generateCacheKey(userId, model, { input: req.body.input, model })
+        writeCache(userId, cacheKey, respModel, data, ttlSeconds, inputTokens, cost).catch(err =>
+          console.error('Cache write failed:', err)
+        )
+      }
     }
   } catch (error) {
     console.error('POST /v1/embeddings proxy error:', error)
@@ -368,10 +457,27 @@ app.post('/v1/messages', async (req: Request, res: Response) => {
 
     const { tansoKey, customerId, featureKey: feat, properties } = parseProxyHeaders(req)
     const featureKey = feat || 'messages'
+    const model = req.body.model || 'unknown'
 
     let userId: string | null = null
     if (tansoKey) {
       userId = await resolveProxyUserId(tansoKey)
+    }
+
+    const { cacheEnabled, ttlSeconds } = parseCacheHeaders(req)
+    // Anthropic defaults temperature to 1 when omitted — only cache explicit temperature: 0
+    const isCacheable = cacheEnabled && !req.body.stream && userId && req.body.temperature === 0
+
+    // Cache lookup
+    if (isCacheable && userId) {
+      const cacheKey = generateCacheKey(userId, model, { messages: req.body.messages, system: req.body.system ?? null, model })
+      const cached = await lookupCache(userId, cacheKey)
+      if (cached) {
+        res.set('X-Tanso-Cache', 'HIT')
+        res.status(200).json(cached)
+        logProxyEvent(userId, model, 0, 0, 0, customerId, featureKey, 'anthropic', { ...properties, cache_hit: 'true' }).catch(() => {})
+        return
+      }
     }
 
     // Forward to Anthropic
@@ -386,22 +492,68 @@ app.post('/v1/messages', async (req: Request, res: Response) => {
     })
 
     const data = await anthropicResponse.json() as Record<string, unknown>
+    if (isCacheable) res.set('X-Tanso-Cache', 'MISS')
     res.status(anthropicResponse.status).json(data)
 
-    // Log asynchronously
+    // Log + cache write
     if (userId && anthropicResponse.ok && data.usage) {
       const usage = data.usage as { input_tokens?: number; output_tokens?: number }
-      const model = (data.model as string) || req.body.model || 'unknown'
+      const respModel = (data.model as string) || model
       const inputTokens = usage.input_tokens || 0
       const outputTokens = usage.output_tokens || 0
-      const cost = await calculateAnthropicCost(model, inputTokens, outputTokens)
-      logProxyEvent(userId, model, inputTokens, outputTokens, cost, customerId, featureKey, 'anthropic', properties).catch(err =>
+      const cost = await calculateAnthropicCost(respModel, inputTokens, outputTokens)
+      logProxyEvent(userId, respModel, inputTokens, outputTokens, cost, customerId, featureKey, 'anthropic', properties).catch(err =>
         console.error('Anthropic proxy event logging failed:', err)
       )
+      if (isCacheable) {
+        const cacheKey = generateCacheKey(userId, model, { messages: req.body.messages, system: req.body.system ?? null, model })
+        writeCache(userId, cacheKey, respModel, data, ttlSeconds, inputTokens + outputTokens, cost).catch(err =>
+          console.error('Cache write failed:', err)
+        )
+      }
     }
   } catch (error) {
     console.error('POST /v1/messages proxy error:', error)
     res.status(502).json({ error: { message: 'Failed to reach Anthropic', type: 'proxy_error' } })
+  }
+})
+
+// GET /proxy/cache/stats — cache performance metrics for current user
+app.get('/proxy/cache/stats', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  try {
+    const [cacheRows, hitRows, totalRows] = await Promise.all([
+      pool.query(
+        `SELECT COUNT(*) FILTER (WHERE expires_at IS NULL OR expires_at > NOW()) AS total_cached,
+                COALESCE(SUM(tokens_saved), 0) AS tokens_saved,
+                COALESCE(SUM(cost_saved), 0) AS cost_saved
+         FROM proxy_cache WHERE user_id = $1`,
+        [req.visitorId]
+      ),
+      pool.query(
+        `SELECT COUNT(*) AS hit_count FROM observe_events
+         WHERE user_id = $1 AND source = 'proxy' AND properties->>'cache_hit' = 'true'`,
+        [req.visitorId]
+      ),
+      pool.query(
+        `SELECT COUNT(*) AS total FROM observe_events WHERE user_id = $1 AND source = 'proxy'`,
+        [req.visitorId]
+      ),
+    ])
+
+    const hitCount = parseInt(hitRows.rows[0].hit_count) || 0
+    const totalCount = parseInt(totalRows.rows[0].total) || 0
+
+    res.json({
+      total_cached_entries: parseInt(cacheRows.rows[0].total_cached) || 0,
+      tokens_saved: parseInt(cacheRows.rows[0].tokens_saved) || 0,
+      cost_saved: parseFloat(cacheRows.rows[0].cost_saved) || 0,
+      total_proxy_requests: totalCount,
+      cache_hits: hitCount,
+      miss_rate_percent: totalCount === 0 ? 0 : parseFloat(((totalCount - hitCount) / totalCount * 100).toFixed(1)),
+    })
+  } catch (error) {
+    console.error('GET /proxy/cache/stats error:', error)
+    res.status(500).json({ error: 'Failed to fetch cache stats' })
   }
 })
 

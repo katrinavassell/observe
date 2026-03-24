@@ -979,3 +979,18 @@ export async function updateAlertRule(id: number, updates: Partial<Pick<AlertRul
 export async function deleteAlertRule(id: number): Promise<{ success: boolean }> {
   return request(`/alerts/${id}`, { method: 'DELETE' })
 }
+
+// ── Proxy Cache ───────────────────────────────────────────────────────────────
+
+export interface CacheStats {
+  total_cached_entries: number
+  tokens_saved: number
+  cost_saved: number
+  total_proxy_requests: number
+  cache_hits: number
+  miss_rate_percent: number
+}
+
+export async function fetchCacheStats(): Promise<CacheStats> {
+  return request('/proxy/cache/stats')
+}
