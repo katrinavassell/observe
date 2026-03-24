@@ -30,7 +30,6 @@ async function clearSampleData(db: { query: (text: string, params: unknown[]) =>
     `DELETE FROM plans WHERE user_id = $1 AND plan_id = ANY($2)`,
     [userId, SAMPLE_PLAN_IDS]
   )
-  await db.query("DELETE FROM simulations WHERE user_id = $1 AND name LIKE '%Sample%'", [userId])
 }
 
 // Upload validation schemas

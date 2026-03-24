@@ -182,11 +182,11 @@ function retry() {
   queryClient.invalidateQueries({ queryKey: ['events-by-customer'] })
 }
 
-const exampleInsights = [
-  { title: 'lead_enrichment is underwater (-23% margin)', description: 'This feature costs $4.12 per run but you charge $3.20. Acme Corp alone ran 1,847 enrichments last month. Switching from gpt-4o to gpt-4o-mini for initial scoring would cut cost 70% with <2% accuracy loss.', severity: 'critical', insight_type: 'margin_alert' },
-  { title: 'Enterprise accounts subsidizing SMBs', description: 'Your top 3 enterprise accounts (Stripe, Ramp, Brex) generate 72% of revenue but only 41% of AI costs. SMB accounts average -8% margin. Consider usage-based pricing for the email_personalization feature.', severity: 'warning', insight_type: 'pricing_opportunity' },
-  { title: 'gpt-4o spend up 340% month-over-month', description: 'Email personalization switched from claude-3-haiku to gpt-4o on Mar 12. Cost per email went from $0.003 to $0.018. Output quality improved but margins dropped from 62% to 31%. Consider gpt-4o-mini as a middle ground.', severity: 'warning', insight_type: 'cost_optimization' },
-  { title: 'meeting_prep has 89% margin potential', description: 'This feature runs one Claude call per meeting at $0.02 but users would pay $2+ per prep. Only 12% of accounts use it. Promoting this feature could add $18K ARR at 89% margin.', severity: 'positive', insight_type: 'pricing_opportunity' },
+const insightCategories = [
+  { title: 'Margin analysis', description: 'Which features cost more than they earn, and by how much.' },
+  { title: 'Model cost comparison', description: 'Which AI models you spend the most on and cheaper alternatives.' },
+  { title: 'Customer profitability', description: 'Which customers cost the most to serve relative to their revenue.' },
+  { title: 'Spend trends', description: 'How your AI costs are changing over time across features and models.' },
 ]
 </script>
 
@@ -273,23 +273,17 @@ const exampleInsights = [
             <p class="text-[11px] text-muted-foreground">2,847 events tracked. Strong dataset for reliable insights.</p>
           </div>
 
-          <div class="space-y-3">
+          <div class="space-y-2">
+            <div class="text-xs font-semibold text-muted-foreground uppercase tracking-wider">What you'll see</div>
             <div
-              v-for="(ex, i) in exampleInsights"
+              v-for="(cat, i) in insightCategories"
               :key="i"
-              class="rounded-lg border p-3 space-y-1.5"
-              :class="severityColor(ex.severity)"
+              class="flex gap-3 rounded-lg border p-3"
             >
-              <div class="flex items-center gap-2">
-                <span
-                  class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium"
-                  :class="severityBadge(ex.severity)"
-                >
-                  {{ ex.severity }}
-                </span>
+              <div class="min-w-0">
+                <div class="text-sm font-medium">{{ cat.title }}</div>
+                <div class="text-xs text-muted-foreground">{{ cat.description }}</div>
               </div>
-              <div class="text-sm font-medium">{{ ex.title }}</div>
-              <div class="text-xs text-muted-foreground">{{ ex.description }}</div>
             </div>
           </div>
         </template>
@@ -318,25 +312,18 @@ const exampleInsights = [
             </div>
           </div>
 
-          <!-- No insights yet: show what they'll get -->
-          <div v-else-if="!isGenerating" class="space-y-3">
+          <!-- No insights yet: show categories -->
+          <div v-else-if="!isGenerating" class="space-y-2">
             <div class="text-xs font-semibold text-muted-foreground uppercase tracking-wider">What you'll get</div>
             <div
-              v-for="(ex, i) in exampleInsights"
+              v-for="(cat, i) in insightCategories"
               :key="i"
-              class="rounded-lg border p-3 space-y-1.5"
-              :class="severityColor(ex.severity)"
+              class="flex gap-3 rounded-lg border p-3"
             >
-              <div class="flex items-center gap-2">
-                <span
-                  class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium"
-                  :class="severityBadge(ex.severity)"
-                >
-                  {{ ex.severity }}
-                </span>
+              <div class="min-w-0">
+                <div class="text-sm font-medium">{{ cat.title }}</div>
+                <div class="text-xs text-muted-foreground">{{ cat.description }}</div>
               </div>
-              <div class="text-sm font-medium">{{ ex.title }}</div>
-              <div class="text-xs text-muted-foreground">{{ ex.description }}</div>
             </div>
           </div>
 

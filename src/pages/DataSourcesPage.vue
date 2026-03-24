@@ -24,7 +24,6 @@ import { useTeam } from '@/composables/useTeam'
 import { useEntitlement } from '@/composables/useEntitlement'
 import {
   loadSampleData,
-  clearRevenueData,
   clearCostData,
   clearUsageData,
   createSdkKey,
@@ -59,7 +58,6 @@ const usageFile = ref<{ name: string; isSample: boolean } | null>(null)
 
 /** Loading states for sample data */
 const isLoadingSample = ref(false)
-const isLoadingRevenue = ref(false)
 const isLoadingCosts = ref(false)
 const isLoadingUsage = ref(false)
 
@@ -246,11 +244,8 @@ async function handleUsageFileCleared(): Promise<void> {
 // Restore file display state when returning to page with existing data
 watch(
   [hasRevenue, hasCosts, hasUsage, () => dataMode.value],
-  ([hasRev, hasCst, hasUsg, mode]) => {
+  ([_hasRev, hasCst, hasUsg, mode]) => {
     if (mode === 'sample') {
-      if (hasRev) {
-        revenueFiles.value = { customers: true, subscriptions: true, invoices: true }
-      }
       if (hasCst && !costsFile.value) {
         costsFile.value = { name: 'sample-costs.csv', isSample: true }
       }
@@ -258,9 +253,6 @@ watch(
         usageFile.value = { name: 'sample-usage.csv', isSample: true }
       }
     } else if (mode === 'user') {
-      if (hasRev) {
-        revenueFiles.value = { customers: false, subscriptions: true, invoices: false }
-      }
       if (hasCst && !costsFile.value) {
         costsFile.value = { name: 'costs.csv', isSample: false }
       }
