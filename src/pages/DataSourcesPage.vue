@@ -34,6 +34,8 @@ import {
   createSdkKey,
   listSdkKeys,
   revokeSdkKey,
+  getStripeStatus,
+  syncStripeData,
 } from '@/lib/api'
 import type { SdkKey } from '@/lib/api'
 
@@ -159,7 +161,6 @@ function dismissGeneratedKey() {
 
 onMounted(async () => {
   try {
-    const { getStripeStatus } = await import('@/lib/api')
     const status = await getStripeStatus()
     isStripeConnected.value = status.connected
     stripeAccountName.value = status.account_name || ''
@@ -354,7 +355,6 @@ async function handleStripeSync(): Promise<void> {
 
   isSyncing.value = true
   try {
-    const { syncStripeData } = await import('@/lib/api')
     const result = await syncStripeData()
 
     if (result.success) {
