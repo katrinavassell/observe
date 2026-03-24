@@ -23,7 +23,6 @@ import { useDataMode } from '@/composables/useDataMode'
 import { useTeam } from '@/composables/useTeam'
 import { useEntitlement } from '@/composables/useEntitlement'
 import {
-  loadSampleData,
   clearCostData,
   clearUsageData,
   createSdkKey,
@@ -48,7 +47,6 @@ const {
   hasCosts,
   hasUsage,
   lastSyncAt,
-  switchToSampleData,
 } = useDataMode()
 
 
@@ -57,9 +55,6 @@ const costsFile = ref<{ name: string; isSample: boolean } | null>(null)
 const usageFile = ref<{ name: string; isSample: boolean } | null>(null)
 
 /** Loading states for sample data */
-const isLoadingSample = ref(false)
-const isLoadingCosts = ref(false)
-const isLoadingUsage = ref(false)
 
 
 const ingestUrl = typeof window !== 'undefined' ? `${window.location.origin}/api/events/ingest` : '/api/events/ingest'
@@ -128,74 +123,7 @@ onMounted(async () => {
   await loadSdkKeys()
 })
 
-// =============================================================================
-// SAMPLE DATA HANDLERS
-// =============================================================================
 
-/**
- * Load all sample data at once.
- * This is the primary CTA for trying the product.
- */
-async function handleTrySampleData(): Promise<void> {
-  isLoadingSample.value = true
-  try {
-    await switchToSampleData()
-    await refetchDataMode()
-
-    // Update file indicators
-    costsFile.value = { name: 'sample-costs.csv', isSample: true }
-    usageFile.value = { name: 'sample-usage.csv', isSample: true }
-
-    toast.success('Sample data loaded!', {
-      description: 'Redirecting to the analyzer...',
-    })
-    setTimeout(() => router.push('/'), 1500)
-  } catch (error) {
-    toast.error('Failed to load sample data', {
-      description: error instanceof Error ? error.message : 'Please try again.',
-    })
-  } finally {
-    isLoadingSample.value = false
-  }
-}
-
-/**
- * Load sample cost data only.
- */
-async function handleUseSampleCosts(): Promise<void> {
-  isLoadingCosts.value = true
-  try {
-    await loadSampleData()
-    await refetchDataMode()
-    costsFile.value = { name: 'sample-costs.csv', isSample: true }
-    toast.success('Sample costs data loaded!')
-  } catch (error) {
-    toast.error('Failed to load sample costs data', {
-      description: error instanceof Error ? error.message : 'Please try again.',
-    })
-  } finally {
-    isLoadingCosts.value = false
-  }
-}
-
-/**
- * Load sample usage data only.
- */
-async function handleUseSampleUsage(): Promise<void> {
-  isLoadingUsage.value = true
-  try {
-    await loadSampleData()
-    await refetchDataMode()
-    usageFile.value = { name: 'sample-usage.csv', isSample: true }
-    toast.success('Sample usage data loaded!')
-  } catch (error) {
-    toast.error('Failed to load sample usage data', {
-      description: error instanceof Error ? error.message : 'Please try again.',
-    })
-  } finally {
-    isLoadingUsage.value = false
-  }
-}
 
 // =============================================================================
 // FILE CHANGE HANDLERS
@@ -608,11 +536,9 @@ await fetch('{{ ingestUrl }}', {
     <!-- AI Cost CSVs + Provider Connections (hidden in demo mode) -->
     <CostsSection
            :file="costsFile"
-      :is-loading-sample="isLoadingCosts"
       :readonly="isViewer"
       @file-uploaded="handleCostsFileUploaded"
       @file-cleared="handleCostsFileCleared"
-      @use-sample="handleUseSampleCosts"
     />
 
     <UsageLimitBanner
@@ -629,11 +555,9 @@ await fetch('{{ ingestUrl }}', {
     <!-- Usage Section (hidden in demo mode) -->
     <UsageSection
            :file="usageFile"
-      :is-loading-sample="isLoadingUsage"
       :readonly="isViewer"
       @file-uploaded="handleUsageFileUploaded"
       @file-cleared="handleUsageFileCleared"
-      @use-sample="handleUseSampleUsage"
     />
 
   </div>

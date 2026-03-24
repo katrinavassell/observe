@@ -65,7 +65,6 @@ const SOURCES = [
   { value: 'stripe', label: 'Stripe Sync' },
   { value: 'openai', label: 'OpenAI' },
   { value: 'anthropic', label: 'Anthropic' },
-  { value: 'sample', label: 'Sample Data' },
 ]
 
 const query = computed(() => ({
