@@ -1,0 +1,20 @@
+{
+  "name": "@tanso/observe",
+  "version": "0.1.0",
+  "description": "Zero-latency AI cost observability SDK",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": { "import": "./dist/index.js", "types": "./dist/index.d.ts" },
+    "./openai": { "import": "./dist/wrappers/openai.js", "types": "./dist/wrappers/openai.d.ts" },
+    "./anthropic": { "import": "./dist/wrappers/anthropic.js", "types": "./dist/wrappers/anthropic.d.ts" }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build"
+  },
+  "engines": { "node": ">=18.0.0" },
+  "license": "Apache-2.0"
+}
