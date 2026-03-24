@@ -56,7 +56,7 @@ const SEED_PRICING: ModelPrice[] = [
 ]
 
 /**
- * Create the model_pricing table and seed it if empty.
+ * Create the model_pricing and user_model_pricing tables and seed defaults if empty.
  */
 export async function initModelPricing(pool: Pg.Pool): Promise<void> {
   await pool.query(`
@@ -67,6 +67,18 @@ export async function initModelPricing(pool: Pg.Pool): Promise<void> {
       output_cost_per_million NUMERIC NOT NULL DEFAULT 0,
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       PRIMARY KEY (model)
+    )
+  `)
+
+  // User-level overrides — customer negotiated rates take precedence over defaults
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS user_model_pricing (
+      user_id TEXT NOT NULL,
+      model TEXT NOT NULL,
+      input_cost_per_million NUMERIC NOT NULL,
+      output_cost_per_million NUMERIC NOT NULL DEFAULT 0,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (user_id, model)
     )
   `)
 
@@ -119,17 +131,98 @@ export async function getModelPricing(pool: Pg.Pool, model: string): Promise<Mod
 }
 
 /**
- * Calculate cost from model + token counts. Returns 0 if model is unknown.
+ * Get user-specific pricing override for a model. Returns null if no override set.
+ */
+export async function getUserModelPricing(pool: Pg.Pool, userId: string, model: string): Promise<ModelPrice | null> {
+  const { rows } = await pool.query(
+    `SELECT ump.model, mp.provider, ump.input_cost_per_million, ump.output_cost_per_million
+     FROM user_model_pricing ump
+     LEFT JOIN model_pricing mp ON mp.model = ump.model
+     WHERE ump.user_id = $1 AND ump.model = $2`,
+    [userId, model]
+  )
+  if (rows.length === 0) return null
+  return {
+    model: rows[0].model,
+    provider: rows[0].provider || 'unknown',
+    input_cost_per_million: parseFloat(rows[0].input_cost_per_million),
+    output_cost_per_million: parseFloat(rows[0].output_cost_per_million),
+  }
+}
+
+/**
+ * Get all pricing for a user — user overrides merged on top of global defaults.
+ */
+export async function getUserPricing(pool: Pg.Pool, userId: string): Promise<ModelPrice[]> {
+  const defaults = await getAllPricing(pool)
+  const { rows } = await pool.query(
+    'SELECT model, input_cost_per_million, output_cost_per_million FROM user_model_pricing WHERE user_id = $1',
+    [userId]
+  )
+  const overrides = new Map(rows.map((r: any) => [r.model, {
+    input_cost_per_million: parseFloat(r.input_cost_per_million),
+    output_cost_per_million: parseFloat(r.output_cost_per_million),
+  }]))
+
+  return defaults.map(d => {
+    const override = overrides.get(d.model)
+    if (override) return { ...d, ...override }
+    return d
+  })
+}
+
+/**
+ * Set a user-level pricing override for a model.
+ */
+export async function upsertUserModelPricing(
+  pool: Pg.Pool,
+  userId: string,
+  model: string,
+  inputCost: number,
+  outputCost: number,
+): Promise<void> {
+  await pool.query(
+    `INSERT INTO user_model_pricing (user_id, model, input_cost_per_million, output_cost_per_million, updated_at)
+     VALUES ($1, $2, $3, $4, NOW())
+     ON CONFLICT (user_id, model) DO UPDATE SET
+       input_cost_per_million = $3,
+       output_cost_per_million = $4,
+       updated_at = NOW()`,
+    [userId, model, inputCost, outputCost]
+  )
+}
+
+/**
+ * Delete a user-level pricing override (revert to global default).
+ */
+export async function deleteUserModelPricing(pool: Pg.Pool, userId: string, model: string): Promise<void> {
+  await pool.query('DELETE FROM user_model_pricing WHERE user_id = $1 AND model = $2', [userId, model])
+}
+
+/**
+ * Calculate cost from model + token counts. Checks user override first, then global default.
+ * Returns 0 if model is unknown.
  */
 export async function calculateCostFromTokens(
   pool: Pg.Pool,
   model: string | undefined,
   inputTokens: number | undefined,
   outputTokens: number | undefined,
+  userId?: string,
 ): Promise<number> {
   if (!model || (inputTokens == null && outputTokens == null)) return 0
-  const pricing = await getModelPricing(pool, model)
+
+  // Check user override first
+  let pricing: ModelPrice | null = null
+  if (userId) {
+    pricing = await getUserModelPricing(pool, userId, model)
+  }
+  // Fall back to global default
+  if (!pricing) {
+    pricing = await getModelPricing(pool, model)
+  }
   if (!pricing) return 0
+
   const inputCost = (inputTokens || 0) * pricing.input_cost_per_million / 1_000_000
   const outputCost = (outputTokens || 0) * pricing.output_cost_per_million / 1_000_000
   return Math.round((inputCost + outputCost) * 1_000_000) / 1_000_000

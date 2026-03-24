@@ -21,7 +21,7 @@ import rateLimit from 'express-rate-limit'
 import { z } from 'zod'
 import { getUncachableStripeClient } from './stripe-client.js'
 import { apiKeyStore } from './api-key-store.js'
-import { initModelPricing, calculateCostFromTokens as calcCostFromDb, getAllPricing, getModelPricing, upsertModelPricing } from './model-pricing.js'
+import { initModelPricing, calculateCostFromTokens as calcCostFromDb, getAllPricing, getModelPricing, upsertModelPricing, getUserPricing, upsertUserModelPricing, deleteUserModelPricing } from './model-pricing.js'
 import {
   tansoListPlans,
   tansoListFeatures,
@@ -1585,6 +1585,17 @@ async function ensureDbInitialized() {
 // MODEL PRICING API
 // =============================================================================
 
+const ADMIN_EMAILS = ['tansoadmin@tansohq.com']
+
+function isAdminUser(req: AuthRequest): boolean {
+  return !!req.accountEmail && ADMIN_EMAILS.includes(req.accountEmail.toLowerCase())
+}
+
+// GET /admin/status — check if current user is admin
+app.get('/admin/status', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  res.json({ isAdmin: isAdminUser(req) })
+})
+
 // GET /pricing/models — public endpoint, returns all current model pricing
 app.get('/pricing/models', async (_req, res: Response) => {
   try {
@@ -1596,9 +1607,12 @@ app.get('/pricing/models', async (_req, res: Response) => {
   }
 })
 
-// POST /pricing/models — admin endpoint, upsert model pricing
+// POST /pricing/models — admin-only endpoint, upsert global model pricing
 app.post('/pricing/models', ensureVisitor, async (req: AuthRequest, res: Response) => {
   try {
+    if (!isAdminUser(req)) {
+      return res.status(403).json({ error: 'Admin access required' })
+    }
     const { model, provider, input_cost_per_million, output_cost_per_million } = req.body
     if (!model || !provider || input_cost_per_million == null) {
       return res.status(400).json({ error: 'model, provider, and input_cost_per_million are required' })
@@ -1613,6 +1627,47 @@ app.post('/pricing/models', ensureVisitor, async (req: AuthRequest, res: Respons
   } catch (error) {
     console.error('POST /pricing/models error:', error)
     res.status(500).json({ error: 'Failed to update model pricing' })
+  }
+})
+
+// GET /pricing/my-overrides — get user's custom pricing overrides merged with defaults
+app.get('/pricing/my-overrides', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  try {
+    const pricing = await getUserPricing(pool, req.visitorId!)
+    res.json({ models: pricing })
+  } catch (error) {
+    console.error('GET /pricing/my-overrides error:', error)
+    res.status(500).json({ error: 'Failed to fetch pricing overrides' })
+  }
+})
+
+// POST /pricing/my-overrides — set a user-level pricing override for a model
+app.post('/pricing/my-overrides', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  try {
+    const { model, input_cost_per_million, output_cost_per_million } = req.body
+    if (!model || input_cost_per_million == null) {
+      return res.status(400).json({ error: 'model and input_cost_per_million are required' })
+    }
+    await upsertUserModelPricing(
+      pool, req.visitorId!, model,
+      parseFloat(input_cost_per_million),
+      parseFloat(output_cost_per_million || 0),
+    )
+    res.json({ success: true })
+  } catch (error) {
+    console.error('POST /pricing/my-overrides error:', error)
+    res.status(500).json({ error: 'Failed to update pricing override' })
+  }
+})
+
+// DELETE /pricing/my-overrides/:model — revert to global default for a model
+app.delete('/pricing/my-overrides/:model', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  try {
+    await deleteUserModelPricing(pool, req.visitorId!, req.params.model)
+    res.json({ success: true })
+  } catch (error) {
+    console.error('DELETE /pricing/my-overrides error:', error)
+    res.status(500).json({ error: 'Failed to delete pricing override' })
   }
 })
 
