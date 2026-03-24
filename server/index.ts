@@ -234,6 +234,26 @@ async function writeCache(
   )
 }
 
+// Clear sample/demo data when transitioning to real user data
+// Uses exact sample IDs to avoid deleting real Stripe data (sub_*, cus_* prefixes match real Stripe IDs)
+async function clearSampleData(db: { query: (text: string, params: unknown[]) => Promise<unknown> }, userId: string): Promise<void> {
+  await db.query("DELETE FROM observe_events WHERE user_id = $1 AND source = 'sample'", [userId])
+  await db.query("DELETE FROM cost_records WHERE user_id = $1 AND cost_type = 'ai_inference' AND customer_id IS NULL AND period_start IS NOT NULL", [userId])
+  await db.query(
+    "DELETE FROM subscriptions WHERE user_id = $1 AND subscription_id IN ('sub_001','sub_002','sub_003','sub_004','sub_005')",
+    [userId]
+  )
+  await db.query(
+    "DELETE FROM customers WHERE user_id = $1 AND customer_id IN ('cus_001','cus_002','cus_003','cus_004','cus_005')",
+    [userId]
+  )
+  await db.query(
+    "DELETE FROM plans WHERE user_id = $1 AND plan_id IN ('starter', 'pro', 'enterprise')",
+    [userId]
+  )
+  await db.query("DELETE FROM simulations WHERE user_id = $1 AND name LIKE '%Sample%'", [userId])
+}
+
 // Model pricing is now in the database (model_pricing table) — see model-pricing.ts
 
 function inferModelProvider(model: string | undefined): string | null {
@@ -259,7 +279,7 @@ async function resolveProxyUserId(tansoKey: string): Promise<string | null> {
     [keyHash]
   )
   if (result.rows.length === 0) return null
-  pool.query('UPDATE sdk_api_keys SET last_used_at = NOW() WHERE key_hash = $1', [keyHash]).catch(() => {})
+  pool.query('UPDATE sdk_api_keys SET last_used_at = NOW() WHERE key_hash = $1', [keyHash]).catch(err => console.error('Failed to update sdk_api_keys last_used_at:', err))
   return result.rows[0].user_id
 }
 
@@ -273,16 +293,20 @@ async function logProxyEvent(
   featureKey: string,
   provider: string = 'openai',
   properties: Record<string, string> = {},
+  requestBody?: Record<string, unknown> | null,
+  responseBody?: Record<string, unknown> | null,
 ): Promise<void> {
   await pool.query(
     `INSERT INTO observe_events (
       user_id, customer_id, feature_key, event_name, timestamp,
       cost_amount, cost_unit, revenue_amount, usage_units,
-      model, model_provider, source, granularity, is_inferred, properties
-    ) VALUES ($1, $2, $3, 'cost', NOW(), $4, 'usd', 0, $5, $6, $7, 'proxy', 'event', false, $8)`,
-    [userId, customerId, featureKey, cost, inputTokens + outputTokens, model, provider, JSON.stringify(properties)]
+      model, model_provider, source, granularity, is_inferred, properties,
+      request_body, response_body
+    ) VALUES ($1, $2, $3, 'cost', NOW(), $4, 'usd', 0, $5, $6, $7, 'proxy', 'event', false, $8, $9, $10)`,
+    [userId, customerId, featureKey, cost, inputTokens + outputTokens, model, provider, JSON.stringify(properties),
+     requestBody ? JSON.stringify(requestBody) : null, responseBody ? JSON.stringify(responseBody) : null]
   )
-  checkAlerts(pool, userId).catch(() => {})
+  checkAlerts(pool, userId).catch(err => console.error('checkAlerts error (proxy event):', err))
 }
 
 // GET /v1/models — proxy to OpenAI
@@ -331,7 +355,7 @@ app.post('/v1/chat/completions', async (req: Request, res: Response) => {
       if (cached) {
         res.set('X-Tanso-Cache', 'HIT')
         res.status(200).json(cached)
-        logProxyEvent(userId, model, 0, 0, 0, customerId, featureKey, 'openai', { ...properties, cache_hit: 'true' }).catch(() => {})
+        logProxyEvent(userId, model, 0, 0, 0, customerId, featureKey, 'openai', { ...properties, cache_hit: 'true' }, req.body, cached as Record<string, unknown>).catch(err => console.error('logProxyEvent error (openai cache hit):', err))
         return
       }
     }
@@ -357,7 +381,7 @@ app.post('/v1/chat/completions', async (req: Request, res: Response) => {
       const inputTokens = usage.prompt_tokens || 0
       const outputTokens = usage.completion_tokens || 0
       const cost = await calculateCost(respModel, inputTokens, outputTokens)
-      logProxyEvent(userId, respModel, inputTokens, outputTokens, cost, customerId, featureKey, 'openai', properties).catch(err =>
+      logProxyEvent(userId, respModel, inputTokens, outputTokens, cost, customerId, featureKey, 'openai', properties, req.body, data).catch(err =>
         console.error('Proxy event logging failed:', err)
       )
       if (isCacheable) {
@@ -401,7 +425,7 @@ app.post('/v1/embeddings', async (req: Request, res: Response) => {
       if (cached) {
         res.set('X-Tanso-Cache', 'HIT')
         res.status(200).json(cached)
-        logProxyEvent(userId, model, 0, 0, 0, customerId, featureKey, 'openai', { ...properties, cache_hit: 'true' }).catch(() => {})
+        logProxyEvent(userId, model, 0, 0, 0, customerId, featureKey, 'openai', { ...properties, cache_hit: 'true' }, req.body, cached as Record<string, unknown>).catch(err => console.error('logProxyEvent error (openai cache hit):', err))
         return
       }
     }
@@ -425,7 +449,7 @@ app.post('/v1/embeddings', async (req: Request, res: Response) => {
       const respModel = (data.model as string) || model
       const inputTokens = usage.prompt_tokens || usage.total_tokens || 0
       const cost = await calculateCost(respModel, inputTokens, 0)
-      logProxyEvent(userId, respModel, inputTokens, 0, cost, customerId, featureKey, 'openai', properties).catch(err =>
+      logProxyEvent(userId, respModel, inputTokens, 0, cost, customerId, featureKey, 'openai', properties, req.body, data).catch(err =>
         console.error('Proxy event logging failed:', err)
       )
       if (isCacheable) {
@@ -475,7 +499,7 @@ app.post('/v1/messages', async (req: Request, res: Response) => {
       if (cached) {
         res.set('X-Tanso-Cache', 'HIT')
         res.status(200).json(cached)
-        logProxyEvent(userId, model, 0, 0, 0, customerId, featureKey, 'anthropic', { ...properties, cache_hit: 'true' }).catch(() => {})
+        logProxyEvent(userId, model, 0, 0, 0, customerId, featureKey, 'anthropic', { ...properties, cache_hit: 'true' }, req.body, cached as Record<string, unknown>).catch(err => console.error('logProxyEvent error (anthropic cache hit):', err))
         return
       }
     }
@@ -502,7 +526,7 @@ app.post('/v1/messages', async (req: Request, res: Response) => {
       const inputTokens = usage.input_tokens || 0
       const outputTokens = usage.output_tokens || 0
       const cost = await calculateAnthropicCost(respModel, inputTokens, outputTokens)
-      logProxyEvent(userId, respModel, inputTokens, outputTokens, cost, customerId, featureKey, 'anthropic', properties).catch(err =>
+      logProxyEvent(userId, respModel, inputTokens, outputTokens, cost, customerId, featureKey, 'anthropic', properties, req.body, data).catch(err =>
         console.error('Anthropic proxy event logging failed:', err)
       )
       if (isCacheable) {
@@ -1080,6 +1104,7 @@ app.post('/data/upload/costs', ensureVisitor, async (req: AuthRequest, res: Resp
     }
 
     await client.query('BEGIN')
+    await clearSampleData(client, req.visitorId!)
     await client.query('DELETE FROM cost_records WHERE user_id = $1', [req.visitorId])
     await client.query("DELETE FROM observe_events WHERE user_id = $1 AND event_name = 'cost'", [req.visitorId])
 
@@ -1126,7 +1151,7 @@ app.post('/data/upload/costs', ensureVisitor, async (req: AuthRequest, res: Resp
     await client.query('COMMIT')
     convertReferralIfPending(req.visitorId!)
     trackTansoUsage(req.visitorId!, 'csv_upload', 'csv_upload_costs')
-    checkAlerts(pool, req.visitorId!).catch(() => {})
+    checkAlerts(pool, req.visitorId!).catch(err => console.error('checkAlerts error (csv upload):', err))
     res.json({ success: true, count: records.length })
   } catch (error) {
     await client.query('ROLLBACK')
@@ -1196,6 +1221,7 @@ app.post('/data/upload/usage', ensureVisitor, async (req: AuthRequest, res: Resp
       )
     }
 
+    await clearSampleData(client, req.visitorId!)
     await client.query(
       'UPDATE user_data_status SET data_mode = $2, updated_at = NOW() WHERE user_id = $1',
       [req.visitorId, 'user']
@@ -1204,7 +1230,7 @@ app.post('/data/upload/usage', ensureVisitor, async (req: AuthRequest, res: Resp
     await client.query('COMMIT')
     convertReferralIfPending(req.visitorId!)
     trackTansoUsage(req.visitorId!, 'csv_upload', 'csv_upload_usage')
-    checkAlerts(pool, req.visitorId!).catch(() => {})
+    checkAlerts(pool, req.visitorId!).catch(err => console.error('checkAlerts error (csv upload):', err))
     res.json({ success: true, count: records.length })
   } catch (error) {
     await client.query('ROLLBACK')
@@ -1278,6 +1304,7 @@ app.post('/data/upload/revenue', ensureVisitor, async (req: AuthRequest, res: Re
       }
     }
 
+    await clearSampleData(client, req.visitorId!)
     await client.query(
       'UPDATE user_data_status SET data_mode = $2, updated_at = NOW() WHERE user_id = $1',
       [req.visitorId, 'user']
@@ -1562,6 +1589,10 @@ async function ensureDbInitialized() {
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_observe_events_inferred ON observe_events(user_id, is_inferred) WHERE is_inferred = true`)
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_observe_events_source ON observe_events(user_id, source)`)
 
+    // Request/response body logging for proxy events
+    await pool.query(`ALTER TABLE observe_events ADD COLUMN IF NOT EXISTS request_body JSONB`)
+    await pool.query(`ALTER TABLE observe_events ADD COLUMN IF NOT EXISTS response_body JSONB`)
+
     // Inference profiles table — stores learned distribution patterns from SDK data
     await pool.query(`
       CREATE TABLE IF NOT EXISTS inference_profiles (
@@ -1724,6 +1755,21 @@ async function ensureDbInitialized() {
 
     // Initialize model pricing table
     await initModelPricing(pool)
+
+    // One-time cleanup: purge stale sample data for users already on 'user' mode
+    try {
+      const contaminated = await pool.query(
+        `SELECT uds.user_id FROM user_data_status uds
+         WHERE uds.data_mode = 'user'
+         AND EXISTS (SELECT 1 FROM observe_events oe WHERE oe.user_id = uds.user_id AND oe.source = 'sample' LIMIT 1)`
+      )
+      for (const row of contaminated.rows) {
+        await clearSampleData(pool, row.user_id)
+        console.log(`Cleaned stale sample data for user ${row.user_id}`)
+      }
+    } catch (err) {
+      console.error('Sample data cleanup error (non-fatal):', err)
+    }
 
     dbInitialized = true
   } catch (error) {
@@ -1988,6 +2034,7 @@ app.post('/stripe/sync', ensureVisitor, expensiveLimiter, async (req: AuthReques
       )
     }
 
+    // clearSampleData not needed here — full DELETE at lines above already clears all existing data
     await client.query(
       'INSERT INTO user_data_status (user_id, data_mode) VALUES ($1, $2) ON CONFLICT (user_id) DO UPDATE SET data_mode = $2, updated_at = NOW()',
       [req.visitorId, 'user']
@@ -2060,6 +2107,8 @@ app.get('/events', ensureVisitor, async (req: AuthRequest, res: Response) => {
     if (source) {
       where += ` AND oe.source = $${paramIdx++}`
       params.push(source)
+    } else {
+      where += ` AND oe.source != 'sample'`
     }
     if (dateFrom) {
       where += ` AND oe.timestamp >= $${paramIdx++}`
@@ -2139,7 +2188,7 @@ app.get('/events/by-customer', ensureVisitor, async (req: AuthRequest, res: Resp
          MAX(oe.timestamp) as last_seen
        FROM observe_events oe
        LEFT JOIN customers c ON oe.user_id = c.user_id AND oe.customer_id = c.customer_id
-       WHERE oe.user_id = $1
+       WHERE oe.user_id = $1 AND oe.source != 'sample'
        GROUP BY oe.customer_id, c.name ORDER BY total_cost DESC`,
       [req.visitorId]
     )
@@ -2171,7 +2220,7 @@ app.get('/events/by-model', ensureVisitor, async (req: AuthRequest, res: Respons
          COALESCE(SUM(revenue_amount), 0) as total_revenue,
          COALESCE(SUM(usage_units), 0) as total_usage,
          MAX(timestamp) as last_seen
-       FROM observe_events WHERE user_id = $1 AND model IS NOT NULL
+       FROM observe_events WHERE user_id = $1 AND model IS NOT NULL AND source != 'sample'
        GROUP BY model, model_provider ORDER BY total_cost DESC`,
       [req.visitorId]
     )
@@ -2192,6 +2241,26 @@ app.get('/events/by-model', ensureVisitor, async (req: AuthRequest, res: Respons
   } catch (error) {
     console.error('Get events/by-model error:', error)
     res.status(500).json({ error: 'Failed to get model aggregations' })
+  }
+})
+
+// GET /events/:id — single event detail with request/response bodies
+app.get('/events/:id', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  try {
+    const eventId = parseInt(req.params.id)
+    if (isNaN(eventId)) return res.status(400).json({ error: 'Invalid event ID' })
+    const result = await pool.query(
+      `SELECT oe.*, c.name as customer_name
+       FROM observe_events oe
+       LEFT JOIN customers c ON oe.user_id = c.user_id AND oe.customer_id = c.customer_id
+       WHERE oe.id = $1 AND oe.user_id = $2`,
+      [eventId, req.visitorId]
+    )
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Event not found' })
+    res.json(coerceEventRow(result.rows[0]))
+  } catch (error) {
+    console.error('GET /events/:id error:', error)
+    res.status(500).json({ error: 'Failed to get event detail' })
   }
 })
 
@@ -2487,7 +2556,7 @@ app.post('/events/ingest', apiLimiter, async (req: Request, res: Response) => {
         if (keyResult.rows.length > 0) {
           userId = keyResult.rows[0].user_id
           // Update last_used_at
-          pool.query('UPDATE sdk_api_keys SET last_used_at = NOW() WHERE key_hash = $1', [keyHash]).catch(() => {})
+          pool.query('UPDATE sdk_api_keys SET last_used_at = NOW() WHERE key_hash = $1', [keyHash]).catch(err => console.error('Failed to update sdk_api_keys last_used_at:', err))
         }
       }
     }
@@ -2617,7 +2686,7 @@ app.post('/events/ingest', apiLimiter, async (req: Request, res: Response) => {
         console.error('Auto inference profile update failed:', err)
       )
       // Check alert thresholds
-      checkAlerts(pool, userId).catch(() => {})
+      checkAlerts(pool, userId).catch(err => console.error('checkAlerts error (ingest):', err))
     }
   } catch (error) {
     console.error('POST /events/ingest error:', error)
@@ -2640,7 +2709,7 @@ app.get('/features', ensureVisitor, async (req: AuthRequest, res: Response) => {
          COALESCE(AVG(revenue_amount), 0) as avg_revenue_per_event,
          MAX(timestamp) as last_seen
        FROM observe_events
-       WHERE user_id = $1 AND feature_key IS NOT NULL
+       WHERE user_id = $1 AND feature_key IS NOT NULL AND source != 'sample'
        GROUP BY feature_key
        ORDER BY total_cost DESC`,
       [req.visitorId]
@@ -2776,7 +2845,7 @@ app.get('/models', ensureVisitor, async (req: AuthRequest, res: Response) => {
          COALESCE(SUM(cost_amount), 0) as total_cost, COALESCE(SUM(revenue_amount), 0) as total_revenue,
          COALESCE(SUM(usage_units), 0) as total_usage, COALESCE(AVG(cost_amount), 0) as avg_cost_per_event,
          MAX(timestamp) as last_seen
-       FROM observe_events WHERE user_id = $1 AND model IS NOT NULL
+       FROM observe_events WHERE user_id = $1 AND model IS NOT NULL AND source != 'sample'
        GROUP BY model, model_provider ORDER BY total_cost DESC`,
       [req.visitorId]
     )
@@ -3489,7 +3558,7 @@ app.put('/simulations/:id', ensureVisitor, async (req: AuthRequest, res: Respons
       feature_analysis: row.feature_analysis || [],
     })
   } catch (error) {
-    await client.query('ROLLBACK').catch(() => {})
+    await client.query('ROLLBACK').catch(err => console.error('ROLLBACK failed:', err))
     console.error('Update simulation error:', error)
     res.status(500).json({ error: 'Failed to update simulation' })
   } finally {
@@ -4442,6 +4511,7 @@ app.post('/integrations/openai/connect', ensureVisitor, async (req: AuthRequest,
 
         // Update has_usage_access and last_synced_at
         if (eventsSynced > 0) {
+          await clearSampleData(pool, visitorId)
           await pool.query(
             `INSERT INTO user_data_status (user_id, data_mode) VALUES ($1, $2) ON CONFLICT (user_id) DO UPDATE SET data_mode = $2, updated_at = NOW()`,
             [visitorId, 'user']
@@ -4601,6 +4671,7 @@ app.post('/integrations/anthropic/connect', ensureVisitor, async (req: AuthReque
 
         // Update data_mode to 'user' if we synced any data
         if (eventsSynced > 0) {
+          await clearSampleData(pool, visitorId)
           await pool.query(
             `INSERT INTO user_data_status (user_id, data_mode) VALUES ($1, $2) ON CONFLICT (user_id) DO UPDATE SET data_mode = $2, updated_at = NOW()`,
             [visitorId, 'user']
@@ -5177,7 +5248,7 @@ app.get('/team/my-role', ensureVisitor, async (req: AuthRequest, res: Response) 
     )
 
     if (!mapResult.rows.length) {
-      return res.json({ role: 'admin', org_id: '' })
+      return res.json({ role: 'viewer', org_id: '' })
     }
 
     const orgId = mapResult.rows[0].org_id

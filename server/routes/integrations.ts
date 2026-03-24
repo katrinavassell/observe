@@ -7,6 +7,16 @@ import { calculateCostFromTokens, getModelPricing } from '../model-pricing.js'
 
 type TrackTansoUsageFn = (visitorId: string, featureKey: string, eventName: string) => void
 
+// Clear sample/demo data when transitioning to real user data
+async function clearSampleData(db: { query: (text: string, params: unknown[]) => Promise<unknown> }, userId: string): Promise<void> {
+  await db.query("DELETE FROM observe_events WHERE user_id = $1 AND source = 'sample'", [userId])
+  await db.query("DELETE FROM cost_records WHERE user_id = $1 AND cost_type = 'ai_inference' AND customer_id IS NULL", [userId])
+  await db.query("DELETE FROM subscriptions WHERE user_id = $1 AND subscription_id LIKE 'sub_%'", [userId])
+  await db.query("DELETE FROM customers WHERE user_id = $1 AND customer_id LIKE 'cus_%'", [userId])
+  await db.query("DELETE FROM plans WHERE user_id = $1 AND plan_id IN ('starter', 'pro', 'enterprise')", [userId])
+  await db.query("DELETE FROM simulations WHERE user_id = $1 AND name LIKE '%Sample%'", [userId])
+}
+
 export function createIntegrationsRoutes(
   pool: Pool,
   ensureVisitor: any,
@@ -98,6 +108,7 @@ export function createIntegrationsRoutes(
 
           // Update has_usage_access and last_synced_at
           if (eventsSynced > 0) {
+            await clearSampleData(pool, visitorId)
             await pool.query(
               `INSERT INTO user_data_status (user_id, data_mode) VALUES ($1, $2) ON CONFLICT (user_id) DO UPDATE SET data_mode = $2, updated_at = NOW()`,
               [visitorId, 'user']
@@ -257,6 +268,7 @@ export function createIntegrationsRoutes(
 
           // Update data_mode to 'user' if we synced any data
           if (eventsSynced > 0) {
+            await clearSampleData(pool, visitorId)
             await pool.query(
               `INSERT INTO user_data_status (user_id, data_mode) VALUES ($1, $2) ON CONFLICT (user_id) DO UPDATE SET data_mode = $2, updated_at = NOW()`,
               [visitorId, 'user']

@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, reactive } from 'vue'
 import { useQuery } from '@tanstack/vue-query'
 import { useRouter, useRoute } from 'vue-router'
-import { getEvents, getEventsByCustomer, getEventsByModel, getFeatures, type ObserveEvent } from '@/lib/api'
-import { Activity, ChevronRight, ChevronLeft, X, Plug, FlaskConical } from 'lucide-vue-next'
+import { getEvents, getEventsByCustomer, getEventsByModel, getFeatures, getEventDetail, type ObserveEvent, type EventDetail } from '@/lib/api'
+import { Activity, ChevronRight, ChevronDown, ChevronLeft, X, Plug, FlaskConical, MessageSquare, Bot, User } from 'lucide-vue-next'
 import { useDemoMode } from '@/composables/useDemoMode'
 import MarginBadge from '@/components/shared/MarginBadge.vue'
 import SourceBadge from '@/components/shared/SourceBadge.vue'
@@ -22,6 +22,44 @@ const dateFrom = ref<string | undefined>()
 const dateTo = ref<string | undefined>()
 const currentPage = ref(0)
 const PAGE_SIZE = 50
+
+// Expandable event detail
+const expandedIds = reactive(new Set<number>())
+const eventDetails = reactive<Record<number, EventDetail>>({})
+const loadingDetails = reactive(new Set<number>())
+
+async function toggleEvent(id: number) {
+  if (expandedIds.has(id)) {
+    expandedIds.delete(id)
+    return
+  }
+  expandedIds.add(id)
+  if (!eventDetails[id]) {
+    loadingDetails.add(id)
+    try {
+      eventDetails[id] = await getEventDetail(id)
+    } catch { /* silently fail */ }
+    loadingDetails.delete(id)
+  }
+}
+
+function formatMessages(body: Record<string, unknown> | null | undefined): Array<{ role: string; content: string }> {
+  if (!body) return []
+  const messages = body.messages as Array<{ role: string; content: string }> | undefined
+  if (!Array.isArray(messages)) return []
+  return messages
+}
+
+function getResponseContent(body: Record<string, unknown> | null | undefined): string | null {
+  if (!body) return null
+  // OpenAI format
+  const choices = body.choices as Array<{ message?: { content?: string } }> | undefined
+  if (choices?.[0]?.message?.content) return choices[0].message.content
+  // Anthropic format
+  const content = body.content as Array<{ text?: string }> | undefined
+  if (content?.[0]?.text) return content[0].text
+  return null
+}
 
 const SOURCES = [
   { value: 'sdk', label: 'SDK' },
@@ -211,6 +249,7 @@ function goToCustomer(id: string) { router.push(`/customers/${id}`) }
         <table class="w-full text-sm text-left">
           <thead class="border-b bg-muted/40 text-muted-foreground text-xs font-medium uppercase tracking-wider">
             <tr>
+              <th class="w-6"></th>
               <th class="px-4 py-3 font-medium">Timestamp</th>
               <th class="px-4 py-3 font-medium">Event</th>
               <th class="px-4 py-3 font-medium">Feature</th>
@@ -277,11 +316,19 @@ function goToCustomer(id: string) { router.push(`/customers/${id}`) }
           </tbody>
 
           <tbody v-else class="divide-y divide-border">
-            <tr
+            <template
               v-for="event in eventsData.events"
               :key="event.id"
-              class="hover:bg-muted/50 transition-colors"
             >
+            <tr
+              class="hover:bg-muted/50 transition-colors cursor-pointer"
+              :class="expandedIds.has(event.id) ? 'bg-muted/30' : ''"
+              @click="toggleEvent(event.id)"
+            >
+              <td class="px-2 py-3 w-6">
+                <ChevronDown v-if="expandedIds.has(event.id)" class="h-3.5 w-3.5 text-muted-foreground" />
+                <ChevronRight v-else class="h-3.5 w-3.5 text-muted-foreground" />
+              </td>
               <td class="px-4 py-3 text-muted-foreground whitespace-nowrap text-xs">
                 {{ formatDate(event.timestamp) }}
               </td>
@@ -333,6 +380,64 @@ function goToCustomer(id: string) { router.push(`/customers/${id}`) }
                 <MarginBadge :margin="marginForEvent(event)" />
               </td>
             </tr>
+
+            <!-- Expanded detail panel -->
+            <tr v-if="expandedIds.has(event.id)">
+              <td :colspan="11" class="px-0 py-0 bg-muted/20 border-b">
+                <div v-if="loadingDetails.has(event.id)" class="p-6 text-center text-sm text-muted-foreground">
+                  Loading...
+                </div>
+                <div v-else-if="eventDetails[event.id]" class="p-5 space-y-4">
+                  <!-- Request messages -->
+                  <div v-if="eventDetails[event.id].request_body">
+                    <p class="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Request</p>
+                    <div v-if="formatMessages(eventDetails[event.id].request_body).length > 0" class="space-y-2">
+                      <div
+                        v-for="(msg, idx) in formatMessages(eventDetails[event.id].request_body)"
+                        :key="idx"
+                        class="flex gap-2"
+                      >
+                        <div class="shrink-0 mt-0.5">
+                          <Bot v-if="msg.role === 'system' || msg.role === 'assistant'" class="h-4 w-4 text-muted-foreground" />
+                          <User v-else class="h-4 w-4 text-foreground" />
+                        </div>
+                        <div class="min-w-0">
+                          <span class="text-[10px] font-medium text-muted-foreground uppercase">{{ msg.role }}</span>
+                          <p class="text-sm whitespace-pre-wrap break-words">{{ msg.content }}</p>
+                        </div>
+                      </div>
+                    </div>
+                    <pre v-else class="text-xs bg-muted rounded-lg p-3 overflow-x-auto max-h-60">{{ JSON.stringify(eventDetails[event.id].request_body, null, 2) }}</pre>
+                  </div>
+
+                  <!-- Response content -->
+                  <div v-if="eventDetails[event.id].response_body">
+                    <p class="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Response</p>
+                    <div v-if="getResponseContent(eventDetails[event.id].response_body)" class="flex gap-2">
+                      <Bot class="h-4 w-4 text-success shrink-0 mt-0.5" />
+                      <p class="text-sm whitespace-pre-wrap break-words">{{ getResponseContent(eventDetails[event.id].response_body) }}</p>
+                    </div>
+                    <pre v-else class="text-xs bg-muted rounded-lg p-3 overflow-x-auto max-h-60">{{ JSON.stringify(eventDetails[event.id].response_body, null, 2) }}</pre>
+                  </div>
+
+                  <!-- No bodies available -->
+                  <p v-if="!eventDetails[event.id].request_body && !eventDetails[event.id].response_body" class="text-sm text-muted-foreground">
+                    No request/response body recorded for this event.
+                  </p>
+
+                  <!-- Metadata -->
+                  <div class="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground border-t pt-3">
+                    <span v-if="eventDetails[event.id].usage_units">{{ eventDetails[event.id].usage_units.toLocaleString() }} tokens</span>
+                    <span v-if="eventDetails[event.id].cost_amount">${{ eventDetails[event.id].cost_amount.toFixed(4) }} cost</span>
+                    <span v-if="eventDetails[event.id].properties?.cache_hit === 'true'" class="text-success">Cache HIT</span>
+                    <span>Source: {{ eventDetails[event.id].source }}</span>
+                    <span>Feature: {{ eventDetails[event.id].feature_key }}</span>
+                  </div>
+                </div>
+                <div v-else class="p-4 text-sm text-muted-foreground">Failed to load detail.</div>
+              </td>
+            </tr>
+            </template>
           </tbody>
         </table>
       </div>

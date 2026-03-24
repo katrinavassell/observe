@@ -994,3 +994,28 @@ export interface CacheStats {
 export async function fetchCacheStats(): Promise<CacheStats> {
   return request('/proxy/cache/stats')
 }
+
+// ── Event Detail ──────────────────────────────────────────────────────────────
+
+export interface EventDetail {
+  id: number
+  user_id: string
+  customer_id: string
+  customer_name?: string
+  feature_key: string
+  event_name: string
+  timestamp: string
+  cost_amount: number
+  revenue_amount: number
+  usage_units: number
+  model?: string
+  model_provider?: string
+  source: string
+  properties?: Record<string, string>
+  request_body?: Record<string, unknown> | null
+  response_body?: Record<string, unknown> | null
+}
+
+export async function getEventDetail(id: number): Promise<EventDetail> {
+  return request(`/events/${id}`)
+}
