@@ -336,22 +336,34 @@ const insightCategories = [
             </div>
           </div>
 
-          <!-- Generate button + progress -->
+          <!-- Generate button -->
           <div class="space-y-3 border-t pt-4">
-            <div class="flex items-center justify-between text-xs text-muted-foreground">
-              <span>{{ totalEvents }} events tracked</span>
-              <span v-if="insightsUsage">{{ insightsUsage.remaining }} of {{ insightsUsage.limit }} generations left</span>
-            </div>
             <Button
+              v-if="totalEvents >= 10"
               class="w-full"
-              :disabled="isGenerating || !insightsAllowed || totalEvents < 10"
+              :disabled="isGenerating || !insightsAllowed"
               @click="handleGenerate"
             >
               <Sparkles class="h-4 w-4 mr-2" />
-              {{ isGenerating ? 'Analyzing...' : totalEvents < 10 ? `Send ${10 - totalEvents} more events to unlock` : !insightsAllowed ? 'Upgrade for more insights' : 'Generate Insights' }}
+              {{ isGenerating ? 'Analyzing...' : 'Generate Insights' }}
             </Button>
-            <div v-if="!insightsAllowed" class="text-center">
-              <router-link to="/plans" class="text-xs text-primary hover:underline">Upgrade to Growth for unlimited</router-link>
+            <div v-else class="rounded-lg border bg-muted/30 p-3 text-center">
+              <p class="text-sm font-medium mb-1">Upload more data to unlock</p>
+              <p class="text-xs text-muted-foreground">AI Insights needs event data from your SDK or proxy integration to analyze.</p>
+            </div>
+
+            <!-- Usage info -->
+            <div v-if="insightsUsage && totalEvents >= 10" class="text-xs text-muted-foreground text-center">
+              <template v-if="insightsUsage.used === 0">
+                {{ insightsUsage.limit }} free insight{{ insightsUsage.limit === 1 ? '' : 's' }} included
+              </template>
+              <template v-else-if="insightsUsage.remaining > 0">
+                {{ insightsUsage.used }} used, {{ insightsUsage.remaining }} remaining
+              </template>
+              <template v-else>
+                All {{ insightsUsage.limit }} insights used.
+                <router-link to="/plans" class="text-primary hover:underline">Upgrade to Growth</router-link> for unlimited.
+              </template>
             </div>
           </div>
 
