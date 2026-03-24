@@ -6,8 +6,14 @@ import {
   getEventsByFeature,
   getEventsByModel,
   getEventsByCustomer,
+  listInsights,
+  generateInsights,
+  getUsageLimits,
 } from '@/lib/api'
-import { AlertCircle, AlertTriangle, Database, Plug } from 'lucide-vue-next'
+import type { AiInsight } from '@/lib/api'
+import { AlertCircle, AlertTriangle, Database, Plug, FlaskConical, Sparkles, Zap } from 'lucide-vue-next'
+import { useDemoMode } from '@/composables/useDemoMode'
+import Sheet from '@/components/ui/sheet.vue'
 import {
   Card,
   Skeleton,
@@ -17,9 +23,65 @@ import { formatCurrency as fmt, formatPct as fmtPct } from '@/lib/format'
 
 const router = useRouter()
 const queryClient = useQueryClient()
+const { isDemoMode, enterDemoMode, exitDemoMode, isLoadingDemo } = useDemoMode()
+
 type Tab = 'feature' | 'model' | 'customer'
 const activeTab = ref<Tab>('feature')
 
+// Insights drawer state
+const insightsOpen = ref(false)
+const isGenerating = ref(false)
+const generateError = ref<string | null>(null)
+
+const { data: insightsData, refetch: refetchInsights } = useQuery({
+  queryKey: ['insights'],
+  queryFn: listInsights,
+  enabled: computed(() => insightsOpen.value),
+})
+
+const { data: usageLimits } = useQuery({
+  queryKey: ['usage-limits'],
+  queryFn: getUsageLimits,
+  enabled: computed(() => insightsOpen.value),
+})
+
+const insightsAllowed = computed(() => usageLimits.value?.ai_insights?.allowed !== false)
+const insightsUsage = computed(() => usageLimits.value?.ai_insights?.usage ?? null)
+
+async function handleGenerate() {
+  isGenerating.value = true
+  generateError.value = null
+  try {
+    await generateInsights()
+    await refetchInsights()
+    // Refresh usage limits
+    queryClient.invalidateQueries({ queryKey: ['usage-limits'] })
+  } catch (e: any) {
+    generateError.value = e?.message || 'Failed to generate insights'
+  } finally {
+    isGenerating.value = false
+  }
+}
+
+function severityColor(severity: string) {
+  switch (severity) {
+    case 'critical': return 'border-destructive/30 bg-destructive/5 text-destructive'
+    case 'warning': return 'border-warning/30 bg-warning/5 text-warning'
+    case 'positive': return 'border-success/30 bg-success/5 text-success'
+    default: return 'border-border bg-card text-foreground'
+  }
+}
+
+function severityBadge(severity: string) {
+  switch (severity) {
+    case 'critical': return 'bg-destructive/10 text-destructive'
+    case 'warning': return 'bg-warning/10 text-warning'
+    case 'positive': return 'bg-success/10 text-success'
+    default: return 'bg-muted text-muted-foreground'
+  }
+}
+
+// Analytics data
 const {
   data: featureData,
   isLoading: featuresLoading,
@@ -51,7 +113,6 @@ const isLoading = computed(() => featuresLoading.value || modelsLoading.value ||
 const isError = computed(() => featuresError.value || modelsError.value || customersError.value)
 const hasData = computed(() => !isLoading.value && !isError.value && (featureData.value?.length || modelData.value?.length || customerData.value?.length))
 
-// KPI computations
 const totalCost = computed(() => {
   if (!featureData.value) return 0
   return featureData.value.reduce((s, f) => s + f.total_cost, 0)
@@ -65,7 +126,6 @@ const netMarginPct = computed(() => {
   return ((totalRevenue.value - totalCost.value) / totalRevenue.value) * 100
 })
 
-// Negative margin alert
 const negativeMarginsInfo = computed(() => {
   if (!featureData.value) return null
   const negative = featureData.value.filter(f => f.margin_pct !== null && f.margin_pct < 0)
@@ -74,7 +134,6 @@ const negativeMarginsInfo = computed(() => {
   return { count: negative.length, totalLoss }
 })
 
-// Feature view
 const sortedFeatures = computed(() => {
   if (!featureData.value) return []
   return [...featureData.value].sort((a, b) => b.total_cost - a.total_cost)
@@ -84,7 +143,6 @@ const maxFeatureCost = computed(() => {
   return Math.max(...sortedFeatures.value.map(f => f.total_cost), 0.01)
 })
 
-// Model view
 const sortedModels = computed(() => {
   if (!modelData.value) return []
   return [...modelData.value].filter(m => m.total_cost > 0).sort((a, b) => b.total_cost - a.total_cost)
@@ -94,7 +152,6 @@ const maxModelCost = computed(() => {
   return Math.max(...sortedModels.value.map(m => m.total_cost), 0.01)
 })
 
-// Customer view
 const sortedCustomers = computed(() => {
   if (!customerData.value) return []
   return [...customerData.value].sort((a, b) => b.total_cost - a.total_cost)
@@ -104,20 +161,202 @@ const maxCustomerCost = computed(() => {
   return Math.max(...sortedCustomers.value.map(c => c.total_cost), 0.01)
 })
 
+// Data quality for insights
+const totalEvents = computed(() => {
+  if (!featureData.value) return 0
+  return featureData.value.reduce((s, f) => s + (f.event_count || 0), 0)
+})
+const dataConfidence = computed(() => {
+  const n = totalEvents.value
+  if (n === 0) return { label: 'No data', color: 'text-muted-foreground', pct: 0 }
+  if (n < 10) return { label: 'Very low', color: 'text-destructive', pct: 15 }
+  if (n < 50) return { label: 'Low', color: 'text-warning', pct: 35 }
+  if (n < 200) return { label: 'Medium', color: 'text-warning', pct: 60 }
+  if (n < 500) return { label: 'Good', color: 'text-success', pct: 80 }
+  return { label: 'High', color: 'text-success', pct: 95 }
+})
+
 function retry() {
   queryClient.invalidateQueries({ queryKey: ['events-by-feature'] })
   queryClient.invalidateQueries({ queryKey: ['events-by-model'] })
   queryClient.invalidateQueries({ queryKey: ['events-by-customer'] })
 }
+
+const exampleInsights = [
+  { title: 'ai_summarization has low margin (12%)', description: 'This feature costs $0.82 but only generates $1.80. A 20% price increase would bring margin to a healthier 30%.', severity: 'warning', insight_type: 'pricing_opportunity' },
+  { title: 'dall-e-3 costs 3x more than stable-diffusion-xl', description: 'Image generation uses dall-e-3 for 75% of requests. Switching to stable-diffusion-xl for non-critical use cases could save 60%.', severity: 'info', insight_type: 'cost_optimization' },
+]
 </script>
 
 <template>
   <div class="space-y-6">
     <!-- Page header -->
-    <div>
-      <h1 class="text-2xl font-semibold tracking-tight">Analytics</h1>
-      <p class="text-muted-foreground mt-1">Where your AI spend is going</p>
+    <div class="flex items-start justify-between">
+      <div>
+        <h1 class="text-2xl font-semibold tracking-tight">Analytics</h1>
+        <p class="text-muted-foreground mt-1">Where your AI spend is going</p>
+      </div>
+      <div class="flex gap-2">
+        <div class="relative group">
+          <Button
+            variant="outline"
+            size="sm"
+            @click="insightsOpen = true"
+          >
+            <Sparkles class="h-3.5 w-3.5 mr-1.5" />
+            AI Insights
+          </Button>
+          <div
+            v-if="!hasData"
+            class="absolute right-0 top-full mt-1 z-10 hidden group-hover:block rounded-md bg-foreground text-background px-3 py-1.5 text-xs whitespace-nowrap shadow-lg"
+          >
+            Upload data to see insights
+          </div>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          :disabled="isLoadingDemo"
+          @click="isDemoMode ? exitDemoMode() : enterDemoMode()"
+        >
+          <FlaskConical class="h-3.5 w-3.5 mr-1.5" />
+          {{ isLoadingDemo ? 'Loading...' : isDemoMode ? 'Exit Demo' : 'Demo Data' }}
+        </Button>
+      </div>
     </div>
+
+    <!-- Demo mode notice -->
+    <div v-if="isDemoMode" class="flex items-center justify-between rounded-lg bg-muted/50 border border-dashed px-4 py-2">
+      <span class="text-sm text-muted-foreground">You're viewing sample data.</span>
+      <Button variant="ghost" size="sm" :disabled="isLoadingDemo" @click="exitDemoMode">
+        {{ isLoadingDemo ? 'Loading...' : 'Exit Demo' }}
+      </Button>
+    </div>
+
+    <!-- AI Insights Drawer -->
+    <Sheet :open="insightsOpen" side="right" @update:open="insightsOpen = $event">
+      <div class="w-[420px] p-6 space-y-5">
+        <div>
+          <div class="flex items-center gap-2 mb-1">
+            <Sparkles class="h-5 w-5 text-primary" />
+            <h2 class="text-lg font-semibold">AI Insights</h2>
+          </div>
+          <p class="text-sm text-muted-foreground">
+            AI analyzes your cost and revenue data to find margin issues, pricing opportunities, and model optimizations. Insights improve as you send more events.
+          </p>
+        </div>
+
+        <!-- Usage -->
+        <div v-if="insightsUsage" class="rounded-lg border bg-muted/30 p-3 space-y-2">
+          <div class="flex items-center justify-between text-sm">
+            <span class="text-muted-foreground">Insights generated</span>
+            <span class="font-medium">{{ insightsUsage.used }} / {{ insightsUsage.limit }}</span>
+          </div>
+          <div class="h-2 rounded-full bg-muted overflow-hidden">
+            <div
+              class="h-full rounded-full transition-all"
+              :class="insightsUsage.remaining === 0 ? 'bg-destructive' : insightsUsage.remaining <= 1 ? 'bg-warning' : 'bg-primary'"
+              :style="{ width: `${Math.min(100, (insightsUsage.used / insightsUsage.limit) * 100)}%` }"
+            />
+          </div>
+          <div v-if="!insightsAllowed" class="flex items-center gap-2 text-xs text-muted-foreground">
+            <Zap class="h-3 w-3 text-primary" />
+            <span>Upgrade to Growth for unlimited insights</span>
+          </div>
+        </div>
+
+        <!-- Demo notice -->
+        <div v-if="isDemoMode" class="rounded-lg bg-muted/50 border border-dashed px-3 py-2 text-xs text-muted-foreground">
+          You're viewing sample data. Insights will reflect demo data.
+        </div>
+
+        <!-- Data confidence -->
+        <div class="rounded-lg border bg-muted/30 p-3 space-y-2">
+          <div class="flex items-center justify-between text-sm">
+            <span class="text-muted-foreground">Data confidence</span>
+            <span class="font-medium" :class="dataConfidence.color">{{ dataConfidence.label }}</span>
+          </div>
+          <div class="h-2 rounded-full bg-muted overflow-hidden">
+            <div
+              class="h-full rounded-full bg-primary transition-all"
+              :style="{ width: `${dataConfidence.pct}%` }"
+            />
+          </div>
+          <p class="text-[11px] text-muted-foreground">
+            {{ totalEvents }} events tracked.
+            {{ totalEvents < 50 ? 'Send more events for better insights.' : totalEvents < 200 ? 'Good start. More data means sharper recommendations.' : 'Strong dataset for reliable insights.' }}
+          </p>
+        </div>
+
+        <!-- Generate button -->
+        <Button
+          class="w-full"
+          :disabled="isGenerating || !insightsAllowed || totalEvents < 10"
+          @click="handleGenerate"
+        >
+          <Sparkles class="h-4 w-4 mr-2" />
+          {{ isGenerating ? 'Analyzing your data...' : totalEvents < 10 ? `Need ${10 - totalEvents} more events` : !insightsAllowed ? 'Limit reached' : 'Generate Insights' }}
+        </Button>
+
+        <div v-if="generateError" class="text-sm text-destructive">{{ generateError }}</div>
+
+        <!-- Insights list -->
+        <div v-if="insightsData && insightsData.length > 0" class="space-y-3">
+          <div class="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Your insights</div>
+          <div
+            v-for="insight in insightsData"
+            :key="insight.id"
+            class="rounded-lg border p-3 space-y-1.5"
+            :class="severityColor(insight.severity)"
+          >
+            <div class="flex items-center gap-2">
+              <span
+                class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium"
+                :class="severityBadge(insight.severity)"
+              >
+                {{ insight.severity }}
+              </span>
+              <span v-if="insight.feature_key" class="font-mono text-[10px] bg-muted px-1.5 py-0.5 rounded">{{ insight.feature_key }}</span>
+            </div>
+            <div class="text-sm font-medium">{{ insight.title }}</div>
+            <div class="text-xs text-muted-foreground">{{ insight.description }}</div>
+          </div>
+        </div>
+
+        <!-- Empty state with examples -->
+        <div v-else-if="!isGenerating" class="space-y-3">
+          <div class="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Example insights</div>
+          <div
+            v-for="(ex, i) in exampleInsights"
+            :key="i"
+            class="rounded-lg border border-dashed p-3 space-y-1.5 opacity-60"
+          >
+            <span
+              class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium"
+              :class="severityBadge(ex.severity)"
+            >
+              {{ ex.severity }}
+            </span>
+            <div class="text-sm font-medium">{{ ex.title }}</div>
+            <div class="text-xs text-muted-foreground">{{ ex.description }}</div>
+          </div>
+          <p class="text-xs text-muted-foreground text-center">
+            These are examples. Click "Generate Insights" to analyze your actual data.
+          </p>
+        </div>
+
+        <!-- Loading state -->
+        <div v-if="isGenerating" class="space-y-3">
+          <div class="flex items-center gap-3 py-4">
+            <div class="h-8 w-8 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+            <div>
+              <div class="text-sm font-medium">Analyzing your data...</div>
+              <div class="text-xs text-muted-foreground">This usually takes 5-10 seconds</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Sheet>
 
     <!-- Error state -->
     <div v-if="isError && !isLoading" class="flex flex-col items-center justify-center py-24 text-center">

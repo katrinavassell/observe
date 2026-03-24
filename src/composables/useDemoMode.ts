@@ -1,50 +1,47 @@
 import { ref, computed } from 'vue'
-import { useRouter } from 'vue-router'
 import { useQueryClient } from '@tanstack/vue-query'
-import { useDataMode } from '@/composables/useDataMode'
-import { logger } from '@/lib/logger'
+import * as api from '@/lib/api'
 
-// Persist demo state across navigations using sessionStorage
 const isDemoActive = ref(sessionStorage.getItem('demo_mode') === 'true')
+const loading = ref(false)
 
 export function useDemoMode() {
-  const router = useRouter()
   const queryClient = useQueryClient()
-  const { switchToSampleData, clearSample, isLoadingSample } = useDataMode()
 
   const isDemoMode = computed(() => isDemoActive.value)
+  const isLoadingDemo = computed(() => loading.value)
 
   async function enterDemoMode() {
+    loading.value = true
     try {
-      await switchToSampleData()
+      await api.loadSampleData()
       isDemoActive.value = true
       sessionStorage.setItem('demo_mode', 'true')
-      // Invalidate all queries so pages refetch with new data
-      queryClient.invalidateQueries()
-      router.push('/')
+      await queryClient.invalidateQueries()
     } catch (error) {
-      logger.error('Failed to enter demo mode', error)
-      throw error
+      console.error('Failed to enter demo mode:', error)
+    } finally {
+      loading.value = false
     }
   }
 
   async function exitDemoMode() {
+    loading.value = true
     try {
-      await clearSample()
+      await api.clearData()
       isDemoActive.value = false
       sessionStorage.removeItem('demo_mode')
-      // Invalidate all queries so pages refetch
-      queryClient.invalidateQueries()
-      router.push('/data-sources')
+      await queryClient.invalidateQueries()
     } catch (error) {
-      logger.error('Failed to exit demo mode', error)
-      throw error
+      console.error('Failed to exit demo mode:', error)
+    } finally {
+      loading.value = false
     }
   }
 
   return {
     isDemoMode,
-    isLoadingDemo: isLoadingSample,
+    isLoadingDemo,
     enterDemoMode,
     exitDemoMode,
   }

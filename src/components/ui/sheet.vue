@@ -35,7 +35,7 @@ const emit = defineEmits<{
             ? 'inset-x-0 top-0 data-[state=closed]:slide-out-to-top data-[state=open]:slide-in-from-top'
             : props.side === 'bottom'
             ? 'inset-x-0 bottom-0 data-[state=closed]:slide-out-to-bottom data-[state=open]:slide-in-from-bottom'
-            : 'inset-y-0 right-0 h-full w-80 data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right'
+            : 'inset-y-0 right-0 h-full w-[420px] max-w-[90vw] data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right'
         )"
       >
         <slot />
