@@ -68,7 +68,7 @@ app.post('/integrations/stripe/connect', async (req, res) => {
 
     // Validate by calling Stripe account endpoint
     const stripe = new Stripe(api_key)
-    const account = await stripe.accounts.retrieve()
+    const account = await stripe.account.retrieve()
 
     const accountName = account.business_profile?.name ||
                        account.settings?.dashboard?.display_name ||
@@ -125,7 +125,7 @@ app.post('/integrations/stripe/sync-enhanced', async (req, res) => {
   try {
     const userId = getUserId(req)
     const stripe = getStripeClient(userId)
-    const account = await stripe.accounts.retrieve()
+    const account = await stripe.account.retrieve()
 
     console.log('Starting enhanced sync...')
 
