@@ -212,15 +212,9 @@ const exampleInsights = [
           variant="outline"
           size="sm"
           @click="insightsOpen = true"
-          class="relative"
         >
           <Sparkles class="h-3.5 w-3.5 mr-1.5" />
-          <template v-if="isDemoMode">AI Insights</template>
-          <template v-else-if="totalEvents >= 10">AI Insights</template>
-          <template v-else>
-            AI Insights
-            <span class="ml-1.5 text-[10px] text-muted-foreground font-normal">{{ totalEvents }}/10 events</span>
-          </template>
+          AI Insights
         </Button>
       </div>
     </div>

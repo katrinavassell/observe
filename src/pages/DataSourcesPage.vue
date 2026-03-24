@@ -145,7 +145,6 @@ async function handleTrySampleData(): Promise<void> {
     await refetchDataMode()
 
     // Update file indicators
-    revenueFiles.value = { customers: true, subscriptions: true, invoices: true }
     costsFile.value = { name: 'sample-costs.csv', isSample: true }
     usageFile.value = { name: 'sample-usage.csv', isSample: true }
 
@@ -162,9 +161,6 @@ async function handleTrySampleData(): Promise<void> {
   }
 }
 
-/**
- * Load sample revenue data only.
- */
 /**
  * Load sample cost data only.
  */
