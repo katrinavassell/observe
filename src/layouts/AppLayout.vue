@@ -1,40 +1,28 @@
 <script setup lang="ts">
-import { computed, ref, onMounted } from 'vue'
+import { computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import {
   BarChart3,
   Plug,
-  FlaskConical,
   Activity,
   Cpu,
   CreditCard,
-  X,
   Settings,
   Eye,
   LogIn,
   LogOut,
   Bell,
-  ShieldCheck,
 } from 'lucide-vue-next'
 import ErrorBoundary from '@/components/shared/ErrorBoundary.vue'
-import { useDemoMode } from '@/composables/useDemoMode'
 import { useTeam } from '@/composables/useTeam'
 import { useAuth } from '@/composables/useAuth'
 
 const route = useRoute()
-const { isDemoMode, enterDemoMode, exitDemoMode, isLoadingDemo } = useDemoMode()
 const { myRole, isViewer, fetchTeamInfo } = useTeam()
 const { account, isLoggedIn, logout } = useAuth()
 
-const isAdminUser = ref(false)
-
-onMounted(async () => {
+onMounted(() => {
   fetchTeamInfo()
-  try {
-    const res = await fetch('/api/admin/status', { credentials: 'include' })
-    const data = await res.json()
-    isAdminUser.value = data.isAdmin
-  } catch {}
 })
 
 const navItems = computed(() => [
@@ -75,13 +63,6 @@ const navItems = computed(() => [
     description: 'Manage your subscription',
     dividerBefore: true,
   },
-  ...(isAdminUser.value ? [{
-    path: '/admin/pricing',
-    label: 'Admin: Pricing',
-    icon: ShieldCheck,
-    description: 'Manage global model pricing',
-    dividerBefore: true,
-  }] : []),
 ])
 
 function isActive(path: string) {
@@ -132,27 +113,6 @@ function isActive(path: string) {
 
         <!-- Bottom section: Account & Team Settings -->
         <div class="border-t p-4 space-y-1">
-          <!-- Demo mode toggle -->
-          <button
-            class="flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm transition-colors hover:bg-accent"
-            :disabled="isLoadingDemo"
-            @click="isDemoMode ? exitDemoMode() : enterDemoMode()"
-          >
-            <div class="flex items-center gap-2">
-              <FlaskConical class="h-4 w-4 shrink-0" :class="isDemoMode ? 'text-warning' : 'text-muted-foreground'" />
-              <span :class="isDemoMode ? 'font-medium' : 'text-muted-foreground'">Demo Data</span>
-            </div>
-            <div
-              class="relative h-5 w-9 rounded-full transition-colors"
-              :class="isDemoMode ? 'bg-warning' : 'bg-muted'"
-            >
-              <div
-                class="absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform"
-                :class="isDemoMode ? 'translate-x-4' : 'translate-x-0.5'"
-              />
-            </div>
-          </button>
-
           <!-- Role badge for viewers -->
           <div v-if="isViewer" class="flex items-center gap-2 px-3 py-1.5 text-xs text-warning bg-warning/10 rounded-lg mb-1">
             <Eye class="h-3 w-3 shrink-0" />
@@ -211,25 +171,6 @@ function isActive(path: string) {
 
     <!-- Main Content -->
     <main class="ml-64 flex-1 min-h-screen">
-      <!-- Demo Mode Banner -->
-      <div
-        v-if="isDemoMode"
-        class="sticky top-0 z-30 flex items-center justify-between gap-3 bg-warning px-4 py-2 text-warning-foreground"
-      >
-        <div class="flex items-center gap-2 text-sm font-medium">
-          <FlaskConical class="h-4 w-4 shrink-0" />
-          You're viewing demo data — changes are not saved
-        </div>
-        <button
-          class="flex items-center gap-1.5 rounded-md bg-warning-foreground/20 px-3 py-1 text-xs font-semibold hover:bg-warning-foreground/30 transition-colors disabled:opacity-50"
-          :disabled="isLoadingDemo"
-          @click="exitDemoMode"
-        >
-          <X class="h-3 w-3" />
-          Exit Demo
-        </button>
-      </div>
-
       <div class="p-6">
         <ErrorBoundary>
           <slot />

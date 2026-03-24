@@ -43,10 +43,6 @@ const router = createRouter({
       redirect: '/',
     },
     {
-      path: '/savings',
-      redirect: '/analytics',
-    },
-    {
       path: '/alerts',
       name: 'alerts',
       component: () => import('@/pages/AlertsPage.vue'),
@@ -63,14 +59,6 @@ const router = createRouter({
     {
       path: '/referrals',
       redirect: '/',
-    },
-    {
-      path: '/simulations',
-      redirect: '/analytics',
-    },
-    {
-      path: '/simulator',
-      redirect: '/analytics',
     },
     // Legacy redirects
     {
@@ -118,8 +106,7 @@ const router = createRouter({
     },
     {
       path: '/admin/pricing',
-      name: 'admin-pricing',
-      component: () => import('@/pages/AdminPricingPage.vue'),
+      redirect: '/models',
     },
     {
       path: '/team',

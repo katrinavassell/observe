@@ -4,14 +4,12 @@ import { useQuery, useQueryClient } from '@tanstack/vue-query'
 import { useRouter } from 'vue-router'
 import { getModels } from '@/lib/api'
 import { Cpu, AlertCircle, Plug, FlaskConical } from 'lucide-vue-next'
-import { useDemoMode } from '@/composables/useDemoMode'
 import MarginBadge from '@/components/shared/MarginBadge.vue'
 import { Skeleton, Button, Card, CardContent } from '@/components/ui'
 import { formatCurrency } from '@/lib/format'
 
 const router = useRouter()
 const queryClient = useQueryClient()
-const { enterDemoMode, isLoadingDemo } = useDemoMode()
 
 const { data: models, isLoading, isError } = useQuery({
   queryKey: ['models'],
@@ -140,16 +138,10 @@ function goToModel(model: string) {
     <div v-else-if="!models || models.length === 0" class="flex flex-col items-center justify-center py-16 text-center">
       <Cpu class="h-10 w-10 text-muted-foreground/40 mb-3" />
       <p class="text-muted-foreground mb-4">Models appear when you connect an AI provider (OpenAI, Anthropic) or send events via the SDK with a model field.</p>
-      <div class="flex gap-3">
-        <Button :disabled="isLoadingDemo" @click="enterDemoMode">
-          <FlaskConical class="h-4 w-4 mr-2" />
-          {{ isLoadingDemo ? 'Loading...' : 'Try Demo' }}
-        </Button>
-        <Button variant="outline" @click="router.push('/data-sources')">
-          <Plug class="h-4 w-4 mr-2" />
-          Import Data
-        </Button>
-      </div>
+      <Button variant="outline" @click="router.push('/data-sources')">
+        <Plug class="h-4 w-4 mr-2" />
+        Import Data
+      </Button>
     </div>
     <!-- Table -->
     <div v-else class="rounded-lg border bg-card overflow-hidden">

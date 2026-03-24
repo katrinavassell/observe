@@ -1,6 +1,0 @@
-export { default as SimulationModal } from './SimulationModal.vue'
-export { default as SimulationResultsView } from './SimulationResultsView.vue'
-export { default as SimulationConfigForm } from './SimulationConfigForm.vue'
-export { default as SimulationMetricCard } from './SimulationMetricCard.vue'
-export { default as SimulationRecommendations } from './SimulationRecommendations.vue'
-export { default as SimulationAssumptions } from './SimulationAssumptions.vue'

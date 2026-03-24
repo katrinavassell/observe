@@ -47,7 +47,7 @@ export function sanitizeErrorForUser(error: unknown): string {
     }
 
     // Generic database errors
-    if (message.includes('supabase') || message.includes('postgres') || message.includes('database')) {
+    if (message.includes('postgres') || message.includes('database')) {
       return 'A database error occurred. Please try again.'
     }
 

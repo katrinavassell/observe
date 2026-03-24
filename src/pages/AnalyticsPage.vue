@@ -7,8 +7,7 @@ import {
   getEventsByModel,
   getEventsByCustomer,
 } from '@/lib/api'
-import { AlertCircle, AlertTriangle, Database, Plug, FlaskConical } from 'lucide-vue-next'
-import { useDemoMode } from '@/composables/useDemoMode'
+import { AlertCircle, AlertTriangle, Database, Plug } from 'lucide-vue-next'
 import {
   Card,
   Skeleton,
@@ -18,8 +17,6 @@ import { formatCurrency as fmt, formatPct as fmtPct } from '@/lib/format'
 
 const router = useRouter()
 const queryClient = useQueryClient()
-const { enterDemoMode, isLoadingDemo } = useDemoMode()
-
 type Tab = 'feature' | 'model' | 'customer'
 const activeTab = ref<Tab>('feature')
 
@@ -153,16 +150,10 @@ function retry() {
       <p class="text-xs text-muted-foreground mb-4">
         Cost and margin breakdowns appear here once you have event data flowing in via the SDK, CSV upload, or provider integrations.
       </p>
-      <div class="flex gap-3">
-        <Button size="sm" :disabled="isLoadingDemo" @click="enterDemoMode">
-          <FlaskConical class="h-3.5 w-3.5 mr-1.5" />
-          {{ isLoadingDemo ? 'Loading...' : 'Try Demo' }}
-        </Button>
-        <Button variant="outline" size="sm" @click="router.push('/data-sources')">
-          <Plug class="h-3.5 w-3.5 mr-1.5" />
-          Data Sources
-        </Button>
-      </div>
+      <Button variant="outline" size="sm" @click="router.push('/data-sources')">
+        <Plug class="h-3.5 w-3.5 mr-1.5" />
+        Data Sources
+      </Button>
     </div>
 
     <!-- Data loaded -->

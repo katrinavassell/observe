@@ -20,8 +20,7 @@ import cors from 'cors'
 import rateLimit from 'express-rate-limit'
 import { z } from 'zod'
 import { getUncachableStripeClient } from './stripe-client.js'
-import { apiKeyStore } from './api-key-store.js'
-import { initModelPricing, calculateCostFromTokens as calcCostFromDb, getAllPricing, getModelPricing, upsertModelPricing, getUserPricing, upsertUserModelPricing, deleteUserModelPricing, getPricingLog, refreshFromSources, getUserPricingTiers, setUserPricingTiers, deleteUserPricingTiers } from './model-pricing.js'
+import { initModelPricing, calculateCostFromTokens as calcCostFromDb, getAllPricing } from './model-pricing.js'
 import {
   tansoListPlans,
   tansoListFeatures,
@@ -137,7 +136,7 @@ app.use(createAuthRoutes(pool, ensureVisitor))
 
 // ─── Shared Tanso helpers (used by multiple route modules) ─────────────────
 const checkTansoFeatureAccess = createCheckTansoFeatureAccess(pool)
-const trackTansoUsage = createTrackTansoUsage()
+const trackTansoUsage = createTrackTansoUsage(pool)
 const convertReferralIfPending = createConvertReferralIfPending(pool)
 
 // ─── Extracted route modules ───────────────────────────────────────────────
@@ -1410,6 +1409,17 @@ async function _doDbInit() {
     `)
 
     await pool.query(`
+      CREATE TABLE IF NOT EXISTS password_reset_tokens (
+        id SERIAL PRIMARY KEY,
+        account_id INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+        token_hash TEXT NOT NULL,
+        expires_at TIMESTAMPTZ NOT NULL,
+        used_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `)
+
+    await pool.query(`
       CREATE TABLE IF NOT EXISTS tanso_customers (
         id SERIAL PRIMARY KEY,
         visitor_id TEXT UNIQUE NOT NULL,
@@ -1789,7 +1799,7 @@ async function _doDbInit() {
 // MODEL PRICING API
 // =============================================================================
 
-const ADMIN_EMAILS = ['tansoadmin@tansohq.com']
+const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || 'tansoadmin@tansohq.com').split(',').map(e => e.trim().toLowerCase())
 
 function isAdminUser(req: AuthRequest): boolean {
   return !!req.accountEmail && ADMIN_EMAILS.includes(req.accountEmail.toLowerCase())
@@ -1811,138 +1821,6 @@ app.get('/pricing/models', async (_req, res: Response) => {
   }
 })
 
-// POST /pricing/models — admin-only endpoint, upsert global model pricing
-app.post('/pricing/models', ensureVisitor, async (req: AuthRequest, res: Response) => {
-  try {
-    if (!isAdminUser(req)) {
-      return res.status(403).json({ error: 'Admin access required' })
-    }
-    const { model, provider, input_cost_per_million, output_cost_per_million } = req.body
-    if (!model || !provider || input_cost_per_million == null) {
-      return res.status(400).json({ error: 'model, provider, and input_cost_per_million are required' })
-    }
-    await upsertModelPricing(pool, {
-      model,
-      provider,
-      input_cost_per_million: parseFloat(input_cost_per_million),
-      output_cost_per_million: parseFloat(output_cost_per_million || 0),
-    })
-    res.json({ success: true })
-  } catch (error) {
-    console.error('POST /pricing/models error:', error)
-    res.status(500).json({ error: 'Failed to update model pricing' })
-  }
-})
-
-// GET /pricing/log — pricing change history (global changes + user's own overrides)
-app.get('/pricing/log', ensureVisitor, async (req: AuthRequest, res: Response) => {
-  try {
-    const limit = parseInt(req.query.limit as string) || 100
-    const log = await getPricingLog(pool, req.visitorId, limit)
-    res.json({ log })
-  } catch (error) {
-    console.error('GET /pricing/log error:', error)
-    res.status(500).json({ error: 'Failed to fetch pricing log' })
-  }
-})
-
-// POST /pricing/refresh — admin-only, manually trigger pricing refresh from OpenRouter/LiteLLM
-app.post('/pricing/refresh', ensureVisitor, async (req: AuthRequest, res: Response) => {
-  try {
-    if (!isAdminUser(req)) {
-      return res.status(403).json({ error: 'Admin access required' })
-    }
-    const result = await refreshFromSources(pool)
-    res.json(result)
-  } catch (error) {
-    console.error('POST /pricing/refresh error:', error)
-    res.status(500).json({ error: 'Failed to refresh pricing' })
-  }
-})
-
-// GET /pricing/my-overrides — get user's custom pricing overrides merged with defaults
-app.get('/pricing/my-overrides', ensureVisitor, async (req: AuthRequest, res: Response) => {
-  try {
-    const pricing = await getUserPricing(pool, req.visitorId!)
-    res.json({ models: pricing })
-  } catch (error) {
-    console.error('GET /pricing/my-overrides error:', error)
-    res.status(500).json({ error: 'Failed to fetch pricing overrides' })
-  }
-})
-
-// POST /pricing/my-overrides — set a user-level pricing override for a model
-app.post('/pricing/my-overrides', ensureVisitor, async (req: AuthRequest, res: Response) => {
-  try {
-    const { model, input_cost_per_million, output_cost_per_million } = req.body
-    if (!model || input_cost_per_million == null) {
-      return res.status(400).json({ error: 'model and input_cost_per_million are required' })
-    }
-    await upsertUserModelPricing(
-      pool, req.visitorId!, model,
-      parseFloat(input_cost_per_million),
-      parseFloat(output_cost_per_million || 0),
-    )
-    res.json({ success: true })
-  } catch (error) {
-    console.error('POST /pricing/my-overrides error:', error)
-    res.status(500).json({ error: 'Failed to update pricing override' })
-  }
-})
-
-// DELETE /pricing/my-overrides/:model — revert to global default for a model
-app.delete('/pricing/my-overrides/:model', ensureVisitor, async (req: AuthRequest, res: Response) => {
-  try {
-    await deleteUserModelPricing(pool, req.visitorId!, req.params.model)
-    res.json({ success: true })
-  } catch (error) {
-    console.error('DELETE /pricing/my-overrides error:', error)
-    res.status(500).json({ error: 'Failed to delete pricing override' })
-  }
-})
-
-// GET /pricing/my-tiers/:model — get tiered pricing for a model
-app.get('/pricing/my-tiers/:model', ensureVisitor, async (req: AuthRequest, res: Response) => {
-  try {
-    const tiers = await getUserPricingTiers(pool, req.visitorId!, req.params.model)
-    res.json({ model: req.params.model, tiers })
-  } catch (error) {
-    console.error('GET /pricing/my-tiers error:', error)
-    res.status(500).json({ error: 'Failed to fetch pricing tiers' })
-  }
-})
-
-// POST /pricing/my-tiers/:model — set tiered pricing for a model
-// Body: { tiers: [{ min_tokens_million: 0, input_cost_per_million: 2.50, output_cost_per_million: 10.00 }, ...] }
-app.post('/pricing/my-tiers/:model', ensureVisitor, async (req: AuthRequest, res: Response) => {
-  try {
-    const { tiers } = req.body
-    if (!Array.isArray(tiers) || tiers.length === 0) {
-      return res.status(400).json({ error: 'tiers array is required with at least one entry' })
-    }
-    for (const tier of tiers) {
-      if (tier.min_tokens_million == null || tier.input_cost_per_million == null) {
-        return res.status(400).json({ error: 'Each tier needs min_tokens_million and input_cost_per_million' })
-      }
-    }
-    await setUserPricingTiers(pool, req.visitorId!, req.params.model, tiers)
-    res.json({ success: true })
-  } catch (error) {
-    console.error('POST /pricing/my-tiers error:', error)
-    res.status(500).json({ error: 'Failed to set pricing tiers' })
-  }
-})
-
-// DELETE /pricing/my-tiers/:model — remove tiered pricing, revert to flat rate
-app.delete('/pricing/my-tiers/:model', ensureVisitor, async (req: AuthRequest, res: Response) => {
-  try {
-    await deleteUserPricingTiers(pool, req.visitorId!, req.params.model)
-    res.json({ success: true })
-  } catch (error) {
-    console.error('DELETE /pricing/my-tiers error:', error)
-    res.status(500).json({ error: 'Failed to delete pricing tiers' })
-  }
-})
 
 // =============================================================================
 // STRIPE NATIVE INTEGRATION
@@ -4282,43 +4160,6 @@ async function getOrCreateTansoCustomer(visitorId: string, email?: string): Prom
     return null
   }
 }
-
-// =============================================================================
-// API Key Management (per-session Tanso API keys)
-// =============================================================================
-
-app.post('/tanso/key', ensureVisitor, async (req: AuthRequest, res: Response) => {
-  try {
-    let { apiKey } = req.body
-    if (!apiKey || typeof apiKey !== 'string') {
-      return res.status(400).json({ error: 'API key is required' })
-    }
-    // Strip "Bearer " prefix if present
-    apiKey = apiKey.replace(/^Bearer\s+/i, '').trim()
-    if (!apiKey.startsWith('sk_') && !apiKey.startsWith('ts_')) {
-      return res.status(400).json({ error: 'Invalid API key format (must start with sk_ or ts_)' })
-    }
-    apiKeyStore.set(req.session.id, apiKey)
-    res.json({ success: true, message: 'API key set for this session' })
-  } catch (err) {
-    console.error('Set API key error:', err)
-    res.status(500).json({ error: 'Failed to set API key' })
-  }
-})
-
-app.get('/tanso/key/status', ensureVisitor, async (req: AuthRequest, res: Response) => {
-  const hasSessionKey = apiKeyStore.has(req.session.id)
-  const hasEnvKey = !!process.env.TANSO_API_KEY
-  res.json({
-    hasApiKey: hasSessionKey || hasEnvKey,
-    environment: hasSessionKey ? 'session' : hasEnvKey ? 'environment' : 'none',
-  })
-})
-
-app.delete('/tanso/key', ensureVisitor, async (req: AuthRequest, res: Response) => {
-  apiKeyStore.delete(req.session.id)
-  res.json({ success: true })
-})
 
 // =============================================================================
 // Tanso Invoices

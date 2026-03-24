@@ -12,17 +12,14 @@
 import { ref, watch, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { toast } from 'vue-sonner'
-import { TrendingUp, FlaskConical, Eye, Key, Copy, Trash2, Plus } from 'lucide-vue-next'
+import { TrendingUp, Eye, Key, Copy, Trash2, Plus } from 'lucide-vue-next'
 import { Card, CardContent, Button } from '@/components/ui'
 import {
-  RevenueSection,
   CostsSection,
   UsageSection,
 } from '@/components/data-sources'
-import StripeApiKeyModal from '@/components/integrations/StripeApiKeyModal.vue'
 import UsageLimitBanner from '@/components/shared/UsageLimitBanner.vue'
 import { useDataMode } from '@/composables/useDataMode'
-import { useDemoMode } from '@/composables/useDemoMode'
 import { useTeam } from '@/composables/useTeam'
 import { useEntitlement } from '@/composables/useEntitlement'
 import {
@@ -33,8 +30,6 @@ import {
   createSdkKey,
   listSdkKeys,
   revokeSdkKey,
-  getStripeStatus,
-  syncStripeData,
 } from '@/lib/api'
 import type { SdkKey } from '@/lib/api'
 
@@ -57,12 +52,6 @@ const {
   switchToSampleData,
 } = useDataMode()
 
-const { isDemoMode, isLoadingDemo, enterDemoMode } = useDemoMode()
-
-// Sync cadence constants (best practices for billing data)
-const SYNC_STALE_THRESHOLD_MS = 60 * 60 * 1000 // 1 hour - sync if older
-const SYNC_INTERVAL_MS = 4 * 60 * 60 * 1000 // 4 hours - background sync interval
-let syncIntervalId: ReturnType<typeof setInterval> | null = null
 
 /** Check if data is stale and needs refresh */
 function isDataStale(): boolean {
@@ -87,14 +76,6 @@ const isLoadingRevenue = ref(false)
 const isLoadingCosts = ref(false)
 const isLoadingUsage = ref(false)
 
-/** Stripe API Key Modal */
-const showStripeModal = ref(false)
-const isStripeConnected = ref(false)
-const stripeAccountName = ref('')
-const isSyncing = ref(false)
-
-/** Component refs */
-const revenueSectionRef = ref<InstanceType<typeof RevenueSection> | null>(null)
 
 const ingestUrl = typeof window !== 'undefined' ? `${window.location.origin}/api/events/ingest` : '/api/events/ingest'
 const proxyBaseUrl = typeof window !== 'undefined' ? `${window.location.origin}/v1` : '/v1'
@@ -158,27 +139,8 @@ function dismissGeneratedKey() {
   showKeyGenerator.value = false
 }
 
-// =============================================================================
-// LIFECYCLE - Check Stripe status and auto-sync
-// =============================================================================
-
 onMounted(async () => {
-  try {
-    const status = await getStripeStatus()
-    isStripeConnected.value = status.connected
-    stripeAccountName.value = status.account_name || ''
-  } catch {
-    isStripeConnected.value = false
-  }
   await loadSdkKeys()
-})
-
-onUnmounted(() => {
-  // Clean up sync interval
-  if (syncIntervalId) {
-    clearInterval(syncIntervalId)
-    syncIntervalId = null
-  }
 })
 
 // =============================================================================
@@ -199,9 +161,6 @@ async function handleTrySampleData(): Promise<void> {
     revenueFiles.value = { customers: true, subscriptions: true, invoices: true }
     costsFile.value = { name: 'sample-costs.csv', isSample: true }
     usageFile.value = { name: 'sample-usage.csv', isSample: true }
-
-    // Update the RevenueSection component to show sample files
-    revenueSectionRef.value?.setSampleDataLoaded()
 
     toast.success('Sample data loaded!', {
       description: 'Redirecting to the analyzer...',
@@ -331,75 +290,6 @@ async function handleUsageFileCleared(): Promise<void> {
   }
 }
 
-function handleStripeConnect(): void {
-  showStripeModal.value = true
-}
-
-async function handleStripeConnected(accountName: string): Promise<void> {
-  isStripeConnected.value = true
-  stripeAccountName.value = accountName
-  toast.success(`Connected to ${accountName}. Syncing data...`)
-
-  // Auto-sync immediately after connecting
-  await handleStripeSync()
-
-  // Set up background sync if not already running
-  if (!syncIntervalId) {
-    syncIntervalId = setInterval(async () => {
-      if (isStripeConnected.value && !isSyncing.value) {
-        await handleStripeSync()
-      }
-    }, SYNC_INTERVAL_MS)
-  }
-}
-
-async function handleStripeSync(): Promise<void> {
-  if (isSyncing.value) return
-
-  isSyncing.value = true
-  try {
-    const result = await syncStripeData()
-
-    if (result.success) {
-      toast.success(`Synced ${result.synced.customers} customers, ${result.synced.subscriptions} subscriptions`)
-      revenueFiles.value = { customers: true, subscriptions: true, invoices: false }
-      await refetchDataMode()
-    }
-  } catch (error) {
-    toast.error('Sync failed', {
-      description: error instanceof Error ? error.message : 'Please try again',
-    })
-  } finally {
-    isSyncing.value = false
-  }
-}
-
-async function handleStripeDisconnect(): Promise<void> {
-  try {
-    // Clear local state
-    isStripeConnected.value = false
-    stripeAccountName.value = ''
-
-    // Clear file indicators
-    revenueFiles.value = { customers: false, subscriptions: false, invoices: false }
-
-    // Stop background sync
-    if (syncIntervalId) {
-      clearInterval(syncIntervalId)
-      syncIntervalId = null
-    }
-
-    // Refresh data mode
-    await refetchDataMode()
-
-    toast.success('Stripe disconnected and data cleared')
-  } catch (error) {
-    toast.error('Failed to disconnect Stripe', {
-      description: error instanceof Error ? error.message : 'Please try again',
-    })
-  }
-}
-
 // =============================================================================
 // DATA RESTORATION
 // =============================================================================
@@ -411,8 +301,6 @@ watch(
     if (mode === 'sample') {
       if (hasRev) {
         revenueFiles.value = { customers: true, subscriptions: true, invoices: true }
-        // Update RevenueSection UI to show sample files
-        revenueSectionRef.value?.setSampleDataLoaded()
       }
       if (hasCst && !costsFile.value) {
         costsFile.value = { name: 'sample-costs.csv', isSample: true }
@@ -423,8 +311,6 @@ watch(
     } else if (mode === 'user') {
       if (hasRev) {
         revenueFiles.value = { customers: false, subscriptions: true, invoices: false }
-        // Update RevenueSection UI to show user files
-        revenueSectionRef.value?.setSampleDataLoaded()
       }
       if (hasCst && !costsFile.value) {
         costsFile.value = { name: 'costs.csv', isSample: false }
@@ -452,66 +338,18 @@ watch(
     <div v-if="isViewer" class="flex items-start gap-3 rounded-lg border border-warning/30 bg-warning/10 p-4 text-sm text-warning-foreground">
       <Eye class="h-4 w-4 mt-0.5 shrink-0" />
       <div>
-        <strong>Viewer access</strong> — You can see your team's data but cannot upload, modify, or clear data. Contact your team admin to make changes.
-      </div>
-    </div>
-
-    <!-- Demo Mode Notice (when already in demo, admin only) -->
-    <Card v-if="isDemoMode && !isViewer" class="border-warning/50 bg-warning/10">
-      <CardContent class="p-6">
-        <div class="flex items-center gap-2 mb-2">
-          <FlaskConical class="h-5 w-5 text-warning" />
-          <h2 class="font-semibold text-foreground">You're in demo mode</h2>
-        </div>
-        <p class="text-sm text-muted-foreground">
-          You're exploring Tanso with realistic demo data. Data import and connection features are disabled in demo mode.
-          Exit the demo from the banner above to connect your own data.
-        </p>
-      </CardContent>
-    </Card>
-
-    <!-- Try Demo Hero (only when not in demo mode and not viewer) -->
-    <Card v-if="!isDemoMode && !isViewer" class="border-primary/30 bg-gradient-to-br from-primary/5 to-primary/10">
-      <CardContent class="p-6">
-        <div class="flex items-center gap-2 mb-3">
-          <FlaskConical class="h-5 w-5 text-primary" />
-          <h2 class="font-semibold">Try Demo Mode</h2>
-        </div>
-        <p class="text-sm text-muted-foreground mb-4">
-          Explore the full dashboard with realistic pre-loaded SaaS data — no setup required:
-        </p>
-        <ul class="text-sm text-muted-foreground space-y-1 mb-5">
-          <li>- 5 customers across Starter, Pro, and Enterprise plans</li>
-          <li>- Revenue, AI costs, and feature usage data</li>
-          <li>- Feature-level margin and model cost analytics</li>
-        </ul>
-        <div class="flex items-center gap-3">
-          <Button @click="enterDemoMode" :disabled="isLoadingDemo">
-            <FlaskConical class="h-4 w-4 mr-2" />
-            {{ isLoadingDemo ? 'Loading Demo...' : 'Try Demo' }}
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
-
-    <!-- Divider (hidden in demo mode and for viewers) -->
-    <div v-if="!isDemoMode && !isViewer" class="relative">
-      <div class="absolute inset-0 flex items-center">
-        <div class="w-full border-t"></div>
-      </div>
-      <div class="relative flex justify-center text-xs">
-        <span class="bg-background px-3 text-muted-foreground">Or connect your own</span>
+        <strong>Viewer access</strong> -You can see your team's data but cannot upload, modify, or clear data. Contact your team admin to make changes.
       </div>
     </div>
 
     <!-- SECTION: Track going forward -->
-    <div v-if="!isDemoMode" class="space-y-1">
+    <div class="space-y-1">
       <h2 class="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Track going forward</h2>
       <p class="text-sm text-muted-foreground">Add a few lines of code to start tracking AI costs in real-time.</p>
     </div>
 
-    <!-- SDK Integration Section — PRIMARY integration, shown first -->
-    <Card v-if="!isDemoMode" class="border-success/20">
+    <!-- SDK Integration Section -PRIMARY integration, shown first -->
+    <Card v-if="true" class="border-success/20">
       <CardContent class="p-6 space-y-5">
         <div>
           <div class="flex items-center gap-2 mb-1">
@@ -522,6 +360,12 @@ watch(
           <p class="text-sm text-muted-foreground">
             Track AI costs automatically. No billing changes required.
           </p>
+        </div>
+
+        <!-- When to use which -->
+        <div class="rounded-lg border bg-muted/30 p-3 text-xs text-muted-foreground space-y-1">
+          <div><strong class="text-foreground">SDK Events</strong> -Best when you want full control. Send events after each AI call with custom cost, revenue, and metadata. Works with any provider or model.</div>
+          <div><strong class="text-foreground">Proxy Mode</strong> -Best for zero-effort setup. Change one URL and cost is captured automatically. Limited to OpenAI and Anthropic APIs.</div>
         </div>
 
         <!-- Integration mode toggle -->
@@ -581,7 +425,7 @@ watch(
           <div v-if="generatedKey" class="rounded-lg border bg-muted/40 p-4 mb-3 space-y-2">
             <div class="flex items-center gap-2 text-xs font-medium text-success">
               <Key class="h-3 w-3" />
-              Save this key — you won't see it again
+              Save this key -you won't see it again
             </div>
             <div class="flex items-center gap-2">
               <code class="flex-1 text-xs font-mono bg-background border rounded px-3 py-2 select-all break-all">{{ generatedKey }}</code>
@@ -608,7 +452,7 @@ watch(
           </div>
         </div>
 
-        <!-- Quick Start — PostHog-style minimal snippet -->
+        <!-- Quick Start -PostHog-style minimal snippet -->
         <div>
           <div class="flex items-center gap-2 mb-2">
             <h3 class="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Quick start</h3>
@@ -627,12 +471,12 @@ watch(
     <span class="text-sky-300">model</span>: <span class="text-amber-300">'gpt-4o'</span>,
     <span class="text-sky-300">inputTokens</span>: response.usage.prompt_tokens,
     <span class="text-sky-300">outputTokens</span>: response.usage.completion_tokens,
-    <span class="text-zinc-500">// cost auto-calculated from model + tokens</span>
+    <span class="text-zinc-500">// cost auto-calculated from model + tokens if omitted</span>
   }]})
 })</pre>
           </div>
           <p class="text-[11px] text-muted-foreground mt-2">
-            3 required fields: <span class="font-mono">eventName</span>, <span class="font-mono">customerReferenceId</span>, <span class="font-mono">featureKey</span>. Everything else is optional — we auto-detect the provider from the model name and enrich revenue from Stripe.
+            3 required fields: <span class="font-mono">eventName</span>, <span class="font-mono">customerReferenceId</span>, <span class="font-mono">featureKey</span>. Everything else is optional -pass <span class="font-mono">model</span> + <span class="font-mono">inputTokens</span>/<span class="font-mono">outputTokens</span> and we auto-calculate cost. Provider is detected from the model name.
           </p>
         </div>
 
@@ -642,7 +486,7 @@ watch(
             Show full example with all options ▾
           </summary>
           <div class="mt-2 rounded-md bg-muted/60 border p-4 font-mono text-xs leading-relaxed overflow-x-auto">
-            <pre class="whitespace-pre"><span class="text-muted-foreground">// Full example — wrap your AI API call</span>
+            <pre class="whitespace-pre"><span class="text-muted-foreground">// Full example -wrap your AI API call</span>
 const response = await openai.chat.completions.create({ ... })
 
 await fetch('{{ ingestUrl }}', {
@@ -655,12 +499,13 @@ await fetch('{{ ingestUrl }}', {
     eventName: 'chat_completion',
     customerReferenceId: 'cus_123',  <span class="text-muted-foreground">// your customer ID</span>
     featureKey: 'ai_summarization',  <span class="text-muted-foreground">// which feature used it</span>
-    costAmount: 0.24,                <span class="text-muted-foreground">// cost in USD</span>
     model: 'gpt-4o',                 <span class="text-muted-foreground">// auto-detects provider</span>
-    usageUnits: 1500,                <span class="text-muted-foreground">// tokens, requests, etc.</span>
+    inputTokens: 500,                <span class="text-muted-foreground">// prompt tokens</span>
+    outputTokens: 1000,              <span class="text-muted-foreground">// completion tokens</span>
+    costAmount: 0.24,                <span class="text-muted-foreground">// or omit -auto-calculated from model + tokens</span>
     revenueAmount: 0.50,             <span class="text-muted-foreground">// or auto-enriched from Stripe</span>
-    eventIdempotencyKey: 'evt_abc',  <span class="text-muted-foreground">// prevents duplicates on retry</span>
-    meta: { session: 'sess_xyz' },   <span class="text-muted-foreground">// any extra context</span>
+    idempotencyKey: 'evt_abc',       <span class="text-muted-foreground">// prevents duplicates on retry</span>
+    properties: { session: 'sess_xyz' }, <span class="text-muted-foreground">// any extra context</span>
   }]})
 })</pre>
           </div>
@@ -692,16 +537,20 @@ await fetch('{{ ingestUrl }}', {
             <div class="flex gap-2"><span class="font-mono bg-muted px-1.5 py-0.5 rounded text-[11px] shrink-0">eventName</span><span class="text-red-500 text-[10px]">required</span><span class="text-muted-foreground">What happened ("chat_completion", "image_generated")</span></div>
             <div class="flex gap-2"><span class="font-mono bg-muted px-1.5 py-0.5 rounded text-[11px] shrink-0">customerReferenceId</span><span class="text-red-500 text-[10px]">required</span><span class="text-muted-foreground">Your customer identifier</span></div>
             <div class="flex gap-2"><span class="font-mono bg-muted px-1.5 py-0.5 rounded text-[11px] shrink-0">featureKey</span><span class="text-red-500 text-[10px]">required</span><span class="text-muted-foreground">Which product feature ("ai_summarization", "search")</span></div>
-            <div class="flex gap-2"><span class="font-mono bg-muted px-1.5 py-0.5 rounded text-[11px] shrink-0">costAmount</span><span class="text-muted-foreground/60 text-[10px]">optional</span><span class="text-muted-foreground">Cost in USD</span></div>
-            <div class="flex gap-2"><span class="font-mono bg-muted px-1.5 py-0.5 rounded text-[11px] shrink-0">model</span><span class="text-muted-foreground/60 text-[10px]">optional</span><span class="text-muted-foreground">Model name — provider auto-detected (claude-* → Anthropic, gpt-* → OpenAI)</span></div>
+            <div class="flex gap-2"><span class="font-mono bg-muted px-1.5 py-0.5 rounded text-[11px] shrink-0">model</span><span class="text-muted-foreground/60 text-[10px]">optional</span><span class="text-muted-foreground">Model name -provider auto-detected (claude-* → Anthropic, gpt-* → OpenAI)</span></div>
+            <div class="flex gap-2"><span class="font-mono bg-muted px-1.5 py-0.5 rounded text-[11px] shrink-0">inputTokens</span><span class="text-muted-foreground/60 text-[10px]">optional</span><span class="text-muted-foreground">Prompt tokens -used with model to auto-calculate cost</span></div>
+            <div class="flex gap-2"><span class="font-mono bg-muted px-1.5 py-0.5 rounded text-[11px] shrink-0">outputTokens</span><span class="text-muted-foreground/60 text-[10px]">optional</span><span class="text-muted-foreground">Completion tokens -used with model to auto-calculate cost</span></div>
+            <div class="flex gap-2"><span class="font-mono bg-muted px-1.5 py-0.5 rounded text-[11px] shrink-0">costAmount</span><span class="text-muted-foreground/60 text-[10px]">optional</span><span class="text-muted-foreground">Cost in USD -or omit and we calculate from model + tokens</span></div>
+            <div class="flex gap-2"><span class="font-mono bg-muted px-1.5 py-0.5 rounded text-[11px] shrink-0">revenueAmount</span><span class="text-muted-foreground/60 text-[10px]">optional</span><span class="text-muted-foreground">Revenue for this event -auto-enriched from Stripe if missing</span></div>
             <div class="flex gap-2"><span class="font-mono bg-muted px-1.5 py-0.5 rounded text-[11px] shrink-0">usageUnits</span><span class="text-muted-foreground/60 text-[10px]">optional</span><span class="text-muted-foreground">Tokens, requests, or any quantity</span></div>
-            <div class="flex gap-2"><span class="font-mono bg-muted px-1.5 py-0.5 rounded text-[11px] shrink-0">revenueAmount</span><span class="text-muted-foreground/60 text-[10px]">optional</span><span class="text-muted-foreground">Revenue for this event — auto-enriched from Stripe if missing</span></div>
-            <div class="flex gap-2"><span class="font-mono bg-muted px-1.5 py-0.5 rounded text-[11px] shrink-0">eventIdempotencyKey</span><span class="text-muted-foreground/60 text-[10px]">optional</span><span class="text-muted-foreground">Unique key for dedup on retry</span></div>
+            <div class="flex gap-2"><span class="font-mono bg-muted px-1.5 py-0.5 rounded text-[11px] shrink-0">idempotencyKey</span><span class="text-muted-foreground/60 text-[10px]">optional</span><span class="text-muted-foreground">Unique key for dedup on retry</span></div>
+            <div class="flex gap-2"><span class="font-mono bg-muted px-1.5 py-0.5 rounded text-[11px] shrink-0">properties</span><span class="text-muted-foreground/60 text-[10px]">optional</span><span class="text-muted-foreground">JSON object with any extra context (session ID, etc.)</span></div>
           </div>
         </div>
 
-        <div class="text-[11px] text-muted-foreground border-t pt-3">
-          Batch up to 1,000 events per request. All data tagged as <span class="font-mono bg-success/10 text-success px-1 py-0.5 rounded">SDK</span> in the dashboard.
+        <div class="text-[11px] text-muted-foreground border-t pt-3 space-y-1.5">
+          <div>Batch up to 1,000 events per request. All data tagged as <span class="font-mono bg-success/10 text-success px-1 py-0.5 rounded">SDK</span> in the dashboard.</div>
+          <div><strong>How cost works:</strong> Pass <span class="font-mono">costAmount</span> directly, or pass <span class="font-mono">model</span> + <span class="font-mono">inputTokens</span>/<span class="font-mono">outputTokens</span> and we calculate it automatically (100+ models, pricing auto-refreshed from OpenRouter).</div>
         </div>
 
         </template>
@@ -710,24 +559,26 @@ await fetch('{{ ingestUrl }}', {
         <template v-else>
 
         <p class="text-sm text-muted-foreground">
-          Swap your API base URL. Cost is captured automatically from every request — no extra code needed.
+          Route your OpenAI/Anthropic calls through Tanso by changing one URL. We forward the request, capture tokens and cost from the response, then log it -zero code changes beyond the base URL.
         </p>
 
         <!-- OpenAI snippet -->
         <div>
           <h3 class="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">OpenAI</h3>
           <div class="rounded-md bg-zinc-950 border border-zinc-800 p-4 font-mono text-xs leading-relaxed overflow-x-auto">
-            <pre class="whitespace-pre text-zinc-100"><span class="text-zinc-500">// Just change baseURL — your existing code works as-is</span>
+            <pre class="whitespace-pre text-zinc-100"><span class="text-zinc-500">// Just change baseURL -your existing code works as-is</span>
 <span class="text-emerald-400">import</span> OpenAI <span class="text-emerald-400">from</span> <span class="text-amber-300">'openai'</span>
 
 <span class="text-emerald-400">const</span> openai = <span class="text-emerald-400">new</span> OpenAI({
   <span class="text-sky-300">baseURL</span>: <span class="text-amber-300">'{{ proxyBaseUrl }}'</span>,
   <span class="text-sky-300">defaultHeaders</span>: {
     <span class="text-amber-300">'X-Tanso-Key'</span>: <span class="text-amber-300">'{{ sdkKeys.length > 0 ? sdkKeys[0].key_prefix + "..." : "YOUR_API_KEY" }}'</span>,
+    <span class="text-amber-300">'X-Tanso-Customer'</span>: userId,       <span class="text-zinc-500">// optional</span>
+    <span class="text-amber-300">'X-Tanso-Feature'</span>: <span class="text-amber-300">'ai_chat'</span>,  <span class="text-zinc-500">// optional</span>
   },
 })
 
-<span class="text-zinc-500">// Use openai normally — every call is tracked automatically</span>
+<span class="text-zinc-500">// Use openai normally -every call is tracked automatically</span>
 <span class="text-emerald-400">const</span> response = <span class="text-emerald-400">await</span> openai.chat.completions.create({
   model: <span class="text-amber-300">'gpt-4o'</span>,
   messages: [{ role: <span class="text-amber-300">'user'</span>, content: prompt }],
@@ -770,6 +621,15 @@ await fetch('{{ ingestUrl }}', {
           </div>
         </div>
 
+        <!-- Optional headers -->
+        <div>
+          <h3 class="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Optional headers</h3>
+          <div class="text-xs space-y-1.5">
+            <div class="flex gap-2"><span class="font-mono bg-muted px-1.5 py-0.5 rounded text-[11px] shrink-0">X-Tanso-Customer</span><span class="text-muted-foreground">Customer ID -attributes cost to a specific customer</span></div>
+            <div class="flex gap-2"><span class="font-mono bg-muted px-1.5 py-0.5 rounded text-[11px] shrink-0">X-Tanso-Feature</span><span class="text-muted-foreground">Feature key -attributes cost to a product feature (defaults to endpoint name)</span></div>
+          </div>
+        </div>
+
         <!-- Supported endpoints -->
         <div>
           <h3 class="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Supported endpoints</h3>
@@ -789,10 +649,9 @@ await fetch('{{ ingestUrl }}', {
       </CardContent>
     </Card>
 
-    <!-- Revenue Section — Stripe connection (hidden in demo mode) -->
+    <!-- Revenue Section -Stripe connection (hidden in demo mode) -->
     <RevenueSection
-      v-if="!isDemoMode"
-      ref="revenueSectionRef"
+           ref="revenueSectionRef"
       :is-loading-sample="isLoadingRevenue"
       :is-stripe-connected="isStripeConnected"
       :stripe-account-name="stripeAccountName"
@@ -807,7 +666,7 @@ await fetch('{{ ingestUrl }}', {
     />
 
     <!-- SECTION: Import historic data (optional) -->
-    <div v-if="!isDemoMode" class="relative mt-4">
+    <div v-if="true" class="relative mt-4">
       <div class="absolute inset-0 flex items-center">
         <div class="w-full border-t"></div>
       </div>
@@ -816,15 +675,14 @@ await fetch('{{ ingestUrl }}', {
       </div>
     </div>
 
-    <div v-if="!isDemoMode" class="space-y-1">
+    <div v-if="true" class="space-y-1">
       <h2 class="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Import historic data</h2>
       <p class="text-sm text-muted-foreground">Already have cost or usage data from your AI providers? Upload CSVs to see trends from day one. You can skip this and come back later.</p>
     </div>
 
     <!-- AI Cost CSVs + Provider Connections (hidden in demo mode) -->
     <CostsSection
-      v-if="!isDemoMode"
-      :file="costsFile"
+           :file="costsFile"
       :is-loading-sample="isLoadingCosts"
       :readonly="isViewer"
       @file-uploaded="handleCostsFileUploaded"
@@ -833,7 +691,7 @@ await fetch('{{ ingestUrl }}', {
     />
 
     <UsageLimitBanner
-      v-if="!isDemoMode && !isViewer && csvUpload.hasLimit.value"
+      v-if="!isViewer && csvUpload.hasLimit.value"
       feature-label="CSV Uploads"
       :allowed="csvUpload.allowed.value"
       :usage="csvUpload.usage.value"
@@ -845,8 +703,7 @@ await fetch('{{ ingestUrl }}', {
 
     <!-- Usage Section (hidden in demo mode) -->
     <UsageSection
-      v-if="!isDemoMode"
-      :file="usageFile"
+           :file="usageFile"
       :is-loading-sample="isLoadingUsage"
       :readonly="isViewer"
       @file-uploaded="handleUsageFileUploaded"

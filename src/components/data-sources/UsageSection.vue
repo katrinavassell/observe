@@ -28,7 +28,6 @@ import {
   validateCsvExtension,
   validateUsageRecords,
 } from '@/lib/validation'
-import { useStripeConnection } from '@/composables/useStripeConnection'
 
 const props = defineProps<{
   /** Current file info if any */
@@ -47,10 +46,6 @@ const emit = defineEmits<{
   /** Emitted when user wants to use sample data */
   useSample: []
 }>()
-
-// Stripe connection to check for synced usage
-const { syncState, isConnected } = useStripeConnection()
-const hasStripeUsage = computed(() => isConnected.value && syncState.value.usage.synced > 0)
 
 // Upload state
 const isUploading = ref(false)
@@ -193,15 +188,6 @@ function downloadTemplate(): void {
         <CardDescription>Upload feature and API usage data</CardDescription>
       </CardHeader>
       <CardContent class="p-5 pt-0 space-y-4">
-        <!-- Info if Stripe usage exists -->
-        <Alert v-if="hasStripeUsage" variant="info">
-          <Info class="h-4 w-4 shrink-0" />
-          <div>
-            <p class="text-sm">
-              You have usage data from Stripe. Any CSV data will be added to it.
-            </p>
-          </div>
-        </Alert>
 
         <!-- Hidden file input -->
         <input

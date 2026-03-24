@@ -2,7 +2,6 @@ import { Router, Response } from 'express'
 import type { Pool } from 'pg'
 import crypto from 'crypto'
 import { type AuthRequest } from './auth.js'
-import { apiKeyStore } from '../api-key-store.js'
 import { getUncachableStripeClient } from '../stripe-client.js'
 import {
   tansoListPlans,
@@ -175,22 +174,57 @@ export function createCheckTansoFeatureAccess(pool: Pool) {
   }
 }
 
-export function createTrackTansoUsage() {
+const ADMIN_EMAIL = 'tansoadmin@tansohq.com'
+let cachedAdminVisitorId: string | null = null
+
+export function createTrackTansoUsage(pool: Pool) {
+  // Resolve admin visitor_id once and cache it
+  async function getAdminVisitorId(): Promise<string | null> {
+    if (cachedAdminVisitorId) return cachedAdminVisitorId
+    try {
+      const result = await pool.query(
+        'SELECT visitor_id FROM accounts WHERE LOWER(email) = $1 LIMIT 1',
+        [ADMIN_EMAIL]
+      )
+      if (result.rows[0]?.visitor_id) {
+        cachedAdminVisitorId = result.rows[0].visitor_id
+        return cachedAdminVisitorId
+      }
+    } catch (err) {
+      console.error('Failed to resolve admin visitor_id:', err)
+    }
+    return null
+  }
+
   return function trackTansoUsage(visitorId: string, featureKey: string, eventName: string) {
     if (!isTansoConfigured()) return
-    try {
-      tansoIngestEvent({
-        eventIdempotencyKey: `${visitorId}-${featureKey}-${Date.now()}`,
-        eventName,
-        occurredAt: new Date().toISOString(),
-        customerReferenceId: visitorId,
-        featureKey,
-      }).catch((err: unknown) => {
-        console.error('Tanso usage tracking error:', err)
-      })
-    } catch (err) {
+    const occurredAt = new Date().toISOString()
+    const idempotencyKey = `${visitorId}-${featureKey}-${Date.now()}`
+
+    // 1. Forward to Tanso billing API
+    tansoIngestEvent({
+      eventIdempotencyKey: idempotencyKey,
+      eventName,
+      occurredAt,
+      customerReferenceId: visitorId,
+      featureKey,
+    }).catch((err: unknown) => {
       console.error('Tanso usage tracking error:', err)
-    }
+    })
+
+    // 2. Also record as an observe_event under the admin account (dogfooding)
+    getAdminVisitorId().then(adminId => {
+      if (!adminId) return
+      pool.query(
+        `INSERT INTO observe_events (
+          user_id, customer_id, feature_key, event_name, timestamp,
+          cost_amount, cost_unit, revenue_amount, usage_units,
+          model, model_provider, source, granularity, is_inferred, idempotency_key
+        ) VALUES ($1, $2, $3, $4, $5, 0, 'usd', 0, 1, NULL, NULL, 'internal', 'event', false, $6)
+        ON CONFLICT (user_id, idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING`,
+        [adminId, visitorId, featureKey, eventName, occurredAt, idempotencyKey]
+      ).catch(err => console.error('Admin observe_event insert error:', err))
+    }).catch(err => console.error('Admin observe tracking error:', err))
   }
 }
 
@@ -204,40 +238,6 @@ export function createTansoRoutes(
   }
 ) {
   const router = Router()
-
-  // API Key Management (per-session Tanso API keys)
-  router.post('/tanso/key', ensureVisitor, async (req: AuthRequest, res: Response) => {
-    try {
-      let { apiKey } = req.body
-      if (!apiKey || typeof apiKey !== 'string') {
-        return res.status(400).json({ error: 'API key is required' })
-      }
-      // Strip "Bearer " prefix if present
-      apiKey = apiKey.replace(/^Bearer\s+/i, '').trim()
-      if (!apiKey.startsWith('sk_') && !apiKey.startsWith('ts_')) {
-        return res.status(400).json({ error: 'Invalid API key format (must start with sk_ or ts_)' })
-      }
-      apiKeyStore.set(req.session.id, apiKey)
-      res.json({ success: true, message: 'API key set for this session' })
-    } catch (err) {
-      console.error('Set API key error:', err)
-      res.status(500).json({ error: 'Failed to set API key' })
-    }
-  })
-
-  router.get('/tanso/key/status', ensureVisitor, async (req: AuthRequest, res: Response) => {
-    const hasSessionKey = apiKeyStore.has(req.session.id)
-    const hasEnvKey = !!process.env.TANSO_API_KEY
-    res.json({
-      hasApiKey: hasSessionKey || hasEnvKey,
-      environment: hasSessionKey ? 'session' : hasEnvKey ? 'environment' : 'none',
-    })
-  })
-
-  router.delete('/tanso/key', ensureVisitor, async (req: AuthRequest, res: Response) => {
-    apiKeyStore.delete(req.session.id)
-    res.json({ success: true })
-  })
 
   // Tanso Invoices
   router.get('/tanso/invoices', ensureVisitor, async (req: AuthRequest, res: Response) => {

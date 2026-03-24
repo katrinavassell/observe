@@ -1,5 +1,3 @@
-import type { Simulation, PricingOpportunity } from '@/types/simulation'
-
 const API_BASE = '/api'
 
 async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
@@ -539,33 +537,6 @@ export async function revokeSdkKey(id: number): Promise<{ success: boolean }> {
 }
 
 // =============================================================================
-// STRIPE NATIVE INTEGRATION
-// =============================================================================
-
-export interface StripeStatus {
-  connected: boolean
-  account_id?: string
-  account_name?: string
-  error?: string
-}
-
-export async function getStripeStatus(): Promise<StripeStatus> {
-  return request('/stripe/status')
-}
-
-export interface StripeSyncResult {
-  success: boolean
-  synced: {
-    customers: number
-    subscriptions: number
-    plans: number
-  }
-}
-
-export async function syncStripeData(): Promise<StripeSyncResult> {
-  return request('/stripe/sync', { method: 'POST' })
-}
-
 // =============================================================================
 // TEAM / ORGANIZATION
 // =============================================================================
@@ -645,62 +616,6 @@ export async function getMyRole(): Promise<{ role: 'admin' | 'viewer'; org_id: s
   return request('/team/my-role')
 }
 
-// =============================================================================
-// Simulations
-// =============================================================================
-
-export async function listSimulations(): Promise<Simulation[]> {
-  return request('/simulations')
-}
-
-export async function getSimulation(id: string): Promise<Simulation> {
-  return request(`/simulations/${id}`)
-}
-
-export async function createSimulation(data: {
-  name: string
-  scenarios?: unknown[]
-  time_range?: { start: string; end: string }
-  segment_name?: string
-}): Promise<Simulation> {
-  return request('/simulations', {
-    method: 'POST',
-    body: JSON.stringify(data),
-  })
-}
-
-export async function updateSimulation(id: string, data: Record<string, unknown>): Promise<Simulation> {
-  return request(`/simulations/${id}`, {
-    method: 'PUT',
-    body: JSON.stringify(data),
-  })
-}
-
-export async function deleteSimulation(id: string): Promise<{ success: boolean }> {
-  return request(`/simulations/${id}`, { method: 'DELETE' })
-}
-
-export async function getOpportunities(): Promise<PricingOpportunity[]> {
-  return request('/simulations/opportunities')
-}
-
-export interface SimulationSuggestion {
-  name: string
-  rationale: string
-  scenarios: Array<{
-    name: string
-    description: string
-    changes: Array<{
-      feature_key: string
-      change_type: string
-      change_value: number
-    }>
-  }>
-}
-
-export async function suggestSimulation(): Promise<SimulationSuggestion> {
-  return request('/simulations/suggest', { method: 'POST' })
-}
 
 // REFERRAL SYSTEM
 // =============================================================================
@@ -802,7 +717,6 @@ export async function clearInsights(): Promise<{ success: boolean }> {
 
 export interface UsageLimits {
   configured: boolean
-  simulations?: { allowed: boolean; usage?: { used: number; limit: number; remaining: number } }
   ai_insights?: { allowed: boolean; usage?: { used: number; limit: number; remaining: number } }
 }
 
@@ -889,18 +803,6 @@ export async function tansoGetInvoices(): Promise<{ invoices: TansoInvoice[]; co
   return request('/tanso/invoices')
 }
 
-// API key management
-export async function tansoSetApiKey(apiKey: string): Promise<{ success: boolean }> {
-  return request('/tanso/key', { method: 'POST', body: JSON.stringify({ apiKey }) })
-}
-
-export async function tansoGetApiKeyStatus(): Promise<{ hasApiKey: boolean; environment: string }> {
-  return request('/tanso/key/status')
-}
-
-export async function tansoClearApiKey(): Promise<{ success: boolean }> {
-  return request('/tanso/key', { method: 'DELETE' })
-}
 
 export interface Account {
   id: number

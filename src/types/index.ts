@@ -46,7 +46,6 @@ export type {
   DataMode,
 } from '@/api/client'
 
-export type { DataStatus as SupabaseDataStatus } from '@/lib/supabase-data'
 
 // =============================================================================
 // COMMON UTILITY TYPES
