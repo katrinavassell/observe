@@ -567,5 +567,10 @@ const exampleInsights = [
         </div>
       </div>
     </template>
+
+    <!-- Demo indicator -->
+    <div v-if="isDemoMode" class="text-xs text-muted-foreground text-center py-1.5">
+      Viewing sample data
+    </div>
   </div>
 </template>
