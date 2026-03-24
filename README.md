@@ -125,9 +125,46 @@ Without `x-tanso-key`, the request is still proxied but no event is logged. The 
 
 ---
 
-## SDK event ingestion
+## SDK (zero latency, 3 lines)
 
-For providers without proxy support, or when you need to attach revenue data, send events directly. Generate an SDK key under **Data Sources > API Keys** in the dashboard.
+```bash
+npm install @tanso/observe
+```
+
+```typescript
+import { TansoObserve } from '@tanso/observe'
+
+const tanso = new TansoObserve({ apiKey: 'sk_live_...' })
+
+tanso.track({
+  eventName: 'chat_response',
+  customerReferenceId: 'cust_123',
+  featureKey: 'ai-assistant',
+  model: 'gpt-4o',
+  costAmount: 0.03,
+})
+```
+
+Fire-and-forget. Events are batched and sent asynchronously. If Observe is unreachable, events are silently dropped — your app's latency is never affected.
+
+### Auto-capture with wrappers
+
+```typescript
+import { wrapOpenAI } from '@tanso/observe/openai'
+const openai = wrapOpenAI(new OpenAI(), tanso, {
+  customerReferenceId: 'cust_123',
+  featureKey: 'ai-chat',
+})
+// Every call is automatically tracked with model, tokens, and cost
+```
+
+Also available: `wrapAnthropic` from `@tanso/observe/anthropic`.
+
+---
+
+## HTTP event ingestion
+
+For providers without proxy or SDK support, or when you need to attach revenue data, send events directly. Generate an SDK key under **Data Sources > API Keys** in the dashboard.
 
 ```bash
 curl -X POST http://localhost:3001/events/ingest \

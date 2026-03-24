@@ -99,8 +99,12 @@ app.use(async (_req: Request, _res: Response, next: NextFunction) => {
   }
 })
 
-if (!process.env.SESSION_SECRET) {
-  throw new Error('SESSION_SECRET environment variable is required')
+// Validate required env vars at startup
+const requiredEnvVars = ['SESSION_SECRET', 'DATABASE_URL'] as const
+for (const envVar of requiredEnvVars) {
+  if (!process.env[envVar]) {
+    throw new Error(`${envVar} environment variable is required`)
+  }
 }
 
 app.set('trust proxy', 1)
@@ -118,7 +122,7 @@ app.use(session({
   cookie: {
     secure: process.env.NODE_ENV === 'production',
     httpOnly: true,
-    sameSite: 'lax',
+    sameSite: 'strict',
     maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
   },
 }))
