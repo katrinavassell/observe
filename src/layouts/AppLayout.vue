@@ -19,6 +19,8 @@ import {
   LogIn,
   LogOut,
   Sparkles,
+  Bell,
+  PiggyBank,
 } from 'lucide-vue-next'
 import ErrorBoundary from '@/components/shared/ErrorBoundary.vue'
 import { useDemoMode } from '@/composables/useDemoMode'
@@ -85,10 +87,29 @@ const navItems = computed(() => [
     description: 'AI-powered analysis of your data',
   },
   {
+    path: '/savings',
+    label: 'Savings',
+    icon: PiggyBank,
+    description: 'Cost optimization recommendations',
+  },
+  {
+    path: '/alerts',
+    label: 'Alerts',
+    icon: Bell,
+    description: 'Threshold-based cost alerts',
+  },
+  {
     path: '/data-sources',
     label: 'Data Sources',
     icon: Plug,
     description: 'Connect integrations or upload files',
+  },
+  {
+    path: '/plans',
+    label: 'Plans & Billing',
+    icon: CreditCard,
+    description: 'Manage your subscription',
+    dividerBefore: true,
   },
 ])
 
@@ -141,7 +162,7 @@ function isActive(path: string) {
         <!-- Bottom section: Account & Team Settings -->
         <div class="border-t p-4 space-y-1">
           <!-- Role badge for viewers -->
-          <div v-if="isViewer" class="flex items-center gap-2 px-3 py-1.5 text-xs text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 rounded-lg mb-1">
+          <div v-if="isViewer" class="flex items-center gap-2 px-3 py-1.5 text-xs text-warning bg-warning/10 rounded-lg mb-1">
             <Eye class="h-3 w-3 shrink-0" />
             <span>Viewer access</span>
           </div>
@@ -201,14 +222,14 @@ function isActive(path: string) {
       <!-- Demo Mode Banner -->
       <div
         v-if="isDemoMode"
-        class="sticky top-0 z-30 flex items-center justify-between gap-3 bg-amber-500 px-4 py-2 text-amber-950"
+        class="sticky top-0 z-30 flex items-center justify-between gap-3 bg-warning px-4 py-2 text-warning-foreground"
       >
         <div class="flex items-center gap-2 text-sm font-medium">
           <FlaskConical class="h-4 w-4 shrink-0" />
           You're viewing demo data — changes are not saved
         </div>
         <button
-          class="flex items-center gap-1.5 rounded-md bg-amber-600/30 px-3 py-1 text-xs font-semibold hover:bg-amber-600/50 transition-colors disabled:opacity-50"
+          class="flex items-center gap-1.5 rounded-md bg-warning-foreground/20 px-3 py-1 text-xs font-semibold hover:bg-warning-foreground/30 transition-colors disabled:opacity-50"
           :disabled="isLoadingDemo"
           @click="exitDemoMode"
         >

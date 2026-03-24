@@ -865,8 +865,13 @@ export function calculateMonthlyMetrics(
   plans: Plan[],
   costs?: CostRecord[]
 ): MonthlyMetrics[] {
-  // Define the months we want to analyze (from sample data: July-December 2024)
-  const months = ['2024-07', '2024-08', '2024-09', '2024-10', '2024-11', '2024-12']
+  // Generate the last 6 months ending at the current month
+  const months: string[] = []
+  const now = new Date()
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+    months.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`)
+  }
 
   const planMap = new Map(plans.map(p => [p.plan_id, p]))
   const subMap = new Map(subscriptions.map(s => [s.customer_id, s]))
@@ -880,16 +885,11 @@ export function calculateMonthlyMetrics(
     }
   })
 
-  // If costs don't have period_start, use the total costs from sample data
-  // Sample data costs: Jul=$3200, Aug=$3600, Sep=$4100, Oct=$4800, Nov=$5400, Dec=$6200
-  const sampleCostsByMonth: Record<string, number> = {
-    '2024-07': 3200,
-    '2024-08': 3600,
-    '2024-09': 4100,
-    '2024-10': 4800,
-    '2024-11': 5400,
-    '2024-12': 6200,
-  }
+  // If costs don't have period_start, generate sample costs that grow over time
+  const sampleCostsByMonth: Record<string, number> = {}
+  months.forEach((month, idx) => {
+    sampleCostsByMonth[month] = 3200 + idx * 600
+  })
 
   const results: MonthlyMetrics[] = []
   let previousMonthMRR = 0

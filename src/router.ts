@@ -48,6 +48,16 @@ const router = createRouter({
       component: () => import('@/pages/CustomerDetailPage.vue'),
     },
     {
+      path: '/savings',
+      name: 'savings',
+      component: () => import('@/pages/SavingsPage.vue'),
+    },
+    {
+      path: '/alerts',
+      name: 'alerts',
+      component: () => import('@/pages/AlertsPage.vue'),
+    },
+    {
       path: '/data-sources',
       name: 'data-sources',
       component: () => import('@/pages/DataSourcesPage.vue'),
@@ -146,6 +156,8 @@ const { isLoggedIn, isInitialized } = useAuth()
 
 router.beforeEach((to) => {
   if (to.meta?.noLayout) return
+  // Allow demo mode users to navigate freely
+  if (sessionStorage.getItem('demo_mode') === 'true') return
   if (isInitialized.value && !isLoggedIn.value) {
     return { name: 'signup' }
   }

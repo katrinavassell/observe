@@ -154,6 +154,27 @@ export async function uploadCostData(records: CostRecord[]): Promise<{ success: 
   })
 }
 
+// Helicone import
+export interface HeliconeEvent {
+  request_id?: string
+  created_at?: string
+  model?: string
+  provider?: string
+  prompt_tokens?: number
+  completion_tokens?: number
+  total_tokens?: number
+  cost?: number
+  user_id?: string
+  properties?: Record<string, string>
+}
+
+export async function importHeliconeData(events: HeliconeEvent[]): Promise<{ success: boolean; imported: number; total: number }> {
+  return request('/import/helicone', {
+    method: 'POST',
+    body: JSON.stringify({ events }),
+  })
+}
+
 export interface UsageRecord {
   customer_id: string
   month: string
@@ -889,4 +910,72 @@ export async function logout(): Promise<{ success: boolean }> {
 
 export async function getMe(): Promise<{ account: Account | null }> {
   return request('/auth/me')
+}
+
+// ── Recommendations ──────────────────────────────────────────────────────────
+
+export interface ModelSwapRecommendation {
+  feature_key: string
+  current_model: string
+  current_provider: string | null
+  current_avg_cost_per_event: number
+  total_cost: number
+  event_count: number
+  recommendations: Array<{
+    model: string
+    provider: string
+    same_provider: boolean
+    estimated_savings_pct: number
+    estimated_monthly_savings: number
+  }>
+}
+
+export interface UnderwaterCustomer {
+  customer_id: string
+  customer_name: string
+  total_ai_cost: number
+  total_revenue: number
+  loss_amount: number
+  margin_pct: number
+  event_count: number
+}
+
+export async function fetchModelSwapRecommendations(days = 90): Promise<{ recommendations: ModelSwapRecommendation[]; total_potential_savings: number; days: number }> {
+  return request(`/recommendations/model-swap?days=${days}`)
+}
+
+export async function fetchUnderwaterCustomers(days = 90): Promise<{ customers: UnderwaterCustomer[]; days: number }> {
+  return request(`/recommendations/underwater-customers?days=${days}`)
+}
+
+// ── Alert Rules ──────────────────────────────────────────────────────────────
+
+export interface AlertRule {
+  id: number
+  user_id: string
+  name: string
+  metric: 'daily_cost' | 'margin_percent' | 'cost_per_event'
+  operator: 'gt' | 'lt' | 'gte' | 'lte'
+  threshold: number
+  email: string
+  enabled: boolean
+  cooldown_minutes: number
+  last_triggered_at: string | null
+  created_at: string
+}
+
+export async function listAlertRules(): Promise<{ rules: AlertRule[] }> {
+  return request('/alerts')
+}
+
+export async function createAlertRule(rule: Pick<AlertRule, 'name' | 'metric' | 'operator' | 'threshold' | 'email'> & { cooldown_minutes?: number }): Promise<AlertRule> {
+  return request('/alerts', { method: 'POST', body: JSON.stringify(rule) })
+}
+
+export async function updateAlertRule(id: number, updates: Partial<Pick<AlertRule, 'name' | 'enabled' | 'threshold' | 'email' | 'cooldown_minutes'>>): Promise<AlertRule> {
+  return request(`/alerts/${id}`, { method: 'PATCH', body: JSON.stringify(updates) })
+}
+
+export async function deleteAlertRule(id: number): Promise<{ success: boolean }> {
+  return request(`/alerts/${id}`, { method: 'DELETE' })
 }

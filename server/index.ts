@@ -3,22 +3,25 @@ import express, { Request, Response, NextFunction } from 'express'
 import session from 'express-session'
 import pgSession from 'connect-pg-simple'
 import Pg from 'pg'
+import { Pool as NeonPool } from '@neondatabase/serverless'
 
-let Pool: typeof Pg.Pool
-if (process.env.DB_DRIVER === 'pg') {
-  Pool = Pg.Pool
-} else {
-  Pool = (await import('@neondatabase/serverless')).Pool as unknown as typeof Pg.Pool
-}
+const Pool = process.env.DB_DRIVER === 'pg' ? Pg.Pool : NeonPool as unknown as typeof Pg.Pool
 import crypto from 'crypto'
 import bcrypt from 'bcryptjs'
 import { createAuthRoutes, createEnsureVisitor, type AuthRequest } from './routes/auth.js'
+import { createDataRoutes } from './routes/data.js'
+// import { createSimulationsRoutes } from './routes/simulations.js'
+import { createTansoRoutes, createCheckTansoFeatureAccess, createTrackTansoUsage } from './routes/tanso.js'
+// import { createTeamRoutes } from './routes/team.js'
+import { createIntegrationsRoutes, createConvertReferralIfPending } from './routes/integrations.js'
+import { createAlertRoutes, checkAlerts } from './routes/alerts.js'
 import helmet from 'helmet'
 import cors from 'cors'
 import rateLimit from 'express-rate-limit'
 import { z } from 'zod'
 import { getUncachableStripeClient } from './stripe-client.js'
 import { apiKeyStore } from './api-key-store.js'
+import { initModelPricing, calculateCostFromTokens as calcCostFromDb, getAllPricing, getModelPricing, upsertModelPricing } from './model-pricing.js'
 import {
   tansoListPlans,
   tansoListFeatures,
@@ -132,6 +135,19 @@ app.use(session({
 const ensureVisitor = createEnsureVisitor(pool)
 app.use(createAuthRoutes(pool, ensureVisitor))
 
+// ─── Shared Tanso helpers (used by multiple route modules) ─────────────────
+const checkTansoFeatureAccess = createCheckTansoFeatureAccess(pool)
+const trackTansoUsage = createTrackTansoUsage()
+const convertReferralIfPending = createConvertReferralIfPending(pool)
+
+// ─── Extracted route modules ───────────────────────────────────────────────
+app.use(createDataRoutes(pool, ensureVisitor, { checkTansoFeatureAccess, trackTansoUsage, convertReferralIfPending }))
+// app.use(createSimulationsRoutes(pool, ensureVisitor))
+app.use(createTansoRoutes(pool, ensureVisitor, { checkTansoFeatureAccess }))
+// app.use(createTeamRoutes(pool, ensureVisitor))
+app.use(createIntegrationsRoutes(pool, ensureVisitor, { trackTansoUsage, convertReferralIfPending }))
+app.use(createAlertRoutes(pool, ensureVisitor))
+
 // ─── OpenAI-compatible proxy ───────────────────────────────────────────────
 // Users swap their base URL to route through this proxy. Requests are forwarded
 // to OpenAI transparently while logging cost/usage as observe_events.
@@ -173,21 +189,22 @@ function parseProxyHeaders(req: Request): {
   return { tansoKey, customerId, featureKey, properties }
 }
 
-const OPENAI_MODEL_PRICING: Record<string, { input: number; output?: number }> = {
-  'gpt-4o':                    { input: 2.50,  output: 10.00 },
-  'gpt-4o-mini':               { input: 0.15,  output: 0.60 },
-  'gpt-4':                     { input: 30.00, output: 60.00 },
-  'o1':                        { input: 15.00, output: 60.00 },
-  'text-embedding-3-small':    { input: 0.02 },
-  'text-embedding-3-large':    { input: 0.13 },
+// Model pricing is now in the database (model_pricing table) — see model-pricing.ts
+
+function inferModelProvider(model: string | undefined): string | null {
+  if (!model) return null
+  const m = model.toLowerCase()
+  if (m.startsWith('claude-')) return 'anthropic'
+  if (m.startsWith('gpt-') || m.startsWith('o1') || m.startsWith('o3') || m.startsWith('o4') || m.startsWith('text-embedding-')) return 'openai'
+  if (m.startsWith('dall-e-')) return 'openai'
+  if (m.startsWith('gemini-')) return 'google'
+  if (m.startsWith('mistral-') || m.startsWith('codestral')) return 'mistral'
+  if (m.startsWith('llama-')) return 'meta'
+  return null
 }
 
-function calculateCost(model: string, inputTokens: number, outputTokens: number): number {
-  const pricing = OPENAI_MODEL_PRICING[model]
-  if (!pricing) return 0
-  const inputCost = (inputTokens / 1_000_000) * pricing.input
-  const outputCost = pricing.output ? (outputTokens / 1_000_000) * pricing.output : 0
-  return Math.round((inputCost + outputCost) * 1_000_000) / 1_000_000
+async function calculateCost(model: string, inputTokens: number, outputTokens: number): Promise<number> {
+  return calcCostFromDb(pool, model, inputTokens, outputTokens)
 }
 
 async function resolveProxyUserId(tansoKey: string): Promise<string | null> {
@@ -220,6 +237,7 @@ async function logProxyEvent(
     ) VALUES ($1, $2, $3, 'cost', NOW(), $4, 'usd', 0, $5, $6, $7, 'proxy', 'event', false, $8)`,
     [userId, customerId, featureKey, cost, inputTokens + outputTokens, model, provider, JSON.stringify(properties)]
   )
+  checkAlerts(pool, userId).catch(() => {})
 }
 
 // GET /v1/models — proxy to OpenAI
@@ -277,7 +295,7 @@ app.post('/v1/chat/completions', async (req: Request, res: Response) => {
       const model = (data.model as string) || req.body.model || 'unknown'
       const inputTokens = usage.prompt_tokens || 0
       const outputTokens = usage.completion_tokens || 0
-      const cost = calculateCost(model, inputTokens, outputTokens)
+      const cost = await calculateCost(model, inputTokens, outputTokens)
       logProxyEvent(userId, model, inputTokens, outputTokens, cost, customerId, featureKey, 'openai', properties).catch(err =>
         console.error('Proxy event logging failed:', err)
       )
@@ -323,7 +341,7 @@ app.post('/v1/embeddings', async (req: Request, res: Response) => {
       const usage = data.usage as { prompt_tokens?: number; total_tokens?: number }
       const model = (data.model as string) || req.body.model || 'unknown'
       const inputTokens = usage.prompt_tokens || usage.total_tokens || 0
-      const cost = calculateCost(model, inputTokens, 0)
+      const cost = await calculateCost(model, inputTokens, 0)
       logProxyEvent(userId, model, inputTokens, 0, cost, customerId, featureKey, 'openai', properties).catch(err =>
         console.error('Proxy event logging failed:', err)
       )
@@ -336,20 +354,8 @@ app.post('/v1/embeddings', async (req: Request, res: Response) => {
 
 // ─── Anthropic-compatible proxy (Helicone migration) ──────────────────────
 
-const ANTHROPIC_MODEL_PRICING: Record<string, { input: number; output: number }> = {
-  'claude-sonnet-4-20250514':     { input: 3.00,  output: 15.00 },
-  'claude-haiku-4-20250414':      { input: 0.80,  output: 4.00 },
-  'claude-3-5-sonnet-20241022':   { input: 3.00,  output: 15.00 },
-  'claude-3-5-haiku-20241022':    { input: 0.80,  output: 4.00 },
-  'claude-3-opus-20240229':       { input: 15.00, output: 75.00 },
-}
-
-function calculateAnthropicCost(model: string, inputTokens: number, outputTokens: number): number {
-  const pricing = ANTHROPIC_MODEL_PRICING[model]
-  if (!pricing) return 0
-  const inputCost = (inputTokens / 1_000_000) * pricing.input
-  const outputCost = (outputTokens / 1_000_000) * pricing.output
-  return Math.round((inputCost + outputCost) * 1_000_000) / 1_000_000
+async function calculateAnthropicCost(model: string, inputTokens: number, outputTokens: number): Promise<number> {
+  return calcCostFromDb(pool, model, inputTokens, outputTokens)
 }
 
 // POST /v1/messages — Anthropic proxy + log (Helicone-compatible)
@@ -388,7 +394,7 @@ app.post('/v1/messages', async (req: Request, res: Response) => {
       const model = (data.model as string) || req.body.model || 'unknown'
       const inputTokens = usage.input_tokens || 0
       const outputTokens = usage.output_tokens || 0
-      const cost = calculateAnthropicCost(model, inputTokens, outputTokens)
+      const cost = await calculateAnthropicCost(model, inputTokens, outputTokens)
       logProxyEvent(userId, model, inputTokens, outputTokens, cost, customerId, featureKey, 'anthropic', properties).catch(err =>
         console.error('Anthropic proxy event logging failed:', err)
       )
@@ -609,57 +615,66 @@ app.post('/data/sample', ensureVisitor, async (req: AuthRequest, res: Response) 
     }
 
     const customers = [
-      { customer_id: 'cus_001', name: 'Acme Corp', email: 'billing@acme.com', segment: 'Enterprise' },
-      { customer_id: 'cus_002', name: 'TechStart Inc', email: 'admin@techstart.io', segment: 'SMB' },
-      { customer_id: 'cus_003', name: 'Global Solutions', email: 'accounts@global.com', segment: 'Mid-Market' },
-      { customer_id: 'cus_004', name: 'Startup Labs', email: 'hello@startuplabs.co', segment: 'SMB' },
-      { customer_id: 'cus_005', name: 'Enterprise Co', email: 'procurement@enterprise.com', segment: 'Enterprise' },
+      { customer_id: 'cus_001', name: 'Acme Corp', email: 'billing@acme.com', segment: 'Enterprise', created_at: '2025-08-01T00:00:00Z' },
+      { customer_id: 'cus_002', name: 'TechStart Inc', email: 'admin@techstart.io', segment: 'SMB', created_at: '2025-11-15T00:00:00Z' },
+      { customer_id: 'cus_003', name: 'Global Solutions', email: 'accounts@global.com', segment: 'Mid-Market', created_at: '2025-09-10T00:00:00Z' },
+      { customer_id: 'cus_004', name: 'Startup Labs', email: 'hello@startuplabs.co', segment: 'SMB', created_at: '2026-02-01T00:00:00Z' },
+      { customer_id: 'cus_005', name: 'Enterprise Co', email: 'procurement@enterprise.com', segment: 'Enterprise', created_at: '2025-06-01T00:00:00Z' },
     ]
     for (const customer of customers) {
       await client.query(
-        'INSERT INTO customers (user_id, customer_id, name, email, segment) VALUES ($1, $2, $3, $4, $5)',
-        [req.visitorId, customer.customer_id, customer.name, customer.email, customer.segment]
+        'INSERT INTO customers (user_id, customer_id, name, email, segment, created_at) VALUES ($1, $2, $3, $4, $5, $6)',
+        [req.visitorId, customer.customer_id, customer.name, customer.email, customer.segment, customer.created_at]
       )
     }
 
     const subscriptions = [
-      { subscription_id: 'sub_001', customer_id: 'cus_001', plan_id: 'enterprise', is_active: true, mrr_override: 299 },
-      { subscription_id: 'sub_002', customer_id: 'cus_002', plan_id: 'starter', is_active: true, mrr_override: 29 },
-      { subscription_id: 'sub_003', customer_id: 'cus_003', plan_id: 'pro', is_active: true, mrr_override: 99 },
-      { subscription_id: 'sub_004', customer_id: 'cus_004', plan_id: 'starter', is_active: true, mrr_override: 29 },
-      { subscription_id: 'sub_005', customer_id: 'cus_005', plan_id: 'enterprise', is_active: true, mrr_override: 299 },
+      { subscription_id: 'sub_001', customer_id: 'cus_001', plan_id: 'enterprise', is_active: true, mrr_override: 299, previous_mrr: 99, created_at: '2025-08-01T00:00:00Z', current_period_start: '2026-03-01T00:00:00Z', current_period_end: '2026-04-01T00:00:00Z' },
+      { subscription_id: 'sub_002', customer_id: 'cus_002', plan_id: 'starter', is_active: true, mrr_override: 29, previous_mrr: 0, created_at: '2025-11-15T00:00:00Z', current_period_start: '2026-03-01T00:00:00Z', current_period_end: '2026-04-01T00:00:00Z' },
+      { subscription_id: 'sub_003', customer_id: 'cus_003', plan_id: 'pro', is_active: true, mrr_override: 99, previous_mrr: 29, created_at: '2025-09-10T00:00:00Z', current_period_start: '2026-03-01T00:00:00Z', current_period_end: '2026-04-01T00:00:00Z' },
+      { subscription_id: 'sub_004', customer_id: 'cus_004', plan_id: 'starter', is_active: true, mrr_override: 29, previous_mrr: 0, created_at: '2026-02-01T00:00:00Z', current_period_start: '2026-03-01T00:00:00Z', current_period_end: '2026-04-01T00:00:00Z' },
+      { subscription_id: 'sub_005', customer_id: 'cus_005', plan_id: 'enterprise', is_active: true, mrr_override: 299, previous_mrr: 299, created_at: '2025-06-01T00:00:00Z', current_period_start: '2026-03-01T00:00:00Z', current_period_end: '2026-04-01T00:00:00Z' },
     ]
     for (const sub of subscriptions) {
       await client.query(
-        'INSERT INTO subscriptions (user_id, subscription_id, customer_id, plan_id, is_active, mrr_override) VALUES ($1, $2, $3, $4, $5, $6)',
-        [req.visitorId, sub.subscription_id, sub.customer_id, sub.plan_id, sub.is_active, sub.mrr_override]
+        `INSERT INTO subscriptions (user_id, subscription_id, customer_id, plan_id, is_active, mrr_override, previous_mrr, created_at, current_period_start, current_period_end)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+        [req.visitorId, sub.subscription_id, sub.customer_id, sub.plan_id, sub.is_active, sub.mrr_override, sub.previous_mrr, sub.created_at, sub.current_period_start, sub.current_period_end]
+      )
+    }
+
+    // Sample cost_records — monthly AI costs for the Overview page
+    const _now = new Date()
+    for (let i = 5; i >= 0; i--) {
+      const start = new Date(_now.getFullYear(), _now.getMonth() - i, 1)
+      const end = new Date(_now.getFullYear(), _now.getMonth() - i + 1, 0)
+      const amount = 3200 + (5 - i) * 600
+      await client.query(
+        'INSERT INTO cost_records (user_id, cost_type, amount, period_start, period_end) VALUES ($1, $2, $3, $4, $5)',
+        [req.visitorId, 'ai_inference', amount, start.toISOString(), end.toISOString()]
       )
     }
 
     // Sample observe_events — feature-level cost+revenue data
+    function daysAgo(d: number) { return new Date(Date.now() - d * 86400000).toISOString() }
     const sampleEvents = [
-      // ai_summarization feature — claude + gpt
-      { customer_id: 'cus_001', feature_key: 'ai_summarization', event_name: 'summary_generated', ts: '2026-01-15T10:00:00Z', cost: 0.24, cost_unit: 'usd', revenue: 0.50, usage: 24, model: 'claude-3-5-sonnet', provider: 'anthropic', source: 'sample' },
-      { customer_id: 'cus_002', feature_key: 'ai_summarization', event_name: 'summary_generated', ts: '2026-01-18T11:30:00Z', cost: 0.08, cost_unit: 'usd', revenue: 0.20, usage: 8, model: 'gpt-4o', provider: 'openai', source: 'sample' },
-      { customer_id: 'cus_003', feature_key: 'ai_summarization', event_name: 'summary_generated', ts: '2026-01-22T09:15:00Z', cost: 0.15, cost_unit: 'usd', revenue: 0.35, usage: 15, model: 'claude-3-5-sonnet', provider: 'anthropic', source: 'sample' },
-      { customer_id: 'cus_001', feature_key: 'ai_summarization', event_name: 'summary_generated', ts: '2026-02-10T14:00:00Z', cost: 0.30, cost_unit: 'usd', revenue: 0.60, usage: 30, model: 'gpt-4o', provider: 'openai', source: 'sample' },
-      { customer_id: 'cus_004', feature_key: 'ai_summarization', event_name: 'summary_generated', ts: '2026-02-12T08:45:00Z', cost: 0.05, cost_unit: 'usd', revenue: 0.15, usage: 5, model: 'claude-3-haiku', provider: 'anthropic', source: 'sample' },
-      // image_generation feature — dall-e-3 + stable-diffusion
-      { customer_id: 'cus_001', feature_key: 'image_generation', event_name: 'image_generated', ts: '2026-01-20T13:00:00Z', cost: 0.04, cost_unit: 'usd', revenue: 0.25, usage: 1, model: 'dall-e-3', provider: 'openai', source: 'sample' },
-      { customer_id: 'cus_003', feature_key: 'image_generation', event_name: 'image_generated', ts: '2026-01-22T15:30:00Z', cost: 0.04, cost_unit: 'usd', revenue: 0.25, usage: 1, model: 'dall-e-3', provider: 'openai', source: 'sample' },
-      { customer_id: 'cus_005', feature_key: 'image_generation', event_name: 'image_generated', ts: '2026-02-05T11:00:00Z', cost: 0.02, cost_unit: 'usd', revenue: 0.20, usage: 1, model: 'stable-diffusion-xl', provider: 'stability', source: 'sample' },
-      { customer_id: 'cus_002', feature_key: 'image_generation', event_name: 'image_generated', ts: '2026-02-08T09:00:00Z', cost: 0.04, cost_unit: 'usd', revenue: 0.25, usage: 1, model: 'dall-e-3', provider: 'openai', source: 'sample' },
-      // search feature — embeddings
-      { customer_id: 'cus_001', feature_key: 'search', event_name: 'search_query', ts: '2026-01-25T10:00:00Z', cost: 0.002, cost_unit: 'usd', revenue: 0.01, usage: 100, model: 'text-embedding-3-small', provider: 'openai', source: 'sample' },
-      { customer_id: 'cus_002', feature_key: 'search', event_name: 'search_query', ts: '2026-01-28T14:00:00Z', cost: 0.003, cost_unit: 'usd', revenue: 0.01, usage: 150, model: 'text-embedding-3-small', provider: 'openai', source: 'sample' },
-      { customer_id: 'cus_003', feature_key: 'search', event_name: 'search_query', ts: '2026-02-03T14:00:00Z', cost: 0.001, cost_unit: 'usd', revenue: 0.005, usage: 50, model: 'text-embedding-3-small', provider: 'openai', source: 'sample' },
-      { customer_id: 'cus_004', feature_key: 'search', event_name: 'search_query', ts: '2026-02-11T09:30:00Z', cost: 0.004, cost_unit: 'usd', revenue: 0.02, usage: 200, model: 'text-embedding-ada-002', provider: 'openai', source: 'sample' },
-      // pdf_generation feature (no model — deterministic)
-      { customer_id: 'cus_001', feature_key: 'pdf_generation', event_name: 'document_generated', ts: '2026-01-19T13:00:00Z', cost: 0.12, cost_unit: 'usd', revenue: 0.50, usage: 12, model: null, provider: null, source: 'sample' },
-      { customer_id: 'cus_005', feature_key: 'pdf_generation', event_name: 'document_generated', ts: '2026-02-07T11:00:00Z', cost: 0.18, cost_unit: 'usd', revenue: 0.70, usage: 18, model: null, provider: null, source: 'sample' },
-      // email_send feature
-      { customer_id: 'cus_002', feature_key: 'email_send', event_name: 'email_sent', ts: '2026-01-18T16:00:00Z', cost: 0.01, cost_unit: 'usd', revenue: 0.05, usage: 100, model: null, provider: null, source: 'sample' },
-      { customer_id: 'cus_004', feature_key: 'email_send', event_name: 'email_sent', ts: '2026-02-15T17:30:00Z', cost: 0.015, cost_unit: 'usd', revenue: 0.06, usage: 150, model: null, provider: null, source: 'sample' },
+      { customer_id: 'cus_001', feature_key: 'ai_summarization', event_name: 'summary_generated', ts: daysAgo(1), cost: 0.24, cost_unit: 'usd', revenue: 0.50, usage: 24, model: 'claude-3-5-sonnet', provider: 'anthropic', source: 'sample' },
+      { customer_id: 'cus_002', feature_key: 'ai_summarization', event_name: 'summary_generated', ts: daysAgo(2), cost: 0.08, cost_unit: 'usd', revenue: 0.20, usage: 8, model: 'gpt-4o', provider: 'openai', source: 'sample' },
+      { customer_id: 'cus_003', feature_key: 'ai_summarization', event_name: 'summary_generated', ts: daysAgo(5), cost: 0.15, cost_unit: 'usd', revenue: 0.35, usage: 15, model: 'claude-3-5-sonnet', provider: 'anthropic', source: 'sample' },
+      { customer_id: 'cus_001', feature_key: 'ai_summarization', event_name: 'summary_generated', ts: daysAgo(10), cost: 0.30, cost_unit: 'usd', revenue: 0.60, usage: 30, model: 'gpt-4o', provider: 'openai', source: 'sample' },
+      { customer_id: 'cus_004', feature_key: 'ai_summarization', event_name: 'summary_generated', ts: daysAgo(14), cost: 0.05, cost_unit: 'usd', revenue: 0.15, usage: 5, model: 'claude-3-haiku', provider: 'anthropic', source: 'sample' },
+      { customer_id: 'cus_001', feature_key: 'image_generation', event_name: 'image_generated', ts: daysAgo(3), cost: 0.04, cost_unit: 'usd', revenue: 0.25, usage: 1, model: 'dall-e-3', provider: 'openai', source: 'sample' },
+      { customer_id: 'cus_003', feature_key: 'image_generation', event_name: 'image_generated', ts: daysAgo(7), cost: 0.04, cost_unit: 'usd', revenue: 0.25, usage: 1, model: 'dall-e-3', provider: 'openai', source: 'sample' },
+      { customer_id: 'cus_005', feature_key: 'image_generation', event_name: 'image_generated', ts: daysAgo(18), cost: 0.02, cost_unit: 'usd', revenue: 0.20, usage: 1, model: 'stable-diffusion-xl', provider: 'stability', source: 'sample' },
+      { customer_id: 'cus_002', feature_key: 'image_generation', event_name: 'image_generated', ts: daysAgo(20), cost: 0.04, cost_unit: 'usd', revenue: 0.25, usage: 1, model: 'dall-e-3', provider: 'openai', source: 'sample' },
+      { customer_id: 'cus_001', feature_key: 'search', event_name: 'search_query', ts: daysAgo(1), cost: 0.002, cost_unit: 'usd', revenue: 0.01, usage: 100, model: 'text-embedding-3-small', provider: 'openai', source: 'sample' },
+      { customer_id: 'cus_002', feature_key: 'search', event_name: 'search_query', ts: daysAgo(4), cost: 0.003, cost_unit: 'usd', revenue: 0.01, usage: 150, model: 'text-embedding-3-small', provider: 'openai', source: 'sample' },
+      { customer_id: 'cus_003', feature_key: 'search', event_name: 'search_query', ts: daysAgo(12), cost: 0.001, cost_unit: 'usd', revenue: 0.005, usage: 50, model: 'text-embedding-3-small', provider: 'openai', source: 'sample' },
+      { customer_id: 'cus_004', feature_key: 'search', event_name: 'search_query', ts: daysAgo(15), cost: 0.004, cost_unit: 'usd', revenue: 0.02, usage: 200, model: 'text-embedding-ada-002', provider: 'openai', source: 'sample' },
+      { customer_id: 'cus_001', feature_key: 'pdf_generation', event_name: 'document_generated', ts: daysAgo(6), cost: 0.12, cost_unit: 'usd', revenue: 0.50, usage: 12, model: null, provider: null, source: 'sample' },
+      { customer_id: 'cus_005', feature_key: 'pdf_generation', event_name: 'document_generated', ts: daysAgo(16), cost: 0.18, cost_unit: 'usd', revenue: 0.70, usage: 18, model: null, provider: null, source: 'sample' },
+      { customer_id: 'cus_002', feature_key: 'email_send', event_name: 'email_sent', ts: daysAgo(8), cost: 0.01, cost_unit: 'usd', revenue: 0.05, usage: 100, model: null, provider: null, source: 'sample' },
+      { customer_id: 'cus_004', feature_key: 'email_send', event_name: 'email_sent', ts: daysAgo(22), cost: 0.015, cost_unit: 'usd', revenue: 0.06, usage: 150, model: null, provider: null, source: 'sample' },
     ]
 
     for (const ev of sampleEvents) {
@@ -741,10 +756,10 @@ app.post('/data/sample', ensureVisitor, async (req: AuthRequest, res: Response) 
 
     for (const sim of sampleSimulations) {
       await client.query(
-        `INSERT INTO simulations (id, user_id, name, status, segment_name, scenarios, feature_analysis, customer_impacts, margin_impact, confidence_score, key_insight, winning_scenario_id, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $13)`,
+        `INSERT INTO simulations (user_id, name, status, segment_name, scenarios, feature_analysis, customer_impacts, margin_impact, confidence_score, key_insight, winning_scenario_id, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $12)`,
         [
-          sim.id, req.visitorId, sim.name, sim.status,
+          req.visitorId, sim.name, sim.status,
           (sim as Record<string, unknown>).segment_name || null,
           JSON.stringify(sim.scenarios),
           JSON.stringify(sim.feature_analysis),
@@ -959,6 +974,7 @@ app.post('/data/upload/costs', ensureVisitor, async (req: AuthRequest, res: Resp
     await client.query('COMMIT')
     convertReferralIfPending(req.visitorId!)
     trackTansoUsage(req.visitorId!, 'csv_upload', 'csv_upload_costs')
+    checkAlerts(pool, req.visitorId!).catch(() => {})
     res.json({ success: true, count: records.length })
   } catch (error) {
     await client.query('ROLLBACK')
@@ -1036,6 +1052,7 @@ app.post('/data/upload/usage', ensureVisitor, async (req: AuthRequest, res: Resp
     await client.query('COMMIT')
     convertReferralIfPending(req.visitorId!)
     trackTansoUsage(req.visitorId!, 'csv_upload', 'csv_upload_usage')
+    checkAlerts(pool, req.visitorId!).catch(() => {})
     res.json({ success: true, count: records.length })
   } catch (error) {
     await client.query('ROLLBACK')
@@ -1529,7 +1546,32 @@ async function ensureDbInitialized() {
         UNIQUE(user_id, cache_key)
       )
     `)
-    await pool.query(`CREATE INDEX IF NOT EXISTS idx_proxy_cache_lookup ON proxy_cache(user_id, cache_key) WHERE expires_at > NOW() OR expires_at IS NULL`)
+    // Partial index with NOW() fails on Neon (not IMMUTABLE) — skip if it fails
+    try {
+      await pool.query(`CREATE INDEX IF NOT EXISTS idx_proxy_cache_lookup ON proxy_cache(user_id, cache_key) WHERE expires_at IS NULL`)
+    } catch {
+      // Index already exists or can't be created — non-fatal
+    }
+
+    // Alert rules table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS alert_rules (
+        id SERIAL PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        metric TEXT NOT NULL,
+        operator TEXT NOT NULL,
+        threshold NUMERIC(12,4) NOT NULL,
+        email TEXT NOT NULL,
+        enabled BOOLEAN DEFAULT true,
+        cooldown_minutes INTEGER DEFAULT 60,
+        last_triggered_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `)
+
+    // Initialize model pricing table
+    await initModelPricing(pool)
 
     dbInitialized = true
   } catch (error) {
@@ -1538,6 +1580,41 @@ async function ensureDbInitialized() {
   }
 }
 
+
+// =============================================================================
+// MODEL PRICING API
+// =============================================================================
+
+// GET /pricing/models — public endpoint, returns all current model pricing
+app.get('/pricing/models', async (_req, res: Response) => {
+  try {
+    const pricing = await getAllPricing(pool)
+    res.json({ models: pricing, updated_at: new Date().toISOString() })
+  } catch (error) {
+    console.error('GET /pricing/models error:', error)
+    res.status(500).json({ error: 'Failed to fetch model pricing' })
+  }
+})
+
+// POST /pricing/models — admin endpoint, upsert model pricing
+app.post('/pricing/models', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  try {
+    const { model, provider, input_cost_per_million, output_cost_per_million } = req.body
+    if (!model || !provider || input_cost_per_million == null) {
+      return res.status(400).json({ error: 'model, provider, and input_cost_per_million are required' })
+    }
+    await upsertModelPricing(pool, {
+      model,
+      provider,
+      input_cost_per_million: parseFloat(input_cost_per_million),
+      output_cost_per_million: parseFloat(output_cost_per_million || 0),
+    })
+    res.json({ success: true })
+  } catch (error) {
+    console.error('POST /pricing/models error:', error)
+    res.status(500).json({ error: 'Failed to update model pricing' })
+  }
+})
 
 // =============================================================================
 // STRIPE NATIVE INTEGRATION
@@ -2214,6 +2291,8 @@ app.post('/events/ingest', apiLimiter, async (req: Request, res: Response) => {
       usageUnits?: number
       model?: string
       modelProvider?: string
+      inputTokens?: number
+      outputTokens?: number
       properties?: Record<string, unknown>
       idempotencyKey?: string
     }> = []
@@ -2240,10 +2319,11 @@ app.post('/events/ingest', apiLimiter, async (req: Request, res: Response) => {
       if (!model) return null
       const m = model.toLowerCase()
       if (m.startsWith('claude-')) return 'anthropic'
-      if (m.startsWith('gpt-')) return 'openai'
+      if (m.startsWith('gpt-') || m.startsWith('o1') || m.startsWith('o3') || m.startsWith('o4') || m.startsWith('text-embedding-')) return 'openai'
       if (m.startsWith('dall-e-')) return 'openai'
       if (m.startsWith('gemini-')) return 'google'
-      if (m.startsWith('text-embedding-')) return 'openai'
+      if (m.startsWith('mistral-') || m.startsWith('codestral')) return 'mistral'
+      if (m.startsWith('llama-')) return 'meta'
       return null
     }
 
@@ -2257,6 +2337,9 @@ app.post('/events/ingest', apiLimiter, async (req: Request, res: Response) => {
       const ts = evt.timestamp || new Date().toISOString()
       const props = evt.properties ? JSON.stringify(evt.properties) : '{}'
 
+      // Auto-calculate cost from model + tokens if costAmount not provided
+      const cost = evt.costAmount ?? await calcCostFromDb(pool, evt.model, evt.inputTokens, evt.outputTokens)
+
       placeholders.push(
         `($${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, 'sdk', 'event', false, $${paramIdx++})`
       )
@@ -2266,10 +2349,10 @@ app.post('/events/ingest', apiLimiter, async (req: Request, res: Response) => {
         evt.featureKey,
         evt.eventName,
         ts,
-        evt.costAmount ?? 0,
+        cost,
         evt.costUnit ?? 'usd',
         evt.revenueAmount ?? 0,
-        evt.usageUnits ?? 0,
+        evt.usageUnits ?? (evt.inputTokens || 0) + (evt.outputTokens || 0),
         evt.model ?? null,
         provider,
         evt.idempotencyKey ?? null
@@ -2300,6 +2383,8 @@ app.post('/events/ingest', apiLimiter, async (req: Request, res: Response) => {
       computeInferenceProfiles(userId).catch(err =>
         console.error('Auto inference profile update failed:', err)
       )
+      // Check alert thresholds
+      checkAlerts(pool, userId).catch(() => {})
     }
   } catch (error) {
     console.error('POST /events/ingest error:', error)
@@ -2541,6 +2626,178 @@ app.get('/customers/:id', ensureVisitor, async (req: AuthRequest, res: Response)
   } catch (error) {
     console.error('Get customer detail error:', error)
     res.status(500).json({ error: 'Failed to get customer detail' })
+  }
+})
+
+// =============================================================================
+// RECOMMENDATIONS
+// =============================================================================
+
+// GET /recommendations/model-swap — find cheaper model alternatives per feature
+app.get('/recommendations/model-swap', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  try {
+    const days = parseInt(req.query.days as string) || 90
+
+    const result = await pool.query(
+      `SELECT
+         feature_key, model, model_provider,
+         COUNT(*) AS event_count,
+         COALESCE(SUM(cost_amount), 0) AS total_cost,
+         COALESCE(AVG(cost_amount), 0) AS avg_cost_per_event,
+         COALESCE(SUM(usage_units), 0) AS total_usage_units
+       FROM observe_events
+       WHERE user_id = $1
+         AND model IS NOT NULL
+         AND cost_amount > 0
+         AND timestamp > NOW() - MAKE_INTERVAL(days => $2)
+       GROUP BY feature_key, model, model_provider
+       ORDER BY total_cost DESC`,
+      [req.visitorId, days]
+    )
+
+    // For each feature+model, find cheaper alternatives from MODEL_PRICING
+    const recommendations: Array<{
+      feature_key: string
+      current_model: string
+      current_provider: string | null
+      current_avg_cost_per_event: number
+      total_cost: number
+      event_count: number
+      recommendations: Array<{
+        model: string
+        provider: string
+        same_provider: boolean
+        estimated_savings_pct: number
+        estimated_monthly_savings: number
+      }>
+    }> = []
+
+    // Build input-rate lookup from DB pricing
+    const allPricing = await getAllPricing(pool)
+    const inputRateMap: Record<string, number> = {}
+    for (const p of allPricing) {
+      inputRateMap[p.model] = p.input_cost_per_million
+    }
+
+    for (const row of result.rows) {
+      const currentInputRate = inputRateMap[row.model]
+      if (!currentInputRate) continue // skip unknown models
+      const avgCost = parseFloat(row.avg_cost_per_event)
+      const totalCost = parseFloat(row.total_cost)
+      if (avgCost <= 0) continue
+
+      const candidates: Array<{
+        model: string
+        provider: string
+        same_provider: boolean
+        estimated_savings_pct: number
+        estimated_monthly_savings: number
+      }> = []
+
+      const isEmbedding = row.model.includes('embedding') || row.model.includes('ada-002')
+      for (const [altModel, altInputRate] of Object.entries(inputRateMap)) {
+        if (altModel === row.model) continue
+
+        // Don't recommend cross-type swaps (embedding ↔ chat)
+        const altIsEmbedding = altModel.includes('embedding') || altModel.includes('ada-002')
+        if (isEmbedding !== altIsEmbedding) continue
+
+        // Only recommend if meaningfully cheaper (>20% savings on input rate)
+        if (altInputRate >= currentInputRate * 0.8) continue
+
+        const costRatio = altInputRate / currentInputRate
+        const savingsPct = Math.round((1 - costRatio) * 100)
+        const monthlySavings = Math.round(totalCost * (1 - costRatio) * 100) / 100
+        const altProvider = inferModelProvider(altModel) || 'unknown'
+
+        candidates.push({
+          model: altModel,
+          provider: altProvider,
+          same_provider: altProvider === (row.model_provider || inferModelProvider(row.model)),
+          estimated_savings_pct: savingsPct,
+          estimated_monthly_savings: monthlySavings,
+        })
+      }
+
+      // Sort by savings, take top 3
+      candidates.sort((a, b) => b.estimated_monthly_savings - a.estimated_monthly_savings)
+      const topCandidates = candidates.slice(0, 3)
+
+      if (topCandidates.length > 0) {
+        recommendations.push({
+          feature_key: row.feature_key,
+          current_model: row.model,
+          current_provider: row.model_provider || inferModelProvider(row.model),
+          current_avg_cost_per_event: avgCost,
+          total_cost: totalCost,
+          event_count: parseInt(row.event_count),
+          recommendations: topCandidates,
+        })
+      }
+    }
+
+    // Deduplicate: keep only the most expensive model per feature
+    const byFeature = new Map<string, typeof recommendations[0]>()
+    for (const rec of recommendations) {
+      const existing = byFeature.get(rec.feature_key)
+      if (!existing || rec.total_cost > existing.total_cost) {
+        byFeature.set(rec.feature_key, rec)
+      }
+    }
+
+    const final = Array.from(byFeature.values())
+    const totalPotentialSavings = final.reduce((sum, r) => sum + (r.recommendations[0]?.estimated_monthly_savings || 0), 0)
+
+    res.json({
+      recommendations: final,
+      total_potential_savings: Math.round(totalPotentialSavings * 100) / 100,
+      days,
+    })
+  } catch (error) {
+    console.error('GET /recommendations/model-swap error:', error)
+    res.status(500).json({ error: 'Failed to generate model swap recommendations' })
+  }
+})
+
+// GET /recommendations/underwater-customers — customers where cost > revenue
+app.get('/recommendations/underwater-customers', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  try {
+    const days = parseInt(req.query.days as string) || 90
+
+    const result = await pool.query(
+      `SELECT
+         oe.customer_id,
+         c.name AS customer_name,
+         COALESCE(SUM(oe.cost_amount), 0) AS total_ai_cost,
+         COALESCE(SUM(oe.revenue_amount), 0) AS total_revenue,
+         COALESCE(SUM(oe.cost_amount), 0) - COALESCE(SUM(oe.revenue_amount), 0) AS loss_amount,
+         COUNT(*) AS event_count
+       FROM observe_events oe
+       LEFT JOIN customers c ON oe.user_id = c.user_id AND oe.customer_id = c.customer_id
+       WHERE oe.user_id = $1
+         AND oe.timestamp > NOW() - MAKE_INTERVAL(days => $2)
+       GROUP BY oe.customer_id, c.name
+       HAVING SUM(oe.cost_amount) > SUM(oe.revenue_amount)
+       ORDER BY (SUM(oe.cost_amount) - SUM(oe.revenue_amount)) DESC`,
+      [req.visitorId, days]
+    )
+
+    const customers = result.rows.map(r => ({
+      customer_id: r.customer_id,
+      customer_name: r.customer_name || r.customer_id,
+      total_ai_cost: parseFloat(r.total_ai_cost),
+      total_revenue: parseFloat(r.total_revenue),
+      loss_amount: parseFloat(r.loss_amount),
+      margin_pct: parseFloat(r.total_revenue) > 0
+        ? Math.round(((parseFloat(r.total_revenue) - parseFloat(r.total_ai_cost)) / parseFloat(r.total_revenue)) * 100)
+        : -100,
+      event_count: parseInt(r.event_count),
+    }))
+
+    res.json({ customers, days })
+  } catch (error) {
+    console.error('GET /recommendations/underwater-customers error:', error)
+    res.status(500).json({ error: 'Failed to find underwater customers' })
   }
 })
 
@@ -3481,54 +3738,6 @@ async function getOrCreateTansoCustomer(visitorId: string, email?: string): Prom
   }
 }
 
-async function checkTansoFeatureAccess(visitorId: string, featureKey: string, email?: string): Promise<{ allowed: boolean; reason?: string; usage?: number; limit?: number; remaining?: number }> {
-  if (!isTansoConfigured()) return { allowed: true }
-  try {
-    const tansoId = await getOrCreateTansoCustomer(visitorId, email)
-    if (!tansoId) return { allowed: true }
-    const result = await tansoCheckEntitlement(visitorId, featureKey)
-    const usageData = result?.usage
-    return {
-      allowed: result?.allowed !== false,
-      reason: result?.reason,
-      usage: usageData?.used ?? usageData?.currentUsage ?? 0,
-      limit: usageData?.limit ?? usageData?.usageLimit ?? 0,
-      remaining: usageData?.remaining ?? usageData?.remainingQuota ?? null,
-    }
-  } catch (err) {
-    console.error('Tanso entitlement check error:', err)
-    // Fallback: check if feature exists in customer's plan (matches SaaSSubscriptionSite pattern)
-    try {
-      const customer = await tansoGetCustomer(visitorId)
-      const activeSub = customer?.subscriptions?.find((s: any) => s.isActive)
-      if (activeSub?.plan?.id) {
-        const plans = await tansoListPlans()
-        const planItems = Array.isArray(plans) ? plans : plans?.items ?? plans?.plans ?? []
-        const plan = planItems.find((p: any) => (p.plan?.id ?? p.id) === activeSub.plan.id)
-        const features = plan?.features || []
-        const hasFeature = features.some((f: any) => f.key === featureKey)
-        return { allowed: hasFeature, reason: hasFeature ? undefined : 'Feature not in plan (fallback)' }
-      }
-    } catch (_) { /* fallback also failed — fail open */ }
-    return { allowed: true }
-  }
-}
-
-async function trackTansoUsage(visitorId: string, featureKey: string, eventName: string) {
-  if (!isTansoConfigured()) return
-  try {
-    await tansoIngestEvent({
-      eventIdempotencyKey: `${visitorId}-${featureKey}-${Date.now()}`,
-      eventName,
-      occurredAt: new Date().toISOString(),
-      customerReferenceId: visitorId,
-      featureKey,
-    })
-  } catch (err) {
-    console.error('Tanso usage tracking error:', err)
-  }
-}
-
 // =============================================================================
 // API Key Management (per-session Tanso API keys)
 // =============================================================================
@@ -3972,17 +4181,6 @@ app.post('/integrations/openai/connect', ensureVisitor, async (req: AuthRequest,
           }>;
         }
 
-        const openaiPricing: Record<string, { input: number; output: number }> = {
-          'gpt-4o': { input: 2.5, output: 10.0 },
-          'gpt-4o-mini': { input: 0.15, output: 0.6 },
-          'gpt-4': { input: 30.0, output: 60.0 },
-          'gpt-3.5-turbo': { input: 0.5, output: 1.5 },
-          'o1': { input: 15.0, output: 60.0 },
-          'o1-mini': { input: 3.0, output: 12.0 },
-          'text-embedding-3-small': { input: 0.02, output: 0 },
-        }
-        const defaultPricing = { input: 2.5, output: 10.0 }
-
         if (usageData.data && Array.isArray(usageData.data)) {
           for (const bucket of usageData.data) {
             const bucketTime = bucket.start_time ? new Date(bucket.start_time * 1000).toISOString() : new Date().toISOString()
@@ -3993,16 +4191,7 @@ app.post('/integrations/openai/connect', ensureVisitor, async (req: AuthRequest,
                 const inputTokens = result.input_tokens || 0
                 const outputTokens = result.output_tokens || 0
 
-                // Find matching pricing by checking if model name starts with a known prefix
-                let pricing = defaultPricing
-                for (const [key, value] of Object.entries(openaiPricing)) {
-                  if (modelName.startsWith(key)) {
-                    pricing = value
-                    break
-                  }
-                }
-
-                const cost = (inputTokens * pricing.input + outputTokens * pricing.output) / 1_000_000
+                const cost = await calcCostFromDb(pool, modelName, inputTokens, outputTokens)
 
                 if (cost > 0) {
                   await pool.query(
@@ -4156,14 +4345,6 @@ app.post('/integrations/anthropic/connect', ensureVisitor, async (req: AuthReque
           }>;
         }
 
-        const anthropicPricing: Record<string, { input: number; output: number }> = {
-          'claude-3-5-sonnet': { input: 3.0, output: 15.0 },
-          'claude-3-5-haiku': { input: 0.8, output: 4.0 },
-          'claude-3-opus': { input: 15.0, output: 75.0 },
-          'claude-3-haiku': { input: 0.25, output: 1.25 },
-        }
-        const defaultPricing = { input: 3.0, output: 15.0 }
-
         if (usageData.data && Array.isArray(usageData.data)) {
           for (const entry of usageData.data) {
             const modelName = entry.model || 'unknown'
@@ -4171,16 +4352,7 @@ app.post('/integrations/anthropic/connect', ensureVisitor, async (req: AuthReque
             const outputTokens = entry.output_tokens || 0
             const entryDate = entry.date ? new Date(entry.date).toISOString() : new Date().toISOString()
 
-            // Find matching pricing by checking if model name starts with a known prefix
-            let pricing = defaultPricing
-            for (const [key, value] of Object.entries(anthropicPricing)) {
-              if (modelName.startsWith(key)) {
-                pricing = value
-                break
-              }
-            }
-
-            const cost = (inputTokens * pricing.input + outputTokens * pricing.output) / 1_000_000
+            const cost = await calcCostFromDb(pool, modelName, inputTokens, outputTokens)
 
             if (cost > 0) {
               await pool.query(
@@ -4277,58 +4449,6 @@ app.post('/integrations/anthropic/disconnect', ensureVisitor, async (req: AuthRe
 // =============================================================================
 
 // Helper: convert a pending referral to 'converted' and grant a Stripe promo code to the referrer
-async function convertReferralIfPending(visitorId: string): Promise<void> {
-  try {
-    // Find the pending referral where this user is the referred party
-    const result = await pool.query(
-      `UPDATE referrals SET status = 'converted', credited_at = NOW()
-       WHERE referred_user_id = $1 AND status = 'pending'
-       RETURNING id, referrer_user_id`,
-      [visitorId]
-    )
-    if (result.rows.length === 0) return
-
-    const { id: referralId, referrer_user_id } = result.rows[0]
-
-    // Create a Stripe promo code for 1 free month of Pro
-    try {
-      const stripe = await getUncachableStripeClient()
-
-      // Create a one-time 100% off coupon for 1 month
-      const coupon = await stripe.coupons.create({
-        percent_off: 100,
-        duration: 'once',
-        name: `Referral reward — 1 month free Pro`,
-        metadata: { referral_id: String(referralId), referrer_user_id },
-      })
-
-      // Create a unique promo code from this coupon
-      const promoCode = await stripe.promotionCodes.create({
-        promotion: { type: 'coupon', coupon: coupon.id },
-        max_redemptions: 1,
-        metadata: { referral_id: String(referralId), referrer_user_id },
-      })
-
-      // Store the promo code for the referrer
-      await pool.query(
-        `INSERT INTO referral_credits (user_id, credit_type, amount, source_referral_id, promo_code, stripe_promo_id)
-         VALUES ($1, 'promo_month', 1, $2, $3, $4)`,
-        [referrer_user_id, referralId, promoCode.code, promoCode.id]
-      )
-    } catch (stripeErr) {
-      console.error('Failed to create Stripe promo code for referral:', stripeErr)
-      // Fallback: still record the credit without a promo code
-      await pool.query(
-        `INSERT INTO referral_credits (user_id, credit_type, amount, source_referral_id)
-         VALUES ($1, 'promo_month', 1, $2)`,
-        [referrer_user_id, referralId]
-      )
-    }
-  } catch (err) {
-    // Non-critical — don't fail the data load
-    console.error('Referral conversion error:', err)
-  }
-}
 
 // GET /referral/code - Get or create a referral code for the current user
 app.get('/referral/code', ensureVisitor, async (req: AuthRequest, res: Response) => {
@@ -5049,272 +5169,95 @@ app.get('/inference/profiles', ensureVisitor, async (req: AuthRequest, res: Resp
   }
 })
 
-// ============================================================
-// Anthropic Proxy — POST /anthropic/v1/messages
-// Users swap their base URL to route through this proxy.
-// We forward to Anthropic, calculate cost, and log an observe_event.
-// ============================================================
 
-const ANTHROPIC_MODEL_PRICING: Record<string, { input: number; output: number }> = {
-  'claude-sonnet-4': { input: 3, output: 15 },
-  'claude-3-5-sonnet': { input: 3, output: 15 },
-  'claude-3-5-haiku': { input: 0.80, output: 4 },
-  'claude-3-opus': { input: 15, output: 75 },
-  'claude-3-haiku': { input: 0.25, output: 1.25 },
-}
+// ─── Helicone data import ─────────────────────────────────────────────────
+// Accepts Helicone's JSON export format and maps to observe_events
+const heliconeEventSchema = z.object({
+  request_id: z.string().optional(),
+  created_at: z.string().optional(),
+  model: z.string().optional(),
+  provider: z.string().optional(),
+  prompt_tokens: z.number().optional(),
+  completion_tokens: z.number().optional(),
+  total_tokens: z.number().optional(),
+  cost: z.number().optional(),
+  user_id: z.string().optional(),
+  // Helicone custom properties
+  properties: z.record(z.string()).optional(),
+})
 
-function matchAnthropicModel(model: string): { input: number; output: number } | null {
-  // Exact match first
-  if (ANTHROPIC_MODEL_PRICING[model]) return ANTHROPIC_MODEL_PRICING[model]
-  // Prefix match (e.g. "claude-3-5-sonnet-20241022" -> "claude-3-5-sonnet")
-  for (const key of Object.keys(ANTHROPIC_MODEL_PRICING)) {
-    if (model.startsWith(key)) return ANTHROPIC_MODEL_PRICING[key]
-  }
-  return null
-}
-
-app.post('/anthropic/v1/messages', async (req: Request, res: Response) => {
+app.post('/import/helicone', ensureVisitor, async (req: AuthRequest, res: Response) => {
   try {
-    // 1. Read required headers
-    const anthropicApiKey = req.headers['x-api-key'] as string | undefined
-    const anthropicVersion = req.headers['anthropic-version'] as string | undefined
-    const tansoKey = req.headers['x-tanso-key'] as string | undefined
+    const userId = req.visitorId
+    if (!userId) return res.status(401).json({ error: 'Not authenticated' })
 
-    if (!anthropicApiKey) {
-      return res.status(401).json({ error: 'Missing x-api-key header (Anthropic API key)' })
-    }
-    if (!anthropicVersion) {
-      return res.status(400).json({ error: 'Missing anthropic-version header' })
-    }
-    if (!tansoKey) {
-      return res.status(400).json({ error: 'Missing X-Tanso-Key header (SDK key for attribution)' })
+    const body = z.object({
+      events: z.array(heliconeEventSchema).min(1).max(10000),
+    }).safeParse(req.body)
+
+    if (!body.success) {
+      return res.status(400).json({ error: 'Invalid format', details: body.error.flatten() })
     }
 
-    // 2. Resolve Tanso SDK key to user
-    const keyHash = crypto.createHash('sha256').update(tansoKey).digest('hex')
-    const keyResult = await pool.query(
-      'SELECT user_id FROM sdk_api_keys WHERE key_hash = $1 AND revoked_at IS NULL',
-      [keyHash]
-    )
-    if (keyResult.rows.length === 0) {
-      return res.status(401).json({ error: 'Invalid or revoked X-Tanso-Key' })
-    }
-    const userId = keyResult.rows[0].user_id
+    const events = body.data.events
+    let imported = 0
 
-    // Update last_used_at (fire-and-forget)
-    pool.query('UPDATE sdk_api_keys SET last_used_at = NOW() WHERE key_hash = $1', [keyHash]).catch(() => {})
+    for (const event of events) {
+      const model = event.model || 'unknown'
+      const provider = event.provider || inferModelProvider(model) || 'unknown'
+      const inputTokens = event.prompt_tokens || 0
+      const outputTokens = event.completion_tokens || 0
+      const cost = event.cost || 0
+      const customerId = event.user_id || event.properties?.['Helicone-User-Id'] || 'unknown'
+      const featureKey = event.properties?.['Helicone-Session-Id'] || event.properties?.['feature'] || 'imported'
+      const timestamp = event.created_at ? new Date(event.created_at) : new Date()
+      const idempotencyKey = event.request_id || null
 
-    // 3. Read optional attribution headers
-    const tansoCustomer = req.headers['x-tanso-customer'] as string | undefined
-    const tansoFeature = req.headers['x-tanso-feature'] as string | undefined
-
-    // 4. Forward to Anthropic
-    const anthropicResponse = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': anthropicApiKey,
-        'anthropic-version': anthropicVersion,
-      },
-      body: JSON.stringify(req.body),
-    })
-
-    const responseBody = await anthropicResponse.json() as Record<string, unknown>
-
-    // 5. Calculate cost and log event (only on success)
-    if (anthropicResponse.ok && responseBody.usage) {
-      const usage = responseBody.usage as { input_tokens?: number; output_tokens?: number }
-      const model = (responseBody.model as string) || (req.body.model as string) || 'unknown'
-      const pricing = matchAnthropicModel(model)
-
-      const inputTokens = usage.input_tokens ?? 0
-      const outputTokens = usage.output_tokens ?? 0
-
-      let costAmount = 0
-      if (pricing) {
-        costAmount = (inputTokens * pricing.input + outputTokens * pricing.output) / 1_000_000
-      }
-
-      // Log observe_event (fire-and-forget)
-      pool.query(
+      const result = await pool.query(
         `INSERT INTO observe_events (
           user_id, customer_id, feature_key, event_name, timestamp,
           cost_amount, cost_unit, revenue_amount, usage_units,
-          model, model_provider, source, granularity, is_inferred
-        ) VALUES ($1, $2, $3, $4, NOW(), $5, 'usd', 0, $6, $7, 'anthropic', 'proxy', 'event', false)`,
-        [
-          userId,
-          tansoCustomer || 'unknown',
-          tansoFeature || 'anthropic-proxy',
-          'llm_call',
-          costAmount,
-          inputTokens + outputTokens,
-          model,
-        ]
-      ).catch(err => console.error('Anthropic proxy: failed to log event:', err))
+          model, model_provider, source, granularity, is_inferred, properties,
+          idempotency_key
+        ) VALUES ($1, $2, $3, 'cost', $4, $5, 'usd', 0, $6, $7, $8, 'helicone_import', 'event', false, $9, $10)
+        ON CONFLICT (user_id, idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING`,
+        [userId, customerId, featureKey, timestamp, cost, inputTokens + outputTokens,
+         model, provider, JSON.stringify(event.properties || {}), idempotencyKey]
+      )
+      if (result.rowCount && result.rowCount > 0) imported++
     }
 
-    // 6. Return response unchanged
-    res.status(anthropicResponse.status).json(responseBody)
-  } catch (error) {
-    console.error('POST /anthropic/v1/messages error:', error)
-    res.status(500).json({ error: 'Anthropic proxy request failed' })
-  }
-})
-
-// =============================================================================
-// PROXY RESPONSE CACHING
-// =============================================================================
-
-interface CacheResult {
-  hit: boolean
-  response?: any
-  tokens_saved?: number
-}
-
-function computeCacheKey(userId: string, model: string, messages: any): string {
-  const payload = JSON.stringify({ model, messages })
-  return crypto.createHash('sha256').update(userId + ':' + payload).digest('hex')
-}
-
-function estimateTokens(responseBody: any): number {
-  const usage = responseBody?.usage
-  if (usage) {
-    return (usage.completion_tokens || 0) + (usage.prompt_tokens || 0)
-      || (usage.output_tokens || 0) + (usage.input_tokens || 0)
-  }
-  // Rough estimate from response text length
-  const text = JSON.stringify(responseBody)
-  return Math.ceil(text.length / 4)
-}
-
-async function tryCache(req: Request, userId: string): Promise<CacheResult> {
-  const cacheHeader = req.headers['x-tanso-cache']
-  if (!cacheHeader || cacheHeader !== 'true') {
-    return { hit: false }
-  }
-
-  const body = req.body || {}
-  const model = body.model || 'unknown'
-  const messages = body.messages || body.input || ''
-  const cacheKey = computeCacheKey(userId, model, messages)
-
-  // Look up cache
-  const result = await pool.query(
-    `SELECT response_body, tokens_saved FROM proxy_cache
-     WHERE user_id = $1 AND cache_key = $2
-       AND (expires_at IS NULL OR expires_at > NOW())`,
-    [userId, cacheKey]
-  )
-
-  if (result.rows.length > 0) {
-    const row = result.rows[0]
-    return { hit: true, response: row.response_body, tokens_saved: row.tokens_saved }
-  }
-
-  return { hit: false }
-}
-
-async function storeInCache(userId: string, model: string, messages: any, responseBody: any, ttlSeconds?: number): Promise<void> {
-  const cacheKey = computeCacheKey(userId, model, messages)
-  const requestHash = crypto.createHash('sha256').update(JSON.stringify(messages)).digest('hex')
-  const tokensSaved = estimateTokens(responseBody)
-  const expiresAt = ttlSeconds
-    ? new Date(Date.now() + ttlSeconds * 1000).toISOString()
-    : new Date(Date.now() + 3600 * 1000).toISOString() // default 1 hour
-
-  await pool.query(
-    `INSERT INTO proxy_cache (user_id, cache_key, model, request_hash, response_body, tokens_saved, expires_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)
-     ON CONFLICT (user_id, cache_key) DO UPDATE SET
-       response_body = EXCLUDED.response_body,
-       tokens_saved = EXCLUDED.tokens_saved,
-       expires_at = EXCLUDED.expires_at,
-       created_at = NOW()`,
-    [userId, cacheKey, model, requestHash, JSON.stringify(responseBody), tokensSaved, expiresAt]
-  )
-}
-
-async function logCacheHitEvent(userId: string, model: string, tokensSaved: number): Promise<void> {
-  await pool.query(
-    `INSERT INTO observe_events (user_id, event_name, model, source, cost_amount, usage_units, properties)
-     VALUES ($1, 'cache_hit', $2, 'cache', 0, $3, '{"cached": true}')`,
-    [userId, model, tokensSaved]
-  )
-}
-
-// Cache stats endpoint
-app.get('/cache/stats', ensureVisitor, async (req: AuthRequest, res: Response) => {
-  try {
-    const userId = req.visitorId
-
-    const [cacheEntries, hitStats, savings] = await Promise.all([
-      pool.query(
-        `SELECT COUNT(*) as count FROM proxy_cache
-         WHERE user_id = $1 AND (expires_at IS NULL OR expires_at > NOW())`,
-        [userId]
-      ),
-      pool.query(
-        `SELECT
-           COUNT(*) FILTER (WHERE properties->>'cached' = 'true') as total_hits
-         FROM observe_events
-         WHERE user_id = $1 AND source = 'cache'`,
-        [userId]
-      ),
-      pool.query(
-        `SELECT
-           COALESCE(SUM(tokens_saved), 0) as tokens_saved,
-           COALESCE(SUM(cost_saved), 0) as cost_saved
-         FROM proxy_cache
-         WHERE user_id = $1`,
-        [userId]
-      ),
-    ])
-
-    // Count misses from observe_events with source='proxy' (logged by proxy routes)
-    const missResult = await pool.query(
-      `SELECT COUNT(*) as total_misses FROM observe_events
-       WHERE user_id = $1 AND source = 'proxy' AND (properties->>'cached' IS NULL OR properties->>'cached' = 'false')`,
-      [userId]
-    )
-
-    res.json({
-      total_hits: parseInt(hitStats.rows[0]?.total_hits || '0'),
-      total_misses: parseInt(missResult.rows[0]?.total_misses || '0'),
-      tokens_saved: parseInt(savings.rows[0]?.tokens_saved || '0'),
-      cost_saved: parseFloat(savings.rows[0]?.cost_saved || '0'),
-      cache_entries: parseInt(cacheEntries.rows[0]?.count || '0'),
-    })
+    res.json({ success: true, imported, total: events.length })
   } catch (err) {
-    console.error('GET /cache/stats error:', err)
-    res.status(500).json({ error: 'Failed to fetch cache stats' })
+    console.error('POST /import/helicone error:', err)
+    res.status(500).json({ error: 'Import failed' })
   }
 })
 
-// Export caching utilities for use by proxy routes
-export { tryCache, storeInCache, logCacheHitEvent, estimateTokens }
+// ─── Static file serving for Docker/self-host ─────────────────────────────
+import path from 'path'
+import { fileURLToPath } from 'url'
 
-// In production, serve the built frontend
-if (process.env.NODE_ENV === 'production') {
-  const { fileURLToPath } = await import('url')
-  const { dirname, join } = await import('path')
-  const __dirname = dirname(fileURLToPath(import.meta.url))
-  app.use(express.static(join(__dirname, '..', 'dist')))
-  app.get('*', (_req, res) => {
-    res.sendFile(join(__dirname, '..', 'dist', 'index.html'))
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
+const distPath = path.join(__dirname, '..', 'dist')
+
+// Only serve static files when self-hosting (Docker), not on Vercel
+import fs from 'fs'
+
+if (process.env.NODE_ENV === 'production' && !process.env.VERCEL && fs.existsSync(distPath)) {
+  app.use(express.static(distPath))
+  // SPA fallback: serve index.html for all non-API routes
+  app.get('*', (_req: Request, res: Response) => {
+    res.sendFile(path.join(distPath, 'index.html'))
   })
 }
 
-// Local dev: start server directly
-if (!process.env.VERCEL) {
-  const PORT = Number(process.env.PORT) || 5000
-  ensureDbInitialized().then(() => {
-    app.listen(PORT, '0.0.0.0', () => {
-      console.log(`Backend server running on http://0.0.0.0:${PORT}`)
-    })
-  }).catch((error) => {
-    console.error('Failed to start server:', error)
-    process.exit(1)
+// Local dev server
+const port = parseInt(process.env.PORT || '3001', 10)
+if (process.env.NODE_ENV !== 'production' || !process.env.VERCEL) {
+  app.listen(port, () => {
+    console.log(`Server running on http://localhost:${port}`)
   })
 }
 

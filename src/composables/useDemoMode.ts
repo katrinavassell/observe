@@ -3,7 +3,8 @@ import { useRouter } from 'vue-router'
 import { useDataMode } from '@/composables/useDataMode'
 import { logger } from '@/lib/logger'
 
-const isDemoActive = ref(false)
+// Persist demo state across navigations using sessionStorage
+const isDemoActive = ref(sessionStorage.getItem('demo_mode') === 'true')
 
 export function useDemoMode() {
   const router = useRouter()
@@ -15,6 +16,7 @@ export function useDemoMode() {
     try {
       await switchToSampleData()
       isDemoActive.value = true
+      sessionStorage.setItem('demo_mode', 'true')
       router.push('/')
     } catch (error) {
       logger.error('Failed to enter demo mode', error)
@@ -29,6 +31,7 @@ export function useDemoMode() {
       logger.error('Failed to exit demo mode', error)
     } finally {
       isDemoActive.value = false
+      sessionStorage.removeItem('demo_mode')
       router.push('/data-sources')
     }
   }

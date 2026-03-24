@@ -3,12 +3,14 @@ import { ref, computed } from 'vue'
 import { useQuery, useQueryClient } from '@tanstack/vue-query'
 import { useRouter } from 'vue-router'
 import { getCustomers, getEventsByCustomer } from '@/lib/api'
-import { Users, ChevronRight, Search, AlertCircle, Plug } from 'lucide-vue-next'
+import { Users, ChevronRight, Search, AlertCircle, Plug, FlaskConical } from 'lucide-vue-next'
+import { useDemoMode } from '@/composables/useDemoMode'
 import MarginBadge from '@/components/shared/MarginBadge.vue'
 import { Input, Select, Skeleton, Button, Card, CardContent } from '@/components/ui'
 
 const router = useRouter()
 const queryClient = useQueryClient()
+const { enterDemoMode, isLoadingDemo } = useDemoMode()
 const search = ref('')
 const segmentFilter = ref('__all__')
 
@@ -132,10 +134,16 @@ function segmentClass(segment: string | null) {
       <p v-if="search || (segmentFilter && segmentFilter !== '__all__')" class="text-muted-foreground mb-4">No customers matching your filters.</p>
       <template v-else>
         <p class="text-muted-foreground mb-4">No customers yet. Load sample data or sync an integration.</p>
-        <Button variant="outline" @click="router.push('/data-sources')">
-          <Plug class="h-4 w-4 mr-2" />
-          Import Data
-        </Button>
+        <div class="flex gap-3">
+          <Button :disabled="isLoadingDemo" @click="enterDemoMode">
+            <FlaskConical class="h-4 w-4 mr-2" />
+            {{ isLoadingDemo ? 'Loading...' : 'Try Demo' }}
+          </Button>
+          <Button variant="outline" @click="router.push('/data-sources')">
+            <Plug class="h-4 w-4 mr-2" />
+            Import Data
+          </Button>
+        </div>
       </template>
     </div>
     <!-- Table -->
@@ -156,7 +164,7 @@ function segmentClass(segment: string | null) {
           <tr
             v-for="c in filtered"
             :key="c.customer_id"
-            class="hover:bg-muted/30 transition-colors cursor-pointer"
+            class="hover:bg-muted/50 transition-colors cursor-pointer"
             @click="router.push(`/customers/${c.customer_id}`)"
           >
             <td class="px-4 py-3 font-medium">{{ c.name }}</td>

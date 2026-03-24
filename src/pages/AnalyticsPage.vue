@@ -12,7 +12,8 @@ import {
   getMarginAlerts,
 } from '@/lib/api'
 import type { CustomerDetail, MarginAlert } from '@/lib/api'
-import { AlertCircle, AlertTriangle, ChevronDown, Plug, Database } from 'lucide-vue-next'
+import { AlertCircle, AlertTriangle, ChevronDown, Plug, Database, FlaskConical } from 'lucide-vue-next'
+import { useDemoMode } from '@/composables/useDemoMode'
 import SourceBadge from '@/components/shared/SourceBadge.vue'
 import {
   Card,
@@ -26,6 +27,7 @@ import { formatCurrency as fmt, formatPct as fmtPct, computeMargin } from '@/lib
 
 const router = useRouter()
 const queryClient = useQueryClient()
+const { enterDemoMode, isLoadingDemo } = useDemoMode()
 
 // ---------------------------------------------------------------------------
 // Data fetching — all 4 queries in parallel
@@ -277,10 +279,10 @@ function retry() {
       <!-- Negative margin alert banner -->
       <div
         v-if="negativeMarginsInfo"
-        class="flex items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950 px-4 py-3 mb-6"
+        class="flex items-center gap-3 rounded-lg border border-warning/30 bg-warning/10 px-4 py-3 mb-6"
       >
-        <AlertTriangle class="h-5 w-5 text-amber-500 shrink-0" />
-        <span class="text-sm font-medium text-amber-800 dark:text-amber-200">
+        <AlertTriangle class="h-5 w-5 text-warning shrink-0" />
+        <span class="text-sm font-medium text-warning-foreground">
           {{ negativeMarginsInfo.count }} feature{{ negativeMarginsInfo.count === 1 ? '' : 's' }}
           {{ negativeMarginsInfo.count === 1 ? 'has' : 'have' }} negative margin totaling
           {{ fmt(negativeMarginsInfo.totalLoss) }}/mo in losses
@@ -289,12 +291,12 @@ function retry() {
 
       <!-- 1. Summary cards -->
       <div class="grid grid-cols-2 sm:grid-cols-5 gap-4 mb-6">
-        <Card class="p-6 ring-2" :class="netMargin >= 0 ? 'ring-green-500/30' : 'ring-red-500/30'">
+        <Card class="p-6 ring-2" :class="netMargin >= 0 ? 'ring-success/30' : 'ring-destructive/30'">
           <div class="text-sm font-medium text-muted-foreground">Net Margin</div>
           <div
             v-if="featureData?.length"
             class="text-3xl font-bold tabular-nums mt-1"
-            :class="netMargin >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'"
+            :class="netMargin >= 0 ? 'text-success' : 'text-destructive'"
           >
             {{ fmt(netMargin) }}
           </div>
@@ -302,7 +304,7 @@ function retry() {
           <div
             v-if="netMarginPct != null"
             class="text-sm tabular-nums mt-0.5"
-            :class="netMarginPct >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'"
+            :class="netMarginPct >= 0 ? 'text-success' : 'text-destructive'"
           >
             {{ fmtPct(netMarginPct) }}
           </div>
@@ -371,7 +373,7 @@ function retry() {
       <Card v-if="marginAlertsData?.alerts?.length" class="mb-6">
         <CardContent class="py-4 px-6">
           <div class="flex items-center gap-2 mb-3">
-            <AlertTriangle class="h-4 w-4 text-amber-500" />
+            <AlertTriangle class="h-4 w-4 text-warning" />
             <span class="text-sm font-medium">Margin Alerts</span>
             <span class="text-xs text-muted-foreground ml-auto">{{ marginAlertsData.alerts.length }} alert{{ marginAlertsData.alerts.length === 1 ? '' : 's' }}</span>
           </div>
@@ -380,10 +382,10 @@ function retry() {
               v-for="(alert, idx) in marginAlertsData.alerts"
               :key="idx"
               class="flex items-start gap-3 rounded-md border px-3 py-2"
-              :class="alert.severity === 'critical' ? 'border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950' : 'border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950'"
+              :class="alert.severity === 'critical' ? 'border-destructive/30 bg-destructive/10' : 'border-warning/30 bg-warning/10'"
             >
-              <AlertCircle v-if="alert.severity === 'critical'" class="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
-              <AlertTriangle v-else class="h-4 w-4 text-amber-500 mt-0.5 shrink-0" />
+              <AlertCircle v-if="alert.severity === 'critical'" class="h-4 w-4 text-destructive mt-0.5 shrink-0" />
+              <AlertTriangle v-else class="h-4 w-4 text-warning mt-0.5 shrink-0" />
               <div class="min-w-0">
                 <div class="text-sm font-medium">{{ alert.title }}</div>
                 <div class="text-xs text-muted-foreground">{{ alert.description }}</div>
@@ -404,6 +406,10 @@ function retry() {
           Revenue, cost, and margin breakdowns appear here once you have event data flowing in via the SDK, CSV upload, or provider integrations.
         </p>
         <div class="flex gap-3">
+          <Button size="sm" :disabled="isLoadingDemo" @click="enterDemoMode">
+            <FlaskConical class="h-3.5 w-3.5 mr-1.5" />
+            {{ isLoadingDemo ? 'Loading...' : 'Try Demo' }}
+          </Button>
           <Button variant="outline" size="sm" @click="router.push('/data-sources')">
             <Plug class="h-3.5 w-3.5 mr-1.5" />
             Data Sources

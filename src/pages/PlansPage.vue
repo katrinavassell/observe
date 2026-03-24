@@ -2,8 +2,8 @@
 import { computed, ref } from 'vue'
 import { useQuery, useQueryClient } from '@tanstack/vue-query'
 import { useRouter } from 'vue-router'
-import { Check, Zap, Loader2, AlertCircle, X, ArrowDown, RotateCcw, XCircle, Calendar, FileText } from 'lucide-vue-next'
-import { tansoGetStatus, tansoGetInvoices } from '@/lib/api'
+import { Check, Zap, Loader2, AlertCircle, X, ArrowDown, RotateCcw, XCircle, Calendar, FileText, ExternalLink } from 'lucide-vue-next'
+import { tansoGetStatus } from '@/lib/api'
 import { toast } from 'vue-sonner'
 
 const queryClient = useQueryClient()
@@ -17,13 +17,6 @@ const { data: statusData, isLoading } = useQuery({
   retryDelay: 2000,
 })
 
-const { data: invoiceData } = useQuery({
-  queryKey: ['tanso-invoices'],
-  queryFn: tansoGetInvoices,
-  retry: 1,
-})
-
-const invoices = computed(() => invoiceData.value?.invoices || [])
 
 async function apiPost(url: string, body: any) {
   const res = await fetch(`/api${url}`, {
@@ -41,7 +34,21 @@ async function apiPost(url: string, body: any) {
 
 function refresh() {
   queryClient.invalidateQueries({ queryKey: ['tanso-status'] })
-  queryClient.invalidateQueries({ queryKey: ['tanso-invoices'] })
+}
+
+const isOpeningPortal = ref(false)
+async function openStripePortal() {
+  isOpeningPortal.value = true
+  try {
+    const data = await apiPost('/tanso/portal', {})
+    if (data.url) {
+      window.location.href = data.url
+    }
+  } catch (err) {
+    toast.error(err instanceof Error ? err.message : 'Failed to open billing portal')
+  } finally {
+    isOpeningPortal.value = false
+  }
 }
 
 const isConfigured = computed(() => statusData.value?.configured ?? false)
@@ -124,7 +131,7 @@ const featureRows = computed(() => {
   const freeFeatures = planFeatureMap(freePlan.value)
   const proFeatures = planFeatureMap(proPlan.value)
   const allFeatures = freePlan.value?.features || proPlan.value?.features || []
-  return allFeatures.map((f: any) => {
+  const rows = allFeatures.map((f: any) => {
     const freeVal = formatFeatureLimit(freeFeatures[f.key])
     const proVal = formatFeatureLimit(proFeatures[f.key])
     const highlight = typeof freeVal === 'string' || typeof proVal === 'string'
@@ -135,6 +142,12 @@ const featureRows = computed(() => {
       pro: proVal,
       highlight,
     }
+  })
+  // Sort: features with limits/differences first, then identical ones
+  return rows.sort((a, b) => {
+    const aDiffers = a.highlight || a.free !== a.pro ? 1 : 0
+    const bDiffers = b.highlight || b.free !== b.pro ? 1 : 0
+    return bDiffers - aDiffers
   })
 })
 
@@ -231,9 +244,21 @@ async function handleCancelDowngrade() {
 
 <template>
   <div class="space-y-10">
-    <div>
-      <h1 class="text-2xl font-semibold tracking-tight">Plans & Billing</h1>
-      <p class="text-sm text-muted-foreground mt-1">Manage your subscription and track feature usage</p>
+    <div class="flex items-center justify-between">
+      <div>
+        <h1 class="text-2xl font-semibold tracking-tight">Plans & Billing</h1>
+        <p class="text-sm text-muted-foreground mt-1">Manage your subscription and track feature usage</p>
+      </div>
+      <button
+        v-if="currentSub?.isActive && currentPlanPrice > 0"
+        class="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium hover:bg-muted transition-colors disabled:opacity-50"
+        :disabled="isOpeningPortal"
+        @click="openStripePortal"
+      >
+        <Loader2 v-if="isOpeningPortal" class="h-4 w-4 animate-spin" />
+        <ExternalLink v-else class="h-4 w-4" />
+        Manage Billing
+      </button>
     </div>
 
     <div v-if="isLoading" class="flex items-center justify-center py-20">
@@ -252,16 +277,16 @@ async function handleCancelDowngrade() {
 
     <template v-else>
       <!-- Subscription status banner -->
-      <div v-if="hasScheduledCancellation" class="rounded-xl border border-amber-200 bg-amber-50 p-4 flex items-center justify-between">
+      <div v-if="hasScheduledCancellation" class="rounded-xl border border-warning/30 bg-warning/10 p-4 flex items-center justify-between">
         <div class="flex items-center gap-3">
-          <Calendar class="h-5 w-5 text-amber-600" />
+          <Calendar class="h-5 w-5 text-warning" />
           <div>
-            <p class="text-sm font-medium text-amber-900">Your subscription is cancelling</p>
-            <p class="text-xs text-amber-700">Access continues until {{ cancelEffectiveDate }}</p>
+            <p class="text-sm font-medium text-foreground">Your subscription is cancelling</p>
+            <p class="text-xs text-muted-foreground">Access continues until {{ cancelEffectiveDate }}</p>
           </div>
         </div>
         <button
-          class="rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-700 transition-colors disabled:opacity-50"
+          class="rounded-lg bg-warning px-3 py-1.5 text-xs font-medium text-warning-foreground hover:bg-warning/90 transition-colors disabled:opacity-50"
           :disabled="isPending"
           @click="handleReactivate"
         >
@@ -270,16 +295,16 @@ async function handleCancelDowngrade() {
         </button>
       </div>
 
-      <div v-if="pendingDowngrade" class="rounded-xl border border-blue-200 bg-blue-50 p-4 flex items-center justify-between">
+      <div v-if="pendingDowngrade" class="rounded-xl border border-primary/30 bg-primary/10 p-4 flex items-center justify-between">
         <div class="flex items-center gap-3">
-          <ArrowDown class="h-5 w-5 text-blue-600" />
+          <ArrowDown class="h-5 w-5 text-primary" />
           <div>
-            <p class="text-sm font-medium text-blue-900">Downgrade scheduled</p>
-            <p class="text-xs text-blue-700">Changes at end of billing period{{ billingPeriodEnd ? ` (${billingPeriodEnd})` : '' }}</p>
+            <p class="text-sm font-medium text-foreground">Downgrade scheduled</p>
+            <p class="text-xs text-muted-foreground">Changes at end of billing period{{ billingPeriodEnd ? ` (${billingPeriodEnd})` : '' }}</p>
           </div>
         </div>
         <button
-          class="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 transition-colors disabled:opacity-50"
+          class="rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
           :disabled="isPending"
           @click="handleCancelDowngrade"
         >
@@ -303,8 +328,8 @@ async function handleCancelDowngrade() {
                 :class="[
                   'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium',
                   e.allowed
-                    ? 'bg-emerald-50 text-emerald-700'
-                    : 'bg-red-50 text-red-700'
+                    ? 'bg-success/10 text-success'
+                    : 'bg-destructive/10 text-destructive'
                 ]"
               >
                 {{ e.allowed ? 'Active' : 'Limit reached' }}
@@ -318,7 +343,7 @@ async function handleCancelDowngrade() {
               <div class="h-2 rounded-full bg-muted overflow-hidden">
                 <div
                   class="h-full rounded-full transition-all"
-                  :class="getUsagePercent(e) >= 90 ? 'bg-red-500' : getUsagePercent(e) >= 70 ? 'bg-amber-500' : 'bg-emerald-500'"
+                  :class="getUsagePercent(e) >= 90 ? 'bg-destructive' : getUsagePercent(e) >= 70 ? 'bg-warning' : 'bg-success'"
                   :style="{ width: getUsagePercent(e) + '%' }"
                 />
               </div>
@@ -334,14 +359,14 @@ async function handleCancelDowngrade() {
           <div
             :class="[
               'rounded-xl border p-6 flex flex-col',
-              currentPlanKey === 'free' ? 'border-emerald-300 bg-emerald-50/30' : 'border-border bg-card'
+              currentPlanKey === 'free' ? 'border-success/30 bg-success/5' : 'border-border bg-card'
             ]"
           >
             <div class="flex items-center justify-between">
               <h3 class="text-lg font-semibold">Free</h3>
               <span
                 v-if="currentPlanKey === 'free'"
-                class="inline-flex items-center rounded-full bg-emerald-100 text-emerald-700 px-2.5 py-0.5 text-xs font-medium"
+                class="inline-flex items-center rounded-full bg-success/10 text-success px-2.5 py-0.5 text-xs font-medium"
               >
                 Current
               </span>
@@ -373,7 +398,7 @@ async function handleCancelDowngrade() {
             <!-- On Free → current plan -->
             <div
               v-else-if="currentPlanKey === 'free'"
-              class="w-full rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm font-medium text-emerald-700 text-center"
+              class="w-full rounded-lg border border-success/30 bg-success/10 px-4 py-2.5 text-sm font-medium text-success text-center"
             >
               <Check class="h-4 w-4 inline mr-1" />
               Your current plan
@@ -384,7 +409,7 @@ async function handleCancelDowngrade() {
           <div
             :class="[
               'rounded-xl border-2 p-6 flex flex-col relative',
-              currentPlanKey === 'pro' ? 'border-emerald-400 bg-emerald-50/30' : 'border-primary bg-card shadow-md'
+              currentPlanKey === 'pro' ? 'border-success/40 bg-success/5' : 'border-primary bg-card shadow-md'
             ]"
           >
             <div
@@ -397,7 +422,7 @@ async function handleCancelDowngrade() {
               <h3 class="text-lg font-semibold">Pro</h3>
               <span
                 v-if="currentPlanKey === 'pro'"
-                class="inline-flex items-center rounded-full bg-emerald-100 text-emerald-700 px-2.5 py-0.5 text-xs font-medium"
+                class="inline-flex items-center rounded-full bg-success/10 text-success px-2.5 py-0.5 text-xs font-medium"
               >
                 Current
               </span>
@@ -420,7 +445,7 @@ async function handleCancelDowngrade() {
             <!-- On Pro → current plan + cancel option -->
             <template v-else>
               <div
-                class="w-full rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm font-medium text-emerald-700 text-center"
+                class="w-full rounded-lg border border-success/30 bg-success/10 px-4 py-2.5 text-sm font-medium text-success text-center"
               >
                 <Check class="h-4 w-4 inline mr-1" />
                 Your current plan
@@ -430,7 +455,7 @@ async function handleCancelDowngrade() {
               </div>
               <button
                 v-if="!hasScheduledCancellation"
-                class="mt-3 w-full text-xs text-muted-foreground hover:text-red-600 transition-colors disabled:opacity-50"
+                class="mt-3 w-full text-xs text-muted-foreground hover:text-destructive transition-colors disabled:opacity-50"
                 :disabled="isPending"
                 @click="handleCancel('END_OF_PERIOD')"
               >
@@ -465,12 +490,12 @@ async function handleCancelDowngrade() {
                 >
                   <td class="py-3 px-4" :class="row.highlight ? 'font-medium' : ''">{{ row.label }}</td>
                   <td class="py-3 px-4 text-center">
-                    <Check v-if="row.free === true" class="h-4 w-4 text-emerald-500 mx-auto" />
+                    <Check v-if="row.free === true" class="h-4 w-4 text-success mx-auto" />
                     <X v-else-if="row.free === false" class="h-4 w-4 text-muted-foreground/40 mx-auto" />
                     <span v-else class="text-muted-foreground">{{ row.free }}</span>
                   </td>
                   <td class="py-3 px-4 text-center">
-                    <Check v-if="row.pro === true" class="h-4 w-4 text-emerald-500 mx-auto" />
+                    <Check v-if="row.pro === true" class="h-4 w-4 text-success mx-auto" />
                     <X v-else-if="row.pro === false" class="h-4 w-4 text-muted-foreground/40 mx-auto" />
                     <span v-else class="font-medium text-primary">{{ row.pro }}</span>
                   </td>
@@ -481,52 +506,7 @@ async function handleCancelDowngrade() {
         </div>
       </div>
 
-      <!-- Invoice History -->
-      <div v-if="invoices.length > 0" class="max-w-3xl space-y-4">
-        <h3 class="text-base font-semibold flex items-center gap-2">
-          <FileText class="h-4 w-4" />
-          Invoice History
-        </h3>
-        <div class="rounded-xl border overflow-hidden">
-          <table class="w-full text-sm">
-            <thead>
-              <tr class="border-b bg-muted/50">
-                <th class="text-left py-3 px-4 font-medium text-muted-foreground">Date</th>
-                <th class="text-left py-3 px-4 font-medium text-muted-foreground">Amount</th>
-                <th class="text-left py-3 px-4 font-medium text-muted-foreground">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr
-                v-for="inv in invoices"
-                :key="inv.id"
-                class="border-b last:border-0"
-              >
-                <td class="py-3 px-4">
-                  {{ inv.createdAt ? new Date(inv.createdAt).toLocaleDateString() : '—' }}
-                </td>
-                <td class="py-3 px-4">
-                  ${{ typeof inv.amount === 'number' ? inv.amount.toFixed(2) : inv.amount }}
-                </td>
-                <td class="py-3 px-4">
-                  <span
-                    :class="[
-                      'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium',
-                      inv.status === 'PAID' ? 'bg-emerald-50 text-emerald-700' :
-                      inv.status === 'PAST_DUE' ? 'bg-red-50 text-red-700' :
-                      'bg-amber-50 text-amber-700'
-                    ]"
-                  >
-                    {{ inv.status }}
-                  </span>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <div v-else-if="plans.length === 0 && entitlements.length === 0" class="rounded-xl border bg-card p-8 text-center">
+      <div v-if="plans.length === 0 && entitlements.length === 0" class="rounded-xl border bg-card p-8 text-center">
         <AlertCircle class="h-10 w-10 text-muted-foreground mx-auto mb-4" />
         <h2 class="text-lg font-semibold">No Plans Available Yet</h2>
         <p class="text-sm text-muted-foreground mt-2 max-w-md mx-auto">

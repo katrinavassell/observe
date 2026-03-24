@@ -3,12 +3,14 @@ import { computed, reactive } from 'vue'
 import { useQuery, useQueryClient } from '@tanstack/vue-query'
 import { useRouter } from 'vue-router'
 import { getFeatures } from '@/lib/api'
-import { Layers, AlertCircle, Plug, ChevronDown, ChevronRight } from 'lucide-vue-next'
+import { Layers, AlertCircle, Plug, ChevronDown, ChevronRight, FlaskConical } from 'lucide-vue-next'
+import { useDemoMode } from '@/composables/useDemoMode'
 import { Card, CardHeader, CardTitle, CardContent, Skeleton, Button } from '@/components/ui'
 import { formatCurrency } from '@/lib/format'
 
 const router = useRouter()
 const queryClient = useQueryClient()
+const { enterDemoMode, isLoadingDemo } = useDemoMode()
 
 const { data: features, isLoading, isError } = useQuery({
   queryKey: ['features'],
@@ -145,10 +147,16 @@ function goToDetail(key: string) {
     <div v-else-if="!features || features.length === 0" class="flex flex-col items-center justify-center py-16 text-center">
       <Layers class="h-10 w-10 text-muted-foreground/40 mb-3" />
       <p class="text-muted-foreground mb-4">No feature data yet. Load sample data to see feature economics.</p>
-      <Button variant="outline" @click="router.push('/data-sources')">
-        <Plug class="h-4 w-4 mr-2" />
-        Import Data
-      </Button>
+      <div class="flex gap-3">
+        <Button :disabled="isLoadingDemo" @click="enterDemoMode">
+          <FlaskConical class="h-4 w-4 mr-2" />
+          {{ isLoadingDemo ? 'Loading...' : 'Try Demo' }}
+        </Button>
+        <Button variant="outline" @click="router.push('/data-sources')">
+          <Plug class="h-4 w-4 mr-2" />
+          Import Data
+        </Button>
+      </div>
     </div>
 
     <!-- Feature List by Band -->

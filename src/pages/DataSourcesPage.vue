@@ -18,7 +18,6 @@ import {
   RevenueSection,
   CostsSection,
   UsageSection,
-  ComingSoonSection,
 } from '@/components/data-sources'
 import StripeApiKeyModal from '@/components/integrations/StripeApiKeyModal.vue'
 import UsageLimitBanner from '@/components/shared/UsageLimitBanner.vue'
@@ -98,6 +97,10 @@ const isSyncing = ref(false)
 const revenueSectionRef = ref<InstanceType<typeof RevenueSection> | null>(null)
 
 const ingestUrl = typeof window !== 'undefined' ? `${window.location.origin}/api/events/ingest` : '/api/events/ingest'
+const proxyBaseUrl = typeof window !== 'undefined' ? `${window.location.origin}/v1` : '/v1'
+
+/** Integration mode toggle */
+const integrationTab = ref<'sdk' | 'proxy'>('sdk')
 
 /** SDK API Key state */
 const sdkKeys = ref<SdkKey[]>([])
@@ -446,7 +449,7 @@ watch(
     </div>
 
     <!-- Viewer notice -->
-    <div v-if="isViewer" class="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-800 p-4 text-sm text-amber-800 dark:text-amber-300">
+    <div v-if="isViewer" class="flex items-start gap-3 rounded-lg border border-warning/30 bg-warning/10 p-4 text-sm text-warning-foreground">
       <Eye class="h-4 w-4 mt-0.5 shrink-0" />
       <div>
         <strong>Viewer access</strong> — You can see your team's data but cannot upload, modify, or clear data. Contact your team admin to make changes.
@@ -454,13 +457,13 @@ watch(
     </div>
 
     <!-- Demo Mode Notice (when already in demo, admin only) -->
-    <Card v-if="isDemoMode && !isViewer" class="border-amber-400/50 bg-amber-50 dark:bg-amber-950/20">
+    <Card v-if="isDemoMode && !isViewer" class="border-warning/50 bg-warning/10">
       <CardContent class="p-6">
         <div class="flex items-center gap-2 mb-2">
-          <FlaskConical class="h-5 w-5 text-amber-600" />
-          <h2 class="font-semibold text-amber-800 dark:text-amber-300">You're in demo mode</h2>
+          <FlaskConical class="h-5 w-5 text-warning" />
+          <h2 class="font-semibold text-foreground">You're in demo mode</h2>
         </div>
-        <p class="text-sm text-amber-700 dark:text-amber-400">
+        <p class="text-sm text-muted-foreground">
           You're exploring Tanso with realistic demo data. Data import and connection features are disabled in demo mode.
           Exit the demo from the banner above to connect your own data.
         </p>
@@ -487,10 +490,6 @@ watch(
             <FlaskConical class="h-4 w-4 mr-2" />
             {{ isLoadingDemo ? 'Loading Demo...' : 'Try Demo' }}
           </Button>
-          <Button variant="outline" @click="handleTrySampleData" :disabled="isLoadingSample">
-            <TrendingUp class="h-4 w-4 mr-2" />
-            {{ isLoadingSample ? 'Loading...' : 'Load Sample Data Only' }}
-          </Button>
         </div>
       </CardContent>
     </Card>
@@ -505,19 +504,50 @@ watch(
       </div>
     </div>
 
+    <!-- SECTION: Track going forward -->
+    <div v-if="!isDemoMode" class="space-y-1">
+      <h2 class="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Track going forward</h2>
+      <p class="text-sm text-muted-foreground">Add a few lines of code to start tracking AI costs in real-time.</p>
+    </div>
+
     <!-- SDK Integration Section — PRIMARY integration, shown first -->
-    <Card v-if="!isDemoMode" class="border-green-200/50">
+    <Card v-if="!isDemoMode" class="border-success/20">
       <CardContent class="p-6 space-y-5">
         <div>
           <div class="flex items-center gap-2 mb-1">
-            <div class="flex items-center justify-center w-8 h-8 rounded-lg bg-green-100 text-green-700 text-xs font-bold">{}</div>
-            <h2 class="font-semibold">SDK Integration</h2>
-            <span class="ml-auto text-[10px] font-medium bg-green-100 text-green-700 px-2 py-0.5 rounded-full">Observe-only</span>
+            <div class="flex items-center justify-center w-8 h-8 rounded-lg bg-success/10 text-success text-xs font-bold">{}</div>
+            <h2 class="font-semibold">Integration</h2>
+            <span class="ml-auto text-[10px] font-medium bg-success/10 text-success px-2 py-0.5 rounded-full">Observe-only</span>
           </div>
           <p class="text-sm text-muted-foreground">
-            Add 3 lines of code to see exactly where your AI spend goes. No billing changes required.
+            Track AI costs automatically. No billing changes required.
           </p>
         </div>
+
+        <!-- Integration mode toggle -->
+        <div class="flex rounded-lg bg-muted p-1 w-fit">
+          <button
+            :class="[
+              'px-3 py-1.5 text-xs font-medium rounded-md transition-colors',
+              integrationTab === 'sdk' ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'
+            ]"
+            @click="integrationTab = 'sdk'"
+          >
+            SDK Events
+          </button>
+          <button
+            :class="[
+              'px-3 py-1.5 text-xs font-medium rounded-md transition-colors',
+              integrationTab === 'proxy' ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'
+            ]"
+            @click="integrationTab = 'proxy'"
+          >
+            Proxy Mode
+          </button>
+        </div>
+
+        <!-- ============ SDK Events Tab ============ -->
+        <template v-if="integrationTab === 'sdk'">
 
         <!-- API Key Management -->
         <div v-if="!isViewer">
@@ -548,8 +578,8 @@ watch(
           </div>
 
           <!-- Generated key display (show once) -->
-          <div v-if="generatedKey" class="rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-700 p-4 mb-3 space-y-2">
-            <div class="flex items-center gap-2 text-xs font-medium text-amber-800 dark:text-amber-300">
+          <div v-if="generatedKey" class="rounded-lg border bg-muted/40 p-4 mb-3 space-y-2">
+            <div class="flex items-center gap-2 text-xs font-medium text-success">
               <Key class="h-3 w-3" />
               Save this key — you won't see it again
             </div>
@@ -594,8 +624,10 @@ watch(
     <span class="text-sky-300">eventName</span>: <span class="text-amber-300">'chat_completion'</span>,
     <span class="text-sky-300">customerReferenceId</span>: userId,
     <span class="text-sky-300">featureKey</span>: <span class="text-amber-300">'ai_summarization'</span>,
-    <span class="text-sky-300">costAmount</span>: <span class="text-purple-300">0.24</span>,
     <span class="text-sky-300">model</span>: <span class="text-amber-300">'gpt-4o'</span>,
+    <span class="text-sky-300">inputTokens</span>: response.usage.prompt_tokens,
+    <span class="text-sky-300">outputTokens</span>: response.usage.completion_tokens,
+    <span class="text-zinc-500">// cost auto-calculated from model + tokens</span>
   }]})
 })</pre>
           </div>
@@ -669,23 +701,95 @@ await fetch('{{ ingestUrl }}', {
         </div>
 
         <div class="text-[11px] text-muted-foreground border-t pt-3">
-          Batch up to 1,000 events per request. All data tagged as <span class="font-mono bg-green-100 text-green-700 px-1 py-0.5 rounded">SDK</span> in the dashboard.
+          Batch up to 1,000 events per request. All data tagged as <span class="font-mono bg-success/10 text-success px-1 py-0.5 rounded">SDK</span> in the dashboard.
         </div>
+
+        </template>
+
+        <!-- ============ Proxy Mode Tab ============ -->
+        <template v-else>
+
+        <p class="text-sm text-muted-foreground">
+          Swap your API base URL. Cost is captured automatically from every request — no extra code needed.
+        </p>
+
+        <!-- OpenAI snippet -->
+        <div>
+          <h3 class="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">OpenAI</h3>
+          <div class="rounded-md bg-zinc-950 border border-zinc-800 p-4 font-mono text-xs leading-relaxed overflow-x-auto">
+            <pre class="whitespace-pre text-zinc-100"><span class="text-zinc-500">// Just change baseURL — your existing code works as-is</span>
+<span class="text-emerald-400">import</span> OpenAI <span class="text-emerald-400">from</span> <span class="text-amber-300">'openai'</span>
+
+<span class="text-emerald-400">const</span> openai = <span class="text-emerald-400">new</span> OpenAI({
+  <span class="text-sky-300">baseURL</span>: <span class="text-amber-300">'{{ proxyBaseUrl }}'</span>,
+  <span class="text-sky-300">defaultHeaders</span>: {
+    <span class="text-amber-300">'X-Tanso-Key'</span>: <span class="text-amber-300">'{{ sdkKeys.length > 0 ? sdkKeys[0].key_prefix + "..." : "YOUR_API_KEY" }}'</span>,
+  },
+})
+
+<span class="text-zinc-500">// Use openai normally — every call is tracked automatically</span>
+<span class="text-emerald-400">const</span> response = <span class="text-emerald-400">await</span> openai.chat.completions.create({
+  model: <span class="text-amber-300">'gpt-4o'</span>,
+  messages: [{ role: <span class="text-amber-300">'user'</span>, content: prompt }],
+})</pre>
+          </div>
+        </div>
+
+        <!-- Anthropic snippet -->
+        <details class="group">
+          <summary class="text-xs font-medium text-muted-foreground cursor-pointer hover:text-foreground transition-colors">
+            Show Anthropic setup ▾
+          </summary>
+          <div class="mt-2">
+            <div class="rounded-md bg-zinc-950 border border-zinc-800 p-4 font-mono text-xs leading-relaxed overflow-x-auto">
+              <pre class="whitespace-pre text-zinc-100"><span class="text-emerald-400">import</span> Anthropic <span class="text-emerald-400">from</span> <span class="text-amber-300">'@anthropic-ai/sdk'</span>
+
+<span class="text-emerald-400">const</span> anthropic = <span class="text-emerald-400">new</span> Anthropic({
+  <span class="text-sky-300">baseURL</span>: <span class="text-amber-300">'{{ proxyBaseUrl }}'</span>,
+  <span class="text-sky-300">defaultHeaders</span>: {
+    <span class="text-amber-300">'X-Tanso-Key'</span>: <span class="text-amber-300">'{{ sdkKeys.length > 0 ? sdkKeys[0].key_prefix + "..." : "YOUR_API_KEY" }}'</span>,
+  },
+})</pre>
+            </div>
+          </div>
+        </details>
+
+        <!-- Benefits -->
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div class="rounded-lg border bg-card p-3">
+            <div class="text-xs font-medium mb-1">Zero code changes</div>
+            <div class="text-[11px] text-muted-foreground">Swap one URL. Your existing OpenAI/Anthropic code works as-is</div>
+          </div>
+          <div class="rounded-lg border bg-card p-3">
+            <div class="text-xs font-medium mb-1">Auto cost tracking</div>
+            <div class="text-[11px] text-muted-foreground">Token usage and cost captured from every API response automatically</div>
+          </div>
+          <div class="rounded-lg border bg-card p-3">
+            <div class="text-xs font-medium mb-1">Works with existing SDKs</div>
+            <div class="text-[11px] text-muted-foreground">Compatible with OpenAI and Anthropic official SDKs. No wrapper needed</div>
+          </div>
+        </div>
+
+        <!-- Supported endpoints -->
+        <div>
+          <h3 class="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Supported endpoints</h3>
+          <div class="text-xs space-y-1">
+            <div class="flex gap-2"><span class="font-mono bg-muted px-1.5 py-0.5 rounded text-[11px]">POST /v1/chat/completions</span><span class="text-muted-foreground">OpenAI chat</span></div>
+            <div class="flex gap-2"><span class="font-mono bg-muted px-1.5 py-0.5 rounded text-[11px]">POST /v1/embeddings</span><span class="text-muted-foreground">OpenAI embeddings</span></div>
+            <div class="flex gap-2"><span class="font-mono bg-muted px-1.5 py-0.5 rounded text-[11px]">POST /v1/messages</span><span class="text-muted-foreground">Anthropic messages</span></div>
+          </div>
+        </div>
+
+        <div class="text-[11px] text-muted-foreground border-t pt-3">
+          Uses the same API keys as SDK Events. Generate one in the SDK Events tab if you haven't already. All data tagged as <span class="font-mono bg-success/10 text-success px-1 py-0.5 rounded">Proxy</span> in the dashboard.
+        </div>
+
+        </template>
+
       </CardContent>
     </Card>
 
-    <!-- AI Provider Connections (hidden in demo mode) -->
-    <CostsSection
-      v-if="!isDemoMode"
-      :file="costsFile"
-      :is-loading-sample="isLoadingCosts"
-      :readonly="isViewer"
-      @file-uploaded="handleCostsFileUploaded"
-      @file-cleared="handleCostsFileCleared"
-      @use-sample="handleUseSampleCosts"
-    />
-
-    <!-- Revenue Section (hidden in demo mode) -->
+    <!-- Revenue Section — Stripe connection (hidden in demo mode) -->
     <RevenueSection
       v-if="!isDemoMode"
       ref="revenueSectionRef"
@@ -700,6 +804,32 @@ await fetch('{{ ingestUrl }}', {
       @disconnect-stripe="handleStripeDisconnect"
       @files-changed="handleRevenueFilesChanged"
       @all-files-cleared="handleRevenueFilesCleared"
+    />
+
+    <!-- SECTION: Import historic data (optional) -->
+    <div v-if="!isDemoMode" class="relative mt-4">
+      <div class="absolute inset-0 flex items-center">
+        <div class="w-full border-t"></div>
+      </div>
+      <div class="relative flex justify-center text-xs">
+        <span class="bg-background px-3 text-muted-foreground">Optional</span>
+      </div>
+    </div>
+
+    <div v-if="!isDemoMode" class="space-y-1">
+      <h2 class="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Import historic data</h2>
+      <p class="text-sm text-muted-foreground">Already have cost or usage data from your AI providers? Upload CSVs to see trends from day one. You can skip this and come back later.</p>
+    </div>
+
+    <!-- AI Cost CSVs + Provider Connections (hidden in demo mode) -->
+    <CostsSection
+      v-if="!isDemoMode"
+      :file="costsFile"
+      :is-loading-sample="isLoadingCosts"
+      :readonly="isViewer"
+      @file-uploaded="handleCostsFileUploaded"
+      @file-cleared="handleCostsFileCleared"
+      @use-sample="handleUseSampleCosts"
     />
 
     <UsageLimitBanner
@@ -724,8 +854,6 @@ await fetch('{{ ingestUrl }}', {
       @use-sample="handleUseSampleUsage"
     />
 
-    <!-- Coming Soon Section (hidden in demo mode) -->
-    <ComingSoonSection v-if="!isDemoMode" />
   </div>
 
   <!-- Stripe API Key Modal -->

@@ -3,13 +3,15 @@ import { ref, computed } from 'vue'
 import { useQuery } from '@tanstack/vue-query'
 import { useRouter, useRoute } from 'vue-router'
 import { getEvents, getEventsByCustomer, getEventsByModel, getFeatures, type ObserveEvent } from '@/lib/api'
-import { Activity, ChevronRight, ChevronLeft, X, Plug } from 'lucide-vue-next'
+import { Activity, ChevronRight, ChevronLeft, X, Plug, FlaskConical } from 'lucide-vue-next'
+import { useDemoMode } from '@/composables/useDemoMode'
 import MarginBadge from '@/components/shared/MarginBadge.vue'
 import SourceBadge from '@/components/shared/SourceBadge.vue'
 import { Select, Input, Button, Skeleton } from '@/components/ui'
 
 const router = useRouter()
 const route = useRoute()
+const { enterDemoMode, isLoadingDemo } = useDemoMode()
 
 // Initialize filters from URL query params (e.g., navigating from ModelsPage with ?model=gpt-4o)
 const selectedFeature = ref<string | undefined>(route.query.feature as string | undefined)
@@ -260,6 +262,10 @@ function goToCustomer(id: string) { router.push(`/customers/${id}`) }
                     The fastest path: add 3 lines to your backend.
                   </p>
                   <div class="flex gap-2 justify-center">
+                    <Button size="sm" :disabled="isLoadingDemo" @click="enterDemoMode">
+                      <FlaskConical class="h-3.5 w-3.5 mr-1.5" />
+                      {{ isLoadingDemo ? 'Loading...' : 'Try Demo' }}
+                    </Button>
                     <Button variant="outline" size="sm" @click="router.push('/data-sources')">
                       <Plug class="h-3.5 w-3.5 mr-1.5" />
                       Get Started

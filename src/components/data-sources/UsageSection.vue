@@ -194,10 +194,10 @@ function downloadTemplate(): void {
       </CardHeader>
       <CardContent class="p-5 pt-0 space-y-4">
         <!-- Info if Stripe usage exists -->
-        <Alert v-if="hasStripeUsage" variant="info" class="bg-blue-50/50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800">
-          <Info class="h-4 w-4 text-blue-600 dark:text-blue-400" />
-          <div class="ml-2">
-            <p class="text-sm text-blue-800 dark:text-blue-200">
+        <Alert v-if="hasStripeUsage" variant="info">
+          <Info class="h-4 w-4 shrink-0" />
+          <div>
+            <p class="text-sm">
               You have usage data from Stripe. Any CSV data will be added to it.
             </p>
           </div>
@@ -241,7 +241,7 @@ function downloadTemplate(): void {
         <div v-if="file" class="border rounded-lg p-4">
           <div class="flex items-center justify-between text-sm">
             <div class="flex items-center gap-2">
-              <CheckCircle class="h-4 w-4 text-green-500" />
+              <CheckCircle class="h-4 w-4 text-success" />
               <span>{{ file.name }}</span>
             </div>
             <button
@@ -275,17 +275,6 @@ function downloadTemplate(): void {
           </button>
         </div>
 
-        <!-- Stripe metered billing note -->
-        <Alert variant="info" class="bg-blue-50/50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800">
-          <Info class="h-4 w-4 text-blue-600 dark:text-blue-400" />
-          <div class="ml-2">
-            <p class="text-sm font-medium text-blue-800 dark:text-blue-200">Using Stripe metered billing?</p>
-            <p class="text-xs text-blue-700 dark:text-blue-300 mt-1">
-              If you connected Stripe above and use Billing Meters or Usage Records,
-              we'll detect and pull usage automatically. No CSV needed.
-            </p>
-          </div>
-        </Alert>
       </CardContent>
     </Card>
   </section>
