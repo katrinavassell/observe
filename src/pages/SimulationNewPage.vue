@@ -244,7 +244,7 @@ async function runSimulation() {
     <!-- Usage limit banner -->
     <div
       v-if="!simulationsAllowed"
-      class="rounded-lg border border-yellow-200 bg-yellow-50 p-4 text-sm text-yellow-800"
+      class="rounded-lg border border-warning/30 bg-warning/10 p-4 text-sm text-warning-foreground"
     >
       You've used all {{ simulationsUsage?.limit ?? '' }} simulations. Upgrade to create more.
     </div>

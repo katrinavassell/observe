@@ -184,66 +184,61 @@ watch(dataMode, () => {
 </script>
 
 <template>
-  <div class="min-h-screen bg-background">
+  <div class="space-y-6">
     <!-- Header -->
-    <header class="sticky top-0 z-10 bg-background/95 backdrop-blur border-b">
-      <div class="container mx-auto px-4 py-3">
-        <div class="flex items-center justify-between">
-          <div class="flex items-center gap-4">
-            <h1 class="text-lg font-semibold">Pricing Analyzer</h1>
-          </div>
-
-          <div class="flex items-center gap-3">
-            <!-- Summary Badges -->
-            <div class="hidden sm:flex items-center gap-2">
-              <Badge
-                v-for="badge in summaryBadges"
-                :key="badge.label"
-                :variant="badge.variant"
-                class="tabular-nums"
-              >
-                {{ badge.label }}: {{ badge.value }}
-              </Badge>
-            </div>
-
-            <!-- Month Selector -->
-            <div v-if="availableMonths.length > 0" class="flex items-center gap-1.5">
-              <Calendar class="h-4 w-4 text-muted-foreground" />
-              <select
-                :value="selectedMonth || availableMonths[availableMonths.length - 1]?.value"
-                class="h-8 rounded-md border bg-background px-2 text-sm"
-                @change="selectedMonth = ($event.target as HTMLSelectElement).value || null"
-              >
-                <option
-                  v-for="m in availableMonths"
-                  :key="m.value"
-                  :value="m.value"
-                >
-                  {{ m.label }}
-                </option>
-              </select>
-            </div>
-
-            <!-- Refresh -->
-            <Button
-              variant="outline"
-              size="sm"
-              :disabled="isLoading"
-              aria-label="Refresh data"
-              @click="loadData"
-            >
-              <RefreshCw
-                class="h-4 w-4"
-                :class="{ 'animate-spin': isLoading }"
-              />
-            </Button>
-          </div>
-        </div>
+    <div class="flex items-center justify-between">
+      <div>
+        <h1 class="text-2xl font-semibold tracking-tight">Pricing Analyzer</h1>
+        <p class="text-sm text-muted-foreground mt-1">SaaS metrics, plan health, and margin analysis</p>
       </div>
-    </header>
+      <div class="flex items-center gap-3">
+        <!-- Summary Badges -->
+        <div class="hidden sm:flex items-center gap-2">
+          <Badge
+            v-for="badge in summaryBadges"
+            :key="badge.label"
+            :variant="badge.variant"
+            class="tabular-nums"
+          >
+            {{ badge.label }}: {{ badge.value }}
+          </Badge>
+        </div>
 
-    <!-- Main Content -->
-    <main class="container mx-auto px-4 py-6 space-y-6">
+        <!-- Month Selector -->
+        <div v-if="availableMonths.length > 0" class="flex items-center gap-1.5">
+          <Calendar class="h-4 w-4 text-muted-foreground" />
+          <select
+            :value="selectedMonth || availableMonths[availableMonths.length - 1]?.value"
+            class="h-8 rounded-md border bg-background px-2 text-sm"
+            @change="selectedMonth = ($event.target as HTMLSelectElement).value || null"
+          >
+            <option
+              v-for="m in availableMonths"
+              :key="m.value"
+              :value="m.value"
+            >
+              {{ m.label }}
+            </option>
+          </select>
+        </div>
+
+        <!-- Refresh -->
+        <Button
+          variant="outline"
+          size="sm"
+          :disabled="isLoading"
+          aria-label="Refresh data"
+          @click="loadData"
+        >
+          <RefreshCw
+            class="h-4 w-4"
+            :class="{ 'animate-spin': isLoading }"
+          />
+        </Button>
+      </div>
+    </div>
+
+    <div class="space-y-6">
       <!-- Loading State -->
       <div v-if="isLoading && !analysisResult" class="flex items-center justify-center py-20">
         <div class="text-center">
@@ -675,6 +670,6 @@ watch(dataMode, () => {
           </Card>
         </div>
       </template>
-    </main>
+    </div>
   </div>
 </template>

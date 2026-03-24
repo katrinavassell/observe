@@ -103,19 +103,19 @@ function goToDetail(key: string) {
 
     <!-- Summary strip -->
     <div v-if="features && features.length > 0" class="grid grid-cols-2 sm:grid-cols-4 gap-4">
-      <div class="rounded-lg border bg-card p-4 shadow-sm">
+      <div class="rounded-lg border bg-card p-4">
         <div class="text-xs text-muted-foreground mb-1">Total Features</div>
         <div class="text-2xl font-semibold tabular-nums">{{ features.length }}</div>
       </div>
-      <div class="rounded-lg border bg-card p-4 shadow-sm">
+      <div class="rounded-lg border bg-card p-4">
         <div class="text-xs text-muted-foreground mb-1">Total Cost</div>
         <div class="text-2xl font-semibold tabular-nums">{{ formatCurrency(features.reduce((s, f) => s + f.total_cost, 0)) }}</div>
       </div>
-      <div class="rounded-lg border bg-card p-4 shadow-sm">
+      <div class="rounded-lg border bg-card p-4">
         <div class="text-xs text-muted-foreground mb-1">Total Revenue</div>
         <div class="text-2xl font-semibold tabular-nums">{{ formatCurrency(features.reduce((s, f) => s + f.total_revenue, 0)) }}</div>
       </div>
-      <div class="rounded-lg border bg-card p-4 shadow-sm">
+      <div class="rounded-lg border bg-card p-4">
         <div class="text-xs text-muted-foreground mb-1">Negative Margin</div>
         <div class="text-2xl font-semibold text-destructive tabular-nums">
           {{ features.filter(f => f.margin_pct !== null && f.margin_pct < 0).length }}

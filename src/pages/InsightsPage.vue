@@ -18,6 +18,7 @@ import {
   ChevronRight,
 } from 'lucide-vue-next'
 import { toast } from 'vue-sonner'
+import { Button } from '@/components/ui'
 
 const router = useRouter()
 const queryClient = useQueryClient()
@@ -139,10 +140,8 @@ function navigateToContext(insight: AiInsight) {
     <!-- Header -->
     <div class="flex items-start justify-between">
       <div>
-        <h1 class="text-2xl font-semibold tracking-tight flex items-center gap-2">
-          <Sparkles class="h-6 w-6 text-primary" />
-          AI Insights
-        </h1>
+        <Sparkles class="h-6 w-6 text-primary" />
+        <h1 class="text-2xl font-semibold tracking-tight">AI Insights</h1>
         <p class="text-sm text-muted-foreground mt-1">
           AI-powered analysis of your margins, pricing, and customer health
         </p>
@@ -151,24 +150,25 @@ function navigateToContext(insight: AiInsight) {
         <span v-if="insightsUsage" class="text-xs text-muted-foreground mr-1">
           {{ insightsUsage.used }} of {{ insightsUsage.limit }} insights used
         </span>
-        <button
+        <Button
           v-if="insights && insights.length > 0"
-          class="inline-flex items-center gap-1.5 rounded-md border px-3 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
+          variant="outline"
+          class="gap-1.5 text-muted-foreground"
           :disabled="clearMutation.isPending.value"
           @click="clearMutation.mutate()"
         >
           <Trash2 class="h-3.5 w-3.5" />
           Clear
-        </button>
-        <button
-          class="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors"
+        </Button>
+        <Button
           :disabled="generateMutation.isPending.value || !insightsAllowed"
+          class="gap-2"
           @click="generateMutation.mutate()"
         >
           <Loader2 v-if="generateMutation.isPending.value" class="h-4 w-4 animate-spin" />
           <Sparkles v-else class="h-4 w-4" />
           {{ !insightsAllowed ? 'Limit Reached' : generateMutation.isPending.value ? 'Analyzing...' : 'Generate Insights' }}
-        </button>
+        </Button>
       </div>
     </div>
 
@@ -202,23 +202,23 @@ function navigateToContext(insight: AiInsight) {
       v-else-if="!insights || insights.length === 0"
       class="rounded-lg border bg-card p-12 text-center"
     >
-      <div class="flex items-center justify-center w-14 h-14 rounded-full bg-purple-100 mx-auto mb-4">
-        <Sparkles class="h-7 w-7 text-purple-500" />
+      <div class="flex items-center justify-center w-14 h-14 rounded-full bg-primary/10 mx-auto mb-4">
+        <Sparkles class="h-7 w-7 text-primary" />
       </div>
       <h2 class="text-lg font-semibold mb-2">No insights yet</h2>
       <p class="text-sm text-muted-foreground max-w-md mx-auto mb-4">
         Click "Generate Insights" to analyze your data. If an OpenAI API key is configured,
         insights are powered by gpt-4o-mini. Otherwise, a local analysis engine is used.
       </p>
-      <button
-        class="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors"
+      <Button
         :disabled="generateMutation.isPending.value || !insightsAllowed"
+        class="gap-2"
         @click="generateMutation.mutate()"
       >
         <Loader2 v-if="generateMutation.isPending.value" class="h-4 w-4 animate-spin" />
         <Sparkles v-else class="h-4 w-4" />
         {{ !insightsAllowed ? 'Limit Reached' : generateMutation.isPending.value ? 'Analyzing...' : 'Generate Insights' }}
-      </button>
+      </Button>
     </div>
 
     <!-- Insights list -->

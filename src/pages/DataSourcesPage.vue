@@ -439,10 +439,10 @@ watch(
 </script>
 
 <template>
-  <div class="space-y-8 max-w-3xl pb-24">
+  <div class="space-y-6 pb-12">
     <!-- Header -->
     <div>
-      <h1 class="text-2xl font-semibold">Data Sources</h1>
+      <h1 class="text-2xl font-semibold tracking-tight">Data Sources</h1>
       <p class="text-muted-foreground">
         Track AI costs per customer, feature, and model
       </p>

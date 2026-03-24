@@ -172,7 +172,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="max-w-4xl space-y-6 pb-24">
+  <div class="space-y-6 pb-12">
     <div>
       <div class="flex items-center gap-2">
         <ShieldCheck class="h-5 w-5 text-primary" />

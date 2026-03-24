@@ -217,7 +217,7 @@ function goToCustomer(id: string) { router.push(`/customers/${id}`) }
         <Input
           v-model="dateFrom"
           type="date"
-          class="h-9 w-[150px] shadow-sm"
+          class="h-9 w-[150px]"
           :class="{ 'text-muted-foreground': !dateFrom }"
           @update:model-value="resetPage"
         />
@@ -225,7 +225,7 @@ function goToCustomer(id: string) { router.push(`/customers/${id}`) }
         <Input
           v-model="dateTo"
           type="date"
-          class="h-9 w-[150px] shadow-sm"
+          class="h-9 w-[150px]"
           :class="{ 'text-muted-foreground': !dateTo }"
           @update:model-value="resetPage"
         />
@@ -244,7 +244,7 @@ function goToCustomer(id: string) { router.push(`/customers/${id}`) }
     </div>
 
     <!-- Table -->
-    <div class="rounded-md border bg-card shadow-sm overflow-hidden">
+    <div class="rounded-md border bg-card overflow-hidden">
       <div class="overflow-x-auto">
         <table class="w-full text-sm text-left">
           <thead class="border-b bg-muted/40 text-muted-foreground text-xs font-medium uppercase tracking-wider">

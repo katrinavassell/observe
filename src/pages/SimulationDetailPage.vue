@@ -58,10 +58,10 @@ function formatDate(ts: string) {
 
 function churnRiskClass(risk: string) {
   switch (risk) {
-    case 'high': return 'bg-red-100 text-red-700 border-red-200'
-    case 'medium': return 'bg-yellow-100 text-yellow-700 border-yellow-200'
-    case 'low': return 'bg-green-100 text-green-700 border-green-200'
-    default: return 'bg-gray-100 text-gray-600 border-gray-200'
+    case 'high': return 'bg-destructive/10 text-destructive border-destructive/20'
+    case 'medium': return 'bg-warning/10 text-warning border-warning/20'
+    case 'low': return 'bg-success/10 text-success border-success/20'
+    default: return 'bg-muted text-muted-foreground border-border'
   }
 }
 </script>
@@ -116,7 +116,7 @@ function churnRiskClass(risk: string) {
 
           <div
             v-if="simulation.status === 'rolled_out'"
-            class="inline-flex items-center gap-2 rounded-md bg-purple-50 border border-purple-200 px-4 py-2 text-sm font-medium text-purple-700"
+            class="inline-flex items-center gap-2 rounded-md bg-primary/10 border border-primary/20 px-4 py-2 text-sm font-medium text-primary"
           >
             <ShieldCheck class="h-4 w-4" />
             Rolled out {{ simulation.rolled_out_at ? formatDate(simulation.rolled_out_at) : '' }}
@@ -139,13 +139,13 @@ function churnRiskClass(risk: string) {
           <!-- Key insight hero -->
           <div
             v-if="simulation.key_insight"
-            class="rounded-lg border bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200 p-5 mt-4"
+            class="rounded-lg border bg-primary/5 border-primary/20 p-5 mt-4"
           >
             <div class="flex items-start gap-3">
-              <Lightbulb class="h-5 w-5 text-blue-600 shrink-0 mt-0.5" />
+              <Lightbulb class="h-5 w-5 text-primary shrink-0 mt-0.5" />
               <div>
-                <div class="text-xs font-medium text-blue-600 mb-1">Key Insight</div>
-                <p class="text-sm text-blue-900 leading-relaxed">{{ simulation.key_insight }}</p>
+                <div class="text-xs font-medium text-primary mb-1">Key Insight</div>
+                <p class="text-sm text-foreground leading-relaxed">{{ simulation.key_insight }}</p>
               </div>
             </div>
           </div>
@@ -160,8 +160,8 @@ function churnRiskClass(risk: string) {
               <div
                 :class="[
                   'h-full rounded-full transition-all',
-                  simulation.confidence_score >= 70 ? 'bg-green-500' :
-                  simulation.confidence_score >= 40 ? 'bg-yellow-500' : 'bg-red-500'
+                  simulation.confidence_score >= 70 ? 'bg-success' :
+                  simulation.confidence_score >= 40 ? 'bg-warning' : 'bg-destructive'
                 ]"
                 :style="{ width: simulation.confidence_score + '%' }"
               />
@@ -194,7 +194,7 @@ function churnRiskClass(risk: string) {
                 <span class="text-2xl font-semibold">{{ simulation.margin_impact.customers_affected }}</span>
                 <span
                   v-if="simulation.margin_impact.high_churn_risk_count > 0"
-                  class="inline-flex items-center gap-0.5 text-xs text-red-600"
+                  class="inline-flex items-center gap-0.5 text-xs text-destructive"
                 >
                   <AlertTriangle class="h-3 w-3" />
                   {{ simulation.margin_impact.high_churn_risk_count }} high risk

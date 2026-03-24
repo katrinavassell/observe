@@ -233,11 +233,11 @@ function retry() {
 </script>
 
 <template>
-  <div>
+  <div class="space-y-6">
     <!-- Page header -->
-    <div class="flex items-center justify-between mb-6">
+    <div class="flex items-center justify-between">
       <div>
-        <h1 class="text-2xl font-semibold text-foreground">Analytics</h1>
+        <h1 class="text-2xl font-semibold tracking-tight">Analytics</h1>
         <p class="text-muted-foreground mt-1">Overview of revenue and margins</p>
       </div>
     </div>
@@ -246,12 +246,9 @@ function retry() {
     <div v-if="isError && !isLoading" class="flex flex-col items-center justify-center py-24 text-center">
       <AlertCircle class="h-10 w-10 text-muted-foreground mb-4" />
       <p class="text-muted-foreground mb-4">Failed to load analytics data.</p>
-      <button
-        class="inline-flex items-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
-        @click="retry"
-      >
+      <Button @click="retry">
         Try Again
-      </button>
+      </Button>
     </div>
 
     <!-- Loading state -->
@@ -554,12 +551,13 @@ function retry() {
                       <span class="w-16 text-right tabular-nums text-muted-foreground">{{ fmtPct(computeMargin(feat.total_revenue, feat.total_cost)) }}</span>
                     </div>
                     <div class="pt-2">
-                      <button
-                        class="text-sm text-muted-foreground hover:text-foreground transition-colors"
+                      <Button
+                        variant="ghost"
+                        size="sm"
                         @click.stop="router.push(`/customers/${c.customer_id}`)"
                       >
                         View customer &rarr;
-                      </button>
+                      </Button>
                     </div>
                   </template>
                 </div>
@@ -572,20 +570,12 @@ function retry() {
                 Showing {{ showFrom }} to {{ showTo }} of {{ totalCustomerCount }} entries
               </span>
               <div class="flex gap-2">
-                <button
-                  :disabled="!canPrev"
-                  class="inline-flex items-center rounded-md border px-3 py-1.5 text-sm font-medium transition-colors hover:bg-accent disabled:opacity-50 disabled:pointer-events-none"
-                  @click="prevPage"
-                >
+                <Button variant="outline" size="sm" :disabled="!canPrev" @click="prevPage">
                   Previous
-                </button>
-                <button
-                  :disabled="!canNext"
-                  class="inline-flex items-center rounded-md border px-3 py-1.5 text-sm font-medium transition-colors hover:bg-accent disabled:opacity-50 disabled:pointer-events-none"
-                  @click="nextPage"
-                >
+                </Button>
+                <Button variant="outline" size="sm" :disabled="!canNext" @click="nextPage">
                   Next
-                </button>
+                </Button>
               </div>
             </div>
           </CardContent>

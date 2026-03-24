@@ -3215,7 +3215,7 @@ app.post('/simulations/suggest', ensureVisitor, async (req: AuthRequest, res: Re
     const customerLines = customerRes.rows.map((r: Record<string, string>) => {
       const cost = parseFloat(r.total_cost) || 0
       const revenue = parseFloat(r.total_revenue) || 0
-      return `- ${r.customer_name || r.customer_id} (${r.segment || 'unknown'}): cost=$${cost.toFixed(2)}, revenue=$${revenue.toFixed(2)}`
+      return `- ${r.customer_name || r.customer_id || 'Unknown'} (${r.segment || 'unknown'}): cost=$${cost.toFixed(2)}, revenue=$${revenue.toFixed(2)}`
     }).join('\n')
 
     const featureKeys = featureRes.rows.map((r: Record<string, string>) => r.feature_key)
@@ -3288,7 +3288,11 @@ Return ONLY the JSON object, no markdown or explanation.`
 
       try {
         const cleaned = content.replace(/^```json?\n?/i, '').replace(/\n?```$/i, '').trim()
-        suggestion = JSON.parse(cleaned)
+        const parsed = JSON.parse(cleaned)
+        suggestion = parsed.suggestion || parsed // handle wrapped responses
+        if (!suggestion.name || !suggestion.rationale || !Array.isArray(suggestion.scenarios)) {
+          throw new Error('AI response missing required fields')
+        }
       } catch {
         console.error('Failed to parse OpenAI suggestion response:', content)
         return res.status(502).json({ error: 'AI returned invalid response. Try again.' })

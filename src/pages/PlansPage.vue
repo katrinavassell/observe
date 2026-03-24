@@ -243,7 +243,7 @@ async function handleCancelDowngrade() {
 </script>
 
 <template>
-  <div class="space-y-10">
+  <div class="space-y-6">
     <div class="flex items-center justify-between">
       <div>
         <h1 class="text-2xl font-semibold tracking-tight">Plans & Billing</h1>

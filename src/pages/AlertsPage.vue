@@ -107,10 +107,10 @@ async function handleDelete(id: number) {
 </script>
 
 <template>
-  <div class="space-y-8 max-w-3xl pb-24">
+  <div class="space-y-6 pb-12">
     <div class="flex items-center justify-between">
       <div>
-        <h1 class="text-2xl font-semibold">Cost Alerts</h1>
+        <h1 class="text-2xl font-semibold tracking-tight">Cost Alerts</h1>
         <p class="text-muted-foreground text-sm">Get emailed when costs spike or margins drop</p>
       </div>
       <Button v-if="!showForm" @click="showForm = true">

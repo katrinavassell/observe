@@ -224,7 +224,7 @@ function memberLabel(member: OrgMember) {
               class="shrink-0 h-8 w-8"
               @click="copyInviteLink"
             >
-              <Check v-if="copiedLink" class="h-4 w-4 text-green-600" />
+              <Check v-if="copiedLink" class="h-4 w-4 text-success" />
               <Copy v-else class="h-4 w-4" />
             </Button>
           </div>

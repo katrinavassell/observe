@@ -37,9 +37,9 @@ function formatCurrency(n: number) {
 </script>
 
 <template>
-  <div class="space-y-6 max-w-3xl pb-24">
+  <div class="space-y-6 pb-12">
     <div>
-      <h1 class="text-2xl font-semibold">Savings</h1>
+      <h1 class="text-2xl font-semibold tracking-tight">Savings</h1>
       <p class="text-muted-foreground text-sm">Actionable recommendations to reduce AI costs and improve margins</p>
     </div>
 
@@ -50,24 +50,19 @@ function formatCurrency(n: number) {
 
     <template v-else-if="hasAnyData">
       <!-- Aggregate savings hero -->
-      <div v-if="totalSavings > 0" class="relative overflow-hidden rounded-xl bg-gradient-to-br from-success to-success/80 text-success-foreground p-6">
-        <div class="absolute top-0 right-0 w-40 h-40 bg-white/5 rounded-full -translate-y-1/2 translate-x-1/2" />
-        <div class="absolute bottom-0 left-0 w-24 h-24 bg-white/5 rounded-full translate-y-1/2 -translate-x-1/2" />
-        <div class="relative">
-          <div class="flex items-center gap-2 mb-3">
-            <PiggyBank class="h-5 w-5 text-success-foreground/70" />
-            <span class="text-sm font-medium text-success-foreground/80">Total Potential Savings</span>
-          </div>
-          <p class="text-4xl font-bold tabular-nums tracking-tight">
-            {{ formatCurrency(totalSavings) }}<span class="text-2xl font-medium text-success-foreground/70">/mo</span>
+      <Card v-if="totalSavings > 0" class="border-success/20 bg-success/5">
+        <CardContent class="p-6">
+          <p class="text-xs font-medium text-muted-foreground mb-1">Total Potential Savings</p>
+          <p class="text-3xl font-bold text-success tabular-nums tracking-tight">
+            {{ formatCurrency(totalSavings) }}<span class="text-lg font-medium text-muted-foreground">/mo</span>
           </p>
-          <div class="flex items-center gap-4 mt-2">
-            <span class="text-sm text-success-foreground/70">{{ formatCurrency(totalSavings * 12) }}/year</span>
-            <span class="text-success-foreground/30">&middot;</span>
-            <span class="text-sm text-success-foreground/70">{{ recommendations.length }} recommendation{{ recommendations.length === 1 ? '' : 's' }}</span>
+          <div class="flex items-center gap-3 mt-2 text-sm text-muted-foreground">
+            <span>{{ formatCurrency(totalSavings * 12) }}/year</span>
+            <span>&middot;</span>
+            <span>{{ recommendations.length }} recommendation{{ recommendations.length === 1 ? '' : 's' }}</span>
           </div>
-        </div>
-      </div>
+        </CardContent>
+      </Card>
 
       <!-- Model Swap Recommendations -->
       <div v-if="recommendations.length > 0" class="space-y-3">
