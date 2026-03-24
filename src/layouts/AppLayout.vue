@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed, ref, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import {
   LayoutDashboard,
@@ -21,6 +21,7 @@ import {
   Sparkles,
   Bell,
   PiggyBank,
+  ShieldCheck,
 } from 'lucide-vue-next'
 import ErrorBoundary from '@/components/shared/ErrorBoundary.vue'
 import { useDemoMode } from '@/composables/useDemoMode'
@@ -32,8 +33,15 @@ const { isDemoMode, exitDemoMode, isLoadingDemo } = useDemoMode()
 const { myRole, isViewer, fetchTeamInfo } = useTeam()
 const { account, isLoggedIn, logout } = useAuth()
 
-onMounted(() => {
+const isAdminUser = ref(false)
+
+onMounted(async () => {
   fetchTeamInfo()
+  try {
+    const res = await fetch('/api/admin/status', { credentials: 'include' })
+    const data = await res.json()
+    isAdminUser.value = data.isAdmin
+  } catch {}
 })
 
 const navItems = computed(() => [
@@ -111,6 +119,13 @@ const navItems = computed(() => [
     description: 'Manage your subscription',
     dividerBefore: true,
   },
+  ...(isAdminUser.value ? [{
+    path: '/admin/pricing',
+    label: 'Admin: Pricing',
+    icon: ShieldCheck,
+    description: 'Manage global model pricing',
+    dividerBefore: true,
+  }] : []),
 ])
 
 function isActive(path: string) {
