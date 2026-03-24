@@ -359,7 +359,7 @@ async function handleCancelDowngrade() {
               currentPlanKey === 'free' ? 'border-success/30 bg-success/5' : 'border-border bg-card'
             ]"
           >
-            <div class="flex items-center justify-between">
+            <div class="flex items-center justify-between mb-1">
               <h3 class="text-lg font-semibold">Free</h3>
               <span
                 v-if="currentPlanKey === 'free'"
@@ -368,12 +368,19 @@ async function handleCancelDowngrade() {
                 Current
               </span>
             </div>
-            <p class="text-sm text-muted-foreground mt-1">{{ freePlan.description }}</p>
-            <div class="mt-4 mb-6">
-              <span class="text-4xl font-bold tracking-tight">${{ freePlan.priceAmount ?? 0 }}</span>
-              <span class="text-sm text-muted-foreground ml-1">{{ freePlan.priceAmount ? '/ month' : 'forever' }}</span>
+            <p class="text-sm text-muted-foreground">{{ freePlan.description }}</p>
+            <div class="mt-4 mb-5">
+              <span class="text-4xl font-bold tracking-tight">$0</span>
+              <span class="text-sm text-muted-foreground ml-1">forever</span>
             </div>
-            <!-- On Pro → show downgrade button -->
+
+            <ul class="space-y-2.5 mb-6 flex-1">
+              <li class="flex items-start gap-2 text-sm"><Check class="h-4 w-4 text-success mt-0.5 shrink-0" /> Cost tracking across all models</li>
+              <li class="flex items-start gap-2 text-sm"><Check class="h-4 w-4 text-success mt-0.5 shrink-0" /> SDK and proxy integration</li>
+              <li class="flex items-start gap-2 text-sm"><Check class="h-4 w-4 text-success mt-0.5 shrink-0" /> CSV data import</li>
+              <li class="flex items-start gap-2 text-sm"><Check class="h-4 w-4 text-success mt-0.5 shrink-0" /> 3 AI insights per month</li>
+            </ul>
+
             <button
               v-if="currentPlanKey === 'growth' && !hasScheduledCancellation"
               class="w-full rounded-lg border border-border bg-card px-4 py-2.5 text-sm font-medium text-foreground hover:bg-muted transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
@@ -383,16 +390,14 @@ async function handleCancelDowngrade() {
               <ArrowDown class="h-4 w-4" />
               Downgrade to Free
             </button>
-            <!-- No subscription → show start button -->
             <button
               v-else-if="!currentPlanKey"
               class="w-full rounded-lg border border-border bg-card px-4 py-2.5 text-sm font-medium text-foreground hover:bg-muted transition-colors disabled:opacity-50"
               :disabled="isPending"
               @click="handleSubscribe(freePlan.id)"
             >
-              Start Free
+              Get Started
             </button>
-            <!-- On Free → current plan -->
             <div
               v-else-if="currentPlanKey === 'free'"
               class="w-full rounded-lg border border-success/30 bg-success/10 px-4 py-2.5 text-sm font-medium text-success text-center"
@@ -402,7 +407,7 @@ async function handleCancelDowngrade() {
             </div>
           </div>
 
-          <!-- Pro card -->
+          <!-- Growth card -->
           <div
             :class="[
               'rounded-xl border-2 p-6 flex flex-col relative',
@@ -415,7 +420,7 @@ async function handleCancelDowngrade() {
             >
               RECOMMENDED
             </div>
-            <div class="flex items-center justify-between">
+            <div class="flex items-center justify-between mb-1">
               <h3 class="text-lg font-semibold">Growth</h3>
               <span
                 v-if="currentPlanKey === 'growth'"
@@ -424,12 +429,19 @@ async function handleCancelDowngrade() {
                 Current
               </span>
             </div>
-            <p class="text-sm text-muted-foreground mt-1">{{ growthPlan.description }}</p>
-            <div class="mt-4 mb-6">
+            <p class="text-sm text-muted-foreground">{{ growthPlan.description }}</p>
+            <div class="mt-4 mb-5">
               <span class="text-4xl font-bold tracking-tight">${{ growthPlan.priceAmount }}</span>
               <span class="text-sm text-muted-foreground ml-1">/ month</span>
             </div>
-            <!-- Not on Pro → upgrade button -->
+
+            <ul class="space-y-2.5 mb-6 flex-1">
+              <li class="flex items-start gap-2 text-sm font-medium"><Zap class="h-4 w-4 text-primary mt-0.5 shrink-0" /> Unlimited AI insights</li>
+              <li class="flex items-start gap-2 text-sm"><Check class="h-4 w-4 text-success mt-0.5 shrink-0" /> Everything in Free</li>
+              <li class="flex items-start gap-2 text-sm"><Check class="h-4 w-4 text-success mt-0.5 shrink-0" /> Priority support</li>
+              <li class="flex items-start gap-2 text-sm"><Check class="h-4 w-4 text-success mt-0.5 shrink-0" /> Cost alerts</li>
+            </ul>
+
             <button
               v-if="currentPlanKey !== 'growth'"
               class="w-full rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
@@ -439,7 +451,6 @@ async function handleCancelDowngrade() {
               <Zap class="h-4 w-4" />
               Upgrade to Growth
             </button>
-            <!-- On Pro → current plan + cancel option -->
             <template v-else>
               <div
                 class="w-full rounded-lg border border-success/30 bg-success/10 px-4 py-2.5 text-sm font-medium text-success text-center"
@@ -459,46 +470,6 @@ async function handleCancelDowngrade() {
                 Cancel subscription
               </button>
             </template>
-          </div>
-        </div>
-
-        <!-- Comparison table -->
-        <div class="max-w-3xl">
-          <h3 class="text-base font-semibold mb-4">Compare plans</h3>
-          <div class="rounded-xl border overflow-hidden">
-            <table class="w-full text-sm">
-              <thead>
-                <tr class="border-b bg-muted/50">
-                  <th class="text-left py-3 px-4 font-medium text-muted-foreground w-1/2">Feature</th>
-                  <th class="text-center py-3 px-4 font-medium text-muted-foreground w-1/4">Free</th>
-                  <th class="text-center py-3 px-4 font-medium w-1/4">
-                    <span class="inline-flex items-center gap-1 text-primary">Growth</span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr
-                  v-for="(row, i) in featureRows"
-                  :key="row.key"
-                  :class="[
-                    i < featureRows.length - 1 ? 'border-b' : '',
-                    row.highlight ? 'bg-primary/[0.02]' : ''
-                  ]"
-                >
-                  <td class="py-3 px-4" :class="row.highlight ? 'font-medium' : ''">{{ row.label }}</td>
-                  <td class="py-3 px-4 text-center">
-                    <Check v-if="row.free === true" class="h-4 w-4 text-success mx-auto" />
-                    <X v-else-if="row.free === false" class="h-4 w-4 text-muted-foreground/40 mx-auto" />
-                    <span v-else class="text-muted-foreground">{{ row.free }}</span>
-                  </td>
-                  <td class="py-3 px-4 text-center">
-                    <Check v-if="row.pro === true" class="h-4 w-4 text-success mx-auto" />
-                    <X v-else-if="row.pro === false" class="h-4 w-4 text-muted-foreground/40 mx-auto" />
-                    <span v-else class="font-medium text-primary">{{ row.pro }}</span>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
           </div>
         </div>
       </div>
