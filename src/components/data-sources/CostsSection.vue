@@ -256,7 +256,7 @@ async function handleDisconnectAnthropic(): Promise<void> {
                 <Badge
                   v-if="isOpenAIConnected"
                   variant="outline"
-                  class="text-green-600 border-green-600/30 bg-green-500/5"
+                  class="text-success border-success/30 bg-success/5"
                 >
                   <CheckCircle class="h-3 w-3 mr-1" />
                   Connected
@@ -297,7 +297,7 @@ async function handleDisconnectAnthropic(): Promise<void> {
                 <Badge
                   v-if="isAnthropicConnected"
                   variant="outline"
-                  class="text-green-600 border-green-600/30 bg-green-500/5"
+                  class="text-success border-success/30 bg-success/5"
                 >
                   <CheckCircle class="h-3 w-3 mr-1" />
                   Connected
@@ -326,13 +326,69 @@ async function handleDisconnectAnthropic(): Promise<void> {
           </div>
         </div>
 
+        <!-- Google -->
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-3">
+            <div class="h-10 w-10 rounded-lg bg-blue-500/10 flex items-center justify-center">
+              <span class="text-lg font-semibold text-blue-500">G</span>
+            </div>
+            <div>
+              <p class="font-medium">Google (Gemini)</p>
+              <p class="text-xs text-muted-foreground">Track via SDK or proxy mode</p>
+            </div>
+          </div>
+          <span class="text-xs text-muted-foreground bg-muted px-2 py-1 rounded">Use SDK</span>
+        </div>
+
+        <!-- Mistral -->
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-3">
+            <div class="h-10 w-10 rounded-lg bg-orange-500/10 flex items-center justify-center">
+              <span class="text-lg font-semibold text-orange-500">M</span>
+            </div>
+            <div>
+              <p class="font-medium">Mistral</p>
+              <p class="text-xs text-muted-foreground">Track via SDK or proxy mode</p>
+            </div>
+          </div>
+          <span class="text-xs text-muted-foreground bg-muted px-2 py-1 rounded">Use SDK</span>
+        </div>
+
+        <!-- Cohere -->
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-3">
+            <div class="h-10 w-10 rounded-lg bg-purple-500/10 flex items-center justify-center">
+              <span class="text-lg font-semibold text-purple-500">C</span>
+            </div>
+            <div>
+              <p class="font-medium">Cohere</p>
+              <p class="text-xs text-muted-foreground">Track via SDK or proxy mode</p>
+            </div>
+          </div>
+          <span class="text-xs text-muted-foreground bg-muted px-2 py-1 rounded">Use SDK</span>
+        </div>
+
+        <!-- Meta / Llama -->
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-3">
+            <div class="h-10 w-10 rounded-lg bg-sky-500/10 flex items-center justify-center">
+              <span class="text-lg font-semibold text-sky-500">L</span>
+            </div>
+            <div>
+              <p class="font-medium">Llama (Meta)</p>
+              <p class="text-xs text-muted-foreground">Track via SDK — self-hosted or any provider</p>
+            </div>
+          </div>
+          <span class="text-xs text-muted-foreground bg-muted px-2 py-1 rounded">Use SDK</span>
+        </div>
+
         <!-- Divider -->
         <div class="relative">
           <div class="absolute inset-0 flex items-center">
             <div class="w-full border-t"></div>
           </div>
           <div class="relative flex justify-center text-xs">
-            <span class="bg-card px-2 text-muted-foreground">add CSV for other providers</span>
+            <span class="bg-card px-2 text-muted-foreground">or upload a CSV</span>
           </div>
         </div>
 
