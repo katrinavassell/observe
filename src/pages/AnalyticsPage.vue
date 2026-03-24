@@ -273,17 +273,27 @@ const insightCategories = [
             <p class="text-[11px] text-muted-foreground">2,847 events tracked. Strong dataset for reliable insights.</p>
           </div>
 
-          <div class="space-y-2">
-            <div class="text-xs font-semibold text-muted-foreground uppercase tracking-wider">What you'll see</div>
+          <div class="space-y-3">
             <div
-              v-for="(cat, i) in insightCategories"
-              :key="i"
-              class="flex gap-3 rounded-lg border p-3"
+              class="rounded-lg border p-3 space-y-1.5 border-destructive/30 bg-destructive/5"
             >
-              <div class="min-w-0">
-                <div class="text-sm font-medium">{{ cat.title }}</div>
-                <div class="text-xs text-muted-foreground">{{ cat.description }}</div>
-              </div>
+              <span class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium bg-destructive/10 text-destructive">critical</span>
+              <div class="text-sm font-medium">ai_summarization margin is -23%</div>
+              <div class="text-xs text-muted-foreground">This feature costs $0.82 per call but only earns $0.63. 5 customers used it 1,847 times last month. Switching from claude-3-5-sonnet to claude-3-haiku for shorter inputs would cut cost 80%.</div>
+            </div>
+            <div
+              class="rounded-lg border p-3 space-y-1.5 border-warning/30 bg-warning/5"
+            >
+              <span class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium bg-warning/10 text-warning">warning</span>
+              <div class="text-sm font-medium">Acme Corp costs 3x more than other enterprise accounts</div>
+              <div class="text-xs text-muted-foreground">Acme Corp generated $0.50 in revenue but $0.54 in AI costs last month. Their image_generation usage is 4x the account average. Consider usage-based pricing for this feature.</div>
+            </div>
+            <div
+              class="rounded-lg border p-3 space-y-1.5 border-success/30 bg-success/5"
+            >
+              <span class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium bg-success/10 text-success">opportunity</span>
+              <div class="text-sm font-medium">search feature has 78% margin with room to grow</div>
+              <div class="text-xs text-muted-foreground">text-embedding-3-small costs $0.002 per query but you charge $0.01. Only 3 of 5 customers use it. Promoting this feature could increase revenue with minimal cost impact.</div>
             </div>
           </div>
         </template>
