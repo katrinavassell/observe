@@ -47,12 +47,6 @@ onMounted(async () => {
 const navItems = computed(() => [
   {
     path: '/',
-    label: 'Overview',
-    icon: DollarSign,
-    description: 'Pricing analyzer & margin health',
-  },
-  {
-    path: '/analytics',
     label: 'Analytics',
     icon: BarChart3,
     description: 'Revenue, costs & margin overview',
@@ -83,22 +77,10 @@ const navItems = computed(() => [
     dividerBefore: true,
   },
   {
-    path: '/simulations',
-    label: 'Simulations',
-    icon: FlaskConical,
-    description: 'What-if pricing scenarios',
-  },
-  {
     path: '/insights',
     label: 'Insights',
     icon: Sparkles,
     description: 'AI-powered analysis of your data',
-  },
-  {
-    path: '/savings',
-    label: 'Savings',
-    icon: PiggyBank,
-    description: 'Cost optimization recommendations',
   },
   {
     path: '/alerts',

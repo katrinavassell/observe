@@ -5,17 +5,16 @@ const router = createRouter({
   routes: [
     {
       path: '/',
-      name: 'pricing',
-      component: () => import('@/pages/PricingAnalyzerPage.vue'),
+      name: 'analytics',
+      component: () => import('@/pages/AnalyticsPage.vue'),
+    },
+    {
+      path: '/analytics',
+      redirect: '/',
     },
     {
       path: '/pricing',
       redirect: '/',
-    },
-    {
-      path: '/analytics',
-      name: 'analytics',
-      component: () => import('@/pages/AnalyticsPage.vue'),
     },
     {
       path: '/events',
@@ -49,8 +48,7 @@ const router = createRouter({
     },
     {
       path: '/savings',
-      name: 'savings',
-      component: () => import('@/pages/SavingsPage.vue'),
+      redirect: '/analytics',
     },
     {
       path: '/alerts',
@@ -74,23 +72,11 @@ const router = createRouter({
     },
     {
       path: '/simulations',
-      name: 'simulations',
-      component: () => import('@/pages/SimulationsPage.vue'),
-    },
-    {
-      path: '/simulations/new',
-      name: 'simulation-new',
-      component: () => import('@/pages/SimulationNewPage.vue'),
-    },
-    {
-      path: '/simulations/:id',
-      name: 'simulation-detail',
-      component: () => import('@/pages/SimulationDetailPage.vue'),
+      redirect: '/analytics',
     },
     {
       path: '/simulator',
-      name: 'simulator',
-      redirect: '/simulations',
+      redirect: '/analytics',
     },
     // Legacy redirects
     {
