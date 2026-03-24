@@ -159,9 +159,6 @@ function formatCurrency(n: number) {
                 <span>Margin: <span class="font-medium text-destructive">{{ cust.margin_pct }}%</span></span>
               </div>
             </div>
-            <Button variant="outline" size="sm" class="shrink-0" @click="router.push(`/customers/${cust.customer_id}`)">
-              View
-            </Button>
           </div>
         </div>
       </div>

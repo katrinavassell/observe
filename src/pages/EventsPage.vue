@@ -166,8 +166,6 @@ function marginForEvent(event: ObserveEvent): number | null {
   return Math.round(((event.revenue_amount - event.cost_amount) / event.revenue_amount) * 100)
 }
 
-function goToFeature(key: string) { router.push(`/features/${key}`) }
-function goToCustomer(id: string) { router.push(`/customers/${id}`) }
 </script>
 
 <template>
@@ -336,24 +334,18 @@ function goToCustomer(id: string) { router.push(`/customers/${id}`) }
                 {{ event.event_name }}
               </td>
               <td class="px-4 py-3">
-                <button
+                <span
                   v-if="event.feature_key"
-                  class="text-foreground hover:text-primary hover:underline inline-flex items-center gap-1 text-sm font-medium transition-colors"
-                  @click="goToFeature(event.feature_key)"
+                  class="font-mono text-xs bg-muted px-1.5 py-0.5 rounded"
                 >
                   {{ event.feature_key }}
-                  <ChevronRight class="h-3 w-3 text-muted-foreground" />
-                </button>
+                </span>
                 <span v-else class="text-muted-foreground text-sm">—</span>
               </td>
               <td class="px-4 py-3">
-                <button
-                  v-if="event.customer_id"
-                  class="text-foreground hover:text-primary hover:underline inline-flex items-center gap-1 text-sm transition-colors"
-                  @click="goToCustomer(event.customer_id)"
-                >
+                <span v-if="event.customer_id" class="text-sm">
                   {{ event.customer_name || event.customer_id }}
-                </button>
+                </span>
                 <span v-else class="text-muted-foreground text-sm">—</span>
               </td>
               <td class="px-4 py-3">

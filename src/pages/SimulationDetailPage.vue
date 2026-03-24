@@ -312,8 +312,7 @@ function churnRiskClass(risk: string) {
                 <tr
                   v-for="ci in simulation.customer_impacts"
                   :key="ci.customer_id"
-                  class="hover:bg-muted/30 cursor-pointer"
-                  @click="router.push(`/customers/${ci.customer_id}`)"
+                  class="hover:bg-muted/30"
                 >
                   <td class="px-4 py-3 font-medium">{{ ci.customer_name }}</td>
                   <td class="px-4 py-3">

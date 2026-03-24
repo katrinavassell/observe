@@ -2156,8 +2156,6 @@ app.get('/events', ensureVisitor, async (req: AuthRequest, res: Response) => {
     if (source) {
       where += ` AND oe.source = $${paramIdx++}`
       params.push(source)
-    } else {
-      where += ` AND oe.source != 'sample'`
     }
     if (dateFrom) {
       where += ` AND oe.timestamp >= $${paramIdx++}`
@@ -2237,7 +2235,7 @@ app.get('/events/by-customer', ensureVisitor, async (req: AuthRequest, res: Resp
          MAX(oe.timestamp) as last_seen
        FROM observe_events oe
        LEFT JOIN customers c ON oe.user_id = c.user_id AND oe.customer_id = c.customer_id
-       WHERE oe.user_id = $1 AND oe.source != 'sample'
+       WHERE oe.user_id = $1
        GROUP BY oe.customer_id, c.name ORDER BY total_cost DESC`,
       [req.visitorId]
     )
@@ -2269,7 +2267,7 @@ app.get('/events/by-model', ensureVisitor, async (req: AuthRequest, res: Respons
          COALESCE(SUM(revenue_amount), 0) as total_revenue,
          COALESCE(SUM(usage_units), 0) as total_usage,
          MAX(timestamp) as last_seen
-       FROM observe_events WHERE user_id = $1 AND model IS NOT NULL AND source != 'sample'
+       FROM observe_events WHERE user_id = $1 AND model IS NOT NULL
        GROUP BY model, model_provider ORDER BY total_cost DESC`,
       [req.visitorId]
     )
@@ -2758,7 +2756,7 @@ app.get('/features', ensureVisitor, async (req: AuthRequest, res: Response) => {
          COALESCE(AVG(revenue_amount), 0) as avg_revenue_per_event,
          MAX(timestamp) as last_seen
        FROM observe_events
-       WHERE user_id = $1 AND feature_key IS NOT NULL AND source != 'sample'
+       WHERE user_id = $1 AND feature_key IS NOT NULL
        GROUP BY feature_key
        ORDER BY total_cost DESC`,
       [req.visitorId]
@@ -2894,7 +2892,7 @@ app.get('/models', ensureVisitor, async (req: AuthRequest, res: Response) => {
          COALESCE(SUM(cost_amount), 0) as total_cost, COALESCE(SUM(revenue_amount), 0) as total_revenue,
          COALESCE(SUM(usage_units), 0) as total_usage, COALESCE(AVG(cost_amount), 0) as avg_cost_per_event,
          MAX(timestamp) as last_seen
-       FROM observe_events WHERE user_id = $1 AND model IS NOT NULL AND source != 'sample'
+       FROM observe_events WHERE user_id = $1 AND model IS NOT NULL
        GROUP BY model, model_provider ORDER BY total_cost DESC`,
       [req.visitorId]
     )
@@ -2936,7 +2934,7 @@ app.get('/customers/:id', ensureVisitor, async (req: AuthRequest, res: Response)
         [req.visitorId, id]
       ),
       pool.query(
-        `SELECT * FROM observe_events WHERE user_id = $1 AND customer_id = $2 AND source != 'sample' ORDER BY timestamp DESC LIMIT 50`,
+        `SELECT * FROM observe_events WHERE user_id = $1 AND customer_id = $2 ORDER BY timestamp DESC LIMIT 50`,
         [req.visitorId, id]
       ),
       pool.query(
@@ -2944,7 +2942,7 @@ app.get('/customers/:id', ensureVisitor, async (req: AuthRequest, res: Response)
            COALESCE(SUM(cost_amount), 0) as total_cost,
            COALESCE(SUM(revenue_amount), 0) as total_revenue,
            COALESCE(SUM(usage_units), 0) as total_usage
-         FROM observe_events WHERE user_id = $1 AND customer_id = $2 AND feature_key IS NOT NULL AND source != 'sample'
+         FROM observe_events WHERE user_id = $1 AND customer_id = $2 AND feature_key IS NOT NULL
          GROUP BY feature_key ORDER BY total_cost DESC`,
         [req.visitorId, id]
       ),

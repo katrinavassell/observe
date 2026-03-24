@@ -2,25 +2,18 @@
 import { computed, ref, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import {
-  LayoutDashboard,
-  DollarSign,
   BarChart3,
   Plug,
   FlaskConical,
   Activity,
-  Layers,
   Cpu,
-  Users,
-  Gift,
   CreditCard,
   X,
   Settings,
   Eye,
   LogIn,
   LogOut,
-  Sparkles,
   Bell,
-  PiggyBank,
   ShieldCheck,
 } from 'lucide-vue-next'
 import ErrorBoundary from '@/components/shared/ErrorBoundary.vue'
@@ -29,7 +22,7 @@ import { useTeam } from '@/composables/useTeam'
 import { useAuth } from '@/composables/useAuth'
 
 const route = useRoute()
-const { isDemoMode, exitDemoMode, isLoadingDemo } = useDemoMode()
+const { isDemoMode, enterDemoMode, exitDemoMode, isLoadingDemo } = useDemoMode()
 const { myRole, isViewer, fetchTeamInfo } = useTeam()
 const { account, isLoggedIn, logout } = useAuth()
 
@@ -58,29 +51,10 @@ const navItems = computed(() => [
     description: 'Observed feature usage events',
   },
   {
-    path: '/features',
-    label: 'Features',
-    icon: Layers,
-    description: 'Feature-level cost & margin',
-  },
-  {
     path: '/models',
     label: 'Models',
     icon: Cpu,
     description: 'AI model cost breakdown',
-  },
-  {
-    path: '/customers',
-    label: 'Customers',
-    icon: Users,
-    description: 'Customer profiles & usage',
-    dividerBefore: true,
-  },
-  {
-    path: '/insights',
-    label: 'Insights',
-    icon: Sparkles,
-    description: 'AI-powered analysis of your data',
   },
   {
     path: '/alerts',
@@ -158,6 +132,27 @@ function isActive(path: string) {
 
         <!-- Bottom section: Account & Team Settings -->
         <div class="border-t p-4 space-y-1">
+          <!-- Demo mode toggle -->
+          <button
+            class="flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm transition-colors hover:bg-accent"
+            :disabled="isLoadingDemo"
+            @click="isDemoMode ? exitDemoMode() : enterDemoMode()"
+          >
+            <div class="flex items-center gap-2">
+              <FlaskConical class="h-4 w-4 shrink-0" :class="isDemoMode ? 'text-warning' : 'text-muted-foreground'" />
+              <span :class="isDemoMode ? 'font-medium' : 'text-muted-foreground'">Demo Data</span>
+            </div>
+            <div
+              class="relative h-5 w-9 rounded-full transition-colors"
+              :class="isDemoMode ? 'bg-warning' : 'bg-muted'"
+            >
+              <div
+                class="absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform"
+                :class="isDemoMode ? 'translate-x-4' : 'translate-x-0.5'"
+              />
+            </div>
+          </button>
+
           <!-- Role badge for viewers -->
           <div v-if="isViewer" class="flex items-center gap-2 px-3 py-1.5 text-xs text-warning bg-warning/10 rounded-lg mb-1">
             <Eye class="h-3 w-3 shrink-0" />

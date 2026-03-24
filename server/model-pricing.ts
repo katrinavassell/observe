@@ -120,7 +120,7 @@ export async function initModelPricing(pool: Pg.Pool): Promise<void> {
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_user_tiers_lookup ON user_model_pricing_tiers(user_id, model, min_tokens_million)`)
 
   await pool.query(`
-    CREATE TABLE IF NOT EXISTS model_pricing_log (`
+    CREATE TABLE IF NOT EXISTS model_pricing_log (
       id SERIAL PRIMARY KEY,
       model TEXT NOT NULL,
       provider TEXT,

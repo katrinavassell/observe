@@ -23,13 +23,11 @@ const router = createRouter({
     },
     {
       path: '/features',
-      name: 'features',
-      component: () => import('@/pages/FeaturesPage.vue'),
+      redirect: '/',
     },
     {
       path: '/features/:key',
-      name: 'feature-detail',
-      component: () => import('@/pages/FeatureDetailPage.vue'),
+      redirect: '/',
     },
     {
       path: '/models',
@@ -38,13 +36,11 @@ const router = createRouter({
     },
     {
       path: '/customers',
-      name: 'customers',
-      component: () => import('@/pages/CustomersPage.vue'),
+      redirect: '/',
     },
     {
       path: '/customers/:id',
-      name: 'customer-detail',
-      component: () => import('@/pages/CustomerDetailPage.vue'),
+      redirect: '/',
     },
     {
       path: '/savings',
@@ -62,13 +58,11 @@ const router = createRouter({
     },
     {
       path: '/insights',
-      name: 'insights',
-      component: () => import('@/pages/InsightsPage.vue'),
+      redirect: '/',
     },
     {
       path: '/referrals',
-      name: 'referrals',
-      component: () => import('@/pages/ReferralsPage.vue'),
+      redirect: '/',
     },
     {
       path: '/simulations',
