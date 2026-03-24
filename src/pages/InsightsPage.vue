@@ -79,29 +79,24 @@ function severityIcon(severity: string) {
 
 function severityClass(severity: string) {
   switch (severity) {
-    case 'critical': return 'border-red-200 bg-red-50'
-    case 'warning': return 'border-yellow-200 bg-yellow-50'
-    case 'positive': return 'border-green-200 bg-green-50'
-    default: return 'border-blue-200 bg-blue-50'
+    case 'critical': return 'border-l-4 border-l-destructive border border-border bg-card'
+    case 'warning': return 'border-l-4 border-l-warning border border-border bg-card'
+    case 'positive': return 'border-l-4 border-l-success border border-border bg-card'
+    default: return 'border-l-4 border-l-primary border border-border bg-card'
   }
 }
 
 function severityIconClass(severity: string) {
   switch (severity) {
-    case 'critical': return 'text-red-600'
-    case 'warning': return 'text-yellow-600'
-    case 'positive': return 'text-green-600'
-    default: return 'text-blue-600'
+    case 'critical': return 'text-destructive'
+    case 'warning': return 'text-warning'
+    case 'positive': return 'text-success'
+    default: return 'text-primary'
   }
 }
 
-function severityTextClass(severity: string) {
-  switch (severity) {
-    case 'critical': return 'text-red-800'
-    case 'warning': return 'text-yellow-800'
-    case 'positive': return 'text-green-800'
-    default: return 'text-blue-800'
-  }
+function severityTextClass(_severity: string) {
+  return 'text-foreground'
 }
 
 function typeIcon(type: string) {
@@ -145,7 +140,7 @@ function navigateToContext(insight: AiInsight) {
     <div class="flex items-start justify-between">
       <div>
         <h1 class="text-2xl font-semibold tracking-tight flex items-center gap-2">
-          <Sparkles class="h-6 w-6 text-purple-500" />
+          <Sparkles class="h-6 w-6 text-primary" />
           AI Insights
         </h1>
         <p class="text-sm text-muted-foreground mt-1">
@@ -180,7 +175,7 @@ function navigateToContext(insight: AiInsight) {
     <!-- Usage limit banner -->
     <div
       v-if="!insightsAllowed"
-      class="rounded-lg border border-yellow-200 bg-yellow-50 p-4 text-sm text-yellow-800"
+      class="rounded-lg border border-warning/30 bg-warning/10 p-4 text-sm text-foreground"
     >
       You've used all {{ insightsUsage?.limit ?? '' }} insight generations. Upgrade to generate more.
     </div>
