@@ -229,6 +229,7 @@ watch(dataMode, () => {
               variant="outline"
               size="sm"
               :disabled="isLoading"
+              aria-label="Refresh data"
               @click="loadData"
             >
               <RefreshCw

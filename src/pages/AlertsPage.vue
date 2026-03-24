@@ -126,8 +126,9 @@ async function handleDelete(id: number) {
       </CardHeader>
       <CardContent class="space-y-4">
         <div>
-          <label class="text-xs font-medium text-muted-foreground block mb-1">Name</label>
+          <label for="alert-name" class="text-xs font-medium text-muted-foreground block mb-1">Name</label>
           <input
+            id="alert-name"
             v-model="formName"
             type="text"
             placeholder="e.g. Daily cost spike"
@@ -137,20 +138,21 @@ async function handleDelete(id: number) {
 
         <div class="grid grid-cols-3 gap-3">
           <div>
-            <label class="text-xs font-medium text-muted-foreground block mb-1">Metric</label>
-            <select v-model="formMetric" class="w-full h-9 rounded-md border bg-background px-3 text-sm">
+            <label for="alert-metric" class="text-xs font-medium text-muted-foreground block mb-1">Metric</label>
+            <select id="alert-metric" v-model="formMetric" class="w-full h-9 rounded-md border bg-background px-3 text-sm">
               <option v-for="m in METRICS" :key="m.value" :value="m.value">{{ m.label }}</option>
             </select>
           </div>
           <div>
-            <label class="text-xs font-medium text-muted-foreground block mb-1">Condition</label>
-            <select v-model="formOperator" class="w-full h-9 rounded-md border bg-background px-3 text-sm">
+            <label for="alert-operator" class="text-xs font-medium text-muted-foreground block mb-1">Condition</label>
+            <select id="alert-operator" v-model="formOperator" class="w-full h-9 rounded-md border bg-background px-3 text-sm">
               <option v-for="op in OPERATORS" :key="op.value" :value="op.value">{{ op.label }}</option>
             </select>
           </div>
           <div>
-            <label class="text-xs font-medium text-muted-foreground block mb-1">Threshold</label>
+            <label for="alert-threshold" class="text-xs font-medium text-muted-foreground block mb-1">Threshold</label>
             <input
+              id="alert-threshold"
               v-model.number="formThreshold"
               type="number"
               step="any"
@@ -161,8 +163,9 @@ async function handleDelete(id: number) {
 
         <div class="grid grid-cols-2 gap-3">
           <div>
-            <label class="text-xs font-medium text-muted-foreground block mb-1">Send to</label>
+            <label for="alert-email" class="text-xs font-medium text-muted-foreground block mb-1">Send to</label>
             <input
+              id="alert-email"
               v-model="formEmail"
               type="email"
               placeholder="you@company.com"
@@ -170,9 +173,10 @@ async function handleDelete(id: number) {
             />
           </div>
           <div>
-            <label class="text-xs font-medium text-muted-foreground block mb-1">Don't re-alert for</label>
+            <label for="alert-cooldown" class="text-xs font-medium text-muted-foreground block mb-1">Don't re-alert for</label>
             <div class="flex items-center gap-2">
               <input
+                id="alert-cooldown"
                 v-model.number="formCooldown"
                 type="number"
                 min="1"
@@ -235,6 +239,7 @@ async function handleDelete(id: number) {
                 variant="ghost"
                 size="sm"
                 class="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                aria-label="Delete alert"
                 @click="handleDelete(rule.id)"
               >
                 <Trash2 class="h-3.5 w-3.5" />

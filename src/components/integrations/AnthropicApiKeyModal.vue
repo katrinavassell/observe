@@ -154,7 +154,7 @@ function handleClose() {
                 v-model="apiKey"
                 :type="showKey ? 'text' : 'password'"
                 placeholder="sk-ant-..."
-                :class="`pr-10 font-mono text-sm ${apiKey.trim() && isKeyValid ? 'border-green-500/50' : ''}`"
+                :class="`pr-10 font-mono text-sm ${apiKey.trim() && isKeyValid ? 'border-success/50' : ''}`"
               />
               <button
                 type="button"
