@@ -1,6 +1,6 @@
 {
-  "name": "dashboard",
-  "private": true,
+  "name": "tanso",
+  "private": false,
   "workspaces": [
     "packages/*"
   ],
