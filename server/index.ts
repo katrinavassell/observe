@@ -2,7 +2,14 @@ import 'dotenv/config'
 import express, { Request, Response, NextFunction } from 'express'
 import session from 'express-session'
 import pgSession from 'connect-pg-simple'
-import { Pool } from '@neondatabase/serverless'
+import Pg from 'pg'
+
+let Pool: typeof Pg.Pool
+if (process.env.DB_DRIVER === 'pg') {
+  Pool = Pg.Pool
+} else {
+  Pool = (await import('@neondatabase/serverless')).Pool as unknown as typeof Pg.Pool
+}
 import crypto from 'crypto'
 import bcrypt from 'bcryptjs'
 import helmet from 'helmet'
@@ -43,6 +50,14 @@ const pool = new Pool({
 const PgStore = pgSession(session)
 
 app.use(express.json({ limit: '2mb' }))
+
+// Strip /api prefix so routes work in both dev (Vite proxy) and production (same origin)
+app.use((req, _res, next) => {
+  if (req.path.startsWith('/api/')) {
+    req.url = req.url.replace('/api', '')
+  }
+  next()
+})
 
 // Security headers
 app.use(helmet())
@@ -148,6 +163,43 @@ async function ensureVisitor(req: AuthRequest, res: Response, next: NextFunction
 // ─── OpenAI-compatible proxy ───────────────────────────────────────────────
 // Users swap their base URL to route through this proxy. Requests are forwarded
 // to OpenAI transparently while logging cost/usage as observe_events.
+// Helicone-compatible: accepts Helicone-Auth, Helicone-User-Id, Helicone-Property-* headers
+// so teams migrating from Helicone can just change their base URL.
+
+// Extract Helicone-compatible headers, falling back to Tanso-native headers
+function parseProxyHeaders(req: Request): {
+  tansoKey: string | undefined
+  customerId: string
+  featureKey: string
+  properties: Record<string, string>
+} {
+  // Auth: Helicone-Auth > x-tanso-key
+  let tansoKey = req.headers['x-tanso-key'] as string | undefined
+  const heliconeAuth = req.headers['helicone-auth'] as string | undefined
+  if (!tansoKey && heliconeAuth?.startsWith('Bearer ')) {
+    tansoKey = heliconeAuth.slice(7).trim()
+  }
+
+  // Customer: Helicone-User-Id > x-tanso-customer
+  const customerId = (req.headers['helicone-user-id'] as string)
+    || (req.headers['x-tanso-customer'] as string)
+    || 'unknown'
+
+  // Feature: Helicone-Session-Id > x-tanso-feature (default per-endpoint)
+  const featureKey = (req.headers['helicone-session-id'] as string)
+    || (req.headers['x-tanso-feature'] as string)
+    || ''
+
+  // Collect Helicone-Property-* headers as properties
+  const properties: Record<string, string> = {}
+  for (const [key, value] of Object.entries(req.headers)) {
+    if (key.startsWith('helicone-property-') && typeof value === 'string') {
+      properties[key.replace('helicone-property-', '')] = value
+    }
+  }
+
+  return { tansoKey, customerId, featureKey, properties }
+}
 
 const OPENAI_MODEL_PRICING: Record<string, { input: number; output?: number }> = {
   'gpt-4o':                    { input: 2.50,  output: 10.00 },
@@ -185,14 +237,16 @@ async function logProxyEvent(
   cost: number,
   customerId: string,
   featureKey: string,
+  provider: string = 'openai',
+  properties: Record<string, string> = {},
 ): Promise<void> {
   await pool.query(
     `INSERT INTO observe_events (
       user_id, customer_id, feature_key, event_name, timestamp,
       cost_amount, cost_unit, revenue_amount, usage_units,
-      model, model_provider, source, granularity, is_inferred
-    ) VALUES ($1, $2, $3, 'cost', NOW(), $4, 'usd', 0, $5, $6, 'openai', 'proxy', 'event', false)`,
-    [userId, customerId, featureKey, cost, inputTokens + outputTokens, model]
+      model, model_provider, source, granularity, is_inferred, properties
+    ) VALUES ($1, $2, $3, 'cost', NOW(), $4, 'usd', 0, $5, $6, $7, 'proxy', 'event', false, $8)`,
+    [userId, customerId, featureKey, cost, inputTokens + outputTokens, model, provider, JSON.stringify(properties)]
   )
 }
 
@@ -214,7 +268,7 @@ app.get('/v1/models', async (req: Request, res: Response) => {
   }
 })
 
-// POST /v1/chat/completions — proxy + log
+// POST /v1/chat/completions — proxy + log (Helicone-compatible)
 app.post('/v1/chat/completions', async (req: Request, res: Response) => {
   try {
     const authHeader = req.headers.authorization
@@ -222,9 +276,8 @@ app.post('/v1/chat/completions', async (req: Request, res: Response) => {
       return res.status(401).json({ error: { message: 'Missing Authorization header (OpenAI key)', type: 'auth_error' } })
     }
 
-    const tansoKey = req.headers['x-tanso-key'] as string | undefined
-    const customerId = (req.headers['x-tanso-customer'] as string) || 'unknown'
-    const featureKey = (req.headers['x-tanso-feature'] as string) || 'chat_completions'
+    const { tansoKey, customerId, featureKey: feat, properties } = parseProxyHeaders(req)
+    const featureKey = feat || 'chat_completions'
 
     let userId: string | null = null
     if (tansoKey) {
@@ -251,7 +304,7 @@ app.post('/v1/chat/completions', async (req: Request, res: Response) => {
       const inputTokens = usage.prompt_tokens || 0
       const outputTokens = usage.completion_tokens || 0
       const cost = calculateCost(model, inputTokens, outputTokens)
-      logProxyEvent(userId, model, inputTokens, outputTokens, cost, customerId, featureKey).catch(err =>
+      logProxyEvent(userId, model, inputTokens, outputTokens, cost, customerId, featureKey, 'openai', properties).catch(err =>
         console.error('Proxy event logging failed:', err)
       )
     }
@@ -261,7 +314,7 @@ app.post('/v1/chat/completions', async (req: Request, res: Response) => {
   }
 })
 
-// POST /v1/embeddings — proxy + log
+// POST /v1/embeddings — proxy + log (Helicone-compatible)
 app.post('/v1/embeddings', async (req: Request, res: Response) => {
   try {
     const authHeader = req.headers.authorization
@@ -269,9 +322,8 @@ app.post('/v1/embeddings', async (req: Request, res: Response) => {
       return res.status(401).json({ error: { message: 'Missing Authorization header (OpenAI key)', type: 'auth_error' } })
     }
 
-    const tansoKey = req.headers['x-tanso-key'] as string | undefined
-    const customerId = (req.headers['x-tanso-customer'] as string) || 'unknown'
-    const featureKey = (req.headers['x-tanso-feature'] as string) || 'embeddings'
+    const { tansoKey, customerId, featureKey: feat, properties } = parseProxyHeaders(req)
+    const featureKey = feat || 'embeddings'
 
     let userId: string | null = null
     if (tansoKey) {
@@ -296,13 +348,78 @@ app.post('/v1/embeddings', async (req: Request, res: Response) => {
       const model = (data.model as string) || req.body.model || 'unknown'
       const inputTokens = usage.prompt_tokens || usage.total_tokens || 0
       const cost = calculateCost(model, inputTokens, 0)
-      logProxyEvent(userId, model, inputTokens, 0, cost, customerId, featureKey).catch(err =>
+      logProxyEvent(userId, model, inputTokens, 0, cost, customerId, featureKey, 'openai', properties).catch(err =>
         console.error('Proxy event logging failed:', err)
       )
     }
   } catch (error) {
     console.error('POST /v1/embeddings proxy error:', error)
     res.status(502).json({ error: { message: 'Failed to reach OpenAI', type: 'proxy_error' } })
+  }
+})
+
+// ─── Anthropic-compatible proxy (Helicone migration) ──────────────────────
+
+const ANTHROPIC_MODEL_PRICING: Record<string, { input: number; output: number }> = {
+  'claude-sonnet-4-20250514':     { input: 3.00,  output: 15.00 },
+  'claude-haiku-4-20250414':      { input: 0.80,  output: 4.00 },
+  'claude-3-5-sonnet-20241022':   { input: 3.00,  output: 15.00 },
+  'claude-3-5-haiku-20241022':    { input: 0.80,  output: 4.00 },
+  'claude-3-opus-20240229':       { input: 15.00, output: 75.00 },
+}
+
+function calculateAnthropicCost(model: string, inputTokens: number, outputTokens: number): number {
+  const pricing = ANTHROPIC_MODEL_PRICING[model]
+  if (!pricing) return 0
+  const inputCost = (inputTokens / 1_000_000) * pricing.input
+  const outputCost = (outputTokens / 1_000_000) * pricing.output
+  return Math.round((inputCost + outputCost) * 1_000_000) / 1_000_000
+}
+
+// POST /v1/messages — Anthropic proxy + log (Helicone-compatible)
+app.post('/v1/messages', async (req: Request, res: Response) => {
+  try {
+    const apiKey = req.headers['x-api-key'] as string | undefined
+    if (!apiKey) {
+      return res.status(401).json({ error: { message: 'Missing x-api-key header (Anthropic key)', type: 'auth_error' } })
+    }
+
+    const { tansoKey, customerId, featureKey: feat, properties } = parseProxyHeaders(req)
+    const featureKey = feat || 'messages'
+
+    let userId: string | null = null
+    if (tansoKey) {
+      userId = await resolveProxyUserId(tansoKey)
+    }
+
+    // Forward to Anthropic
+    const anthropicResponse = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key': apiKey,
+        'anthropic-version': (req.headers['anthropic-version'] as string) || '2023-06-01',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(req.body),
+    })
+
+    const data = await anthropicResponse.json() as Record<string, unknown>
+    res.status(anthropicResponse.status).json(data)
+
+    // Log asynchronously
+    if (userId && anthropicResponse.ok && data.usage) {
+      const usage = data.usage as { input_tokens?: number; output_tokens?: number }
+      const model = (data.model as string) || req.body.model || 'unknown'
+      const inputTokens = usage.input_tokens || 0
+      const outputTokens = usage.output_tokens || 0
+      const cost = calculateAnthropicCost(model, inputTokens, outputTokens)
+      logProxyEvent(userId, model, inputTokens, outputTokens, cost, customerId, featureKey, 'anthropic', properties).catch(err =>
+        console.error('Anthropic proxy event logging failed:', err)
+      )
+    }
+  } catch (error) {
+    console.error('POST /v1/messages proxy error:', error)
+    res.status(502).json({ error: { message: 'Failed to reach Anthropic', type: 'proxy_error' } })
   }
 })
 
@@ -415,7 +532,7 @@ app.post('/auth/logout', (req: AuthRequest, res: Response) => {
       console.error('Logout error:', err)
       return res.status(500).json({ error: 'Failed to log out' })
     }
-    res.clearCookie('connect.sid')
+    res.clearCookie('pa.sid')
     res.json({ success: true })
   })
 })
@@ -1049,7 +1166,7 @@ app.post('/data/upload/usage', ensureVisitor, async (req: AuthRequest, res: Resp
         periodEnd.setDate(0)
         const periodEndStr = periodEnd.toISOString().split('T')[0]
         const metricKey = record.metric || record.metric_key
-        const metricValue = record.value || record.metric_value
+        const metricValue = record.value ?? record.metric_value
 
         usagePlaceholders.push(`($${usageIdx++}, $${usageIdx++}, $${usageIdx++}, $${usageIdx++}, $${usageIdx++}, $${usageIdx++}, $${usageIdx++})`)
         usageValues.push(req.visitorId, record.customer_id, metricKey, metricValue, record.limit || record.metric_limit || null, periodStart, periodEndStr)
@@ -5333,6 +5450,17 @@ app.get('/cache/stats', ensureVisitor, async (req: AuthRequest, res: Response) =
 
 // Export caching utilities for use by proxy routes
 export { tryCache, storeInCache, logCacheHitEvent, estimateTokens }
+
+// In production, serve the built frontend
+if (process.env.NODE_ENV === 'production') {
+  const { fileURLToPath } = await import('url')
+  const { dirname, join } = await import('path')
+  const __dirname = dirname(fileURLToPath(import.meta.url))
+  app.use(express.static(join(__dirname, '..', 'dist')))
+  app.get('*', (_req, res) => {
+    res.sendFile(join(__dirname, '..', 'dist', 'index.html'))
+  })
+}
 
 // Local dev: start server directly
 if (!process.env.VERCEL) {

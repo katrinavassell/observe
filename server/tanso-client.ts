@@ -207,7 +207,7 @@ export async function tansoCheckMultipleEntitlements(
         const result = await tansoCheckEntitlement(customerReferenceId, key)
         results[key] = result?.allowed !== false
       } catch (_) {
-        results[key] = true // fail open
+        results[key] = false // fail closed — deny on error
       }
     })
   )
