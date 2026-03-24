@@ -21,7 +21,7 @@ import rateLimit from 'express-rate-limit'
 import { z } from 'zod'
 import { getUncachableStripeClient } from './stripe-client.js'
 import { apiKeyStore } from './api-key-store.js'
-import { initModelPricing, calculateCostFromTokens as calcCostFromDb, getAllPricing, getModelPricing, upsertModelPricing, getUserPricing, upsertUserModelPricing, deleteUserModelPricing } from './model-pricing.js'
+import { initModelPricing, calculateCostFromTokens as calcCostFromDb, getAllPricing, getModelPricing, upsertModelPricing, getUserPricing, upsertUserModelPricing, deleteUserModelPricing, getPricingLog, refreshFromSources } from './model-pricing.js'
 import {
   tansoListPlans,
   tansoListFeatures,
@@ -1627,6 +1627,32 @@ app.post('/pricing/models', ensureVisitor, async (req: AuthRequest, res: Respons
   } catch (error) {
     console.error('POST /pricing/models error:', error)
     res.status(500).json({ error: 'Failed to update model pricing' })
+  }
+})
+
+// GET /pricing/log — pricing change history (global changes + user's own overrides)
+app.get('/pricing/log', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  try {
+    const limit = parseInt(req.query.limit as string) || 100
+    const log = await getPricingLog(pool, req.visitorId, limit)
+    res.json({ log })
+  } catch (error) {
+    console.error('GET /pricing/log error:', error)
+    res.status(500).json({ error: 'Failed to fetch pricing log' })
+  }
+})
+
+// POST /pricing/refresh — admin-only, manually trigger pricing refresh from OpenRouter/LiteLLM
+app.post('/pricing/refresh', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!isAdminUser(req)) {
+      return res.status(403).json({ error: 'Admin access required' })
+    }
+    const result = await refreshFromSources(pool)
+    res.json(result)
+  } catch (error) {
+    console.error('POST /pricing/refresh error:', error)
+    res.status(500).json({ error: 'Failed to refresh pricing' })
   }
 })
 

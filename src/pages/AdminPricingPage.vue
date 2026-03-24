@@ -2,7 +2,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { Card, CardContent, CardHeader, CardTitle, Button } from '@/components/ui'
-import { Loader2, Save, Plus, Trash2, ShieldCheck } from 'lucide-vue-next'
+import { Loader2, Save, Plus, RefreshCw, ShieldCheck, ArrowRight } from 'lucide-vue-next'
 
 interface ModelPrice {
   model: string
@@ -28,7 +28,22 @@ const newInput = ref(0)
 const newOutput = ref(0)
 const isAdding = ref(false)
 
+interface LogEntry {
+  id: number
+  model: string
+  provider: string
+  field: string
+  old_value: number
+  new_value: number
+  source: string
+  user_id: string | null
+  created_at: string
+}
+
 const providers = ['openai', 'anthropic', 'google', 'mistral', 'meta', 'cohere', 'other']
+const logEntries = ref<LogEntry[]>([])
+const isRefreshing = ref(false)
+const refreshResult = ref<{ updated: number; added: number; source: string } | null>(null)
 
 const groupedByProvider = computed(() => {
   const groups: Record<string, ModelPrice[]> = {}
@@ -57,10 +72,35 @@ async function checkAdmin() {
 }
 
 async function loadPricing() {
-  const res = await fetch('/api/pricing/models')
-  const data = await res.json()
-  models.value = data.models
+  const [modelsRes, logRes] = await Promise.all([
+    fetch('/api/pricing/models'),
+    fetch('/api/pricing/log', { credentials: 'include' }),
+  ])
+  const modelsData = await modelsRes.json()
+  const logData = await logRes.json()
+  models.value = modelsData.models
+  logEntries.value = logData.log || []
   isLoading.value = false
+}
+
+async function triggerRefresh() {
+  isRefreshing.value = true
+  refreshResult.value = null
+  try {
+    const res = await fetch('/api/pricing/refresh', { method: 'POST', credentials: 'include' })
+    refreshResult.value = await res.json()
+    await loadPricing()
+  } finally {
+    isRefreshing.value = false
+  }
+}
+
+function formatDate(iso: string) {
+  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+}
+
+function sourceLabel(source: string) {
+  return { openrouter: 'OpenRouter', litellm: 'LiteLLM', admin: 'Admin', user_override: 'Custom Rate' }[source] || source
 }
 
 function startEdit(m: ModelPrice) {
@@ -142,6 +182,25 @@ onMounted(async () => {
         Set the global default pricing per model. Users can override these with their own negotiated rates.
       </p>
     </div>
+
+    <!-- Refresh from sources -->
+    <Card v-if="!isLoading" class="border-primary/20">
+      <CardContent class="p-4 flex items-center justify-between">
+        <div>
+          <p class="text-sm font-medium">Auto-sync from OpenRouter / LiteLLM</p>
+          <p class="text-xs text-muted-foreground">Prices refresh daily. Click to sync now.</p>
+        </div>
+        <div class="flex items-center gap-3">
+          <span v-if="refreshResult" class="text-xs text-muted-foreground">
+            {{ refreshResult.updated }} updated, {{ refreshResult.added }} new ({{ refreshResult.source }})
+          </span>
+          <Button size="sm" :disabled="isRefreshing" @click="triggerRefresh">
+            <RefreshCw class="h-4 w-4 mr-1" :class="isRefreshing ? 'animate-spin' : ''" />
+            {{ isRefreshing ? 'Syncing...' : 'Sync Now' }}
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
 
     <div v-if="isLoading" class="flex items-center justify-center py-20">
       <Loader2 class="h-6 w-6 animate-spin text-muted-foreground" />
@@ -231,6 +290,42 @@ onMounted(async () => {
                       <Button size="sm" variant="ghost" class="h-7 text-xs" @click="startEdit(m)">Edit</Button>
                     </td>
                   </template>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      </div>
+
+      <!-- Change Log -->
+      <div v-if="logEntries.length > 0" class="space-y-2">
+        <h2 class="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Change Log</h2>
+        <Card>
+          <div class="overflow-hidden">
+            <table class="w-full text-sm">
+              <thead>
+                <tr class="border-b bg-muted/50 text-muted-foreground">
+                  <th class="text-left px-4 py-2.5 font-medium text-xs uppercase tracking-wider">Date</th>
+                  <th class="text-left px-4 py-2.5 font-medium text-xs uppercase tracking-wider">Model</th>
+                  <th class="text-left px-4 py-2.5 font-medium text-xs uppercase tracking-wider">Change</th>
+                  <th class="text-left px-4 py-2.5 font-medium text-xs uppercase tracking-wider">Source</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y">
+                <tr v-for="entry in logEntries" :key="entry.id" class="text-xs">
+                  <td class="px-4 py-2.5 text-muted-foreground whitespace-nowrap">{{ formatDate(entry.created_at) }}</td>
+                  <td class="px-4 py-2.5">
+                    <code class="font-mono bg-muted px-1.5 py-0.5 rounded">{{ entry.model }}</code>
+                  </td>
+                  <td class="px-4 py-2.5">
+                    <span class="text-muted-foreground">{{ entry.field === 'input_cost_per_million' ? 'Input' : 'Output' }}:</span>
+                    <span class="tabular-nums">${{ entry.old_value.toFixed(2) }}</span>
+                    <ArrowRight class="inline h-3 w-3 mx-1 text-muted-foreground" />
+                    <span class="tabular-nums font-medium">${{ entry.new_value.toFixed(2) }}</span>
+                  </td>
+                  <td class="px-4 py-2.5">
+                    <span class="bg-muted px-1.5 py-0.5 rounded text-muted-foreground">{{ sourceLabel(entry.source) }}</span>
+                  </td>
                 </tr>
               </tbody>
             </table>
