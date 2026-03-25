@@ -6,12 +6,10 @@ import {
   Plug,
   Activity,
   Cpu,
-  CreditCard,
   Settings,
   Eye,
   LogIn,
   LogOut,
-  Bell,
 } from 'lucide-vue-next'
 import ErrorBoundary from '@/components/shared/ErrorBoundary.vue'
 import { useTeam } from '@/composables/useTeam'
@@ -45,23 +43,10 @@ const navItems = computed(() => [
     description: 'AI model cost breakdown',
   },
   {
-    path: '/alerts',
-    label: 'Alerts',
-    icon: Bell,
-    description: 'Threshold-based cost alerts',
-  },
-  {
     path: '/data-sources',
     label: 'Data Sources',
     icon: Plug,
     description: 'Connect integrations or upload files',
-  },
-  {
-    path: '/plans',
-    label: 'Plans & Billing',
-    icon: CreditCard,
-    description: 'Manage your subscription',
-    dividerBefore: true,
   },
 ])
 

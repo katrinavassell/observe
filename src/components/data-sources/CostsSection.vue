@@ -32,8 +32,6 @@ import OpenAIApiKeyModal from '@/components/integrations/OpenAIApiKeyModal.vue'
 const props = defineProps<{
   /** Current file info if any */
   file: { name: string; isSample: boolean } | null
-  /** Whether sample data is being loaded */
-  isLoadingSample?: boolean
   /** If true, hides upload/clear controls (viewer mode) */
   readonly?: boolean
 }>()
@@ -43,8 +41,6 @@ const emit = defineEmits<{
   fileUploaded: [file: { name: string; isSample: boolean }]
   /** Emitted when file is cleared */
   fileCleared: []
-  /** Emitted when user wants to use sample data */
-  useSample: []
 }>()
 
 // Upload state
@@ -444,7 +440,7 @@ async function handleDisconnectAnthropic(): Promise<void> {
           </div>
         </div>
 
-        <div v-if="!props.readonly" class="flex items-center justify-center gap-4">
+        <div v-if="!props.readonly" class="flex items-center justify-center">
           <button
             type="button"
             class="text-xs text-primary hover:underline flex items-center gap-1"
@@ -452,15 +448,6 @@ async function handleDisconnectAnthropic(): Promise<void> {
           >
             <Download class="h-3 w-3" />
             Download template
-          </button>
-          <span class="text-muted-foreground/30">|</span>
-          <button
-            type="button"
-            class="text-xs text-muted-foreground hover:text-foreground"
-            :disabled="isLoadingSample"
-            @click="emit('useSample')"
-          >
-            {{ isLoadingSample ? 'Loading...' : 'Use sample data' }}
           </button>
         </div>
       </CardContent>

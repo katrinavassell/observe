@@ -43,11 +43,6 @@ const router = createRouter({
       redirect: '/',
     },
     {
-      path: '/alerts',
-      name: 'alerts',
-      component: () => import('@/pages/AlertsPage.vue'),
-    },
-    {
       path: '/data-sources',
       name: 'data-sources',
       component: () => import('@/pages/DataSourcesPage.vue'),

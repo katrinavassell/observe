@@ -54,9 +54,6 @@ const {
 const costsFile = ref<{ name: string; isSample: boolean } | null>(null)
 const usageFile = ref<{ name: string; isSample: boolean } | null>(null)
 
-/** Loading states for sample data */
-
-
 const ingestUrl = typeof window !== 'undefined' ? `${window.location.origin}/api/events/ingest` : '/api/events/ingest'
 const proxyBaseUrl = typeof window !== 'undefined' ? `${window.location.origin}/v1` : '/v1'
 
@@ -530,7 +527,7 @@ await fetch('{{ ingestUrl }}', {
 
     <div v-if="true" class="space-y-1">
       <h2 class="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Import historic data</h2>
-      <p class="text-sm text-muted-foreground">Already have cost or usage data from your AI providers? Upload CSVs to see trends from day one. You can skip this and come back later.</p>
+      <p class="text-sm text-muted-foreground">Already have cost or usage data from your AI providers? Upload CSVs to get insights faster. Confidence improves with more granular data.</p>
     </div>
 
     <!-- AI Cost CSVs + Provider Connections (hidden in demo mode) -->
