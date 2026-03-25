@@ -186,7 +186,7 @@ const insightCategories = [
   { title: 'Margin analysis', description: 'Which features cost more than they earn, and by how much.' },
   { title: 'Model cost comparison', description: 'Which AI models you spend the most on and cheaper alternatives.' },
   { title: 'Customer profitability', description: 'Which customers cost the most to serve relative to their revenue.' },
-  { title: 'Spend trends', description: 'How your AI costs are changing over time across features and models.' },
+  { title: 'Historic spend estimation', description: 'Cross-references your SDK data with CSV uploads and provider imports to estimate where past spend went.' },
 ]
 </script>
 

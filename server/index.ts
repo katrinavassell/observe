@@ -3776,18 +3776,75 @@ app.post('/insights/generate', ensureVisitor, expensiveLimiter, async (req: Auth
       return `- ${r.model} (${r.model_provider || 'unknown'}): cost=$${cost.toFixed(2)}, ${r.event_count} calls`
     }).join('\n')
 
-    const prompt = `You are an AI SaaS pricing analyst. Analyze this data and return exactly 3-5 actionable insights as a JSON array.
+    // Pull historic context (CSV uploads, OpenAI/Anthropic imports)
+    let historicContext = ''
+    try {
+      const [costRecords, usageRecords, importedEvents] = await Promise.all([
+        pool.query(
+          `SELECT cost_type, SUM(amount)::numeric as total, COUNT(*)::int as records,
+             MIN(period_start) as earliest, MAX(period_end) as latest
+           FROM cost_records WHERE user_id = $1 GROUP BY cost_type`,
+          [req.visitorId]
+        ),
+        pool.query(
+          `SELECT metric_name, SUM(value)::numeric as total, COUNT(*)::int as records
+           FROM usage_records WHERE user_id = $1 GROUP BY metric_name`,
+          [req.visitorId]
+        ),
+        pool.query(
+          `SELECT source, model, model_provider,
+             COUNT(*)::int as event_count,
+             COALESCE(SUM(cost_amount), 0)::numeric as total_cost,
+             MIN(timestamp) as earliest, MAX(timestamp) as latest
+           FROM observe_events
+           WHERE user_id = $1 AND source IN ('openai', 'anthropic', 'csv') AND granularity != 'event'
+           GROUP BY source, model, model_provider`,
+          [req.visitorId]
+        ),
+      ])
 
-Overall: ${parseInt(overall.total_events)} events, total cost $${totalCost.toFixed(2)}, total revenue $${totalRevenue.toFixed(2)}, overall margin ${overallMargin}%
+      const parts: string[] = []
 
-Features:
+      if (costRecords.rows.length > 0) {
+        const lines = costRecords.rows.map((r: any) =>
+          `- ${r.cost_type}: $${parseFloat(r.total).toFixed(2)} total (${r.records} records, ${r.earliest?.toISOString().slice(0, 10)} to ${r.latest?.toISOString().slice(0, 10)})`
+        )
+        parts.push(`Historic cost data (from CSV/imports):\n${lines.join('\n')}`)
+      }
+
+      if (usageRecords.rows.length > 0) {
+        const lines = usageRecords.rows.map((r: any) =>
+          `- ${r.metric_name}: ${parseFloat(r.total).toLocaleString()} total (${r.records} records)`
+        )
+        parts.push(`Historic usage data (from CSV/imports):\n${lines.join('\n')}`)
+      }
+
+      if (importedEvents.rows.length > 0) {
+        const lines = importedEvents.rows.map((r: any) =>
+          `- ${r.source} import: ${r.model || 'various models'} (${r.model_provider || 'unknown'}), $${parseFloat(r.total_cost).toFixed(2)} cost, ${r.event_count} records, ${r.earliest?.toISOString().slice(0, 10)} to ${r.latest?.toISOString().slice(0, 10)}`
+        )
+        parts.push(`Imported provider data (daily aggregates, no per-customer breakdown):\n${lines.join('\n')}`)
+      }
+
+      if (parts.length > 0) {
+        historicContext = '\n\nHistoric Context (use to cross-reference with SDK event data above):\n' + parts.join('\n\n')
+      }
+    } catch (err) {
+      console.error('Failed to fetch historic context for insights:', err)
+    }
+
+    const prompt = `You are an AI cost analyst. Analyze this data and return exactly 3-5 actionable insights as a JSON array.
+
+Overall: ${parseInt(overall.total_events)} SDK events, total cost $${totalCost.toFixed(2)}, total revenue $${totalRevenue.toFixed(2)}, overall margin ${overallMargin}%
+
+Features (from SDK events):
 ${featureSummary}
 
-Top Customers:
+Top Customers (from SDK events):
 ${customerSummary}
 
-AI Models Used:
-${modelSummary}
+AI Models Used (from SDK events):
+${modelSummary}${historicContext}
 
 Return a JSON array where each insight has these fields:
 - insight_type: one of "margin_alert", "pricing_opportunity", "cost_optimization", "customer_risk"
@@ -3798,6 +3855,8 @@ Return a JSON array where each insight has these fields:
 - customer_id: the relevant customer id if applicable, or null
 
 Focus on: negative/low margins, cost optimization opportunities, pricing misalignment, customer concentration risk. Be specific with numbers from the data.
+
+If historic context is provided, use it to cross-reference with SDK data. For example, if SDK data shows 60% of gpt-4o calls go to ai_summarization, and historic data shows $3,200/mo total OpenAI spend, estimate that ~$1,920/mo goes to summarization. Call out when historic spend patterns don't match current SDK patterns.
 
 Return ONLY the JSON array, no markdown or explanation.`
 
