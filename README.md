@@ -3,7 +3,6 @@
 **AI cost observability that connects cost to revenue to margin.**
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
-[![Docker](https://img.shields.io/docker/pulls/tanso/observe)](https://hub.docker.com/r/tanso/observe)
 
 ---
 
@@ -11,7 +10,7 @@
 
 Helicone shows you what your AI calls cost. That's it. You still have to answer the questions that actually matter: which features are unprofitable? Which customers cost more to serve than they pay? What happens to margins if you raise prices on one plan?
 
-Observe closes that loop. It tracks AI cost at the feature and customer level, joins it with your revenue data, and gives you margin-by-feature breakdowns, per-customer profitability, and a simulation engine to model pricing changes before you ship them.
+Observe closes that loop. It tracks AI cost at the feature and customer level, joins it with your revenue data, and gives you margin-by-feature breakdowns, per-customer profitability, and AI-powered insights to optimize pricing.
 
 If you're running an AI product and you're losing money on a subset of customers or features, Observe shows you exactly where and by how much.
 
@@ -23,14 +22,15 @@ If you're running an AI product and you're losing money on a subset of customers
 |---|---|
 | **OpenAI + Anthropic proxy** | Swap one URL, get automatic cost logging for all chat and embedding calls |
 | **SDK event ingestion** | Send cost + revenue + usage events from your backend in a single HTTP call |
-| **Feature-level economics** | See cost, revenue, margin %, and margin trend per feature key |
-| **Per-customer profitability** | Identify customers where your cost-to-serve exceeds what they pay |
+| **Analytics dashboard** | Revenue, costs, and margin overview with trend charts |
 | **AI model breakdown** | Cost and volume by model (gpt-4o, claude-sonnet, etc.) |
-| **Pricing simulations** | Model a price change across a customer segment, see revenue impact and churn risk |
+| **Cost alerts** | Threshold-based alerts with email notifications |
 | **AI insights** | AI-generated recommendations about margin compression and pricing opportunities |
-| **Stripe sync** | Import customers, subscriptions, and invoices directly from your Stripe account |
+| **OpenAI/Anthropic integration** | Connect API keys to auto-pull usage data |
+| **Stripe billing** | Subscribe to plans, manage billing through Stripe checkout |
 | **CSV upload** | Upload cost, usage, and revenue data without any API integration |
-| **Sample data** | Explore with a realistic pre-populated dataset — no credentials needed |
+| **Team collaboration** | Invite team members with admin/viewer roles |
+| **Sample data** | Explore with a realistic pre-populated dataset |
 
 ---
 
@@ -39,12 +39,12 @@ If you're running an AI product and you're losing money on a subset of customers
 ### Docker (recommended)
 
 ```bash
-git clone https://github.com/tanso/observe.git
-cd observe
+git clone https://github.com/tansohq/metrics-onboarding.git
+cd metrics-onboarding
 docker compose up
 ```
 
-Dashboard: `http://localhost:5173` | API: `http://localhost:3001`
+App: `http://localhost:3000`
 
 Set a real session secret before any non-local deployment:
 
@@ -57,21 +57,23 @@ SESSION_SECRET=your-secret docker compose up
 **Prerequisites:** Node.js 20+, PostgreSQL 16+
 
 ```bash
-git clone https://github.com/tanso/observe.git
-cd observe
+git clone https://github.com/tansohq/metrics-onboarding.git
+cd metrics-onboarding
 npm install
 ```
 
-Create a `.env` file:
+Create a `.env` file (see `.env.example` for all options):
 
 ```env
-DATABASE_URL=postgresql://user:password@localhost:5432/observe
+DATABASE_URL=postgresql://user:password@localhost:5432/tanso
 SESSION_SECRET=any-random-string-at-least-32-chars
 ```
 
 ```bash
 npm run dev
 ```
+
+Frontend: `http://localhost:5173` | API: `http://localhost:3001`
 
 The database schema is created automatically on first start.
 
@@ -121,7 +123,7 @@ client = anthropic.Anthropic(
 | `POST /v1/embeddings` | OpenAI embeddings |
 | `POST /v1/messages` | Anthropic messages |
 
-Without `x-tanso-key`, the request is still proxied but no event is logged. The proxy never blocks or modifies your request.
+Without `x-tanso-key`, the request is still proxied but no event is logged. The proxy never blocks or modifies your request. Responses can be cached to reduce costs (see proxy cache in the architecture docs).
 
 ---
 
@@ -145,7 +147,7 @@ tanso.track({
 })
 ```
 
-Fire-and-forget. Events are batched and sent asynchronously. If Observe is unreachable, events are silently dropped — your app's latency is never affected.
+Fire-and-forget. Events are batched and sent asynchronously. If Observe is unreachable, events are silently dropped -- your app's latency is never affected.
 
 ### Auto-capture with wrappers
 
@@ -196,7 +198,7 @@ curl -X POST http://localhost:3001/events/ingest \
 | `properties` | no | Arbitrary metadata |
 | `idempotencyKey` | no | Deduplicate retries |
 
-Batch limit: 1000 events per request. Invalid events are rejected individually — valid ones still accepted.
+Batch limit: 1000 events per request. Invalid events are rejected individually -- valid ones still accepted.
 
 ---
 
@@ -208,70 +210,29 @@ Browser (Vue 3 SPA)
         v
 Express API  (port 3001)
   |-- /v1/*                  OpenAI + Anthropic proxy
-  |-- /events/ingest         SDK event ingestion
-  |-- /api/events/*          Query events by feature, customer, model
-  |-- /api/simulations/*     Pricing simulation engine
-  |-- /api/insights/*        AI-generated insights
+  |-- /events/ingest         SDK event ingestion (public, key-authenticated)
+  |-- /auth/*                Signup, login, password reset
+  |-- /data/*                CSV upload, sample data, Stripe sync
+  |-- /integrations/*        OpenAI/Anthropic API key connections
+  |-- /alerts/*              Cost alert rules
+  |-- /tanso/*               Billing (plans, subscriptions, entitlements)
+  |-- /team/*                Team invites, roles
+  |-- /insights/*            AI-generated insights
+  |-- /analytics/*           Customer P&L, margin alerts
+  |-- /models/*              Model pricing data
         |
         v
-PostgreSQL (observe_events)
+PostgreSQL (observe_events + 20 supporting tables)
 ```
 
-All data — proxy, SDK, Stripe, CSV — lands in a single `observe_events` table with the same schema. Margin queries aggregate from this one table.
+All data -- proxy, SDK, Stripe, CSV -- lands in a single `observe_events` table with the same schema. Margin queries aggregate from this one table.
 
 | Layer | Technology |
 |---|---|
-| Frontend | Vue 3, TypeScript, Vite, Tailwind CSS, Chart.js |
+| Frontend | Vue 3, TypeScript, Vite, Tailwind CSS, Chart.js, shadcn-vue |
 | Backend | Express 5, Node.js 20 |
-| Database | PostgreSQL 16 |
-
----
-
-## Migrating from Helicone?
-
-Change your `base_url` and key. Your existing Helicone headers work unchanged:
-
-```python
-# Before (Helicone)
-client = OpenAI(
-    base_url="https://oai.helicone.ai/v1",
-    default_headers={
-        "Helicone-Auth": "Bearer sk_helicone_...",
-        "Helicone-User-Id": "user_123",
-    }
-)
-
-# After (Observe) — change URL and key, everything else stays
-client = OpenAI(
-    base_url="http://localhost:3001/v1",
-    default_headers={
-        "Helicone-Auth": "Bearer obs_...",    # your Observe SDK key
-        "Helicone-User-Id": "user_123",       # still works
-    }
-)
-```
-
-**Supported Helicone headers:**
-
-| Helicone header | Maps to |
-|---|---|
-| `Helicone-Auth` | Observe SDK key |
-| `Helicone-User-Id` | Customer ID |
-| `Helicone-Session-Id` | Feature key |
-| `Helicone-Property-*` | Event properties |
-
-**What Observe adds over Helicone:**
-
-| | Helicone | Observe |
-|---|---------|---------|
-| Cost tracking | Per-request | Per-request |
-| Revenue tracking | No | Per-feature, per-customer |
-| Margin analysis | No | Real-time P&L per feature |
-| Negative margin alerts | No | Automatic |
-| Pricing simulations | No | Model changes before shipping |
-| Self-host | Yes | Yes (`docker compose up`) |
-
-**Importing Helicone data:** export request logs as CSV, then use **Data Sources > Upload CSV** in the dashboard.
+| Database | PostgreSQL 16 (Neon serverless or standard pg) |
+| Billing | Tanso SDK + Stripe |
 
 ---
 

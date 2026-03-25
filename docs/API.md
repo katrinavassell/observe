@@ -1,18 +1,54 @@
-# API Reference (Legacy)
+# API Reference
 
-> **Note:** This documents the existing Express backend endpoints. For the new Observe endpoints (events, features, customers, models, simulations, insights), see the [api/](./api/) directory.
+Express backend endpoints. The API runs on port 3001 and is proxied by Vite at `/api/*` in development.
+
+For detailed API docs on specific subsystems, see the [api/](./api/) directory.
 
 ## Authentication
 
-No authentication required. All requests use anonymous sessions via cookies. The `ensureVisitor` middleware assigns a `visitorId` on first request and scopes all data to that visitor.
+Account-based auth with email/password. Session cookies are used for all authenticated requests. Include `credentials: 'include'` in fetch calls (handled by `src/lib/api.ts`).
 
-Cookies are set automatically — include `credentials: 'include'` in fetch calls (handled by `src/lib/api.ts`).
+Rate limited: 20 auth attempts per 15 minutes.
 
 ---
 
-## Endpoints
+## Auth Endpoints
 
-### GET /api/session/init
+### POST /auth/signup
+
+Create a new account.
+
+**Request Body:**
+```json
+{ "email": "user@example.com", "password": "...", "name": "Jane" }
+```
+
+### POST /auth/login
+
+Log in to an existing account.
+
+**Request Body:**
+```json
+{ "email": "user@example.com", "password": "..." }
+```
+
+### POST /auth/logout
+
+End the current session.
+
+### GET /auth/me
+
+Get the current authenticated account.
+
+### POST /auth/forgot-password
+
+Request a password reset email.
+
+### POST /auth/reset-password
+
+Reset password with a token.
+
+### GET /session/init
 
 Initialize or resume a session. Returns the visitor ID.
 
@@ -23,7 +59,9 @@ Initialize or resume a session. Returns the visitor ID.
 
 ---
 
-### GET /api/data/status
+## Data Endpoints
+
+### GET /data/status
 
 Get data mode and record counts.
 
@@ -43,143 +81,259 @@ Get data mode and record counts.
 }
 ```
 
----
-
-### GET /api/data/analyzer
+### GET /data/analyzer
 
 Fetch all data for the pricing analyzer (plans, customers, subscriptions, usage, costs).
 
-**Response:** `AnalyzerData` object or `null` if no customers exist.
-
----
-
-### POST /api/data/sample
+### POST /data/sample
 
 Load sample dataset. Clears existing data first.
 
-**Response:**
-```json
-{ "success": true, "message": "Sample data loaded" }
-```
-
----
-
-### DELETE /api/data/clear
+### DELETE /data/clear
 
 Clear all user data.
 
----
-
-### POST /api/data/upload/revenue
+### POST /data/upload/revenue
 
 Upload customers, plans, and subscriptions.
 
-**Request Body:**
-```json
-{
-  "customers": [{ "customer_id": "cus_001", "name": "Acme Corp", "email": "billing@acme.com" }],
-  "plans": [{ "plan_id": "pro", "name": "Professional", "price_amount": 99 }],
-  "subscriptions": [{ "subscription_id": "sub_001", "customer_id": "cus_001", "plan_id": "pro", "is_active": true }]
-}
-```
-
----
-
-### POST /api/data/upload/costs
+### POST /data/upload/costs
 
 Upload cost records.
 
-**Request Body:**
-```json
-{
-  "records": [
-    { "month": "2026-01", "customer_id": "cus_001", "provider": "openai", "cost": 245.00 }
-  ]
-}
-```
-
----
-
-### POST /api/data/upload/usage
+### POST /data/upload/usage
 
 Upload usage records.
 
-**Request Body:**
-```json
-{
-  "records": [
-    { "month": "2026-01", "customer_id": "cus_001", "metric_key": "api_calls", "metric_value": 15000 }
-  ]
-}
-```
-
----
-
-### DELETE /api/data/clear/revenue
-### DELETE /api/data/clear/costs
-### DELETE /api/data/clear/usage
+### DELETE /data/clear/revenue
+### DELETE /data/clear/costs
+### DELETE /data/clear/usage
 
 Clear specific data categories.
 
 ---
 
-### GET /api/customers
-### GET /api/plans
-### GET /api/subscriptions
-### GET /api/usage
-### GET /api/costs
+## Event Endpoints
 
-List endpoints for each data type. Returns arrays of records.
+### POST /events/ingest (Public)
 
----
+Ingest events via SDK key authentication (Bearer token in Authorization header). Does not require a session.
 
-### GET /api/metrics/summary
-
-Quick MRR/ARR summary.
-
-**Response:**
+**Request Body:**
 ```json
 {
-  "total_customers": 5,
-  "active_subscriptions": 5,
-  "mrr": 755,
-  "arr": 9060,
-  "arpc": 151
+  "events": [{
+    "eventName": "inference",
+    "customerReferenceId": "cus_acme",
+    "featureKey": "chat",
+    "costAmount": 0.003,
+    "model": "gpt-4o-mini"
+  }]
 }
 ```
 
+### GET /events
+
+List events for the current user. Supports pagination with `limit` and `offset`.
+
+### GET /events/:id
+
+Get a single event by ID.
+
+### GET /events/by-feature
+
+Events aggregated by feature key.
+
+### GET /events/by-customer
+
+Events aggregated by customer.
+
+### GET /events/by-model
+
+Events aggregated by model.
+
 ---
 
-### GET /api/stripe/status
+## Analytics Endpoints
 
-Check if Stripe is connected via Replit native integration.
+### GET /analytics/customer-pnl
 
-**Response:**
+Customer profit & loss breakdown.
+
+### GET /analytics/margin-alerts
+
+Detect features or customers with concerning margin trends.
+
+---
+
+## Proxy Endpoints
+
+### POST /v1/chat/completions
+
+Proxy to OpenAI chat completions. Logs cost as an observe_event.
+
+### POST /v1/embeddings
+
+Proxy to OpenAI embeddings.
+
+### POST /v1/messages
+
+Proxy to Anthropic messages API.
+
+Headers: `x-tanso-key`, `x-tanso-customer`, `x-tanso-feature` for event attribution.
+
+---
+
+## Integration Endpoints
+
+### GET /integrations/openai/status
+### POST /integrations/openai/connect
+### DELETE /integrations/openai/disconnect
+### POST /integrations/openai/sync
+
+Manage OpenAI API key connection and usage data sync.
+
+### GET /integrations/anthropic/status
+### POST /integrations/anthropic/connect
+### DELETE /integrations/anthropic/disconnect
+### POST /integrations/anthropic/sync
+
+Same for Anthropic.
+
+---
+
+## Alert Endpoints
+
+### GET /alerts
+
+List alert rules for the current user.
+
+### POST /alerts
+
+Create a new alert rule.
+
+**Request Body:**
 ```json
 {
-  "connected": true,
-  "account_id": "acct_...",
-  "account_name": "My Company"
+  "name": "High daily cost",
+  "metric": "daily_cost",
+  "operator": ">",
+  "threshold": 50.00,
+  "email": "alerts@example.com"
 }
 ```
 
+### PUT /alerts/:id
+
+Update an alert rule.
+
+### DELETE /alerts/:id
+
+Delete an alert rule.
+
 ---
 
-### POST /api/stripe/sync
+## Model Endpoints
+
+### GET /models
+
+List all AI models with pricing data.
+
+### GET /v1/models
+
+OpenAI-compatible model list.
+
+### GET /pricing/models
+
+Model pricing table (cost per token by model).
+
+---
+
+## Insights Endpoints
+
+### GET /insights
+
+List generated insights.
+
+### POST /insights/generate
+
+Generate new AI insights from current data.
+
+---
+
+## Tanso Billing Endpoints
+
+### GET /tanso/plans
+
+List available subscription plans.
+
+### GET /tanso/features
+
+List plan features.
+
+### GET /tanso/entitlements
+
+List current user's entitlements.
+
+### GET /tanso/check/:featureKey
+
+Check if user has access to a specific feature.
+
+### POST /tanso/subscribe
+
+Create a new subscription.
+
+### POST /tanso/cancel
+
+Cancel current subscription.
+
+### GET /tanso/invoices
+
+List user's invoices.
+
+---
+
+## Team Endpoints
+
+### GET /team
+
+Get team info and members.
+
+### POST /team/invite
+
+Invite a team member by email.
+
+### POST /team/join/:token
+
+Accept a team invite.
+
+---
+
+## SDK Key Endpoints
+
+### GET /sdk-keys
+
+List SDK API keys.
+
+### POST /sdk-keys
+
+Generate a new SDK API key.
+
+### DELETE /sdk-keys/:id
+
+Revoke an SDK API key.
+
+---
+
+## Stripe Endpoints
+
+### GET /stripe/status
+
+Check Stripe connection status.
+
+### POST /stripe/sync
 
 Sync customers, subscriptions, and plans from Stripe.
-
-**Response:**
-```json
-{
-  "success": true,
-  "synced": {
-    "customers": 25,
-    "subscriptions": 30,
-    "plans": 4
-  }
-}
-```
 
 ---
 
@@ -191,5 +345,8 @@ All endpoints return errors as:
 ```
 
 HTTP status codes:
-- `400` — Bad request (missing fields, invalid data)
-- `500` — Server error (database failure, Stripe error)
+- `400` -- Bad request (missing fields, invalid data)
+- `401` -- Not authenticated
+- `403` -- Not authorized (e.g., viewer trying to write)
+- `429` -- Rate limited
+- `500` -- Server error

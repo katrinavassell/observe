@@ -1,6 +1,6 @@
 # Architecture Overview
 
-Technical architecture of Observe — feature-level economics and pricing simulation for AI SaaS companies.
+Technical architecture of Observe -- AI cost observability for SaaS companies.
 
 ## System Overview
 
@@ -15,7 +15,7 @@ Technical architecture of Observe — feature-level economics and pricing simula
 │                           │                                         │
 │  ┌────────────────────────┴────────────────────────────────────┐   │
 │  │                     lib/ (Business Logic)                    │   │
-│  │  pricing-analyzer.ts │ api.ts (HTTP client)                  │   │
+│  │  pricing-analyzer.ts │ api.ts │ format.ts │ validation.ts    │   │
 │  └────────────────────────┬────────────────────────────────────┘   │
 └───────────────────────────┼─────────────────────────────────────────┘
                             │ /api/* (Vite proxy)
@@ -23,21 +23,24 @@ Technical architecture of Observe — feature-level economics and pricing simula
 ┌─────────────────────────────────────────────────────────────────────┐
 │                     Express Backend (port 3001)                     │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐              │
-│  │   Sessions   │  │  Data CRUD   │  │   Stripe     │              │
-│  │  (pg-simple) │  │  (pg Pool)   │  │  (Replit)    │              │
-│  └──────────────┘  └──────────────┘  └──────┬───────┘              │
-└─────────────────────────────────────────────┼───────────────────────┘
-                            │                 │
-                            ▼                 ▼
-                  ┌──────────────┐   ┌──────────────┐
-                  │  PostgreSQL  │   │  Stripe API  │
-                  │  (Replit)    │   └──────────────┘
-                  └──────────────┘
+│  │   Auth       │  │  Data CRUD   │  │   Stripe     │              │
+│  │  (accounts)  │  │  (pg Pool)   │  │  (checkout)  │              │
+│  ├──────────────┤  ├──────────────┤  ├──────────────┤              │
+│  │ Integrations │  │    Tanso     │  │    Alerts    │              │
+│  │ (OpenAI/Ant) │  │  (billing)   │  │  (rules)     │              │
+│  └──────────────┘  └──────────────┘  └──────────────┘              │
+│  ┌──────────────┐  ┌──────────────┐                                │
+│  │  AI Proxy    │  │    Team      │                                │
+│  │ (v1/* fwd)   │  │  (orgs)      │                                │
+│  └──────────────┘  └──────────────┘                                │
+└─────────────────────────────────────────────────────────────────────┘
                             │
-                            ▼ (Phase 3)
-                  ┌──────────────┐
-                  │  OpenAI API  │
-                  └──────────────┘
+              ┌─────────────┼─────────────────┐
+              ▼             ▼                  ▼
+    ┌──────────────┐ ┌──────────────┐ ┌──────────────┐
+    │  PostgreSQL  │ │  Stripe API  │ │  OpenAI API  │
+    │  (Neon/pg)   │ │              │ │ Anthropic API│
+    └──────────────┘ └──────────────┘ └──────────────┘
 ```
 
 ---
@@ -47,7 +50,7 @@ Technical architecture of Observe — feature-level economics and pricing simula
 ### 1. Data Import Flow
 
 ```
-User Input (CSV, Stripe, or Sample Data)
+User Input (CSV, Stripe, OpenAI/Anthropic sync, or Sample Data)
          │
          ▼
 ┌─────────────────────────────┐
@@ -68,16 +71,16 @@ User Input (CSV, Stripe, or Sample Data)
 └─────────────────────────────┘
 ```
 
-### 2. Feature Economics Flow
+### 2. Analytics Flow
 
 ```
-Frontend requests /api/events/by-feature
+Frontend requests /api/analytics/customer-pnl
          │
          ▼
 ┌─────────────────────────────┐
 │  Express Backend             │
 │  - Query observe_events      │
-│  - GROUP BY feature_key      │
+│  - GROUP BY feature/customer │
 │  - SUM cost, revenue, usage  │
 │  - Calculate margin %        │
 └─────────────┬───────────────┘
@@ -85,37 +88,25 @@ Frontend requests /api/events/by-feature
               ▼
 ┌─────────────────────────────┐
 │  Vue Components              │
-│  - FeaturesPage.vue          │
+│  - AnalyticsPage.vue (home)  │
+│  - EventsPage.vue            │
 │  - ModelsPage.vue            │
-│  - CustomersPage.vue         │
+│  - AlertsPage.vue            │
 └─────────────────────────────┘
 ```
 
-### 3. Pricing Analyzer Flow (Existing)
+### 3. Proxy Flow
 
 ```
-Frontend requests /api/data/analyzer
+Client SDK → POST /v1/chat/completions
          │
          ▼
 ┌─────────────────────────────┐
 │  Express Backend             │
-│  - Query legacy tables       │
-│  - Return raw data           │
-└─────────────┬───────────────┘
-              │
-              ▼
-┌─────────────────────────────┐
-│  pricing-analyzer.ts         │
-│  (client-side calculation)   │
-│  - calculateMRR()            │
-│  - calculatePlanHealth()     │
-│  - analyzeMRRMovement()      │
-│  - detectNegativeMargin()    │
-└─────────────┬───────────────┘
-              │
-              ▼
-┌─────────────────────────────┐
-│  PricingAnalyzerPage.vue     │
+│  - Check proxy cache         │
+│  - Forward to OpenAI/Anthro  │
+│  - Log cost as observe_event │
+│  - Cache response (optional) │
 └─────────────────────────────┘
 ```
 
@@ -144,50 +135,77 @@ Frontend requests /api/data/analyzer
 ```
 src/
 ├── pages/                  # Route components
-│   ├── PricingAnalyzerPage.vue   # Existing: MRR, margins, cohorts
-│   ├── DataSourcesPage.vue       # Existing: CSV + Stripe import
-│   ├── SimulatorPage.vue         # Existing: basic simulator (to be replaced)
-│   ├── EventsPage.vue            # New: event stream
-│   ├── FeaturesPage.vue          # New: feature economics
-│   ├── FeatureDetailPage.vue     # New: single feature detail
-│   ├── ModelsPage.vue            # New: AI model costs
-│   ├── CustomersPage.vue         # New: customer margins
-│   ├── CustomerDetailPage.vue    # New: single customer detail
-│   ├── SimulationsPage.vue       # New: simulation list + opportunities
-│   ├── SimulationNewPage.vue     # New: 3-step wizard
-│   └── SimulationDetailPage.vue  # New: results + impact + rollout
+│   ├── AnalyticsPage.vue        # Home: revenue, costs, margin overview
+│   ├── EventsPage.vue           # Filterable event stream
+│   ├── ModelsPage.vue           # AI model cost breakdown
+│   ├── AlertsPage.vue           # Threshold-based cost alerts
+│   ├── DataSourcesPage.vue      # CSV upload, integrations
+│   ├── PlansPage.vue            # Subscription plans & billing
+│   ├── CheckoutPage.vue         # Stripe checkout flow
+│   ├── CheckoutSuccessPage.vue  # Post-checkout confirmation
+│   ├── LoginPage.vue            # Login / signup (also used for /signup)
+│   ├── TeamSettingsPage.vue     # Team management, invites
+│   └── JoinTeamPage.vue         # Accept team invite
 ├── components/
 │   ├── ui/                 # Reusable UI (shadcn-vue)
 │   ├── charts/             # Data visualization
+│   ├── dashboard/          # Metric cards, quick actions
 │   ├── data-sources/       # Import workflows
-│   ├── pricing/            # Pricing analyzer components
-│   ├── simulation/         # Legacy simulator (to be replaced)
-│   ├── simulations/        # New: ported simulator components
-│   └── shared/             # MarginBadge, TrendIndicator, etc.
+│   ├── integrations/       # OpenAI/Anthropic API key modals
+│   ├── onboarding/         # Upload wizard, column mapper
+│   ├── pricing/            # Margin overview card
+│   ├── accounts/           # Account detail panel
+│   └── shared/             # ErrorBoundary, MarginBadge, TrendIndicator
 ├── composables/            # Shared reactive state
-│   ├── useAuth.ts          # Session management
-│   ├── useDataMode.ts      # Data mode tracking
-│   ├── useStripeConnection.ts  # Stripe sync
-│   ├── useSimulation.ts    # Legacy simulator
-│   └── useSimulationState.ts   # New: ported simulation engine
+│   ├── useAuth.ts          # Login, signup, session management
+│   ├── useDataMode.ts      # Data mode tracking (none/sample/user)
+│   ├── useDemoMode.ts      # Demo mode for unauthenticated browsing
+│   ├── useEntitlement.ts   # Tanso feature entitlement checks
+│   ├── useOnline.ts        # Network connectivity detection
+│   └── useTeam.ts          # Team info, roles, invites
+├── layouts/
+│   └── AppLayout.vue       # Sidebar navigation + main content area
 ├── lib/
 │   ├── api.ts              # HTTP client for Express backend
 │   ├── pricing-analyzer.ts # Client-side metrics calculation
-│   ├── utils.ts            # Shared utilities
-│   └── simulation-seed.ts  # New: sample data for simulator
+│   ├── sample-data.ts      # Sample data generation
+│   ├── format.ts           # Number/date formatting helpers
+│   ├── validation.ts       # Input validation
+│   ├── errors.ts           # Error types
+│   ├── logger.ts           # Client-side logging
+│   ├── database.types.ts   # Database type definitions
+│   └── utils.ts            # Shared utilities
 └── types/
-    ├── index.ts            # Shared types
-    └── simulation.ts       # Simulation types (ported from tansoflow)
+    └── ...                 # Shared type definitions
 ```
+
+### Navigation
+
+The sidebar shows these items in order:
+
+| Nav Item | Route | Page |
+|----------|-------|------|
+| Analytics | `/` | AnalyticsPage (home) |
+| Events | `/events` | EventsPage |
+| Models | `/models` | ModelsPage |
+| Alerts | `/alerts` | AlertsPage |
+| Data Sources | `/data-sources` | DataSourcesPage |
+| Plans & Billing | `/plans` | PlansPage |
+
+Additional routes (not in sidebar): `/login`, `/signup`, `/checkout`, `/checkout/success`, `/team`, `/join/:token`.
+
+Several legacy routes (`/features`, `/customers`, `/insights`, `/pricing`) redirect to `/`.
 
 ### Key Composables
 
 | Composable | Purpose |
 |------------|---------|
-| `useAuth` | Anonymous session init via `/api/session/init` |
-| `useDataMode` | Track data mode (none/sample/user) |
-| `useStripeConnection` | Stripe status check + sync trigger |
-| `useSimulationState` | New: full simulation engine (segments, scenarios, impact) |
+| `useAuth` | Login, signup, logout, password reset, session state |
+| `useDataMode` | Track data mode (none/sample/user) via `/data/status` |
+| `useDemoMode` | Allow unauthenticated users to explore with sample data |
+| `useEntitlement` | Check Tanso feature flags (e.g., plan-gated features) |
+| `useOnline` | Detect network connectivity for offline-aware UI |
+| `useTeam` | Fetch team info, roles, manage invites |
 
 ---
 
@@ -195,60 +213,90 @@ src/
 
 ### Express Server (`server/index.ts`)
 
-Single Express app on port 3001, proxied by Vite at `/api/*`.
+Single Express app on port 3001, proxied by Vite at `/api/*`. The `/api` prefix is stripped by middleware so routes work identically in dev and production.
+
+### Route Modules (`server/routes/`)
+
+| Module | Purpose |
+|--------|---------|
+| `auth.ts` | Signup, login, logout, password reset, session init |
+| `data.ts` | CSV upload, sample data, Stripe sync, data status |
+| `integrations.ts` | OpenAI/Anthropic API key connection, usage sync |
+| `tanso.ts` | Billing plans, subscriptions, entitlements, checkout |
+| `alerts.ts` | Alert rule CRUD, threshold evaluation, email dispatch |
+
+Additional endpoints are defined inline in `server/index.ts` (events, analytics, proxy, models, insights, team, SDK keys, referrals).
+
+### Supporting Modules
+
+| Module | Purpose |
+|--------|---------|
+| `stripe-client.ts` | Stripe SDK wrapper for checkout and customer portal |
+| `tanso-client.ts` | Tanso billing SDK wrapper |
+| `model-pricing.ts` | Model pricing database and cost calculation |
+
+### Middleware
 
 | Middleware | Purpose |
 |-----------|---------|
-| `express-session` + `connect-pg-simple` | Anonymous visitor sessions stored in PostgreSQL |
-| `ensureVisitor` | Creates visitor ID if not in session, ensures `user_data_status` row exists |
-| `express.json()` | JSON body parsing |
+| `express-session` + `connect-pg-simple` | Sessions stored in PostgreSQL |
+| `ensureVisitor` | Creates visitor ID if not in session, ensures data isolation |
+| `helmet` | Security headers |
+| `cors` | Restrict origins to known frontends |
+| `express-rate-limit` | Rate limiting on auth (20/15min) and API (60/min) endpoints |
 
 ### Authentication Model
 
-No login required. Anonymous sessions:
+Account-based auth with email/password:
 
 ```
-1. First request → session cookie created
+1. Signup → account created, password hashed with bcrypt
          │
          ▼
-2. ensureVisitor middleware → generates visitorId (UUID)
+2. Login → session cookie created with visitor ID
          │
          ▼
-3. visitorId stored in session → persisted in sessions table
-         │
-         ▼
-4. All DB queries filter by user_id = visitorId
+3. All DB queries filter by user_id = visitorId
 ```
+
+Demo mode allows unauthenticated exploration with sample data. An auth guard redirects unauthenticated users to `/signup`.
 
 ### Data Isolation
 
-All queries are scoped by `user_id`:
-```sql
-SELECT * FROM observe_events WHERE user_id = $1
-```
-
-This is enforced at the application level in `ensureVisitor` middleware, not via PostgreSQL RLS.
+All queries are scoped by `user_id` (visitor ID). Team members share data through the `visitor_org_map` table which maps visitors to organizations.
 
 ### Stripe Integration
 
-Uses Replit's native Stripe connector (`@replit/connectors-sdk`):
-- No API key storage needed
-- `getUncachableStripeClient()` returns a configured Stripe client
-- Syncs customers, subscriptions, plans, prices
+Uses the Stripe SDK directly (`stripe` npm package):
+- Checkout sessions for subscription purchases
+- Customer portal for billing management
+- No Stripe webhook handler -- subscription state managed via Tanso
 
 ---
 
 ## Database
 
-PostgreSQL hosted by Replit. Tables created at startup with `CREATE TABLE IF NOT EXISTS`.
+PostgreSQL with support for both standard `pg` driver and `@neondatabase/serverless` (selected via `DB_DRIVER` env var). Tables created at startup with `CREATE TABLE IF NOT EXISTS`.
 
-### Legacy Tables (existing, kept for pricing analyzer)
-`plans`, `customers`, `subscriptions`, `usage_records`, `cost_records`, `user_data_status`, `sessions`
+### Core Tables
+- `observe_events` -- unified event store for all data
+- `accounts` -- user accounts with hashed passwords
+- `organizations` / `organization_members` / `visitor_org_map` -- team structure
+- `sdk_api_keys` -- API keys for programmatic event ingestion
+- `integrations` -- connected API key providers (OpenAI, Anthropic)
+- `alert_rules` -- threshold-based cost alert definitions
 
-### New Tables (Observe)
-- `observe_events` — unified event store for all data
-- `simulations` — pricing simulation definitions + results
-- `ai_insights` — AI-generated insight records
+### Legacy Tables (kept for pricing analyzer)
+`plans`, `customers`, `subscriptions`, `usage_records`, `cost_records`, `user_data_status`
+
+### Supporting Tables
+- `simulations`, `ai_insights` -- simulation and insight records
+- `inference_profiles` -- learned distribution patterns from SDK data
+- `proxy_cache` -- cached proxy responses to reduce costs
+- `tanso_customers` -- Tanso billing customer mapping
+- `referral_codes`, `referrals`, `referral_credits` -- referral program
+- `integration_requests` -- interest capture for future integrations
+- `password_reset_tokens` -- password reset flow
 
 See [DATABASE.md](./DATABASE.md) for full schema reference.
 
@@ -256,32 +304,33 @@ See [DATABASE.md](./DATABASE.md) for full schema reference.
 
 ## Deployment
 
-### Replit Configuration (`.replit`)
+### Docker (`docker-compose.yml`)
 
 ```
-Frontend: Vite on port 5000 (external port 80)
-Backend:  Express on port 3001
-Database: PostgreSQL (Replit native)
+PostgreSQL 16 Alpine (tanso user)
+App container (port 3000, production build)
 ```
 
-### Build & Deploy
-- **Dev:** `npm run dev` → runs backend + frontend concurrently
-- **Build:** `npm run build` → `vue-tsc && vite build`
-- **Deploy:** Replit autoscale → backend serves API, Vite preview serves static files
+### Local Development
+
+- **Dev:** `npm run dev` -- runs backend + frontend concurrently
+- **Build:** `npm run build` -- `vue-tsc && vite build`
+
+### Environment Variables
+
+See `.env.example` for all options. Required: `DATABASE_URL`, `SESSION_SECRET`. Optional: Tanso billing, Stripe, OpenAI/Anthropic keys, Resend for email alerts.
 
 ---
 
 ## Performance
 
 ### Database Indexes
-- `observe_events`: indexed on `(user_id, timestamp)`, `(user_id, feature_key)`, `(user_id, customer_id)`, `(user_id, model)`
-- Legacy tables: indexed on `user_id` and relevant lookup columns
+- `observe_events`: indexed on `(user_id, timestamp)`, `(user_id, feature_key)`, `(user_id, source)`, `(user_id, idempotency_key)`, `(user_id, is_inferred)`
+- Legacy tables: indexed on `user_id`
+- `sdk_api_keys`: indexed on `key_hash` (active keys only)
 
 ### Client-Side Caching
-TanStack Vue Query provides:
-- Automatic request deduplication
-- Background refetching
-- Stale-while-revalidate pattern
+TanStack Vue Query provides automatic request deduplication, background refetching, and stale-while-revalidate.
 
-### Pagination
-All list endpoints support `limit` and `offset` for large datasets.
+### Proxy Caching
+The `proxy_cache` table stores responses keyed by request hash, saving tokens and cost on repeated identical requests.

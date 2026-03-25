@@ -4,27 +4,19 @@ Vue components and composables in Observe.
 
 ## Page Components (`src/pages/`)
 
-### Existing Pages
-
 | Page | Route | Purpose |
 |------|-------|---------|
-| `PricingAnalyzerPage.vue` | `/` | MRR, margins, plan health, cohorts |
-| `DataSourcesPage.vue` | `/data-sources` | CSV upload, Stripe sync, sample data |
-| `SimulatorPage.vue` | `/simulator` | Basic pricing simulator (being replaced) |
-
-### New Pages (Observe)
-
-| Page | Route | Purpose |
-|------|-------|---------|
+| `AnalyticsPage.vue` | `/` | Home page: revenue, costs, margin overview |
 | `EventsPage.vue` | `/events` | Filterable event stream |
-| `FeaturesPage.vue` | `/features` | Feature list with margin status |
-| `FeatureDetailPage.vue` | `/features/:key` | Single feature: timeseries, customers, models |
 | `ModelsPage.vue` | `/models` | AI model cost breakdown |
-| `CustomersPage.vue` | `/customers` | Customer list with margins |
-| `CustomerDetailPage.vue` | `/customers/:id` | Single customer: events, features, timeline |
-| `SimulationsPage.vue` | `/simulations` | Simulation list + pricing opportunities |
-| `SimulationNewPage.vue` | `/simulations/new` | 3-step wizard: Define → Scenarios → Review |
-| `SimulationDetailPage.vue` | `/simulations/:id` | Results, customer impact, rollout |
+| `AlertsPage.vue` | `/alerts` | Threshold-based cost alert rules |
+| `DataSourcesPage.vue` | `/data-sources` | CSV upload, integrations, sample data |
+| `PlansPage.vue` | `/plans` | Subscription plans and billing management |
+| `CheckoutPage.vue` | `/checkout` | Stripe checkout flow |
+| `CheckoutSuccessPage.vue` | `/checkout/success` | Post-checkout confirmation |
+| `LoginPage.vue` | `/login`, `/signup` | Authentication (login and signup) |
+| `TeamSettingsPage.vue` | `/team` | Team management and member invites |
+| `JoinTeamPage.vue` | `/join/:token` | Accept a team invite link |
 
 ---
 
@@ -36,9 +28,19 @@ Vue components and composables in Observe.
 | `MRRTrendChart.vue` | `historical, forecast` | MRR trend with projections |
 | `CohortChart.vue` | `cohorts: CohortData[]` | Cohort retention curves |
 | `CostBreakdownChart.vue` | `costs, groupBy` | Cost distribution |
-| `RevenueFlowChart.vue` | `data` | Revenue flow waterfall |
 | `MarginCompressionAlert.vue` | `compression, threshold` | Margin health warning |
 | `GapCallout.vue` | `gaps, onResolve` | Data gap notifications |
+
+---
+
+## Dashboard Components (`src/components/dashboard/`)
+
+| Component | Purpose |
+|-----------|---------|
+| `MetricCard.vue` | Key metric display with trend |
+| `AlertCard.vue` | Alert summary card |
+| `MrrMonthlyBreakdown.vue` | Month-by-month MRR breakdown |
+| `QuickActions.vue` | Shortcut buttons for common actions |
 
 ---
 
@@ -46,27 +48,32 @@ Vue components and composables in Observe.
 
 | Component | Purpose |
 |-----------|---------|
-| `RevenueSection.vue` | Stripe sync + revenue CSV upload |
 | `CostsSection.vue` | Cost CSV upload |
 | `UsageSection.vue` | Usage CSV upload |
 | `ComingSoonSection.vue` | Future integrations placeholder |
-| `StripeConnectModal.vue` | Stripe connection dialog |
-| `StripeSyncProgress.vue` | Sync progress display |
 
 ---
 
-## Simulation Components (New — `src/components/simulations/`)
-
-Ported from tansoflow. All Vue 3 + shadcn-vue.
+## Integration Components (`src/components/integrations/`)
 
 | Component | Purpose |
 |-----------|---------|
-| `SimulationCard.vue` | Simulation list item with status badge |
-| `OpportunityCard.vue` | Pricing opportunity with severity + suggested action |
-| `CustomerCard.vue` | Customer impact row with churn risk |
-| `MarginBadge.vue` | Color-coded margin status badge |
-| `TrendIndicator.vue` | Up/down/stable trend arrow |
-| `MiniSparkline.vue` | Small inline chart for trends |
+| `IntegrationCard.vue` | Integration status card (connected/available) |
+| `OpenAIApiKeyModal.vue` | Connect OpenAI API key |
+| `AnthropicApiKeyModal.vue` | Connect Anthropic API key |
+| `IntegrationRequestModal.vue` | Request a new integration |
+| `InterestCaptureModal.vue` | Capture interest for upcoming features |
+
+---
+
+## Onboarding Components (`src/components/onboarding/`)
+
+| Component | Purpose |
+|-----------|---------|
+| `UploadWizard.vue` | Step-by-step data upload flow |
+| `ColumnMapper.vue` | Map CSV columns to Observe schema |
+| `ImportGuide.vue` | Import instructions and tips |
+| `GettingStartedCard.vue` | First-run getting started card |
 
 ---
 
@@ -75,8 +82,26 @@ Ported from tansoflow. All Vue 3 + shadcn-vue.
 | Component | Purpose |
 |-----------|---------|
 | `MarginOverviewCard.vue` | Margin summary with chart |
-| `PricingSimulatorPanel.vue` | Inline simulator widget |
-| `RevenueFlowChart.vue` | Revenue flow visualization |
+
+---
+
+## Account Components (`src/components/accounts/`)
+
+| Component | Purpose |
+|-----------|---------|
+| `AccountDetailPanel.vue` | Account settings and profile |
+
+---
+
+## Shared Components (`src/components/shared/`)
+
+| Component | Purpose |
+|-----------|---------|
+| `ErrorBoundary.vue` | Catch and display component errors |
+| `MarginBadge.vue` | Color-coded margin status badge |
+| `SourceBadge.vue` | Data source indicator (CSV, SDK, proxy, etc.) |
+| `TrendIndicator.vue` | Up/down/stable trend arrow |
+| `UsageLimitBanner.vue` | Plan usage limit warning |
 
 ---
 
@@ -90,14 +115,17 @@ Reusable primitives built on Radix Vue (shadcn-vue):
 | `Card` | CardHeader, CardTitle, CardDescription, CardContent |
 | `Badge` | default, secondary, outline, destructive |
 | `Input` | Standard text input |
+| `Label` | Form label |
+| `Select` | Dropdown select |
 | `Alert` | Info/warning/error display |
 | `Progress` | Progress bar with percentage |
 | `Skeleton` | Loading placeholder |
 | `Tabs` | Tabs, TabsList, TabsTrigger, TabsContent |
 | `Tooltip` | Hover information |
 | `Separator` | Visual divider |
+| `Sheet` | Slide-out panel |
+| `Table` | TableHeader, TableBody, TableRow, TableHead, TableCell |
 | `FileDropzone` | Drag-and-drop file upload |
-| `DataSourceBadge` | Data source status indicator |
 | `ConfirmDialog` | Confirmation modal |
 
 ---
@@ -106,13 +134,13 @@ Reusable primitives built on Radix Vue (shadcn-vue):
 
 ### useAuth
 
-Session management (anonymous visitors).
+Account-based authentication.
 
 ```typescript
-const { visitorId, isInitialized } = useAuth()
+const { account, isLoggedIn, isInitialized, login, signup, logout } = useAuth()
 ```
 
-Calls `/api/session/init` on mount to get/create a visitor session.
+Handles signup, login, logout, and session persistence.
 
 ### useDataMode
 
@@ -122,42 +150,45 @@ Data mode tracking.
 const { dataMode, hasData, hasRevenue, hasCosts, hasUsage, refetch } = useDataMode()
 ```
 
-Polls `/api/data/status` to track what data is loaded.
+Polls `/data/status` to track what data is loaded.
 
-### useStripeConnection
+### useDemoMode
 
-Stripe connection and sync.
-
-```typescript
-const { stripeStatus, isSyncing, checkStatus, syncData } = useStripeConnection()
-```
-
-Uses `/api/stripe/status` and `/api/stripe/sync`.
-
-### useSimulation (Legacy)
-
-Basic pricing simulation via server-side calculation.
+Demo mode for unauthenticated browsing.
 
 ```typescript
-const { isRunning, results, runSimulation } = useSimulation()
+const { isDemoMode, enableDemoMode, disableDemoMode } = useDemoMode()
 ```
 
-Being replaced by `useSimulationState`.
+Allows users to explore with sample data without creating an account.
 
-### useSimulationState (New)
+### useEntitlement
 
-Full simulation engine ported from tansoflow. Manages segments, scenarios, customer impact, feature analysis, rollout workflow.
+Tanso billing entitlement checks.
 
 ```typescript
-const {
-  simulations,
-  pricingOpportunities,
-  selectedSimulation,
-  createSimulation,
-  runSimulation,
-  rolloutScenario,
-} = useSimulationState()
+const { checkEntitlement, hasFeature } = useEntitlement()
 ```
+
+Gates features behind plan tiers using Tanso feature flags.
+
+### useOnline
+
+Network connectivity detection.
+
+```typescript
+const { isOnline } = useOnline()
+```
+
+### useTeam
+
+Team management.
+
+```typescript
+const { myRole, isViewer, fetchTeamInfo } = useTeam()
+```
+
+Fetches team info, determines current user's role (admin/viewer).
 
 ---
 
@@ -169,8 +200,8 @@ Use TanStack Vue Query for all server data:
 
 ```typescript
 const { data, isLoading, error } = useQuery({
-  queryKey: ['events', 'by-feature'],
-  queryFn: () => getEventsByFeature(),
+  queryKey: ['events'],
+  queryFn: () => api.getEvents(),
 })
 ```
 

@@ -2,113 +2,41 @@
 
 Model pricing changes against real customer data before you commit.
 
+> **Note:** The simulator pages (`/simulations`) are currently redirected to the home page. The simulation engine exists in the backend and database but the dedicated UI pages are not yet active. Simulations can still be created and managed via the API.
+
 ## Why Simulate
 
 Changing prices is high-stakes:
-- Raise too much → customers churn
-- Raise too little → you leave money on the table
-- Change the wrong feature → profitable customers subsidize unprofitable ones
+- Raise too much -- customers churn
+- Raise too little -- you leave money on the table
+- Change the wrong feature -- profitable customers subsidize unprofitable ones
 
 The simulator lets you see the impact before you ship.
 
-## Pricing Opportunities
+## API Access
 
-Before you even create a simulation, Observe auto-detects opportunities from your data:
+Simulations are available via the backend API:
 
-| Opportunity | What Triggered It | Suggested Action |
-|-------------|-------------------|------------------|
-| **Negative margin** | A feature has margin < 0% | Raise price or reduce cost |
-| **Underpriced** | A feature has margin below 20% | Consider price increase |
-| **Tiering opportunity** | High-volume feature with flat pricing | Add graduated tiers |
+### POST /simulations
 
-These appear as a banner on the Simulations page. Click "Simulate" on any opportunity to pre-fill the wizard.
+Create a new simulation.
 
-## Creating a Simulation
+### GET /simulations
 
-### Step 1: Define
+List existing simulations.
 
-- **Name** your simulation (e.g., "Q2 API pricing increase")
-- **Select segment** — all customers, or filter by plan, margin status, etc.
-- **Date range** — the period to analyze
-- Preview shows: customer count, total MRR, average margin for the segment
+### GET /simulations/:id
 
-### Step 2: Build Scenarios
+Get simulation details and results.
 
-You always start with a **Baseline** scenario (current pricing). Then add 1–3 alternatives:
+## Data Model
 
-| Change Type | Example |
-|-------------|---------|
-| Percentage increase | "Raise all prices 15%" |
-| Percentage decrease | "Discount 10% for annual contracts" |
-| Flat monthly | "Set base fee to $49/mo" |
-| Per unit | "Charge $0.002 per API call" |
+Simulations are stored in the `simulations` table with:
 
-Each scenario shows projected revenue and margin as you configure it.
-
-### Step 3: Review & Run
-
-See all scenarios side-by-side before committing. Click **Run Simulation** to calculate full customer-level impact.
-
-## Reading Results
-
-### Hero Metrics
-Top-level numbers for the simulation:
-- Total revenue change
-- Average margin change
-- Number of customers at churn risk
-
-### Scenario Comparison Table
-
-Side-by-side view of all scenarios with:
-- Revenue, margin, churn risk count
-- Badges: `highest_revenue`, `best_margin`, `lowest_risk`
-
-### Customer Impact Tab
-
-Per-customer breakdown:
-
-| Column | Description |
-|--------|-------------|
-| Customer | Name |
-| Current MRR | What they pay now |
-| New MRR | What they'd pay under the scenario |
-| Change % | Price increase/decrease for this customer |
-| Current Margin | Their margin today |
-| New Margin | Projected margin under new pricing |
-| Churn Risk | `high`, `medium`, or `low` |
-
-**Churn risk is calculated from:**
-- Price increase > 20% → high risk
-- Margin < 0% → high risk
-- Month-to-month contract → high risk
-- Price increase 10–20% or margin < 30% → medium risk
-- Everything else → low risk
-
-### Feature Analysis Tab
-
-Per-feature margin impact:
-
-| Column | Description |
-|--------|-------------|
-| Feature | Feature key |
-| Current Price | Price per unit today |
-| New Price | Price under this scenario |
-| Volume | Usage volume |
-| Current Margin | Today's margin |
-| New Margin | Projected margin |
-| Status | `negative` / `low` / `profitable` / `high` |
-
-## Rollout
-
-Once you've picked a winning scenario:
-
-1. Click **Roll Out** on the scenario
-2. The simulation status changes to `rolled_out`
-3. Timestamp is recorded
-
-This is a **decision record**, not an automated price change. You implement the actual price change in your billing system (Stripe, etc.) separately.
-
-To track the impact: re-import your data after the change takes effect and compare the new margins against your simulation projections.
+- **Scenarios** -- different pricing configurations to compare
+- **Time range** -- the period to analyze
+- **Segment** -- which customers to include
+- **Results** -- customer impacts, feature analysis, margin changes
 
 ## Supported Pricing Models
 
@@ -121,4 +49,14 @@ To track the impact: re-import your data after the change takes effect and compa
 | `matrix` | Price varies by one dimension (e.g., region) |
 | `fixed` | Flat monthly/annual fee |
 | `percentage_plus_fixed` | Fintech-style: 2.9% + $0.30 per transaction |
-| `matrix_2d` | Two-dimensional pricing (e.g., context_window × input/output for AI models) |
+| `matrix_2d` | Two-dimensional pricing (e.g., context_window x input/output for AI models) |
+
+## Churn Risk Calculation
+
+When a simulation runs, churn risk is estimated per customer:
+
+- Price increase > 20% -- high risk
+- Margin < 0% -- high risk
+- Month-to-month contract -- high risk
+- Price increase 10-20% or margin < 30% -- medium risk
+- Everything else -- low risk

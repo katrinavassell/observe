@@ -10,8 +10,8 @@ Thanks for your interest in contributing! This guide will help you get set up.
 ## Setup
 
 ```bash
-git clone https://github.com/tanso/observe.git
-cd observe
+git clone https://github.com/tansohq/metrics-onboarding.git
+cd metrics-onboarding
 npm install
 cp .env.example .env
 # Edit .env with your DATABASE_URL and a SESSION_SECRET
@@ -30,24 +30,27 @@ docker compose up
 
 ```
 src/                  Vue 3 frontend (Vite + TypeScript)
-  components/         UI components (charts, dashboard, onboarding, etc.)
-  composables/        Vue composables (data fetching, state)
+  components/         UI components (charts, dashboard, integrations, onboarding, etc.)
+  composables/        Vue composables (auth, data mode, entitlements, teams)
+  layouts/            App layout with sidebar navigation
   lib/                Shared utilities, API clients, analyzers
   pages/              Route-level page components
 server/               Express API backend
-  index.ts            Main server entry point
+  index.ts            Main server entry point (routes + inline handlers)
+  routes/             Route modules (auth, data, integrations, tanso, alerts)
   stripe-client.ts    Stripe integration
   tanso-client.ts     Tanso billing client
-  api-key-store.ts    API key management
+  model-pricing.ts    AI model pricing data
 docs/                 Documentation
+packages/sdk/         @tanso/observe SDK
 ```
 
 ## Development
 
-- `npm run dev` — Start frontend + backend concurrently
-- `npm run test` — Run tests
-- `npm run typecheck` — Type-check with vue-tsc
-- `npm run lint` — Lint with ESLint
+- `npm run dev` -- Start frontend + backend concurrently
+- `npm run test` -- Run tests with Vitest
+- `npm run typecheck` -- Type-check with vue-tsc
+- `npm run lint` -- Lint with ESLint
 
 ## Submitting a PR
 
@@ -56,4 +59,4 @@ docs/                 Documentation
 3. Run `npm run test` and `npm run typecheck` to verify.
 4. Open a pull request with a clear description of what changed and why.
 
-Keep PRs focused — one feature or fix per PR makes review easier.
+Keep PRs focused -- one feature or fix per PR makes review easier.
