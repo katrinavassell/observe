@@ -209,7 +209,7 @@ function memberLabel(member: OrgMember) {
               class="w-[110px]"
               @update:model-value="inviteRole = $event as 'admin' | 'viewer'"
             />
-            <Button :disabled="isInviting" @click="handleInvite">
+            <Button :disabled="isInviting" class="h-9" @click="handleInvite">
               <Loader2 v-if="isInviting" class="h-4 w-4 animate-spin mr-1.5" />
               Generate Link
             </Button>

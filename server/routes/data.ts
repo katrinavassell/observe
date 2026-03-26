@@ -857,7 +857,7 @@ export function createDataRoutes(
         let idx = 1
         for (const customer of batch) {
           placeholders.push(`($${idx++}, $${idx++}, $${idx++}, $${idx++})`)
-          values.push(req.visitorId, customer.id, customer.name || customer.email || customer.id, customer.email || null)
+          values.push(req.visitorId, customer.id, customer.email || customer.id, customer.email || null)
         }
         await client.query(
           `INSERT INTO customers (user_id, customer_id, name, email) VALUES ${placeholders.join(', ')} ON CONFLICT DO NOTHING`,

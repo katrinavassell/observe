@@ -13,7 +13,8 @@ import { createDataRoutes } from './routes/data.js'
 // import { createSimulationsRoutes } from './routes/simulations.js'
 import { createTansoRoutes, createCheckTansoFeatureAccess, createTrackTansoUsage } from './routes/tanso.js'
 // import { createTeamRoutes } from './routes/team.js'
-import { createIntegrationsRoutes, createConvertReferralIfPending } from './routes/integrations.js'
+import { createIntegrationsRoutes, createConvertReferralIfPending, syncStripeDataForUser } from './routes/integrations.js'
+import { createStripeClientFromKey, encryptApiKey, decryptApiKey, getStripeClientForUser } from './stripe-client.js'
 import { createAlertRoutes, checkAlerts } from './routes/alerts.js'
 import helmet from 'helmet'
 import cors from 'cors'
@@ -1589,9 +1590,17 @@ async function _doDbInit() {
         has_usage_access BOOLEAN DEFAULT false,
         connected_at TIMESTAMPTZ DEFAULT NOW(),
         last_synced_at TIMESTAMPTZ,
+        encrypted_api_key TEXT,
+        stripe_account_id TEXT,
+        stripe_account_name TEXT,
         UNIQUE(user_id, provider)
       )
     `)
+
+    // Add columns for Stripe integration (migration for existing databases)
+    await pool.query(`ALTER TABLE integrations ADD COLUMN IF NOT EXISTS encrypted_api_key TEXT`)
+    await pool.query(`ALTER TABLE integrations ADD COLUMN IF NOT EXISTS stripe_account_id TEXT`)
+    await pool.query(`ALTER TABLE integrations ADD COLUMN IF NOT EXISTS stripe_account_name TEXT`)
 
     // Team / Organization tables
     await pool.query(`
@@ -1673,6 +1682,7 @@ async function _doDbInit() {
         user_id TEXT NOT NULL,
         key_hash TEXT NOT NULL UNIQUE,
         key_prefix TEXT NOT NULL,
+        encrypted_key TEXT,
         name TEXT NOT NULL DEFAULT 'default',
         created_at TIMESTAMPTZ DEFAULT NOW(),
         last_used_at TIMESTAMPTZ,
@@ -1680,6 +1690,7 @@ async function _doDbInit() {
       )
     `)
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_sdk_api_keys_hash ON sdk_api_keys(key_hash) WHERE revoked_at IS NULL`)
+    await pool.query(`ALTER TABLE sdk_api_keys ADD COLUMN IF NOT EXISTS encrypted_key TEXT`)
 
     // Proxy response cache table
     await pool.query(`
@@ -1795,6 +1806,149 @@ app.get('/stripe/status', ensureVisitor, async (_req: AuthRequest, res: Response
   }
 })
 
+// =============================================================================
+// STRIPE INTEGRATION (user-provided API key)
+// =============================================================================
+
+app.post('/integrations/stripe/connect', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  try {
+    const visitorId = req.visitorId!
+    const { api_key } = req.body
+
+    if (!api_key || typeof api_key !== 'string') {
+      return res.status(400).json({ error: 'api_key is required' })
+    }
+
+    if (!api_key.startsWith('rk_live_') && !api_key.startsWith('rk_test_') &&
+        !api_key.startsWith('sk_live_') && !api_key.startsWith('sk_test_')) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid Stripe API key format. Use a restricted key (rk_live_... or rk_test_...) or secret key (sk_live_... or sk_test_...).',
+      })
+    }
+
+    let accountName = ''
+    let accountId = ''
+    try {
+      const stripe = createStripeClientFromKey(api_key)
+      const account = await stripe.accounts.retrieve()
+      accountId = account.id
+      accountName = (account as any).business_profile?.name
+        || (account as any).display_name
+        || account.id
+    } catch {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid Stripe API key. Please check your key and try again.',
+      })
+    }
+
+    const keyPrefix = api_key.substring(0, 12) + '...'
+    const encryptedKey = encryptApiKey(api_key)
+
+    await pool.query(
+      `INSERT INTO integrations (user_id, provider, api_key_prefix, has_usage_access, connected_at, encrypted_api_key, stripe_account_id, stripe_account_name)
+       VALUES ($1, 'stripe', $2, true, NOW(), $3, $4, $5)
+       ON CONFLICT (user_id, provider)
+       DO UPDATE SET api_key_prefix = $2, has_usage_access = true, connected_at = NOW(), encrypted_api_key = $3, stripe_account_id = $4, stripe_account_name = $5`,
+      [visitorId, keyPrefix, encryptedKey, accountId, accountName]
+    )
+
+    let syncResult = { customers: 0, subscriptions: 0, plans: 0 }
+    try {
+      syncResult = await syncStripeDataForUser(pool, visitorId, api_key)
+      await clearSampleData(pool, visitorId)
+      await pool.query(
+        'INSERT INTO user_data_status (user_id, data_mode) VALUES ($1, $2) ON CONFLICT (user_id) DO UPDATE SET data_mode = $2, updated_at = NOW()',
+        [visitorId, 'user']
+      )
+      convertReferralIfPending(visitorId)
+    } catch (syncErr) {
+      console.error('Initial Stripe sync error (connection succeeded):', syncErr)
+    }
+
+    trackTansoUsage(visitorId, 'stripe_sync', 'stripe_connected')
+
+    res.json({
+      success: true,
+      message: 'Stripe connected successfully',
+      account_name: accountName,
+      account_id: accountId,
+      synced: syncResult,
+    })
+  } catch (err) {
+    console.error('Stripe connect error:', err)
+    res.status(500).json({ error: 'Failed to connect Stripe' })
+  }
+})
+
+app.get('/integrations/stripe/status', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  try {
+    const result = await pool.query(
+      `SELECT api_key_prefix, has_usage_access, connected_at, last_synced_at, stripe_account_id, stripe_account_name
+       FROM integrations WHERE user_id = $1 AND provider = 'stripe'`,
+      [req.visitorId]
+    )
+
+    if (result.rows.length === 0) {
+      return res.json({ connected: false })
+    }
+
+    const row = result.rows[0]
+    res.json({
+      connected: true,
+      api_key_prefix: row.api_key_prefix,
+      account_id: row.stripe_account_id,
+      account_name: row.stripe_account_name,
+      connected_at: row.connected_at,
+      last_synced_at: row.last_synced_at,
+    })
+  } catch (err) {
+    console.error('Stripe status error:', err)
+    res.status(500).json({ error: 'Failed to check Stripe status' })
+  }
+})
+
+app.post('/integrations/stripe/sync', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  try {
+    const visitorId = req.visitorId!
+    const syncResult = await syncStripeDataForUser(pool, visitorId)
+
+    await pool.query(
+      `UPDATE integrations SET last_synced_at = NOW() WHERE user_id = $1 AND provider = 'stripe'`,
+      [visitorId]
+    )
+
+    trackTansoUsage(visitorId, 'stripe_sync', 'stripe_data_synced')
+
+    res.json({ success: true, synced: syncResult })
+  } catch (err) {
+    console.error('Stripe sync error:', err)
+    res.status(500).json({ error: 'Failed to sync Stripe data' })
+  }
+})
+
+app.post('/integrations/stripe/disconnect', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  try {
+    const visitorId = req.visitorId!
+    const { clear_data } = req.body
+
+    await pool.query('DELETE FROM integrations WHERE user_id = $1 AND provider = $2', [visitorId, 'stripe'])
+
+    if (clear_data) {
+      await pool.query("DELETE FROM observe_events WHERE user_id = $1 AND source = 'stripe'", [visitorId])
+      await pool.query('DELETE FROM subscriptions WHERE user_id = $1', [visitorId])
+      await pool.query('DELETE FROM customers WHERE user_id = $1', [visitorId])
+      await pool.query('DELETE FROM plans WHERE user_id = $1', [visitorId])
+    }
+
+    res.json({ success: true, message: clear_data ? 'Stripe disconnected and data cleared' : 'Stripe disconnected' })
+  } catch (err) {
+    console.error('Stripe disconnect error:', err)
+    res.status(500).json({ error: 'Failed to disconnect Stripe' })
+  }
+})
+
 // Sync data from Stripe into the user's session
 const expensiveLimiter = rateLimit({
   windowMs: 60 * 1000,
@@ -1867,7 +2021,7 @@ app.post('/stripe/sync', ensureVisitor, expensiveLimiter, async (req: AuthReques
       let idx = 1
       for (const customer of batch) {
         placeholders.push(`($${idx++}, $${idx++}, $${idx++}, $${idx++})`)
-        values.push(req.visitorId, customer.id, customer.name || customer.email || customer.id, customer.email || null)
+        values.push(req.visitorId, customer.id, customer.email || customer.id, customer.email || null)
       }
       await client.query(
         `INSERT INTO customers (user_id, customer_id, name, email) VALUES ${placeholders.join(', ')} ON CONFLICT DO NOTHING`,
@@ -2378,10 +2532,11 @@ app.post('/sdk-keys', ensureVisitor, async (req: AuthRequest, res: Response) => 
     const rawKey = 'sk_live_' + crypto.randomBytes(16).toString('hex')
     const keyHash = crypto.createHash('sha256').update(rawKey).digest('hex')
     const keyPrefix = rawKey.slice(0, 12)
+    const encryptedKey = encryptApiKey(rawKey)
 
     await pool.query(
-      'INSERT INTO sdk_api_keys (user_id, key_hash, key_prefix, name) VALUES ($1, $2, $3, $4)',
-      [userId, keyHash, keyPrefix, name]
+      'INSERT INTO sdk_api_keys (user_id, key_hash, key_prefix, encrypted_key, name) VALUES ($1, $2, $3, $4, $5)',
+      [userId, keyHash, keyPrefix, encryptedKey, name]
     )
 
     res.json({ key: rawKey, prefix: keyPrefix, name })
@@ -2391,18 +2546,69 @@ app.post('/sdk-keys', ensureVisitor, async (req: AuthRequest, res: Response) => 
   }
 })
 
-// GET /sdk-keys — List all active SDK API keys
+// GET /sdk-keys — List all active SDK API keys (includes full key if encrypted_key exists)
 app.get('/sdk-keys', ensureVisitor, async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.visitorId!
     const result = await pool.query(
-      'SELECT id, key_prefix, name, created_at, last_used_at FROM sdk_api_keys WHERE user_id = $1 AND revoked_at IS NULL ORDER BY created_at DESC',
+      'SELECT id, key_prefix, encrypted_key, name, created_at, last_used_at FROM sdk_api_keys WHERE user_id = $1 AND revoked_at IS NULL ORDER BY created_at DESC',
       [userId]
     )
-    res.json(result.rows)
+    const keys = result.rows.map(row => ({
+      id: row.id,
+      key_prefix: row.key_prefix,
+      full_key: row.encrypted_key ? decryptApiKey(row.encrypted_key) : null,
+      name: row.name,
+      created_at: row.created_at,
+      last_used_at: row.last_used_at,
+    }))
+    res.json(keys)
   } catch (error) {
     console.error('GET /sdk-keys error:', error)
     res.status(500).json({ error: 'Failed to list API keys' })
+  }
+})
+
+// POST /sdk-keys/:id/reset — Revoke old key and generate a new one with the same name
+app.post('/sdk-keys/:id/reset', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.visitorId!
+    const keyId = parseInt(req.params.id, 10)
+    if (isNaN(keyId)) {
+      return res.status(400).json({ error: 'Invalid key ID' })
+    }
+
+    // Get the old key's name
+    const old = await pool.query(
+      'SELECT name FROM sdk_api_keys WHERE id = $1 AND user_id = $2 AND revoked_at IS NULL',
+      [keyId, userId]
+    )
+    if (old.rows.length === 0) {
+      return res.status(404).json({ error: 'Key not found' })
+    }
+    const name = old.rows[0].name
+
+    // Revoke old key
+    await pool.query(
+      'UPDATE sdk_api_keys SET revoked_at = NOW() WHERE id = $1 AND user_id = $2',
+      [keyId, userId]
+    )
+
+    // Generate new key
+    const rawKey = 'sk_live_' + crypto.randomBytes(16).toString('hex')
+    const keyHash = crypto.createHash('sha256').update(rawKey).digest('hex')
+    const keyPrefix = rawKey.slice(0, 12)
+    const encryptedKey = encryptApiKey(rawKey)
+
+    const result = await pool.query(
+      'INSERT INTO sdk_api_keys (user_id, key_hash, key_prefix, encrypted_key, name) VALUES ($1, $2, $3, $4, $5) RETURNING id',
+      [userId, keyHash, keyPrefix, encryptedKey, name]
+    )
+
+    res.json({ id: result.rows[0].id, key: rawKey, prefix: keyPrefix, name })
+  } catch (error) {
+    console.error('POST /sdk-keys/:id/reset error:', error)
+    res.status(500).json({ error: 'Failed to reset API key' })
   }
 })
 
@@ -2522,6 +2728,27 @@ app.post('/events/ingest', apiLimiter, async (req: Request, res: Response) => {
       return null
     }
 
+    // Auto-enrich revenue from Stripe: look up MRR for customers in this batch
+    const customerIds = [...new Set(validEvents.map(e => e.customerReferenceId))]
+    const mrrByCustomer = new Map<string, number>()
+    if (customerIds.length > 0) {
+      try {
+        const mrrResult = await pool.query(
+          `SELECT s.customer_id, SUM(s.mrr_override) as mrr
+           FROM subscriptions s
+           WHERE s.user_id = $1 AND s.is_active = true AND s.customer_id = ANY($2)
+           GROUP BY s.customer_id`,
+          [userId, customerIds]
+        )
+        for (const row of mrrResult.rows) {
+          // MRR / 30 = daily revenue share per event
+          mrrByCustomer.set(row.customer_id, parseFloat(row.mrr) / 30)
+        }
+      } catch {
+        // Non-critical: if lookup fails, just skip enrichment
+      }
+    }
+
     // Build batch insert
     const values: unknown[] = []
     const placeholders: string[] = []
@@ -2530,10 +2757,12 @@ app.post('/events/ingest', apiLimiter, async (req: Request, res: Response) => {
     for (const evt of validEvents) {
       const provider = evt.modelProvider || inferModelProvider(evt.model)
       const ts = evt.timestamp || new Date().toISOString()
-      const props = evt.properties ? JSON.stringify(evt.properties) : '{}'
 
       // Auto-calculate cost from model + tokens if costAmount not provided
       const cost = evt.costAmount ?? await calcCostFromDb(pool, evt.model, evt.inputTokens, evt.outputTokens)
+
+      // Auto-enrich revenue from Stripe MRR if not provided
+      const revenue = evt.revenueAmount ?? mrrByCustomer.get(evt.customerReferenceId) ?? 0
 
       placeholders.push(
         `($${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, 'sdk', 'event', false, $${paramIdx++})`
@@ -2546,7 +2775,7 @@ app.post('/events/ingest', apiLimiter, async (req: Request, res: Response) => {
         ts,
         cost,
         evt.costUnit ?? 'usd',
-        evt.revenueAmount ?? 0,
+        revenue,
         evt.usageUnits ?? (evt.inputTokens || 0) + (evt.outputTokens || 0),
         evt.model ?? null,
         provider,

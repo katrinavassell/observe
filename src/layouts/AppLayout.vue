@@ -6,6 +6,7 @@ import {
   Plug,
   Activity,
   Cpu,
+  Bell,
   Settings,
   Eye,
   LogIn,
@@ -41,6 +42,12 @@ const navItems = computed(() => [
     label: 'Models',
     icon: Cpu,
     description: 'AI model cost breakdown',
+  },
+  {
+    path: '/alerts',
+    label: 'Alerts',
+    icon: Bell,
+    description: 'Cost spike and margin alerts',
   },
   {
     path: '/data-sources',
@@ -155,7 +162,7 @@ function isActive(path: string) {
     </aside>
 
     <!-- Main Content -->
-    <main class="ml-64 flex-1 min-h-screen">
+    <main class="ml-64 flex-1 min-h-screen overflow-x-hidden">
       <div class="p-6">
         <ErrorBoundary>
           <slot />

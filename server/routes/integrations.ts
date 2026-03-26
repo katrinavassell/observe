@@ -2,7 +2,7 @@ import { Router, Response } from 'express'
 import type { Pool } from 'pg'
 import crypto from 'crypto'
 import { type AuthRequest } from './auth.js'
-import { getUncachableStripeClient } from '../stripe-client.js'
+import { getUncachableStripeClient, createStripeClientFromKey, encryptApiKey, getStripeClientForUser } from '../stripe-client.js'
 import { calculateCostFromTokens, getModelPricing } from '../model-pricing.js'
 
 type TrackTansoUsageFn = (visitorId: string, featureKey: string, eventName: string) => void
@@ -14,6 +14,125 @@ async function clearSampleData(db: { query: (text: string, params: unknown[]) =>
   await db.query("DELETE FROM subscriptions WHERE user_id = $1 AND subscription_id LIKE 'sub_%'", [userId])
   await db.query("DELETE FROM customers WHERE user_id = $1 AND customer_id LIKE 'cus_%'", [userId])
   await db.query("DELETE FROM plans WHERE user_id = $1 AND plan_id IN ('starter', 'pro', 'enterprise')", [userId])
+}
+
+/**
+ * Sync Stripe data (customers, subscriptions, plans, revenue events) for a user.
+ * If apiKey is provided, uses it directly. Otherwise retrieves the stored encrypted key.
+ */
+export async function syncStripeDataForUser(
+  pool: Pool,
+  userId: string,
+  apiKey?: string
+): Promise<{ customers: number; subscriptions: number; plans: number }> {
+  const stripe = apiKey
+    ? createStripeClientFromKey(apiKey)
+    : await getStripeClientForUser(pool, userId)
+
+  const [stripeCustomersList, stripeSubscriptionsList, stripeProductsList, pricesList] = await Promise.all([
+    stripe.customers.list({ limit: 100 }).autoPagingToArray({ limit: 10000 }),
+    stripe.subscriptions.list({ limit: 100, status: 'all' }).autoPagingToArray({ limit: 10000 }),
+    stripe.products.list({ limit: 100, active: true }).autoPagingToArray({ limit: 10000 }),
+    stripe.prices.list({ limit: 100, active: true }).autoPagingToArray({ limit: 10000 }),
+  ])
+
+  // Clear existing Stripe-sourced data before re-syncing
+  await pool.query('DELETE FROM subscriptions WHERE user_id = $1', [userId])
+  await pool.query('DELETE FROM customers WHERE user_id = $1', [userId])
+  await pool.query('DELETE FROM plans WHERE user_id = $1', [userId])
+  await pool.query("DELETE FROM observe_events WHERE user_id = $1 AND source = 'stripe'", [userId])
+
+  const batchSize = 500
+
+  // Insert plans from Stripe products + prices
+  const planIds = new Set<string>()
+  const planRows: { planId: string; name: string; amount: number; intervalMonths: number }[] = []
+  for (const price of pricesList) {
+    const planId = price.id
+    if (planIds.has(planId)) continue
+    planIds.add(planId)
+    const product = stripeProductsList.find(p => p.id === (typeof price.product === 'string' ? price.product : price.product?.id))
+    const name = product?.name || planId
+    const amount = (price.unit_amount || 0) / 100
+    const intervalMonths = price.recurring?.interval === 'year' ? 12 : 1
+    planRows.push({ planId, name, amount, intervalMonths })
+  }
+  for (let i = 0; i < planRows.length; i += batchSize) {
+    const batch = planRows.slice(i, i + batchSize)
+    const values: unknown[] = []
+    const placeholders: string[] = []
+    let idx = 1
+    for (const p of batch) {
+      placeholders.push(`($${idx++}, $${idx++}, $${idx++}, $${idx++}, $${idx++}, $${idx++})`)
+      values.push(userId, p.planId, p.name, p.amount, p.intervalMonths, 'recurring')
+    }
+    await pool.query(
+      `INSERT INTO plans (user_id, plan_id, name, price_amount, interval_months, billing_model) VALUES ${placeholders.join(', ')} ON CONFLICT DO NOTHING`,
+      values
+    )
+  }
+
+  // Insert customers
+  const validCustomers = stripeCustomersList.filter(c => typeof c !== 'string')
+  for (let i = 0; i < validCustomers.length; i += batchSize) {
+    const batch = validCustomers.slice(i, i + batchSize)
+    const values: unknown[] = []
+    const placeholders: string[] = []
+    let idx = 1
+    for (const customer of batch) {
+      placeholders.push(`($${idx++}, $${idx++}, $${idx++}, $${idx++})`)
+      values.push(userId, customer.id, customer.email || customer.id, customer.email || null)
+    }
+    await pool.query(
+      `INSERT INTO customers (user_id, customer_id, name, email) VALUES ${placeholders.join(', ')} ON CONFLICT DO NOTHING`,
+      values
+    )
+  }
+
+  // Insert subscriptions + revenue events
+  let syncedSubs = 0
+  const subRows: { id: string; customerId: string; priceId: string; isActive: boolean; mrr: number }[] = []
+  for (const sub of stripeSubscriptionsList) {
+    const priceId = sub.items?.data?.[0]?.price?.id
+    if (!priceId) continue
+    const unitAmount = sub.items.data[0].price.unit_amount || 0
+    const mrr = sub.items.data[0].price.recurring?.interval === 'year'
+      ? Math.round(unitAmount / 12 / 100)
+      : Math.round(unitAmount / 100)
+    subRows.push({ id: sub.id, customerId: sub.customer as string, priceId, isActive: sub.status === 'active', mrr })
+    syncedSubs++
+  }
+  for (let i = 0; i < subRows.length; i += batchSize) {
+    const batch = subRows.slice(i, i + batchSize)
+    const subValues: unknown[] = []
+    const subPlaceholders: string[] = []
+    const eventValues: unknown[] = []
+    const eventPlaceholders: string[] = []
+    let subIdx = 1
+    let eventIdx = 1
+    for (const s of batch) {
+      subPlaceholders.push(`($${subIdx++}, $${subIdx++}, $${subIdx++}, $${subIdx++}, $${subIdx++}, $${subIdx++})`)
+      subValues.push(userId, s.id, s.customerId, s.priceId, s.isActive, s.mrr)
+      eventPlaceholders.push(`($${eventIdx++}, $${eventIdx++}, 'subscription', 'revenue', NOW(), $${eventIdx++}, 'stripe', 'monthly_aggregate')`)
+      eventValues.push(userId, s.customerId, s.mrr)
+    }
+    await pool.query(
+      `INSERT INTO subscriptions (user_id, subscription_id, customer_id, plan_id, is_active, mrr_override) VALUES ${subPlaceholders.join(', ')} ON CONFLICT DO NOTHING`,
+      subValues
+    )
+    await pool.query(
+      `INSERT INTO observe_events (user_id, customer_id, feature_key, event_name, timestamp, revenue_amount, source, granularity) VALUES ${eventPlaceholders.join(', ')}`,
+      eventValues
+    )
+  }
+
+  // Update last_synced_at
+  await pool.query(
+    `UPDATE integrations SET last_synced_at = NOW() WHERE user_id = $1 AND provider = 'stripe'`,
+    [userId]
+  )
+
+  return { customers: validCustomers.length, subscriptions: syncedSubs, plans: planIds.size }
 }
 
 export function createIntegrationsRoutes(
@@ -471,6 +590,159 @@ export function createIntegrationsRoutes(
     } catch (err) {
       console.error('Referral stats error:', err)
       res.status(500).json({ error: 'Failed to get referral stats' })
+    }
+  })
+
+  // =============================================================================
+  // STRIPE INTEGRATION
+  // =============================================================================
+
+  // POST /integrations/stripe/connect - Validate Stripe API key, store encrypted, trigger initial sync
+  router.post('/integrations/stripe/connect', ensureVisitor, async (req: AuthRequest, res: Response) => {
+    try {
+      const visitorId = req.visitorId!
+      const { api_key } = req.body
+
+      if (!api_key || typeof api_key !== 'string') {
+        return res.status(400).json({ error: 'api_key is required' })
+      }
+
+      // Validate key format
+      if (!api_key.startsWith('rk_live_') && !api_key.startsWith('rk_test_') &&
+          !api_key.startsWith('sk_live_') && !api_key.startsWith('sk_test_')) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid Stripe API key format. Use a restricted key (rk_live_... or rk_test_...) or secret key (sk_live_... or sk_test_...).',
+        })
+      }
+
+      // Validate key by calling Stripe
+      let accountName = ''
+      let accountId = ''
+      try {
+        const stripe = createStripeClientFromKey(api_key)
+        const account = await stripe.accounts.retrieve()
+        accountId = account.id
+        accountName = (account as any).business_profile?.name
+          || (account as any).display_name
+          || account.id
+      } catch (stripeErr) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid Stripe API key. Please check your key and try again.',
+        })
+      }
+
+      const keyPrefix = api_key.substring(0, 12) + '...'
+      const encryptedKey = encryptApiKey(api_key)
+
+      // Store the integration with encrypted key
+      await pool.query(
+        `INSERT INTO integrations (user_id, provider, api_key_prefix, has_usage_access, connected_at, encrypted_api_key, stripe_account_id, stripe_account_name)
+         VALUES ($1, 'stripe', $2, true, NOW(), $3, $4, $5)
+         ON CONFLICT (user_id, provider)
+         DO UPDATE SET api_key_prefix = $2, has_usage_access = true, connected_at = NOW(), encrypted_api_key = $3, stripe_account_id = $4, stripe_account_name = $5`,
+        [visitorId, keyPrefix, encryptedKey, accountId, accountName]
+      )
+
+      // Trigger initial sync
+      let syncResult = { customers: 0, subscriptions: 0, plans: 0 }
+      try {
+        syncResult = await syncStripeDataForUser(pool, visitorId, api_key)
+        await clearSampleData(pool, visitorId)
+        await pool.query(
+          'INSERT INTO user_data_status (user_id, data_mode) VALUES ($1, $2) ON CONFLICT (user_id) DO UPDATE SET data_mode = $2, updated_at = NOW()',
+          [visitorId, 'user']
+        )
+        convertReferralIfPending(visitorId)
+      } catch (syncErr) {
+        console.error('Initial Stripe sync error (connection succeeded):', syncErr)
+      }
+
+      trackTansoUsage(visitorId, 'stripe_sync', 'stripe_connected')
+
+      res.json({
+        success: true,
+        message: 'Stripe connected successfully',
+        account_name: accountName,
+        account_id: accountId,
+        synced: syncResult,
+      })
+    } catch (err) {
+      console.error('Stripe connect error:', err)
+      res.status(500).json({ error: 'Failed to connect Stripe' })
+    }
+  })
+
+  // GET /integrations/stripe/status - Check Stripe connection status
+  router.get('/integrations/stripe/status', ensureVisitor, async (req: AuthRequest, res: Response) => {
+    try {
+      const visitorId = req.visitorId!
+      const result = await pool.query(
+        `SELECT api_key_prefix, has_usage_access, connected_at, last_synced_at, stripe_account_id, stripe_account_name
+         FROM integrations WHERE user_id = $1 AND provider = 'stripe'`,
+        [visitorId]
+      )
+
+      if (result.rows.length === 0) {
+        return res.json({ connected: false })
+      }
+
+      const row = result.rows[0]
+      res.json({
+        connected: true,
+        api_key_prefix: row.api_key_prefix,
+        account_id: row.stripe_account_id,
+        account_name: row.stripe_account_name,
+        connected_at: row.connected_at,
+        last_synced_at: row.last_synced_at,
+      })
+    } catch (err) {
+      console.error('Stripe status error:', err)
+      res.status(500).json({ error: 'Failed to check Stripe status' })
+    }
+  })
+
+  // POST /integrations/stripe/sync - Re-sync Stripe data using stored key
+  router.post('/integrations/stripe/sync', ensureVisitor, async (req: AuthRequest, res: Response) => {
+    try {
+      const visitorId = req.visitorId!
+      const syncResult = await syncStripeDataForUser(pool, visitorId)
+
+      // Update last_synced_at
+      await pool.query(
+        `UPDATE integrations SET last_synced_at = NOW() WHERE user_id = $1 AND provider = 'stripe'`,
+        [visitorId]
+      )
+
+      trackTansoUsage(visitorId, 'stripe_sync', 'stripe_data_synced')
+
+      res.json({ success: true, synced: syncResult })
+    } catch (err) {
+      console.error('Stripe sync error:', err)
+      res.status(500).json({ error: 'Failed to sync Stripe data' })
+    }
+  })
+
+  // POST /integrations/stripe/disconnect - Disconnect Stripe
+  router.post('/integrations/stripe/disconnect', ensureVisitor, async (req: AuthRequest, res: Response) => {
+    try {
+      const visitorId = req.visitorId!
+      const { clear_data } = req.body
+
+      await pool.query('DELETE FROM integrations WHERE user_id = $1 AND provider = $2', [visitorId, 'stripe'])
+
+      if (clear_data) {
+        await pool.query("DELETE FROM observe_events WHERE user_id = $1 AND source = 'stripe'", [visitorId])
+        await pool.query('DELETE FROM subscriptions WHERE user_id = $1', [visitorId])
+        await pool.query('DELETE FROM customers WHERE user_id = $1', [visitorId])
+        await pool.query('DELETE FROM plans WHERE user_id = $1', [visitorId])
+      }
+
+      res.json({ success: true, message: clear_data ? 'Stripe disconnected and data cleared' : 'Stripe disconnected' })
+    } catch (err) {
+      console.error('Stripe disconnect error:', err)
+      res.status(500).json({ error: 'Failed to disconnect Stripe' })
     }
   })
 

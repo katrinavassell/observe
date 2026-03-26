@@ -510,6 +510,7 @@ export async function ingestEvents(events: IngestEvent[], apiKey?: string): Prom
 export interface SdkKey {
   id: number
   key_prefix: string
+  full_key: string | null
   name: string | null
   created_at: string
   last_used_at: string | null
@@ -534,6 +535,10 @@ export async function listSdkKeys(): Promise<SdkKey[]> {
 
 export async function revokeSdkKey(id: number): Promise<{ success: boolean }> {
   return request(`/sdk-keys/${id}`, { method: 'DELETE' })
+}
+
+export async function resetSdkKey(id: number): Promise<CreateSdkKeyResponse & { id: number }> {
+  return request(`/sdk-keys/${id}/reset`, { method: 'POST' })
 }
 
 // =============================================================================

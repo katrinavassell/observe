@@ -9,15 +9,16 @@
  * - Unsaved changes confirmation
  */
 
-import { ref, watch, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { toast } from 'vue-sonner'
-import { TrendingUp, Eye, Key, Copy, Trash2, Plus } from 'lucide-vue-next'
+import { TrendingUp, Eye, Key, Copy, Trash2, Plus, CreditCard, RefreshCw, Loader2, Unplug } from 'lucide-vue-next'
 import { Card, CardContent, Button } from '@/components/ui'
 import {
   CostsSection,
   UsageSection,
 } from '@/components/data-sources'
+import StripeApiKeyModal from '@/components/integrations/StripeApiKeyModal.vue'
 import UsageLimitBanner from '@/components/shared/UsageLimitBanner.vue'
 import { useDataMode } from '@/composables/useDataMode'
 import { useTeam } from '@/composables/useTeam'
@@ -28,8 +29,15 @@ import {
   createSdkKey,
   listSdkKeys,
   revokeSdkKey,
+  resetSdkKey,
 } from '@/lib/api'
+import {
+  getStripeStatus,
+  syncStripeData,
+  disconnectStripe,
+} from '@/api/client'
 import type { SdkKey } from '@/lib/api'
+import type { StripeStatus } from '@/api/client'
 
 const router = useRouter()
 const { isViewer } = useTeam()
@@ -111,13 +119,126 @@ function copyKeyToClipboard() {
   setTimeout(() => { keyCopied.value = false }, 2000)
 }
 
+const apiKeyForSnippet = computed(() => {
+  if (sdkKeys.value.length > 0) {
+    return sdkKeys.value[0].full_key || (sdkKeys.value[0].key_prefix + '...')
+  }
+  return 'YOUR_API_KEY'
+})
+
+async function handleResetKey(id: number) {
+  if (!confirm('Reset this API key? The old key will stop working immediately.')) return
+  try {
+    await resetSdkKey(id)
+    await loadSdkKeys()
+    toast.success('API key reset')
+  } catch (error) {
+    toast.error('Failed to reset key', {
+      description: error instanceof Error ? error.message : 'Please try again.',
+    })
+  }
+}
+
+const keyCopiedId = ref<number | null>(null)
+const revealedKeyId = ref<number | null>(null)
+function copyFullKey(key: SdkKey) {
+  const text = key.full_key || key.key_prefix + '...'
+  navigator.clipboard.writeText(text)
+  keyCopiedId.value = key.id
+  toast.success('API key copied')
+  setTimeout(() => { keyCopiedId.value = null }, 2000)
+}
+
+const snippetCopied = ref(false)
+const curlCopied = ref(false)
+function copyCurl() {
+  const apiKey = apiKeyForSnippet.value
+  const curl = `curl -X POST '${ingestUrl}' \\
+  -H 'Content-Type: application/json' \\
+  -H 'Authorization: Bearer ${apiKey}' \\
+  -d '{"events":[{"eventName":"chat_completion","customerReferenceId":"cus_test_123","featureKey":"ai_summarization","model":"gpt-4o","inputTokens":500,"outputTokens":100}]}'`
+  navigator.clipboard.writeText(curl)
+  curlCopied.value = true
+  setTimeout(() => { curlCopied.value = false }, 2000)
+}
+function copySnippet() {
+  const apiKey = apiKeyForSnippet.value
+  const snippet = `await fetch('${ingestUrl}', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json',
+             'Authorization': 'Bearer ${apiKey}' },
+  body: JSON.stringify({ events: [{
+    eventName: 'chat_completion',
+    customerReferenceId: userId,
+    featureKey: 'ai_summarization',
+    model: 'gpt-4o',
+    inputTokens: response.usage.prompt_tokens,
+    outputTokens: response.usage.completion_tokens,
+  }]})
+})`
+  navigator.clipboard.writeText(snippet)
+  snippetCopied.value = true
+  setTimeout(() => { snippetCopied.value = false }, 2000)
+}
+
 function dismissGeneratedKey() {
   generatedKey.value = null
   showKeyGenerator.value = false
 }
 
+/** Stripe connection state */
+const showStripeModal = ref(false)
+const stripeStatus = ref<StripeStatus>({ connected: false, account_id: null, account_name: null })
+const isSyncingStripe = ref(false)
+const isDisconnectingStripe = ref(false)
+
+async function loadStripeStatus() {
+  try {
+    stripeStatus.value = await getStripeStatus()
+  } catch {
+    // silently fail
+  }
+}
+
+async function handleStripeConnected() {
+  await loadStripeStatus()
+  await refetchDataMode()
+}
+
+async function handleStripeSync() {
+  isSyncingStripe.value = true
+  try {
+    await syncStripeData()
+    await loadStripeStatus()
+    await refetchDataMode()
+    toast.success('Stripe data synced')
+  } catch (error) {
+    toast.error('Failed to sync Stripe data', {
+      description: error instanceof Error ? error.message : 'Please try again.',
+    })
+  } finally {
+    isSyncingStripe.value = false
+  }
+}
+
+async function handleStripeDisconnect() {
+  isDisconnectingStripe.value = true
+  try {
+    await disconnectStripe(true)
+    stripeStatus.value = { connected: false, account_id: null, account_name: null }
+    await refetchDataMode()
+    toast.success('Stripe disconnected')
+  } catch (error) {
+    toast.error('Failed to disconnect Stripe', {
+      description: error instanceof Error ? error.message : 'Please try again.',
+    })
+  } finally {
+    isDisconnectingStripe.value = false
+  }
+}
+
 onMounted(async () => {
-  await loadSdkKeys()
+  await Promise.all([loadSdkKeys(), loadStripeStatus()])
 })
 
 
@@ -291,7 +412,7 @@ watch(
           <div v-if="generatedKey" class="rounded-lg border bg-muted/40 p-4 mb-3 space-y-2">
             <div class="flex items-center gap-2 text-xs font-medium text-success">
               <Key class="h-3 w-3" />
-              Save this key -you won't see it again
+              Key generated successfully
             </div>
             <div class="flex items-center gap-2">
               <code class="flex-1 text-xs font-mono bg-background border rounded px-3 py-2 select-all break-all">{{ generatedKey }}</code>
@@ -305,15 +426,32 @@ watch(
 
           <!-- Existing keys list -->
           <div v-if="sdkKeys.length > 0" class="space-y-1.5 mb-3">
-            <div v-for="key in sdkKeys" :key="key.id" class="flex items-center justify-between rounded-md border bg-card px-3 py-2 text-xs">
-              <div class="flex items-center gap-3">
-                <code class="font-mono text-muted-foreground">{{ key.key_prefix }}...</code>
-                <span v-if="key.name" class="text-foreground">{{ key.name }}</span>
-                <span class="text-muted-foreground">{{ new Date(key.created_at).toLocaleDateString() }}</span>
+            <div v-for="key in sdkKeys" :key="key.id" class="rounded-md border bg-card px-3 py-2 text-xs space-y-1.5">
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                  <span v-if="key.name" class="text-foreground font-medium">{{ key.name }}</span>
+                  <span class="text-muted-foreground">{{ new Date(key.created_at).toLocaleDateString() }}</span>
+                </div>
+                <div class="flex items-center gap-1">
+                  <Button variant="ghost" size="sm" class="h-6 px-2 text-xs text-muted-foreground" @click="copyFullKey(key)">
+                    <Copy class="h-3 w-3 mr-1" />
+                    {{ keyCopiedId === key.id ? 'Copied!' : 'Copy' }}
+                  </Button>
+                  <Button variant="ghost" size="sm" class="h-6 px-2 text-xs text-muted-foreground" @click="handleResetKey(key.id)">
+                    <RefreshCw class="h-3 w-3 mr-1" />
+                    Reset
+                  </Button>
+                  <Button variant="ghost" size="sm" class="h-6 w-6 p-0 text-muted-foreground hover:text-destructive" @click="handleRevokeKey(key.id)">
+                    <Trash2 class="h-3 w-3" />
+                  </Button>
+                </div>
               </div>
-              <Button variant="ghost" size="sm" class="h-6 w-6 p-0 text-muted-foreground hover:text-destructive" @click="handleRevokeKey(key.id)">
-                <Trash2 class="h-3 w-3" />
-              </Button>
+              <div class="flex items-center gap-2">
+                <code class="font-mono text-muted-foreground select-all break-all">{{ revealedKeyId === key.id ? (key.full_key || key.key_prefix + '...') : key.key_prefix + '...' }}</code>
+                <button v-if="key.full_key" class="text-[10px] text-muted-foreground hover:text-foreground transition-colors shrink-0" @click="revealedKeyId = revealedKeyId === key.id ? null : key.id">
+                  <Eye class="h-3 w-3" />
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -324,12 +462,18 @@ watch(
             <h3 class="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Quick start</h3>
             <span class="text-[10px] text-muted-foreground">~ 2 minutes</span>
           </div>
-          <div class="rounded-md bg-zinc-950 border border-zinc-800 p-4 font-mono text-xs leading-relaxed overflow-x-auto">
+          <div class="relative rounded-md bg-zinc-950 border border-zinc-800 p-4 font-mono text-xs leading-relaxed overflow-x-auto">
+            <button
+              class="absolute top-2 right-2 px-2 py-1 rounded text-[10px] font-sans border border-zinc-700 text-zinc-400 hover:text-zinc-200 hover:border-zinc-500 transition-colors"
+              @click="copySnippet"
+            >
+              {{ snippetCopied ? 'Copied!' : 'Copy' }}
+            </button>
             <pre class="whitespace-pre text-zinc-100"><span class="text-zinc-500">// Add after any AI API call. That's it.</span>
 <span class="text-emerald-400">await</span> fetch(<span class="text-amber-300">'{{ ingestUrl }}'</span>, {
   method: <span class="text-amber-300">'POST'</span>,
   headers: { <span class="text-amber-300">'Content-Type'</span>: <span class="text-amber-300">'application/json'</span>,
-             <span class="text-amber-300">'Authorization'</span>: <span class="text-amber-300">'Bearer {{ sdkKeys.length > 0 ? sdkKeys[0].key_prefix + "..." : "YOUR_API_KEY" }}'</span> },
+             <span class="text-amber-300">'Authorization'</span>: <span class="text-amber-300">'Bearer {{ apiKeyForSnippet }}'</span> },
   body: JSON.stringify({ events: [{
     <span class="text-sky-300">eventName</span>: <span class="text-amber-300">'chat_completion'</span>,
     <span class="text-sky-300">customerReferenceId</span>: userId,
@@ -346,32 +490,51 @@ watch(
           </p>
         </div>
 
+        <!-- Test with curl -->
+        <details class="group">
+          <summary class="text-xs font-medium text-muted-foreground cursor-pointer hover:text-foreground transition-colors">
+            Test with curl ▾
+          </summary>
+          <div class="mt-2 relative rounded-md bg-zinc-950 border border-zinc-800 p-4 font-mono text-xs leading-relaxed overflow-x-auto">
+            <button
+              class="absolute top-2 right-2 px-2 py-1 rounded text-[10px] font-sans border border-zinc-700 text-zinc-400 hover:text-zinc-200 hover:border-zinc-500 transition-colors"
+              @click="copyCurl"
+            >
+              {{ curlCopied ? 'Copied!' : 'Copy' }}
+            </button>
+            <pre class="whitespace-pre text-zinc-100">curl -X POST <span class="text-amber-300">'{{ ingestUrl }}'</span> \
+  -H <span class="text-amber-300">'Content-Type: application/json'</span> \
+  -H <span class="text-amber-300">'Authorization: Bearer {{ apiKeyForSnippet }}'</span> \
+  -d <span class="text-amber-300">'{"events":[{"eventName":"chat_completion","customerReferenceId":"cus_test_123","featureKey":"ai_summarization","model":"gpt-4o","inputTokens":500,"outputTokens":100}]}'</span></pre>
+          </div>
+        </details>
+
         <!-- Full example with comments -->
         <details class="group">
           <summary class="text-xs font-medium text-muted-foreground cursor-pointer hover:text-foreground transition-colors">
             Show full example with all options ▾
           </summary>
-          <div class="mt-2 rounded-md bg-muted/60 border p-4 font-mono text-xs leading-relaxed overflow-x-auto">
-            <pre class="whitespace-pre"><span class="text-muted-foreground">// Full example -wrap your AI API call</span>
-const response = await openai.chat.completions.create({ ... })
+          <div class="mt-2 rounded-md bg-zinc-950 border border-zinc-800 p-4 font-mono text-xs leading-relaxed overflow-x-auto">
+            <pre class="whitespace-pre text-zinc-100"><span class="text-zinc-500">// Full example -wrap your AI API call</span>
+<span class="text-emerald-400">const</span> response = <span class="text-emerald-400">await</span> openai.chat.completions.create({ ... })
 
-await fetch('{{ ingestUrl }}', {
-  method: 'POST',
+<span class="text-emerald-400">await</span> fetch(<span class="text-amber-300">'{{ ingestUrl }}'</span>, {
+  method: <span class="text-amber-300">'POST'</span>,
   headers: {
-    'Content-Type': 'application/json',
-    'Authorization': 'Bearer {{ sdkKeys.length > 0 ? sdkKeys[0].key_prefix + "..." : "YOUR_API_KEY" }}'
+    <span class="text-amber-300">'Content-Type'</span>: <span class="text-amber-300">'application/json'</span>,
+    <span class="text-amber-300">'Authorization'</span>: <span class="text-amber-300">'Bearer {{ apiKeyForSnippet }}'</span>
   },
   body: JSON.stringify({ events: [{
-    eventName: 'chat_completion',
-    customerReferenceId: 'cus_123',  <span class="text-muted-foreground">// your customer ID</span>
-    featureKey: 'ai_summarization',  <span class="text-muted-foreground">// which feature used it</span>
-    model: 'gpt-4o',                 <span class="text-muted-foreground">// auto-detects provider</span>
-    inputTokens: 500,                <span class="text-muted-foreground">// prompt tokens</span>
-    outputTokens: 1000,              <span class="text-muted-foreground">// completion tokens</span>
-    costAmount: 0.24,                <span class="text-muted-foreground">// or omit -auto-calculated from model + tokens</span>
-    revenueAmount: 0.50,             <span class="text-muted-foreground">// or auto-enriched from Stripe</span>
-    idempotencyKey: 'evt_abc',       <span class="text-muted-foreground">// prevents duplicates on retry</span>
-    properties: { session: 'sess_xyz' }, <span class="text-muted-foreground">// any extra context</span>
+    <span class="text-sky-300">eventName</span>: <span class="text-amber-300">'chat_completion'</span>,
+    <span class="text-sky-300">customerReferenceId</span>: <span class="text-amber-300">'cus_123'</span>,  <span class="text-zinc-500">// your customer ID</span>
+    <span class="text-sky-300">featureKey</span>: <span class="text-amber-300">'ai_summarization'</span>,  <span class="text-zinc-500">// which feature used it</span>
+    <span class="text-sky-300">model</span>: <span class="text-amber-300">'gpt-4o'</span>,                 <span class="text-zinc-500">// auto-detects provider</span>
+    <span class="text-sky-300">inputTokens</span>: 500,                <span class="text-zinc-500">// prompt tokens</span>
+    <span class="text-sky-300">outputTokens</span>: 1000,              <span class="text-zinc-500">// completion tokens</span>
+    <span class="text-sky-300">costAmount</span>: 0.24,                <span class="text-zinc-500">// or omit -auto-calculated from model + tokens</span>
+    <span class="text-sky-300">revenueAmount</span>: 0.50,             <span class="text-zinc-500">// or auto-enriched from Stripe</span>
+    <span class="text-sky-300">idempotencyKey</span>: <span class="text-amber-300">'evt_abc'</span>,       <span class="text-zinc-500">// prevents duplicates on retry</span>
+    <span class="text-sky-300">properties</span>: { session: <span class="text-amber-300">'sess_xyz'</span> }, <span class="text-zinc-500">// any extra context</span>
   }]})
 })</pre>
           </div>
@@ -390,8 +553,8 @@ await fetch('{{ ingestUrl }}', {
               <div class="text-[11px] text-muted-foreground">Compare GPT-4o vs Claude vs embeddings costs. Provider auto-detected</div>
             </div>
             <div class="rounded-lg border bg-card p-3">
-              <div class="text-xs font-medium mb-1">Historical backfill</div>
-              <div class="text-[11px] text-muted-foreground">SDK patterns auto-split old CSV/API data into per-feature estimates</div>
+              <div class="text-xs font-medium mb-1">Margin tracking</div>
+              <div class="text-[11px] text-muted-foreground">Connect Stripe to auto-enrich revenue and see per-customer margins</div>
             </div>
           </div>
         </div>
@@ -438,7 +601,7 @@ await fetch('{{ ingestUrl }}', {
 <span class="text-emerald-400">const</span> openai = <span class="text-emerald-400">new</span> OpenAI({
   <span class="text-sky-300">baseURL</span>: <span class="text-amber-300">'{{ proxyBaseUrl }}'</span>,
   <span class="text-sky-300">defaultHeaders</span>: {
-    <span class="text-amber-300">'X-Tanso-Key'</span>: <span class="text-amber-300">'{{ sdkKeys.length > 0 ? sdkKeys[0].key_prefix + "..." : "YOUR_API_KEY" }}'</span>,
+    <span class="text-amber-300">'X-Tanso-Key'</span>: <span class="text-amber-300">'{{ apiKeyForSnippet }}'</span>,
     <span class="text-amber-300">'X-Tanso-Customer'</span>: userId,       <span class="text-zinc-500">// optional</span>
     <span class="text-amber-300">'X-Tanso-Feature'</span>: <span class="text-amber-300">'ai_chat'</span>,  <span class="text-zinc-500">// optional</span>
   },
@@ -464,7 +627,7 @@ await fetch('{{ ingestUrl }}', {
 <span class="text-emerald-400">const</span> anthropic = <span class="text-emerald-400">new</span> Anthropic({
   <span class="text-sky-300">baseURL</span>: <span class="text-amber-300">'{{ proxyBaseUrl }}'</span>,
   <span class="text-sky-300">defaultHeaders</span>: {
-    <span class="text-amber-300">'X-Tanso-Key'</span>: <span class="text-amber-300">'{{ sdkKeys.length > 0 ? sdkKeys[0].key_prefix + "..." : "YOUR_API_KEY" }}'</span>,
+    <span class="text-amber-300">'X-Tanso-Key'</span>: <span class="text-amber-300">'{{ apiKeyForSnippet }}'</span>,
   },
 })</pre>
             </div>
@@ -515,6 +678,65 @@ await fetch('{{ ingestUrl }}', {
       </CardContent>
     </Card>
 
+    <!-- Stripe Revenue Integration -->
+    <Card class="border-[#635bff]/20">
+      <CardContent class="p-6">
+        <!-- Not connected state -->
+        <template v-if="!stripeStatus.connected">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <div class="flex items-center justify-center w-10 h-10 rounded-lg bg-[#635bff]/10">
+                <CreditCard class="h-5 w-5 text-[#635bff]" />
+              </div>
+              <div>
+                <h3 class="font-semibold">Connect Stripe</h3>
+                <p class="text-sm text-muted-foreground">Auto-sync customers, subscriptions, and MRR. Revenue enriches SDK events automatically.</p>
+              </div>
+            </div>
+            <Button v-if="!isViewer" @click="showStripeModal = true">
+              Connect
+            </Button>
+          </div>
+        </template>
+
+        <!-- Connected state -->
+        <template v-else>
+          <div class="space-y-3">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-3">
+                <div class="flex items-center justify-center w-10 h-10 rounded-lg bg-[#635bff]/10">
+                  <CreditCard class="h-5 w-5 text-[#635bff]" />
+                </div>
+                <div>
+                  <div class="flex items-center gap-2">
+                    <h3 class="font-semibold">{{ stripeStatus.account_name || 'Stripe' }}</h3>
+                    <span class="text-[10px] font-medium bg-success/10 text-success px-2 py-0.5 rounded-full">Connected</span>
+                  </div>
+                  <p class="text-xs text-muted-foreground">
+                    {{ stripeStatus.account_id }}
+                    <span v-if="stripeStatus.last_synced_at"> · Last synced {{ new Date(stripeStatus.last_synced_at).toLocaleDateString() }}</span>
+                  </p>
+                </div>
+              </div>
+              <div v-if="!isViewer" class="flex items-center gap-2">
+                <Button variant="outline" size="sm" :disabled="isSyncingStripe" @click="handleStripeSync">
+                  <Loader2 v-if="isSyncingStripe" class="h-3 w-3 mr-1 animate-spin" />
+                  <RefreshCw v-else class="h-3 w-3 mr-1" />
+                  Re-sync
+                </Button>
+                <Button variant="ghost" size="sm" class="text-muted-foreground hover:text-destructive" :disabled="isDisconnectingStripe" @click="handleStripeDisconnect">
+                  <Unplug class="h-3 w-3" />
+                </Button>
+              </div>
+            </div>
+            <div class="rounded-lg border bg-muted/30 p-3 text-xs text-muted-foreground">
+              Revenue is auto-enriched on SDK events when <span class="font-mono">customerReferenceId</span> matches a Stripe customer ID. Send events with your Stripe <span class="font-mono">cus_*</span> IDs to see margin calculations.
+            </div>
+          </div>
+        </template>
+      </CardContent>
+    </Card>
+
     <!-- SECTION: Import historic data (optional) -->
     <div v-if="true" class="relative mt-4">
       <div class="absolute inset-0 flex items-center">
@@ -527,7 +749,7 @@ await fetch('{{ ingestUrl }}', {
 
     <div v-if="true" class="space-y-1">
       <h2 class="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Import historic data</h2>
-      <p class="text-sm text-muted-foreground">Already have cost or usage data from your AI providers? Upload CSVs to get insights faster. Confidence improves with more granular data.</p>
+      <p class="text-sm text-muted-foreground">Already have cost or usage data from your AI providers? Upload CSVs to get insights faster.</p>
     </div>
 
     <!-- AI Cost CSVs + Provider Connections (hidden in demo mode) -->
