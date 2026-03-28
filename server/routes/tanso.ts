@@ -18,7 +18,6 @@ import {
   tansoCancelScheduledPlanChanges,
   tansoListCustomerInvoices,
   tansoMarkInvoicePaid,
-  tansoCreateCheckoutSession,
   tansoAdminGetFeatureRule,
   isTansoConfigured,
 } from '../tanso-client.js'
@@ -259,21 +258,21 @@ export function createTansoRoutes(
       healthy = false
     }
 
-    try {
-      await getOrCreateTansoCustomer(pool, visitorId, req.accountEmail)
-    } catch (err) {
-      console.error('Tanso status: customer setup failed:', err instanceof Error ? err.message : err)
-    }
+    // In Stripe-driven mode, customers are created via Stripe webhook — don't force-create here
+    // Only attempt customer/entitlement lookups if user has an account (is logged in)
+    if (req.accountEmail) {
+      try {
+        const ent = await tansoListCustomerEntitlements(visitorId)
+        entitlements = flattenEntitlements(ent)
+      } catch (err) {
+        // Customer may not exist in Tanso yet (will be created when Stripe subscription syncs)
+        if (!(err instanceof Error && err.message.includes('404'))) {
+          console.error('Tanso status: entitlements fetch failed:', err instanceof Error ? err.message : err)
+        }
+      }
 
-    try {
-      const ent = await tansoListCustomerEntitlements(visitorId)
-      entitlements = flattenEntitlements(ent)
-    } catch (err) {
-      console.error('Tanso status: entitlements fetch failed:', err instanceof Error ? err.message : err)
-    }
-
-    try {
-      customer = await tansoGetCustomer(visitorId)
+      try {
+        customer = await tansoGetCustomer(visitorId)
       // Normalize scheduledChanges on subscriptions (matches SaaSSubscriptionSite pattern)
       if (customer?.subscriptions) {
         for (const sub of customer.subscriptions) {
@@ -291,8 +290,11 @@ export function createTansoRoutes(
         }
       }
     } catch (err) {
-      console.error('Tanso status: customer fetch failed:', err instanceof Error ? err.message : err)
-    }
+        if (!(err instanceof Error && err.message.includes('404'))) {
+          console.error('Tanso status: customer fetch failed:', err instanceof Error ? err.message : err)
+        }
+      }
+    } // end if (req.accountEmail)
 
     // Fetch feature rules for each plan-feature combo (limits, pricing model, etc.)
     const featureRules: Record<string, Record<string, any>> = {}
@@ -382,6 +384,7 @@ export function createTansoRoutes(
   router.post('/tanso/subscribe', ensureVisitor, async (req: AuthRequest, res: Response) => {
     try {
       if (!isTansoConfigured()) return res.status(503).json({ error: 'Billing not configured' })
+      if (!req.accountEmail) return res.status(401).json({ error: 'Please sign in to subscribe' })
       const visitorId = req.visitorId!
       const { planId } = req.body
       if (!planId) return res.status(400).json({ error: 'planId is required' })
@@ -408,32 +411,13 @@ export function createTansoRoutes(
         const targetPrice = Number(targetPlan?.plan?.priceAmount ?? targetPlan?.priceAmount ?? 0)
 
         if (targetPrice > currentPrice) {
-          // UPGRADE — apply plan change, then handle payment if needed
+          // UPGRADE — Tanso handles plan change, Stripe handles proration via auto-charge
           await tansoChangeSubscriptionPlan(activeSub.id, planId, 'UPGRADE')
           const updated = await tansoGetCustomer(visitorId)
           const newSub = updated?.subscriptions?.find((s: any) => s.isActive)
-
-          // If upgrading from free to paid, need Stripe checkout for the price difference
-          if (currentPrice === 0 && targetPrice > 0) {
-            try {
-              const invoices = await tansoListCustomerInvoices(visitorId)
-              const items = Array.isArray(invoices) ? invoices : invoices?.items ?? []
-              const unpaid = items.find((inv: any) => inv.status !== 'PAID' && inv.amount > 0)
-              if (unpaid?.id) {
-                const checkout = await tansoCreateCheckoutSession(unpaid.id)
-                if (checkout?.url) {
-                  return res.json({ success: true, subscription: newSub, checkoutUrl: checkout.url, changeType: 'upgrade' })
-                }
-              }
-            } catch (checkoutErr) {
-              console.error('Upgrade checkout error:', checkoutErr)
-              return res.status(500).json({ error: 'Plan upgraded but payment setup failed. Please check your billing.' })
-            }
-          }
-
           return res.json({ success: true, subscription: newSub, changeType: 'upgrade' })
         } else {
-          // DOWNGRADE — scheduled for end of billing period (reference: Pricing.tsx line 205-236)
+          // DOWNGRADE — scheduled for end of billing period
           await tansoChangeSubscriptionPlan(activeSub.id, planId, 'DOWNGRADE')
           const updated = await tansoGetCustomer(visitorId)
           const newSub = updated?.subscriptions?.find((s: any) => s.isActive)
@@ -444,36 +428,14 @@ export function createTansoRoutes(
       // ── NEW SUBSCRIPTION ──
       const result = await tansoCreateSubscription(visitorId, planId)
       const subscription = result?.subscription ?? result
+      const checkoutUrl = result?.checkoutUrl
 
-      // Fetch invoices separately (reference: SaaSSubscriptionSite Checkout.tsx)
-      const invoices = await tansoListCustomerInvoices(visitorId)
-      const invoiceItems = Array.isArray(invoices) ? invoices : invoices?.items ?? []
-      const unpaidInvoice = invoiceItems
-        .filter((inv: any) => inv.status !== 'PAID')
-        .sort((a: any, b: any) => new Date(b.dueDate || b.createdAt || 0).getTime() - new Date(a.dueDate || a.createdAt || 0).getTime())[0]
-
-      if (!unpaidInvoice?.id) {
-        return res.json({ success: true, subscription })
+      // Paid plan — Tanso returns checkoutUrl for Stripe Checkout
+      if (checkoutUrl) {
+        return res.json({ success: true, subscription, checkoutUrl })
       }
 
-      // Paid plan — must go through Stripe checkout
-      if (unpaidInvoice.amount > 0) {
-        try {
-          const checkout = await tansoCreateCheckoutSession(unpaidInvoice.id)
-          if (checkout?.url) {
-            return res.json({ success: true, subscription, checkoutUrl: checkout.url })
-          }
-          // No URL returned — Stripe may not be configured on Tanso side
-          console.error('Stripe checkout returned no URL — is Stripe connected in Tanso?')
-          return res.status(500).json({ error: 'Payment setup failed. Please ensure Stripe is connected.' })
-        } catch (checkoutErr) {
-          console.error('Stripe checkout session error:', checkoutErr)
-          return res.status(500).json({ error: 'Payment setup failed. Please try again.' })
-        }
-      }
-
-      // Free plan ($0 invoice) — mark as paid to activate
-      try { await tansoMarkInvoicePaid(unpaidInvoice.id) } catch (_) { /* best effort */ }
+      // Free plan — no payment needed
       res.json({ success: true, subscription })
     } catch (err) {
       console.error('Tanso subscribe error:', err)
@@ -485,10 +447,8 @@ export function createTansoRoutes(
   router.post('/tanso/portal', ensureVisitor, async (req: AuthRequest, res: Response) => {
     try {
       const stripe = await getUncachableStripeClient()
-      // Look up Stripe customer by email
-      const visitor = await pool.query('SELECT email FROM visitors WHERE id = $1', [req.visitorId])
-      const email = visitor.rows[0]?.email
-      if (!email) return res.status(400).json({ error: 'No email found for account' })
+      const email = req.accountEmail
+      if (!email) return res.status(400).json({ error: 'Please sign in to manage billing' })
 
       const customers = await stripe.customers.list({ email, limit: 1 })
       if (customers.data.length === 0) {
@@ -507,14 +467,14 @@ export function createTansoRoutes(
     }
   })
 
-  // Cancel subscription (supports IMMEDIATELY or END_OF_PERIOD)
+  // Cancel subscription (supports IMMEDIATE or END_OF_PERIOD)
   router.post('/tanso/cancel', ensureVisitor, async (req: AuthRequest, res: Response) => {
     try {
       if (!isTansoConfigured()) return res.status(503).json({ error: 'Billing not configured' })
-      const { subscriptionId, cancelMode = 'IMMEDIATELY' } = req.body
+      const { subscriptionId, cancelMode = 'IMMEDIATE' } = req.body
       if (!subscriptionId) return res.status(400).json({ error: 'subscriptionId is required' })
-      if (cancelMode !== 'IMMEDIATELY' && cancelMode !== 'END_OF_PERIOD') {
-        return res.status(400).json({ error: 'cancelMode must be IMMEDIATELY or END_OF_PERIOD' })
+      if (cancelMode !== 'IMMEDIATE' && cancelMode !== 'END_OF_PERIOD') {
+        return res.status(400).json({ error: 'cancelMode must be IMMEDIATE or END_OF_PERIOD' })
       }
 
       // Verify ownership

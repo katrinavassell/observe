@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { toast } from 'vue-sonner'
 import { Loader2, CreditCard, Lock, AlertCircle } from 'lucide-vue-next'
 import { Card, CardContent, CardHeader, CardTitle, Button } from '@/components/ui'
+import { tansoGetPlans } from '@/lib/api'
 
 const route = useRoute()
 const router = useRouter()
@@ -12,45 +13,35 @@ const isProcessing = ref(true)
 const error = ref<string | null>(null)
 const statusMessage = ref('Preparing your subscription...')
 
-const planName = route.query.planName as string || 'Plan'
-const planPrice = Number(route.query.planPrice) || 0
-const planDescription = route.query.planDescription as string || ''
-const planId = route.query.planId as string
-const hasExistingSub = route.query.hasExistingSubscription === 'true'
-
-async function apiPost(url: string, body: any) {
-  const res = await fetch(`/api${url}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    credentials: 'include',
-    body: JSON.stringify(body),
-  })
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}))
-    throw new Error(data.error || `Request failed: ${res.status}`)
-  }
-  return res.json()
-}
+const planKey = route.query.planKey as string || route.query.planName as string || 'growth'
+const planName = planKey === 'growth' ? 'Growth' : 'Free'
+const planPrice = Number(route.query.planPrice) || 12
 
 async function processCheckout() {
-  if (!planId) {
-    error.value = 'No plan selected'
-    isProcessing.value = false
-    return
-  }
-
-  // Clear any stale upgrade flag
-  localStorage.removeItem('is_upgrade')
-
   try {
-    if (hasExistingSub) {
-      localStorage.setItem('is_upgrade', 'true')
-      statusMessage.value = 'Upgrading your plan...'
-    } else {
-      statusMessage.value = 'Creating your subscription...'
+    statusMessage.value = 'Loading plan details...'
+
+    const { plans } = await tansoGetPlans()
+    const planItems = Array.isArray(plans) ? plans : []
+    const plan = planItems.find((p: any) => (p.plan?.key ?? p.key) === planKey)
+    const planId = plan?.plan?.id ?? plan?.id
+    if (!planId) throw new Error(`Plan "${planKey}" not found`)
+
+    statusMessage.value = 'Creating your subscription...'
+
+    const res = await fetch('/api/tanso/subscribe', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ planId }),
+    })
+
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}))
+      throw new Error(data.error || `Request failed: ${res.status}`)
     }
 
-    const data = await apiPost('/tanso/subscribe', { planId })
+    const data = await res.json()
 
     if (data.checkoutUrl) {
       statusMessage.value = 'Redirecting to payment...'
@@ -58,7 +49,7 @@ async function processCheckout() {
       return
     }
 
-    // No checkout needed (free plan or upgrade applied immediately)
+    // No checkout needed (upgrade applied immediately or free plan)
     router.push({ path: '/checkout/success', query: { plan: planName } })
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Checkout failed'
@@ -69,10 +60,6 @@ async function processCheckout() {
 }
 
 onMounted(() => {
-  if (!planId) {
-    router.replace('/plans')
-    return
-  }
   processCheckout()
 })
 </script>
@@ -88,7 +75,6 @@ onMounted(() => {
         <CardContent class="space-y-4">
           <div>
             <h3 class="text-lg font-semibold">{{ planName }}</h3>
-            <p v-if="planDescription" class="text-sm text-muted-foreground mt-1">{{ planDescription }}</p>
           </div>
           <div class="border-t pt-4">
             <div class="flex justify-between items-center">

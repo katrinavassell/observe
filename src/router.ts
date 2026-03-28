@@ -48,6 +48,11 @@ const router = createRouter({
       component: () => import('@/pages/DataSourcesPage.vue'),
     },
     {
+      path: '/alerts',
+      name: 'alerts',
+      component: () => import('@/pages/AlertsPage.vue'),
+    },
+    {
       path: '/insights',
       redirect: '/',
     },

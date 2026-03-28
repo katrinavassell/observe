@@ -606,15 +606,16 @@ export interface StripeStatus {
   account_name: string | null
   is_live_mode?: boolean
   connected_at?: string
+  last_synced_at?: string
+  api_key_prefix?: string
 }
 
 /**
  * Check if Stripe is connected for the current user.
- * Uses Supabase Edge Function directly.
  */
 export async function getStripeStatus(): Promise<StripeStatus> {
   try {
-    return await request('/stripe/status')
+    return await request('/integrations/stripe/status')
   } catch {
     return { connected: false, account_id: null, account_name: null }
   }
@@ -622,11 +623,10 @@ export async function getStripeStatus(): Promise<StripeStatus> {
 
 /**
  * Disconnect Stripe integration.
- * Uses Supabase Edge Function directly.
  * @param clearData - If true, also clears all synced revenue/usage data
  */
 export async function disconnectStripe(clearData = false): Promise<{ success: boolean; message: string }> {
-  return request('/stripe/disconnect', {
+  return request('/integrations/stripe/disconnect', {
     method: 'POST',
     body: JSON.stringify({ clear_data: clearData }),
   })

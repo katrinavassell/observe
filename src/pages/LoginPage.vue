@@ -56,7 +56,8 @@ async function handleSubmit() {
       await login(trimmedEmail, password.value)
       toast.success('Welcome back!')
     }
-    router.push('/')
+    const redirectTo = (route.query.redirect as string) || '/'
+    router.push(redirectTo)
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Authentication failed'
     toast.error('Error', { description: message })

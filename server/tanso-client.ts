@@ -134,9 +134,9 @@ export async function tansoGetCustomer(customerReferenceId: string): Promise<Tan
   return apiGet<TansoCustomer>(`/api/v1/client/customers/${encodeURIComponent(customerReferenceId)}`)
 }
 
-export async function tansoCreateCustomer(externalClientCustomerId: string, email: string, firstName?: string): Promise<TansoCustomer> {
+export async function tansoCreateCustomer(customerReferenceId: string, email: string, firstName?: string): Promise<TansoCustomer> {
   return apiPost<TansoCustomer>('/api/v1/client/customers', {
-    externalClientCustomerId,
+    customerReferenceId,
     email,
     ...(firstName ? { firstName } : {}),
   })
@@ -166,7 +166,7 @@ export async function tansoCreateSubscription(customerReferenceId: string, planI
   })
 }
 
-export async function tansoCancelSubscription(subscriptionId: string, cancelMode: 'IMMEDIATELY' | 'END_OF_PERIOD' = 'IMMEDIATELY'): Promise<TansoSubscription> {
+export async function tansoCancelSubscription(subscriptionId: string, cancelMode: 'IMMEDIATE' | 'END_OF_PERIOD' = 'IMMEDIATE'): Promise<TansoSubscription> {
   return apiPost<TansoSubscription>(`/api/v1/client/subscriptions/cancellation/${encodeURIComponent(subscriptionId)}?cancelMode=${cancelMode}`)
 }
 
@@ -241,9 +241,7 @@ export async function tansoMarkInvoicePaid(invoiceId: string): Promise<TansoInvo
   return apiPost<TansoInvoice>(`/api/v1/client/billing/invoices/${encodeURIComponent(invoiceId)}/mark-paid`)
 }
 
-export async function tansoCreateCheckoutSession(invoiceId: string): Promise<TansoCheckoutSession> {
-  return apiPost<TansoCheckoutSession>(`/api/v1/client/billing/invoices/${encodeURIComponent(invoiceId)}/stripe/checkout`)
-}
+// Checkout URL is now returned directly in the subscription creation response
 
 // =============================================================================
 // Credits

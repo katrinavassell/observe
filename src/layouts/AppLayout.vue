@@ -7,6 +7,7 @@ import {
   Activity,
   Cpu,
   Bell,
+  CreditCard,
   Settings,
   Eye,
   LogIn,
@@ -54,6 +55,13 @@ const navItems = computed(() => [
     label: 'Data Sources',
     icon: Plug,
     description: 'Connect integrations or upload files',
+  },
+  {
+    path: '/plans',
+    label: 'Plans & Billing',
+    icon: CreditCard,
+    description: 'Manage your subscription and billing',
+    dividerBefore: true,
   },
 ])
 

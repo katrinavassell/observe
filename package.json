@@ -7,7 +7,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "concurrently \"PORT=3001 npx tsx server/index.ts\" \"vite\"",
+    "dev": "concurrently \"lsof -ti:3001 | xargs kill -9 2>/dev/null; PORT=3001 npx tsx server/index.ts\" \"vite\"",
     "dev:frontend": "vite",
     "dev:backend": "npx tsx server/index.ts",
     "build": "vue-tsc --noEmit && vite build",
