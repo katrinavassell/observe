@@ -44,7 +44,7 @@ function getPlanKey(subscription: any): string {
   return 'free'
 }
 
-async function getUsageThisMonth(pool: Pool, userId: string, featureKey: string): Promise<number> {
+async function getAiInsightsThisMonth(pool: Pool, userId: string): Promise<number> {
   const result = await pool.query(
     `SELECT COUNT(*) as count FROM ai_insights
      WHERE user_id = $1 AND created_at >= date_trunc('month', now())`,
@@ -90,7 +90,7 @@ export function createCheckFeatureAccess(pool: Pool) {
     }
 
     // Metered feature — check usage
-    const used = await getUsageThisMonth(pool, visitorId, featureKey)
+    const used = await getAiInsightsThisMonth(pool, visitorId)
     const remaining = Math.max(0, featureLimit - used)
     return {
       allowed: remaining > 0,
@@ -152,7 +152,7 @@ export function createBillingRoutes(
       // Build usage/entitlements from DB
       const features = PLAN_FEATURES[planKey] || PLAN_FEATURES.free
       const limits = PLAN_LIMITS[planKey] || PLAN_LIMITS.free
-      const insightsUsed = await getUsageThisMonth(pool, req.visitorId!, 'ai_insights')
+      const insightsUsed = await getAiInsightsThisMonth(pool, req.visitorId!)
 
       const entitlements = features.map(key => {
         const limit = limits[key]
@@ -346,12 +346,7 @@ export function createBillingRoutes(
       const visitorId = req.visitorId!
 
       // Monthly insights count
-      const insightsResult = await pool.query(
-        `SELECT COUNT(*) as count FROM ai_insights
-         WHERE user_id = $1 AND created_at >= date_trunc('month', now())`,
-        [visitorId]
-      )
-      const insightsUsed = parseInt(insightsResult.rows[0]?.count || '0', 10)
+      const insightsUsed = await getAiInsightsThisMonth(pool, visitorId)
 
       // Daily breakdown for chart
       const dailyResult = await pool.query(
@@ -374,7 +369,7 @@ export function createBillingRoutes(
         } catch (_) {}
       }
 
-      const limit = PLAN_LIMITS[planKey]?.ai_insights ?? 5
+      const limit = PLAN_LIMITS[planKey]?.ai_insights ?? null
       res.json({
         configured: true,
         ai_insights: {

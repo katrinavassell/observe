@@ -29,7 +29,7 @@ async function processCheckout() {
 
     statusMessage.value = 'Creating your subscription...'
 
-    const res = await fetch('/api/tanso/subscribe', {
+    const res = await fetch('/api/billing/subscribe', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',

@@ -805,7 +805,7 @@ export interface TansoInvoice {
 }
 
 export async function tansoGetInvoices(): Promise<{ invoices: TansoInvoice[]; configured: boolean }> {
-  return request('/tanso/invoices')
+  return request('/billing/invoices')
 }
 
 
