@@ -12,7 +12,7 @@ import {
 } from '@/lib/api'
 import type { AiInsight } from '@/lib/api'
 import { AlertCircle, AlertTriangle, Database, Plug, FlaskConical, Sparkles, Zap } from 'lucide-vue-next'
-import { useDemoMode } from '@/composables/useDemoMode'
+import { useDataMode } from '@/composables/useDataMode'
 import Sheet from '@/components/ui/sheet.vue'
 import {
   Card,
@@ -23,7 +23,7 @@ import { formatCurrency as fmt, formatPct as fmtPct } from '@/lib/format'
 
 const router = useRouter()
 const queryClient = useQueryClient()
-const { isDemoMode, enterDemoMode, exitDemoMode, isLoadingDemo } = useDemoMode()
+const { isSampleMode, switchToSampleData, clearSample, isLoadingSample } = useDataMode()
 
 type Tab = 'feature' | 'model' | 'customer'
 const activeTab = ref<Tab>('feature')
@@ -200,13 +200,13 @@ const insightCategories = [
       </div>
       <div class="flex items-center gap-2">
         <Button
-          v-if="isDemoMode"
+          v-if="isSampleMode"
           variant="ghost"
           size="sm"
-          :disabled="isLoadingDemo"
-          @click="exitDemoMode()"
+          :disabled="isLoadingSample"
+          @click="clearSample()"
         >
-          {{ isLoadingDemo ? 'Loading...' : 'Exit preview' }}
+          {{ isLoadingSample ? 'Loading...' : 'Exit preview' }}
         </Button>
         <Button
           variant="outline"
@@ -257,7 +257,7 @@ const insightCategories = [
         </div>
 
         <!-- DEMO MODE: hardcoded preview -->
-        <template v-if="isDemoMode">
+        <template v-if="isSampleMode">
           <div class="rounded-lg bg-muted/50 border border-dashed px-3 py-2 text-xs text-muted-foreground">
             Preview mode. Connect your data to generate real insights.
           </div>
@@ -414,9 +414,9 @@ const insightCategories = [
         Connect your AI calls to see cost, revenue, and margin breakdowns by feature, model, and customer.
       </p>
       <div class="flex gap-3">
-        <Button size="sm" :disabled="isLoadingDemo" @click="enterDemoMode()">
+        <Button size="sm" :disabled="isLoadingSample" @click="switchToSampleData()">
           <FlaskConical class="h-3.5 w-3.5 mr-1.5" />
-          {{ isLoadingDemo ? 'Loading...' : 'Preview with sample data' }}
+          {{ isLoadingSample ? 'Loading...' : 'Preview with sample data' }}
         </Button>
         <Button variant="outline" size="sm" @click="router.push('/data-sources')">
           Connect your data
@@ -575,7 +575,7 @@ const insightCategories = [
     </template>
 
     <!-- Demo indicator -->
-    <div v-if="isDemoMode" class="text-xs text-muted-foreground text-center py-1.5">
+    <div v-if="isSampleMode" class="text-xs text-muted-foreground text-center py-1.5">
       Viewing sample data
     </div>
   </div>

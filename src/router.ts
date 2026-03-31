@@ -128,8 +128,6 @@ const { isLoggedIn, isInitialized } = useAuth()
 
 router.beforeEach((to) => {
   if (to.meta?.noLayout) return
-  // Allow demo mode users to navigate freely
-  if (sessionStorage.getItem('demo_mode') === 'true') return
   if (isInitialized.value && !isLoggedIn.value) {
     return { name: 'signup' }
   }
