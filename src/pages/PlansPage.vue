@@ -85,7 +85,7 @@ const cancelEffectiveDate = computed(() => {
 })
 
 const meteredEntitlements = computed(() =>
-  entitlements.value.filter((e: any) => e.usageLimit || e.currentUsage != null)
+  entitlements.value.filter((e: any) => e.usageLimit || e.currentUsage != null || e.unlimited)
 )
 
 // Plans from Tanso
@@ -258,10 +258,21 @@ async function handleReactivate() {
                 {{ e.allowed ? 'Active' : 'Limit reached' }}
               </span>
             </div>
-            <div v-if="e.usageLimit" class="space-y-2">
+            <!-- Unlimited plan -->
+            <div v-if="e.unlimited" class="space-y-2">
+              <div class="flex justify-between text-xs text-muted-foreground">
+                <span>{{ e.currentUsage || 0 }} used this month</span>
+                <span class="text-success">Unlimited</span>
+              </div>
+              <div class="h-2 rounded-full bg-success/20 overflow-hidden">
+                <div class="h-full rounded-full bg-success" style="width: 100%" />
+              </div>
+            </div>
+            <!-- Limited plan -->
+            <div v-else-if="e.usageLimit" class="space-y-2">
               <div class="flex justify-between text-xs text-muted-foreground">
                 <span>{{ e.currentUsage || 0 }} / {{ e.usageLimit }} used</span>
-                <span>{{ e.remainingQuota ?? (e.usageLimit - (e.currentUsage || 0)) }} remaining</span>
+                <span>{{ e.remaining ?? (e.usageLimit - (e.currentUsage || 0)) }} remaining</span>
               </div>
               <div class="h-2 rounded-full bg-muted overflow-hidden">
                 <div

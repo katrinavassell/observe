@@ -156,6 +156,17 @@ export function createBillingRoutes(
 
       const entitlements = features.map(key => {
         const limit = limits[key]
+        // Always include usage stats for metered features (even if unlimited)
+        if (key === 'ai_insights') {
+          return {
+            featureKey: key,
+            allowed: limit === null ? true : insightsUsed < limit,
+            usageLimit: limit,
+            currentUsage: insightsUsed,
+            remaining: limit === null ? null : Math.max(0, limit - insightsUsed),
+            unlimited: limit === null,
+          }
+        }
         if (limit === null || limit === undefined) {
           return { featureKey: key, allowed: true }
         }
