@@ -11,7 +11,7 @@ import bcrypt from 'bcryptjs'
 import { createAuthRoutes, createEnsureVisitor, type AuthRequest } from './routes/auth.js'
 import { createDataRoutes } from './routes/data.js'
 // import { createSimulationsRoutes } from './routes/simulations.js'
-import { createBillingRoutes, createCheckBillingFeatureAccess, createTrackBillingUsage } from './routes/tanso.js'
+import { createBillingRoutes, createCheckFeatureAccess, createTrackUsage } from './routes/billing.js'
 
 // import { createTeamRoutes } from './routes/team.js'
 import { createIntegrationsRoutes, createConvertReferralIfPending, syncStripeDataForUser } from './routes/integrations.js'
@@ -23,23 +23,7 @@ import rateLimit from 'express-rate-limit'
 import { z } from 'zod'
 import { getUncachableStripeClient } from './stripe-client.js'
 import { initModelPricing, calculateCostFromTokens as calcCostFromDb, getAllPricing } from './model-pricing.js'
-import {
-  billingListPlans,
-  billingListFeatures,
-  billingGetCustomer,
-  billingCreateCustomer,
-  billingListCustomerEntitlements,
-  billingIngestEvent,
-  billingCreateSubscription,
-  billingChangeSubscriptionPlan,
-  billingCancelSubscription,
-  billingCancelScheduledCancellation,
-  billingCancelScheduledPlanChanges,
-  billingListCustomerInvoices,
-  billingMarkInvoicePaid,
-  billingAdminGetFeatureRule,
-  isBillingConfigured,
-} from './tanso-client.js'
+// Tanso client removed — billing is now Stripe-direct (see routes/billing.ts)
 
 const app = express()
 
@@ -156,14 +140,14 @@ async function getAdminVisitorId(): Promise<string | null> {
 }
 
 // ─── Shared billing helpers (used by multiple route modules) ─────────────────
-const checkBillingFeatureAccess = createCheckBillingFeatureAccess(pool)
-const trackBillingUsage = createTrackBillingUsage(pool, getAdminVisitorId)
+const checkBillingFeatureAccess = createCheckFeatureAccess(pool)
+const trackBillingUsage = createTrackUsage(pool)
 const convertReferralIfPending = createConvertReferralIfPending(pool)
 
 // ─── Extracted route modules ───────────────────────────────────────────────
 app.use(createDataRoutes(pool, ensureVisitor, { checkBillingFeatureAccess, trackBillingUsage, convertReferralIfPending }))
 // app.use(createSimulationsRoutes(pool, ensureVisitor))
-app.use(createBillingRoutes(pool, ensureVisitor, { checkBillingFeatureAccess }))
+app.use(createBillingRoutes(pool, ensureVisitor, { checkFeatureAccess: checkBillingFeatureAccess }))
 
 // app.use(createTeamRoutes(pool, ensureVisitor))
 app.use(createIntegrationsRoutes(pool, ensureVisitor, { trackBillingUsage, convertReferralIfPending }))
@@ -3909,28 +3893,35 @@ app.post('/insights/generate', ensureVisitor, expensiveLimiter, async (req: Auth
   }
 
   try {
-    // Gather summary data from observe_events
-    const [featureRes, customerRes, modelRes, overallRes] = await Promise.all([
+    // Gather rich summary data from observe_events for pricing analysis
+    const [featureRes, customerRes, modelRes, overallRes, featureModelRes, customerFeatureRes, trendRes] = await Promise.all([
+      // Per-feature breakdown with cost-per-call
       pool.query(
         `SELECT feature_key,
            COUNT(*) as event_count,
            COALESCE(SUM(cost_amount), 0) as total_cost,
            COALESCE(SUM(revenue_amount), 0) as total_revenue,
-           COALESCE(SUM(usage_units), 0) as total_usage
+           COALESCE(SUM(usage_units), 0) as total_usage,
+           CASE WHEN COUNT(*) > 0 THEN COALESCE(SUM(cost_amount), 0) / COUNT(*) ELSE 0 END as cost_per_call,
+           CASE WHEN COUNT(*) > 0 THEN COALESCE(SUM(revenue_amount), 0) / COUNT(*) ELSE 0 END as revenue_per_call
          FROM observe_events WHERE user_id = $1 AND feature_key IS NOT NULL
          GROUP BY feature_key ORDER BY total_cost DESC`,
         [req.visitorId]
       ),
+      // Per-customer with feature-level breakdown
       pool.query(
-        `SELECT oe.customer_id, c.name as customer_name,
+        `SELECT oe.customer_id, c.name as customer_name, c.segment,
+           COUNT(*) as event_count,
            COALESCE(SUM(oe.cost_amount), 0) as total_cost,
-           COALESCE(SUM(oe.revenue_amount), 0) as total_revenue
+           COALESCE(SUM(oe.revenue_amount), 0) as total_revenue,
+           CASE WHEN COUNT(*) > 0 THEN COALESCE(SUM(oe.cost_amount), 0) / COUNT(*) ELSE 0 END as cost_per_call
          FROM observe_events oe
          LEFT JOIN customers c ON oe.user_id = c.user_id AND oe.customer_id = c.customer_id
          WHERE oe.user_id = $1
-         GROUP BY oe.customer_id, c.name ORDER BY total_cost DESC LIMIT 10`,
+         GROUP BY oe.customer_id, c.name, c.segment ORDER BY total_cost DESC LIMIT 15`,
         [req.visitorId]
       ),
+      // Model usage
       pool.query(
         `SELECT model, model_provider,
            COUNT(*) as event_count,
@@ -3939,12 +3930,49 @@ app.post('/insights/generate', ensureVisitor, expensiveLimiter, async (req: Auth
          GROUP BY model, model_provider ORDER BY total_cost DESC`,
         [req.visitorId]
       ),
+      // Overall totals
       pool.query(
         `SELECT
            COUNT(*) as total_events,
            COALESCE(SUM(cost_amount), 0) as total_cost,
            COALESCE(SUM(revenue_amount), 0) as total_revenue
          FROM observe_events WHERE user_id = $1`,
+        [req.visitorId]
+      ),
+      // Which models power which features (for model routing recommendations)
+      pool.query(
+        `SELECT feature_key, model,
+           COUNT(*) as event_count,
+           COALESCE(SUM(cost_amount), 0) as total_cost,
+           CASE WHEN COUNT(*) > 0 THEN COALESCE(SUM(cost_amount), 0) / COUNT(*) ELSE 0 END as cost_per_call
+         FROM observe_events
+         WHERE user_id = $1 AND feature_key IS NOT NULL AND model IS NOT NULL
+         GROUP BY feature_key, model ORDER BY feature_key, total_cost DESC`,
+        [req.visitorId]
+      ),
+      // Usage variance across customers per feature (for usage-based pricing signals)
+      pool.query(
+        `SELECT feature_key,
+           COUNT(DISTINCT customer_id) as unique_customers,
+           MIN(ct.calls) as min_calls, MAX(ct.calls) as max_calls,
+           AVG(ct.calls) as avg_calls, STDDEV(ct.calls) as stddev_calls
+         FROM (
+           SELECT feature_key, customer_id, COUNT(*) as calls
+           FROM observe_events
+           WHERE user_id = $1 AND feature_key IS NOT NULL
+           GROUP BY feature_key, customer_id
+         ) ct
+         GROUP BY feature_key`,
+        [req.visitorId]
+      ),
+      // Monthly trend (for trajectory analysis)
+      pool.query(
+        `SELECT DATE_TRUNC('month', timestamp) as month,
+           COALESCE(SUM(cost_amount), 0) as total_cost,
+           COALESCE(SUM(revenue_amount), 0) as total_revenue,
+           COUNT(*) as event_count
+         FROM observe_events WHERE user_id = $1
+         GROUP BY month ORDER BY month DESC LIMIT 6`,
         [req.visitorId]
       ),
     ])
@@ -3958,24 +3986,59 @@ app.post('/insights/generate', ensureVisitor, expensiveLimiter, async (req: Auth
     const totalRevenue = parseFloat(overall.total_revenue) || 0
     const overallMargin = totalRevenue > 0 ? Math.round(((totalRevenue - totalCost) / totalRevenue) * 100) : 0
 
-    // Build summary for the AI prompt
+    // Build rich summaries for pricing consultant prompt
     const featureSummary = featureRes.rows.map((r: Record<string, string>) => {
       const cost = parseFloat(r.total_cost) || 0
       const revenue = parseFloat(r.total_revenue) || 0
       const margin = revenue > 0 ? Math.round(((revenue - cost) / revenue) * 100) : 0
-      return `- ${r.feature_key}: cost=$${cost.toFixed(2)}, revenue=$${revenue.toFixed(2)}, margin=${margin}%, ${r.event_count} events`
+      const costPerCall = parseFloat(r.cost_per_call) || 0
+      const revenuePerCall = parseFloat(r.revenue_per_call) || 0
+      return `- ${r.feature_key}: cost=$${cost.toFixed(2)}, revenue=$${revenue.toFixed(2)}, margin=${margin}%, ${r.event_count} events, cost/call=$${costPerCall.toFixed(4)}, revenue/call=$${revenuePerCall.toFixed(4)}`
     }).join('\n')
 
     const customerSummary = customerRes.rows.map((r: Record<string, string>) => {
       const cost = parseFloat(r.total_cost) || 0
       const revenue = parseFloat(r.total_revenue) || 0
-      return `- ${r.customer_name || r.customer_id}: cost=$${cost.toFixed(2)}, revenue=$${revenue.toFixed(2)}`
+      const margin = revenue > 0 ? Math.round(((revenue - cost) / revenue) * 100) : 0
+      const costPerCall = parseFloat(r.cost_per_call) || 0
+      return `- ${r.customer_name || r.customer_id} (${r.segment || 'no segment'}): cost=$${cost.toFixed(2)}, revenue=$${revenue.toFixed(2)}, margin=${margin}%, ${r.event_count} calls, cost/call=$${costPerCall.toFixed(4)}`
     }).join('\n')
 
     const modelSummary = modelRes.rows.map((r: Record<string, string>) => {
       const cost = parseFloat(r.total_cost) || 0
       return `- ${r.model} (${r.model_provider || 'unknown'}): cost=$${cost.toFixed(2)}, ${r.event_count} calls`
     }).join('\n')
+
+    // Model-per-feature breakdown (which models power which features)
+    const featureModelSummary = featureModelRes.rows.length > 0
+      ? featureModelRes.rows.map((r: Record<string, string>) => {
+          const costPerCall = parseFloat(r.cost_per_call) || 0
+          return `- ${r.feature_key} → ${r.model}: ${r.event_count} calls, cost/call=$${costPerCall.toFixed(4)}`
+        }).join('\n')
+      : 'No model-level feature data available.'
+
+    // Usage variance (signals for usage-based pricing)
+    const usageVarianceSummary = customerFeatureRes.rows.length > 0
+      ? customerFeatureRes.rows.map((r: Record<string, string>) => {
+          const min = parseInt(r.min_calls) || 0
+          const max = parseInt(r.max_calls) || 0
+          const avg = parseFloat(r.avg_calls) || 0
+          const stddev = parseFloat(r.stddev_calls) || 0
+          const ratio = min > 0 ? Math.round(max / min) : max
+          return `- ${r.feature_key}: ${r.unique_customers} customers, calls range ${min}–${max} (${ratio}x spread), avg=${Math.round(avg)}, stddev=${Math.round(stddev)}`
+        }).join('\n')
+      : 'No per-customer usage variance data available.'
+
+    // Monthly trend
+    const trendSummary = trendRes.rows.length > 0
+      ? trendRes.rows.map((r: any) => {
+          const month = r.month ? new Date(r.month).toISOString().slice(0, 7) : 'unknown'
+          const cost = parseFloat(r.total_cost) || 0
+          const revenue = parseFloat(r.total_revenue) || 0
+          const margin = revenue > 0 ? Math.round(((revenue - cost) / revenue) * 100) : 0
+          return `- ${month}: cost=$${cost.toFixed(2)}, revenue=$${revenue.toFixed(2)}, margin=${margin}%, ${r.event_count} events`
+        }).join('\n')
+      : 'No trend data available.'
 
     // Pull historic context (CSV uploads, OpenAI/Anthropic imports)
     let historicContext = ''
@@ -4034,30 +4097,55 @@ app.post('/insights/generate', ensureVisitor, expensiveLimiter, async (req: Auth
       console.error('Failed to fetch historic context for insights:', err)
     }
 
-    const prompt = `You are an AI cost analyst. Analyze this data and return exactly 3-5 actionable insights as a JSON array.
+    const prompt = `You are an AI pricing consultant for SaaS companies that build on AI models. Your client pays you to analyze their cost and usage data and tell them exactly how to price their product. Be specific, quantitative, and actionable — like a $50k/year pricing advisor, not a generic dashboard.
 
-Overall: ${parseInt(overall.total_events)} SDK events, total cost $${totalCost.toFixed(2)}, total revenue $${totalRevenue.toFixed(2)}, overall margin ${overallMargin}%
+## Client's Data
 
-Features (from SDK events):
+Overall: ${parseInt(overall.total_events)} events tracked, total cost $${totalCost.toFixed(2)}, total revenue $${totalRevenue.toFixed(2)}, overall margin ${overallMargin}%
+
+### Features (cost, revenue, and unit economics per call)
 ${featureSummary}
 
-Top Customers (from SDK events):
+### Customers (who costs how much to serve)
 ${customerSummary}
 
-AI Models Used (from SDK events):
-${modelSummary}${historicContext}
+### AI Models Used
+${modelSummary}
 
-Return a JSON array where each insight has these fields:
-- insight_type: one of "margin_alert", "pricing_opportunity", "cost_optimization", "customer_risk"
+### Which Models Power Which Features
+${featureModelSummary}
+
+### Usage Variance Across Customers (signals for pricing model design)
+${usageVarianceSummary}
+
+### Monthly Trend (most recent first)
+${trendSummary}${historicContext}
+
+## Your Analysis
+
+Return exactly 4-6 insights as a JSON array. Each insight must have:
+- insight_type: one of "pricing_recommendation", "usage_pricing_signal", "model_routing", "margin_alert", "customer_risk", "cost_optimization"
 - title: short headline (under 60 chars)
-- description: 1-2 sentence explanation with specific numbers
+- description: 2-3 sentences. Include specific dollar amounts, percentages, and recommended actions. For pricing recommendations, state the exact price point or range.
 - severity: one of "critical", "warning", "info", "positive"
 - feature_key: the relevant feature key if applicable, or null
 - customer_id: the relevant customer id if applicable, or null
 
-Focus on: negative/low margins, cost optimization opportunities, pricing misalignment, customer concentration risk. Be specific with numbers from the data.
+### What a great pricing consultant would focus on:
 
-If historic context is provided, use it to cross-reference with SDK data. For example, if SDK data shows 60% of gpt-4o calls go to ai_summarization, and historic data shows $3,200/mo total OpenAI spend, estimate that ~$1,920/mo goes to summarization. Call out when historic spend patterns don't match current SDK patterns.
+1. **Pricing recommendations**: For each feature with poor margins, calculate what the price per call SHOULD be to hit 50%+ margin. State it explicitly: "Charge $X per call" or "Raise price by Y%".
+
+2. **Usage-based pricing signals**: If some customers use a feature 10x more than others but pay the same, that's a clear signal for usage-based or tiered pricing. Quantify the spread and recommend a pricing model (per-call, tiered, or overage-based).
+
+3. **Model routing opportunities**: If an expensive model is used for a feature where a cheaper model would work, calculate the savings. Be specific: "Routing 70% of summarization calls to haiku instead of sonnet saves $X/month".
+
+4. **Margin trajectory**: If margins are improving or degrading over time, explain why and what to do about it. If model costs dropped but prices stayed flat, the client is leaving margin on the table — or could lower prices to grow volume.
+
+5. **Customer profitability**: Flag customers who cost more to serve than they pay. Recommend whether to reprice, upsell, or accept the loss as acquisition cost.
+
+6. **Cross-reference historic data**: If CSV/import data shows total historic spend, estimate how much went to each feature based on current usage proportions. Flag discrepancies between historic and current patterns.
+
+Prioritize pricing recommendations and usage-based pricing signals — those are the highest-value insights. Every insight should end with a concrete "do this" action, not just an observation.
 
 Return ONLY the JSON array, no markdown or explanation.`
 
@@ -4082,10 +4170,10 @@ Return ONLY the JSON array, no markdown or explanation.`
           'Authorization': `Bearer ${openaiKey}`,
         },
         body: JSON.stringify({
-          model: 'gpt-4o-mini',
+          model: 'gpt-4o',
           messages: [{ role: 'user', content: prompt }],
           temperature: 0.3,
-          max_tokens: 1500,
+          max_tokens: 3000,
         }),
       })
 
@@ -4103,7 +4191,7 @@ Return ONLY the JSON array, no markdown or explanation.`
       tokensUsed = completion.usage?.total_tokens || 0
       const promptTokens = (completion.usage as Record<string, number>)?.prompt_tokens || 0
       const completionTokens = (completion.usage as Record<string, number>)?.completion_tokens || 0
-      costUsd = promptTokens * 0.00000015 + completionTokens * 0.0000006
+      costUsd = promptTokens * 0.0000025 + completionTokens * 0.00001
 
       try {
         const cleaned = content.replace(/^```json?\n?/i, '').replace(/\n?```$/i, '').trim()
@@ -4121,77 +4209,145 @@ Return ONLY the JSON array, no markdown or explanation.`
         return res.status(502).json({ error: 'AI returned invalid response. Try again.' })
       }
     } else {
-      // Fallback: generate insights locally without OpenAI
+      // Fallback: generate consultant-grade insights locally without OpenAI
       insights = []
 
+      // 1. Pricing recommendations for features with poor margins
       for (const row of featureRes.rows) {
         const cost = parseFloat(row.total_cost) || 0
         const revenue = parseFloat(row.total_revenue) || 0
         const margin = revenue > 0 ? Math.round(((revenue - cost) / revenue) * 100) : 0
+        const costPerCall = parseFloat(row.cost_per_call) || 0
+        const revenuePerCall = parseFloat(row.revenue_per_call) || 0
+        const events = parseInt(row.event_count) || 0
+        const targetRevenuePerCall = costPerCall / 0.5 // 50% margin target
 
         if (margin < 0) {
           insights.push({
-            insight_type: 'margin_alert',
-            title: `${row.feature_key} has negative margin (${margin}%)`,
-            description: `This feature costs $${cost.toFixed(2)} but only generates $${revenue.toFixed(2)} in revenue. Consider raising prices or optimizing the underlying AI model costs.`,
+            insight_type: 'pricing_recommendation',
+            title: `${row.feature_key}: charge $${targetRevenuePerCall.toFixed(4)}/call for 50% margin`,
+            description: `This feature costs $${costPerCall.toFixed(4)}/call but you charge $${revenuePerCall.toFixed(4)}/call (${margin}% margin). To hit 50% margin, set the price to $${targetRevenuePerCall.toFixed(4)}/call. At ${events} calls, that recovers $${((targetRevenuePerCall - revenuePerCall) * events).toFixed(2)} in lost margin.`,
             severity: 'critical',
             feature_key: row.feature_key,
           })
-        } else if (margin < 20) {
+        } else if (margin < 30) {
           insights.push({
-            insight_type: 'pricing_opportunity',
-            title: `${row.feature_key} has low margin (${margin}%)`,
-            description: `At ${margin}% margin, this feature is barely profitable. A price increase would bring it to a healthier 30%+ margin.`,
+            insight_type: 'pricing_recommendation',
+            title: `${row.feature_key}: raise price to $${targetRevenuePerCall.toFixed(4)}/call`,
+            description: `At ${margin}% margin and $${costPerCall.toFixed(4)} cost/call, this feature is underpriced. Raise per-call price from $${revenuePerCall.toFixed(4)} to $${targetRevenuePerCall.toFixed(4)} to reach 50% margin. That's a ${Math.round(((targetRevenuePerCall - revenuePerCall) / (revenuePerCall || 0.0001)) * 100)}% increase.`,
             severity: 'warning',
             feature_key: row.feature_key,
           })
         }
       }
 
+      // 2. Usage-based pricing signals from customer variance
+      for (const row of customerFeatureRes.rows) {
+        const min = parseInt(row.min_calls) || 0
+        const max = parseInt(row.max_calls) || 0
+        const customers = parseInt(row.unique_customers) || 0
+        const ratio = min > 0 ? Math.round(max / min) : max
+
+        if (ratio >= 5 && customers >= 2) {
+          insights.push({
+            insight_type: 'usage_pricing_signal',
+            title: `${row.feature_key}: ${ratio}x usage spread across customers`,
+            description: `Your heaviest user of ${row.feature_key} makes ${max} calls vs ${min} for the lightest (${ratio}x spread across ${customers} customers). If they pay the same flat rate, you're subsidizing power users. Consider per-call pricing or usage tiers with an overage charge.`,
+            severity: 'warning',
+            feature_key: row.feature_key,
+          })
+        }
+      }
+
+      // 3. Model routing opportunities
+      const featureModels: Record<string, Array<{ model: string; cost_per_call: number; event_count: number; total_cost: number }>> = {}
+      for (const row of featureModelRes.rows) {
+        const key = row.feature_key
+        if (!featureModels[key]) featureModels[key] = []
+        featureModels[key].push({
+          model: row.model,
+          cost_per_call: parseFloat(row.cost_per_call) || 0,
+          event_count: parseInt(row.event_count) || 0,
+          total_cost: parseFloat(row.total_cost) || 0,
+        })
+      }
+      for (const [feature, models] of Object.entries(featureModels)) {
+        if (models.length >= 2) {
+          const sorted = [...models].sort((a, b) => b.cost_per_call - a.cost_per_call)
+          const expensive = sorted[0]
+          const cheap = sorted[sorted.length - 1]
+          if (expensive.cost_per_call > cheap.cost_per_call * 2) {
+            const savingsIfRouted = (expensive.cost_per_call - cheap.cost_per_call) * expensive.event_count * 0.7 // assume 70% routable
+            insights.push({
+              insight_type: 'model_routing',
+              title: `Route ${feature} calls from ${expensive.model} to ${cheap.model}`,
+              description: `${expensive.model} costs $${expensive.cost_per_call.toFixed(4)}/call vs $${cheap.cost_per_call.toFixed(4)} for ${cheap.model} (${Math.round(expensive.cost_per_call / (cheap.cost_per_call || 0.0001))}x more expensive). Routing 70% of ${expensive.event_count} calls to the cheaper model saves ~$${savingsIfRouted.toFixed(2)}/period. Test quality on a sample before switching.`,
+              severity: 'info',
+              feature_key: feature,
+            })
+          }
+        }
+      }
+
+      // 4. Overall margin health
       if (overallMargin < 30) {
         insights.push({
           insight_type: 'margin_alert',
-          title: `Overall margin is ${overallMargin}% — below healthy threshold`,
-          description: `Total costs ($${totalCost.toFixed(2)}) consume ${100 - overallMargin}% of revenue ($${totalRevenue.toFixed(2)}). Target 50%+ margin for SaaS sustainability.`,
+          title: `Overall margin is ${overallMargin}% — below 30% threshold`,
+          description: `Total costs ($${totalCost.toFixed(2)}) consume ${100 - overallMargin}% of revenue ($${totalRevenue.toFixed(2)}). Healthy AI SaaS targets 50%+ margin. Combine pricing increases on underperforming features with model routing to close the gap.`,
           severity: overallMargin < 0 ? 'critical' : 'warning',
         })
       } else {
         insights.push({
           insight_type: 'margin_alert',
           title: `Overall margin is healthy at ${overallMargin}%`,
-          description: `Revenue ($${totalRevenue.toFixed(2)}) comfortably covers costs ($${totalCost.toFixed(2)}). Focus on maintaining this margin as you scale.`,
+          description: `Revenue ($${totalRevenue.toFixed(2)}) covers costs ($${totalCost.toFixed(2)}) with ${overallMargin}% margin. You could lower prices to grow volume or maintain margin and invest in features.`,
           severity: 'positive',
         })
       }
 
-      if (modelRes.rows.length > 1) {
-        const mostExpensive = modelRes.rows[0]
-        const cheapest = modelRes.rows[modelRes.rows.length - 1]
-        if (parseFloat(mostExpensive.total_cost) > parseFloat(cheapest.total_cost) * 3) {
-          insights.push({
-            insight_type: 'cost_optimization',
-            title: `${mostExpensive.model} costs ${Math.round(parseFloat(mostExpensive.total_cost) / (parseFloat(cheapest.total_cost) || 0.01))}x more than ${cheapest.model}`,
-            description: `Consider routing simpler requests to ${cheapest.model} ($${parseFloat(cheapest.total_cost).toFixed(2)}) instead of ${mostExpensive.model} ($${parseFloat(mostExpensive.total_cost).toFixed(2)}) where quality permits.`,
-            severity: 'info',
-          })
-        }
-      }
-
-      if (customerRes.rows.length >= 2) {
-        const topCustomerRevenue = parseFloat(customerRes.rows[0].total_revenue) || 0
-        const concentration = totalRevenue > 0 ? Math.round((topCustomerRevenue / totalRevenue) * 100) : 0
-        if (concentration > 40) {
+      // 5. Customer profitability risk
+      for (const row of customerRes.rows) {
+        const cost = parseFloat(row.total_cost) || 0
+        const revenue = parseFloat(row.total_revenue) || 0
+        const margin = revenue > 0 ? Math.round(((revenue - cost) / revenue) * 100) : -100
+        if (margin < 0 && cost > totalCost * 0.1) {
           insights.push({
             insight_type: 'customer_risk',
-            title: `${customerRes.rows[0].customer_name || customerRes.rows[0].customer_id} is ${concentration}% of revenue`,
-            description: `High customer concentration risk. If this customer churns, you lose $${topCustomerRevenue.toFixed(2)} (${concentration}% of total). Diversify your customer base.`,
-            severity: 'warning',
-            customer_id: customerRes.rows[0].customer_id,
+            title: `${row.customer_name || row.customer_id} is unprofitable at ${margin}% margin`,
+            description: `This customer costs $${cost.toFixed(2)} to serve but pays $${revenue.toFixed(2)} (${margin}% margin, ${Math.round((cost / totalCost) * 100)}% of your total cost). Either reprice their plan, add usage caps, or treat as acquisition cost with a timeline to convert.`,
+            severity: 'critical',
+            customer_id: row.customer_id,
           })
         }
       }
 
-      insights = insights.slice(0, 5)
+      // 6. Margin trend
+      if (trendRes.rows.length >= 2) {
+        const recent = trendRes.rows[0]
+        const older = trendRes.rows[trendRes.rows.length - 1]
+        const recentMargin = parseFloat(recent.total_revenue) > 0
+          ? Math.round(((parseFloat(recent.total_revenue) - parseFloat(recent.total_cost)) / parseFloat(recent.total_revenue)) * 100) : 0
+        const olderMargin = parseFloat(older.total_revenue) > 0
+          ? Math.round(((parseFloat(older.total_revenue) - parseFloat(older.total_cost)) / parseFloat(older.total_revenue)) * 100) : 0
+        const delta = recentMargin - olderMargin
+        if (Math.abs(delta) >= 5) {
+          insights.push({
+            insight_type: delta > 0 ? 'cost_optimization' : 'margin_alert',
+            title: `Margin ${delta > 0 ? 'improved' : 'dropped'} ${Math.abs(delta)}pp over ${trendRes.rows.length} months`,
+            description: `Margin moved from ${olderMargin}% to ${recentMargin}% (${delta > 0 ? '+' : ''}${delta}pp). ${delta > 0 ? 'If model costs dropped but your prices stayed flat, you could lower prices to grow volume or keep the extra margin.' : 'Check if usage patterns shifted to more expensive models, or if a specific feature or customer drove the increase.'}`,
+            severity: delta < -10 ? 'warning' : 'info',
+          })
+        }
+      }
+
+      // Prioritize: pricing recommendations first, then signals, then alerts
+      const priority: Record<string, number> = {
+        pricing_recommendation: 0, usage_pricing_signal: 1, model_routing: 2,
+        customer_risk: 3, margin_alert: 4, cost_optimization: 5,
+      }
+      insights.sort((a, b) => (priority[a.insight_type] ?? 9) - (priority[b.insight_type] ?? 9))
+      insights = insights.slice(0, 6)
     }
 
     // Store insights
@@ -4223,21 +4379,8 @@ Return ONLY the JSON array, no markdown or explanation.`
       [visitorId, costUsd]
     )
 
-    // Track usage in billing (fail open)
-    if (isBillingConfigured()) {
-      try {
-        await billingIngestEvent({
-          eventIdempotencyKey: crypto.randomUUID(),
-          eventName: 'insights_generated',
-          occurredAt: new Date().toISOString(),
-          customerReferenceId: visitorId,
-          featureKey: 'ai_insights',
-          usageUnits: 1,
-        })
-      } catch (err) {
-        console.error('Billing usage tracking error (ai_insights):', err)
-      }
-    }
+    // Track usage (insights are metered by counting ai_insights rows)
+    trackBillingUsage(visitorId, 'ai_insights', 'insights_generated')
 
     res.json({
       insights: storedInsights,
@@ -4264,7 +4407,6 @@ app.delete('/insights', ensureVisitor, async (req: AuthRequest, res: Response) =
 
 // GET /usage/limits — return current usage for ai_insights
 app.get('/usage/limits', ensureVisitor, async (req: AuthRequest, res: Response) => {
-  if (!isBillingConfigured()) return res.json({ configured: false })
   const visitorId = req.visitorId!
   try {
     const access = await checkBillingFeatureAccess(visitorId, 'ai_insights', req.accountEmail)

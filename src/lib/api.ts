@@ -766,31 +766,31 @@ export async function tansoGetStatus(): Promise<{
   customer: any
   configured: boolean
 }> {
-  return request('/tanso/status')
+  return request('/billing/status')
 }
 
 export async function tansoGetPlans(): Promise<{ plans: TansoPlan[]; configured: boolean }> {
-  return request('/tanso/plans')
+  return request('/billing/status')
 }
 
 export async function tansoGetFeatures(): Promise<{ features: any[]; configured: boolean }> {
-  return request('/tanso/features')
+  return request('/billing/status')
 }
 
 export async function tansoGetEntitlements(): Promise<{ entitlements: TansoEntitlement[]; configured: boolean }> {
-  return request('/tanso/entitlements')
+  return request('/billing/status')
 }
 
 export async function tansoGetSubscription(): Promise<{ customer: any; configured: boolean }> {
-  return request('/tanso/subscription')
+  return request('/billing/status')
 }
 
 export async function tansoSubscribe(planId: string): Promise<{ success: boolean; subscription: any }> {
-  return request('/tanso/subscribe', { method: 'POST', body: JSON.stringify({ planId }) })
+  return request('/billing/subscribe', { method: 'POST', body: JSON.stringify({ planId }) })
 }
 
 export async function tansoCheckFeature(featureKey: string): Promise<TansoEntitlementCheck> {
-  return request(`/tanso/check/${featureKey}`)
+  return request(`/billing/check/${featureKey}`)
 }
 
 // Invoice types and API

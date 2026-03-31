@@ -43,7 +43,7 @@ async function openStripePortal() {
   if (!requireAuth()) return
   isOpeningPortal.value = true
   try {
-    const data = await apiPost('/tanso/portal', {})
+    const data = await apiPost('/billing/portal', {})
     if (data.url) {
       window.location.href = data.url
     }
@@ -129,7 +129,7 @@ async function handleSubscribe(planKey: string) {
       isPending.value = false
       return
     }
-    const data = await apiPost('/tanso/subscribe', { planId: plan.id })
+    const data = await apiPost('/billing/subscribe', { planId: plan.id })
 
     if (data.checkoutUrl) {
       window.location.href = data.checkoutUrl
@@ -156,7 +156,7 @@ async function handleCancel(mode: 'IMMEDIATE' | 'END_OF_PERIOD' = 'END_OF_PERIOD
   if (!requireAuth() || !currentSub.value) return
   isPending.value = true
   try {
-    await apiPost('/tanso/cancel', { subscriptionId: currentSub.value.id, cancelMode: mode })
+    await apiPost('/billing/cancel', { subscriptionId: currentSub.value.id, cancelMode: mode })
     toast.success(mode === 'END_OF_PERIOD'
       ? 'Subscription will cancel at end of billing period'
       : 'Subscription cancelled')
@@ -172,7 +172,7 @@ async function handleReactivate() {
   if (!requireAuth() || !currentSub.value) return
   isPending.value = true
   try {
-    await apiPost('/tanso/reactivate', { subscriptionId: currentSub.value.id })
+    await apiPost('/billing/reactivate', { subscriptionId: currentSub.value.id })
     toast.success('Subscription reactivated!')
     refresh()
   } catch (error: unknown) {
