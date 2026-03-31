@@ -196,11 +196,10 @@ function retry() {
 }
 
 const insightCategories = [
-  { title: 'Pricing recommendations', description: 'Exact price points per feature to hit your target margin, based on your actual cost-per-call data.' },
-  { title: 'Usage-based pricing signals', description: 'Detects when some customers use 10x more than others — signals to switch from flat-rate to usage-based pricing.' },
-  { title: 'Model routing savings', description: 'Finds where cheaper AI models can handle the same work, with specific dollar savings per feature.' },
-  { title: 'Customer profitability', description: 'Flags customers who cost more to serve than they pay, with recommendations to reprice or upsell.' },
-  { title: 'Margin trajectory', description: 'Tracks how margins change over time and explains why — model cost drops, usage shifts, pricing drift.' },
+  { title: 'Margin analysis', description: 'Which features cost more than they earn, and by how much.' },
+  { title: 'Model cost comparison', description: 'Which AI models you spend the most on and cheaper alternatives.' },
+  { title: 'Customer profitability', description: 'Which customers cost the most to serve relative to their revenue.' },
+  { title: 'Historic spend estimation', description: 'Cross-references your SDK data with CSV uploads and provider imports to estimate where past spend went.' },
 ]
 </script>
 
@@ -242,7 +241,7 @@ const insightCategories = [
             <h2 class="text-lg font-semibold">AI Insights</h2>
           </div>
           <p class="text-sm text-muted-foreground">
-            Your AI pricing consultant. Analyzes cost-per-call, usage patterns, and customer data to recommend exact price points, flag unprofitable customers, and find model routing savings.
+            AI analyzes your cost and revenue data to find margin issues, pricing opportunities, and model optimizations. Insights improve as you send more events.
           </p>
         </div>
 
@@ -292,22 +291,22 @@ const insightCategories = [
               class="rounded-lg border p-3 space-y-1.5 border-destructive/30 bg-destructive/5"
             >
               <span class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium bg-destructive/10 text-destructive">critical</span>
-              <div class="text-sm font-medium">ai_summarization: charge $0.0016/call for 50% margin</div>
-              <div class="text-xs text-muted-foreground">This feature costs $0.0008/call but you charge $0.0003/call (-62% margin). At 1,847 calls/month, set price to $0.0016/call to hit 50% margin — recovers $2.40/month. Current pricing leaves $1,477 in losses annually.</div>
+              <div class="text-sm font-medium">ai_summarization margin is -23%</div>
+              <div class="text-xs text-muted-foreground">This feature costs $0.82 per call but only earns $0.63. 5 customers used it 1,847 times last month. Switching from claude-3-5-sonnet to claude-3-haiku for shorter inputs would cut cost 80%.</div>
             </div>
             <div
               class="rounded-lg border p-3 space-y-1.5 border-warning/30 bg-warning/5"
             >
               <span class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium bg-warning/10 text-warning">warning</span>
-              <div class="text-sm font-medium">image_generation: 12x usage spread suggests per-call pricing</div>
-              <div class="text-xs text-muted-foreground">Acme Corp makes 480 calls/month vs 40 for your lightest user (12x spread across 5 customers). If everyone pays the same flat rate, Acme is subsidized by $54/month. Switch to per-call pricing or add an overage tier above 100 calls.</div>
+              <div class="text-sm font-medium">Acme Corp costs 3x more than other enterprise accounts</div>
+              <div class="text-xs text-muted-foreground">Acme Corp generated $0.50 in revenue but $0.54 in AI costs last month. Their image_generation usage is 4x the account average. Consider usage-based pricing for this feature.</div>
             </div>
             <div
               class="rounded-lg border p-3 space-y-1.5 border-success/30 bg-success/5"
             >
-              <span class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium bg-success/10 text-success">positive</span>
-              <div class="text-sm font-medium">Route summarization calls to haiku — save $48/month</div>
-              <div class="text-xs text-muted-foreground">70% of ai_summarization calls use &lt;500 input tokens. Routing those to claude-3-haiku ($0.0001/call) instead of claude-3-5-sonnet ($0.0008/call) saves $48/month with no quality loss on short inputs. Test on a 10% sample first.</div>
+              <span class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium bg-success/10 text-success">opportunity</span>
+              <div class="text-sm font-medium">search feature has 78% margin with room to grow</div>
+              <div class="text-xs text-muted-foreground">text-embedding-3-small costs $0.002 per query but you charge $0.01. Only 3 of 5 customers use it. Promoting this feature could increase revenue with minimal cost impact.</div>
             </div>
           </div>
         </template>
