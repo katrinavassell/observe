@@ -7,12 +7,9 @@ import {
   Zap,
   Loader2,
   AlertCircle,
-  X,
   ArrowDown,
   RotateCcw,
-  XCircle,
   Calendar,
-  FileText,
   ExternalLink,
 } from "lucide-vue-next";
 import { tansoGetStatus } from "@/lib/api";

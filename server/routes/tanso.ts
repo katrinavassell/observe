@@ -166,7 +166,12 @@ async function getOrCreateBillingCustomer(
       throw createErr;
     }
   } catch (err) {
-    console.error("Billing customer lookup/create error:", err);
+    console.error(
+      "Billing customer lookup/create error for visitor",
+      visitorId,
+      ":",
+      err,
+    );
     return null;
   }
 }
@@ -816,12 +821,10 @@ export function createBillingRoutes(
         res.json(result);
       } catch (err) {
         console.error("Billing check error:", err);
-        res
-          .status(503)
-          .json({
-            allowed: false,
-            reason: "Feature check temporarily unavailable. Please retry.",
-          });
+        res.status(503).json({
+          allowed: false,
+          reason: "Feature check temporarily unavailable. Please retry.",
+        });
       }
     },
   );

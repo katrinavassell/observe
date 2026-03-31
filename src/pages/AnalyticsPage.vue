@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
-import { useQuery, useQueryClient } from '@tanstack/vue-query'
-import { useRouter } from 'vue-router'
+import { ref, computed } from "vue";
+import { useQuery, useQueryClient } from "@tanstack/vue-query";
+import { useRouter } from "vue-router";
 import {
   getEventsByFeature,
   getEventsByModel,
@@ -9,88 +9,113 @@ import {
   listInsights,
   generateInsights,
   getUsageLimits,
-} from '@/lib/api'
-import type { AiInsight } from '@/lib/api'
-import { AlertCircle, AlertTriangle, Database, Plug, FlaskConical, Sparkles, Zap } from 'lucide-vue-next'
-import { useDataMode } from '@/composables/useDataMode'
-import Sheet from '@/components/ui/sheet.vue'
+} from "@/lib/api";
+import type { AiInsight } from "@/lib/api";
 import {
-  Card,
-  Skeleton,
-  Button,
-} from '@/components/ui'
-import { formatCurrency as fmt, formatPct as fmtPct } from '@/lib/format'
+  AlertCircle,
+  AlertTriangle,
+  Database,
+  Plug,
+  FlaskConical,
+  Sparkles,
+  Zap,
+} from "lucide-vue-next";
+import { useDataMode } from "@/composables/useDataMode";
+import Sheet from "@/components/ui/sheet.vue";
+import { Card, Skeleton, Button } from "@/components/ui";
+import { formatCurrency as fmt, formatPct as fmtPct } from "@/lib/format";
 
-const router = useRouter()
-const queryClient = useQueryClient()
-const { isSampleMode, switchToSampleData, clearSample, isLoadingSample } = useDataMode()
+const router = useRouter();
+const queryClient = useQueryClient();
+const { isSampleMode, switchToSampleData, clearSample, isLoadingSample } =
+  useDataMode();
 
-type Tab = 'feature' | 'model' | 'customer'
-const activeTab = ref<Tab>('feature')
+type Tab = "feature" | "model" | "customer";
+const activeTab = ref<Tab>("feature");
 
 // Insights drawer state
-const insightsOpen = ref(false)
-const isGenerating = ref(false)
-const generateError = ref<string | null>(null)
+const insightsOpen = ref(false);
+const isGenerating = ref(false);
+const generateError = ref<string | null>(null);
 
 const { data: insightsData, refetch: refetchInsights } = useQuery({
-  queryKey: ['insights'],
+  queryKey: ["insights"],
   queryFn: listInsights,
   enabled: computed(() => insightsOpen.value),
-})
+});
 
 const { data: usageLimits } = useQuery({
-  queryKey: ['usage-limits'],
+  queryKey: ["usage-limits"],
   queryFn: getUsageLimits,
   enabled: computed(() => insightsOpen.value),
-})
+});
 
-const insightsAllowed = computed(() => usageLimits.value?.ai_insights?.allowed !== false)
-const insightsUsage = computed(() => usageLimits.value?.ai_insights?.usage ?? null)
+const insightsAllowed = computed(
+  () => usageLimits.value?.ai_insights?.allowed !== false,
+);
+const insightsUsage = computed(
+  () => usageLimits.value?.ai_insights?.usage ?? null,
+);
 
 async function handleGenerate() {
-  isGenerating.value = true
-  generateError.value = null
+  isGenerating.value = true;
+  generateError.value = null;
   try {
-    await generateInsights()
-    await refetchInsights()
+    await generateInsights();
+    await refetchInsights();
     // Refresh usage limits
-    queryClient.invalidateQueries({ queryKey: ['usage-limits'] })
+    queryClient.invalidateQueries({ queryKey: ["usage-limits"] });
   } catch (e: any) {
-    generateError.value = e?.message || 'Failed to generate insights'
+    generateError.value = e?.message || "Failed to generate insights";
   } finally {
-    isGenerating.value = false
+    isGenerating.value = false;
   }
 }
 
 function severityColor(severity: string) {
   switch (severity) {
-    case 'critical': return 'border-destructive/30 bg-destructive/5 text-destructive'
-    case 'warning': return 'border-warning/30 bg-warning/5 text-warning'
-    case 'positive': return 'border-success/30 bg-success/5 text-success'
-    default: return 'border-border bg-card text-foreground'
+    case "critical":
+      return "border-destructive/30 bg-destructive/5 text-destructive";
+    case "warning":
+      return "border-warning/30 bg-warning/5 text-warning";
+    case "positive":
+      return "border-success/30 bg-success/5 text-success";
+    default:
+      return "border-border bg-card text-foreground";
   }
 }
 
 function severityBadge(severity: string) {
   switch (severity) {
-    case 'critical': return 'bg-destructive/10 text-destructive'
-    case 'warning': return 'bg-warning/10 text-warning'
-    case 'positive': return 'bg-success/10 text-success'
-    default: return 'bg-muted text-muted-foreground'
+    case "critical":
+      return "bg-destructive/10 text-destructive";
+    case "warning":
+      return "bg-warning/10 text-warning";
+    case "positive":
+      return "bg-success/10 text-success";
+    default:
+      return "bg-muted text-muted-foreground";
   }
 }
 
 function insightTypeLabel(type: string) {
   switch (type) {
-    case 'pricing_recommendation': return 'Pricing'
-    case 'usage_pricing_signal': return 'Usage pattern'
-    case 'model_routing': return 'Model routing'
-    case 'margin_alert': return 'Margin'
-    case 'customer_risk': return 'Customer'
-    case 'cost_optimization': return 'Cost'
-    case 'pricing_opportunity': return 'Pricing'
-    default: return type.replace(/_/g, ' ')
+    case "pricing_recommendation":
+      return "Pricing";
+    case "usage_pricing_signal":
+      return "Usage pattern";
+    case "model_routing":
+      return "Model routing";
+    case "margin_alert":
+      return "Margin";
+    case "customer_risk":
+      return "Customer";
+    case "cost_optimization":
+      return "Cost";
+    case "pricing_opportunity":
+      return "Pricing";
+    default:
+      return type.replace(/_/g, " ");
   }
 }
 
@@ -100,107 +125,141 @@ const {
   isLoading: featuresLoading,
   isError: featuresError,
 } = useQuery({
-  queryKey: ['events-by-feature'],
+  queryKey: ["events-by-feature"],
   queryFn: getEventsByFeature,
-})
+});
 
 const {
   data: modelData,
   isLoading: modelsLoading,
   isError: modelsError,
 } = useQuery({
-  queryKey: ['events-by-model'],
+  queryKey: ["events-by-model"],
   queryFn: getEventsByModel,
-})
+});
 
 const {
   data: customerData,
   isLoading: customersLoading,
   isError: customersError,
 } = useQuery({
-  queryKey: ['events-by-customer'],
+  queryKey: ["events-by-customer"],
   queryFn: getEventsByCustomer,
-})
+});
 
-const isLoading = computed(() => featuresLoading.value || modelsLoading.value || customersLoading.value)
-const isError = computed(() => featuresError.value || modelsError.value || customersError.value)
-const hasData = computed(() => !isLoading.value && !isError.value && (featureData.value?.length || modelData.value?.length || customerData.value?.length))
+const isLoading = computed(
+  () => featuresLoading.value || modelsLoading.value || customersLoading.value,
+);
+const isError = computed(
+  () => featuresError.value || modelsError.value || customersError.value,
+);
+const hasData = computed(
+  () =>
+    !isLoading.value &&
+    !isError.value &&
+    (featureData.value?.length ||
+      modelData.value?.length ||
+      customerData.value?.length),
+);
 
 const totalCost = computed(() => {
-  if (!featureData.value) return 0
-  return featureData.value.reduce((s, f) => s + f.total_cost, 0)
-})
+  if (!featureData.value) return 0;
+  return featureData.value.reduce((s, f) => s + f.total_cost, 0);
+});
 const totalRevenue = computed(() => {
-  if (!featureData.value) return 0
-  return featureData.value.reduce((s, f) => s + f.total_revenue, 0)
-})
+  if (!featureData.value) return 0;
+  return featureData.value.reduce((s, f) => s + f.total_revenue, 0);
+});
 const netMarginPct = computed(() => {
-  if (totalRevenue.value === 0) return null
-  return ((totalRevenue.value - totalCost.value) / totalRevenue.value) * 100
-})
+  if (totalRevenue.value === 0) return null;
+  return ((totalRevenue.value - totalCost.value) / totalRevenue.value) * 100;
+});
 
 const negativeMarginsInfo = computed(() => {
-  if (!featureData.value) return null
-  const negative = featureData.value.filter(f => f.margin_pct !== null && f.margin_pct < 0)
-  if (negative.length === 0) return null
-  const totalLoss = negative.reduce((s, f) => s + (f.total_cost - f.total_revenue), 0)
-  return { count: negative.length, totalLoss }
-})
+  if (!featureData.value) return null;
+  const negative = featureData.value.filter(
+    (f) => f.margin_pct !== null && f.margin_pct < 0,
+  );
+  if (negative.length === 0) return null;
+  const totalLoss = negative.reduce(
+    (s, f) => s + (f.total_cost - f.total_revenue),
+    0,
+  );
+  return { count: negative.length, totalLoss };
+});
 
 const sortedFeatures = computed(() => {
-  if (!featureData.value) return []
-  return [...featureData.value].sort((a, b) => b.total_cost - a.total_cost)
-})
+  if (!featureData.value) return [];
+  return [...featureData.value].sort((a, b) => b.total_cost - a.total_cost);
+});
 const maxFeatureCost = computed(() => {
-  if (!sortedFeatures.value.length) return 1
-  return Math.max(...sortedFeatures.value.map(f => f.total_cost), 0.01)
-})
+  if (!sortedFeatures.value.length) return 1;
+  return Math.max(...sortedFeatures.value.map((f) => f.total_cost), 0.01);
+});
 
 const sortedModels = computed(() => {
-  if (!modelData.value) return []
-  return [...modelData.value].filter(m => m.total_cost > 0).sort((a, b) => b.total_cost - a.total_cost)
-})
+  if (!modelData.value) return [];
+  return [...modelData.value]
+    .filter((m) => m.total_cost > 0)
+    .sort((a, b) => b.total_cost - a.total_cost);
+});
 const maxModelCost = computed(() => {
-  if (!sortedModels.value.length) return 1
-  return Math.max(...sortedModels.value.map(m => m.total_cost), 0.01)
-})
+  if (!sortedModels.value.length) return 1;
+  return Math.max(...sortedModels.value.map((m) => m.total_cost), 0.01);
+});
 
 const sortedCustomers = computed(() => {
-  if (!customerData.value) return []
-  return [...customerData.value].sort((a, b) => b.total_cost - a.total_cost)
-})
+  if (!customerData.value) return [];
+  return [...customerData.value].sort((a, b) => b.total_cost - a.total_cost);
+});
 const maxCustomerCost = computed(() => {
-  if (!sortedCustomers.value.length) return 1
-  return Math.max(...sortedCustomers.value.map(c => c.total_cost), 0.01)
-})
+  if (!sortedCustomers.value.length) return 1;
+  return Math.max(...sortedCustomers.value.map((c) => c.total_cost), 0.01);
+});
 
 // Data quality for insights
 const totalEvents = computed(() => {
-  if (!featureData.value) return 0
-  return featureData.value.reduce((s, f) => s + (f.event_count || 0), 0)
-})
+  if (!featureData.value) return 0;
+  return featureData.value.reduce((s, f) => s + (f.event_count || 0), 0);
+});
 const dataConfidence = computed(() => {
-  const n = totalEvents.value
-  if (n === 0) return { label: 'No data', color: 'text-muted-foreground', pct: 0 }
-  if (n < 10) return { label: 'Very low', color: 'text-destructive', pct: 15 }
-  if (n < 50) return { label: 'Low', color: 'text-warning', pct: 35 }
-  if (n < 200) return { label: 'Medium', color: 'text-warning', pct: 60 }
-  if (n < 500) return { label: 'Good', color: 'text-success', pct: 80 }
-  return { label: 'High', color: 'text-success', pct: 95 }
-})
+  const n = totalEvents.value;
+  if (n === 0)
+    return { label: "No data", color: "text-muted-foreground", pct: 0 };
+  if (n < 10) return { label: "Very low", color: "text-destructive", pct: 15 };
+  if (n < 50) return { label: "Low", color: "text-warning", pct: 35 };
+  if (n < 200) return { label: "Medium", color: "text-warning", pct: 60 };
+  if (n < 500) return { label: "Good", color: "text-success", pct: 80 };
+  return { label: "High", color: "text-success", pct: 95 };
+});
 
 function retry() {
-  queryClient.invalidateQueries({ queryKey: ['events-by-feature'] })
-  queryClient.invalidateQueries({ queryKey: ['events-by-model'] })
-  queryClient.invalidateQueries({ queryKey: ['events-by-customer'] })
+  queryClient.invalidateQueries({ queryKey: ["events-by-feature"] });
+  queryClient.invalidateQueries({ queryKey: ["events-by-model"] });
+  queryClient.invalidateQueries({ queryKey: ["events-by-customer"] });
 }
 
 const insightCategories = [
-  { title: 'Margin analysis', description: 'Which features cost more than they earn, and by how much.' },
-  { title: 'Model cost comparison', description: 'Which AI models you spend the most on and cheaper alternatives.' },
-  { title: 'Customer profitability', description: 'Which customers cost the most to serve relative to their revenue.' },
-  { title: 'Historic spend estimation', description: 'Cross-references your SDK data with CSV uploads and provider imports to estimate where past spend went.' },
-]
+  {
+    title: "Margin analysis",
+    description: "Which features cost more than they earn, and by how much.",
+  },
+  {
+    title: "Model cost comparison",
+    description:
+      "Which AI models you spend the most on and cheaper alternatives.",
+  },
+  {
+    title: "Customer profitability",
+    description:
+      "Which customers cost the most to serve relative to their revenue.",
+  },
+  {
+    title: "Historic spend estimation",
+    description:
+      "Cross-references your SDK data with CSV uploads and provider imports to estimate where past spend went.",
+  },
+];
 </script>
 
 <template>
@@ -219,13 +278,9 @@ const insightCategories = [
           :disabled="isLoadingSample"
           @click="clearSample()"
         >
-          {{ isLoadingSample ? 'Loading...' : 'Exit preview' }}
+          {{ isLoadingSample ? "Loading..." : "Exit preview" }}
         </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          @click="insightsOpen = true"
-        >
+        <Button variant="outline" size="sm" @click="insightsOpen = true">
           <Sparkles class="h-3.5 w-3.5 mr-1.5" />
           AI Insights
         </Button>
@@ -233,7 +288,11 @@ const insightCategories = [
     </div>
 
     <!-- AI Insights Drawer -->
-    <Sheet :open="insightsOpen" side="right" @update:open="insightsOpen = $event">
+    <Sheet
+      :open="insightsOpen"
+      side="right"
+      @update:open="insightsOpen = $event"
+    >
       <div class="w-[420px] p-6 space-y-5">
         <div>
           <div class="flex items-center gap-2 mb-1">
@@ -241,37 +300,63 @@ const insightCategories = [
             <h2 class="text-lg font-semibold">AI Insights</h2>
           </div>
           <p class="text-sm text-muted-foreground">
-            AI analyzes your cost and revenue data to find margin issues, pricing opportunities, and model optimizations. Insights improve as you send more events.
+            AI analyzes your cost and revenue data to find margin issues,
+            pricing opportunities, and model optimizations. Insights improve as
+            you send more events.
           </p>
         </div>
 
         <!-- Usage -->
-        <div v-if="insightsUsage" class="rounded-lg border bg-muted/30 p-3 space-y-2">
+        <div
+          v-if="insightsUsage"
+          class="rounded-lg border bg-muted/30 p-3 space-y-2"
+        >
           <div class="flex items-center justify-between text-sm">
             <span class="text-muted-foreground">Insights generated</span>
-            <span class="font-medium">{{ insightsUsage.used }} / {{ insightsUsage.limit }}</span>
+            <span class="font-medium"
+              >{{ insightsUsage.used }} / {{ insightsUsage.limit }}</span
+            >
           </div>
           <div class="h-2 rounded-full bg-muted overflow-hidden">
             <div
               class="h-full rounded-full transition-all"
-              :class="insightsUsage.remaining === 0 ? 'bg-destructive' : insightsUsage.remaining <= 1 ? 'bg-warning' : 'bg-primary'"
-              :style="{ width: `${Math.min(100, (insightsUsage.used / insightsUsage.limit) * 100)}%` }"
+              :class="
+                insightsUsage.remaining === 0
+                  ? 'bg-destructive'
+                  : insightsUsage.remaining <= 1
+                    ? 'bg-warning'
+                    : 'bg-primary'
+              "
+              :style="{
+                width: `${insightsUsage.limit > 0 ? Math.min(100, (insightsUsage.used / insightsUsage.limit) * 100) : 0}%`,
+              }"
             />
           </div>
           <div class="text-xs text-muted-foreground">
             <template v-if="insightsUsage.remaining > 0">
-              {{ insightsUsage.remaining }} insight{{ insightsUsage.remaining === 1 ? '' : 's' }} remaining this month
+              {{ insightsUsage.remaining }} insight{{
+                insightsUsage.remaining === 1 ? "" : "s"
+              }}
+              remaining this month
             </template>
             <div v-else class="flex items-center gap-2">
               <Zap class="h-3 w-3 text-primary" />
-              <span>No insights remaining. <router-link to="/plans" class="text-primary hover:underline">Upgrade to Growth</router-link> for unlimited.</span>
+              <span
+                >No insights remaining.
+                <router-link to="/plans" class="text-primary hover:underline"
+                  >Upgrade to Growth</router-link
+                >
+                for unlimited.</span
+              >
             </div>
           </div>
         </div>
 
         <!-- DEMO MODE: hardcoded preview -->
         <template v-if="isSampleMode">
-          <div class="rounded-lg bg-muted/50 border border-dashed px-3 py-2 text-xs text-muted-foreground">
+          <div
+            class="rounded-lg bg-muted/50 border border-dashed px-3 py-2 text-xs text-muted-foreground"
+          >
             Preview mode. Connect your data to generate real insights.
           </div>
 
@@ -283,30 +368,60 @@ const insightCategories = [
             <div class="h-2 rounded-full bg-muted overflow-hidden">
               <div class="h-full rounded-full bg-primary" style="width: 92%" />
             </div>
-            <p class="text-[11px] text-muted-foreground">2,847 events tracked. Strong dataset for reliable insights.</p>
+            <p class="text-[11px] text-muted-foreground">
+              2,847 events tracked. Strong dataset for reliable insights.
+            </p>
           </div>
 
           <div class="space-y-3">
             <div
               class="rounded-lg border p-3 space-y-1.5 border-destructive/30 bg-destructive/5"
             >
-              <span class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium bg-destructive/10 text-destructive">critical</span>
-              <div class="text-sm font-medium">ai_summarization margin is -23%</div>
-              <div class="text-xs text-muted-foreground">This feature costs $0.82 per call but only earns $0.63. 5 customers used it 1,847 times last month. Switching from claude-3-5-sonnet to claude-3-haiku for shorter inputs would cut cost 80%.</div>
+              <span
+                class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium bg-destructive/10 text-destructive"
+                >critical</span
+              >
+              <div class="text-sm font-medium">
+                ai_summarization margin is -23%
+              </div>
+              <div class="text-xs text-muted-foreground">
+                This feature costs $0.82 per call but only earns $0.63. 5
+                customers used it 1,847 times last month. Switching from
+                claude-3-5-sonnet to claude-3-haiku for shorter inputs would cut
+                cost 80%.
+              </div>
             </div>
             <div
               class="rounded-lg border p-3 space-y-1.5 border-warning/30 bg-warning/5"
             >
-              <span class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium bg-warning/10 text-warning">warning</span>
-              <div class="text-sm font-medium">Acme Corp costs 3x more than other enterprise accounts</div>
-              <div class="text-xs text-muted-foreground">Acme Corp generated $0.50 in revenue but $0.54 in AI costs last month. Their image_generation usage is 4x the account average. Consider usage-based pricing for this feature.</div>
+              <span
+                class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium bg-warning/10 text-warning"
+                >warning</span
+              >
+              <div class="text-sm font-medium">
+                Acme Corp costs 3x more than other enterprise accounts
+              </div>
+              <div class="text-xs text-muted-foreground">
+                Acme Corp generated $0.50 in revenue but $0.54 in AI costs last
+                month. Their image_generation usage is 4x the account average.
+                Consider usage-based pricing for this feature.
+              </div>
             </div>
             <div
               class="rounded-lg border p-3 space-y-1.5 border-success/30 bg-success/5"
             >
-              <span class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium bg-success/10 text-success">opportunity</span>
-              <div class="text-sm font-medium">search feature has 78% margin with room to grow</div>
-              <div class="text-xs text-muted-foreground">text-embedding-3-small costs $0.002 per query but you charge $0.01. Only 3 of 5 customers use it. Promoting this feature could increase revenue with minimal cost impact.</div>
+              <span
+                class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium bg-success/10 text-success"
+                >opportunity</span
+              >
+              <div class="text-sm font-medium">
+                search feature has 78% margin with room to grow
+              </div>
+              <div class="text-xs text-muted-foreground">
+                text-embedding-3-small costs $0.002 per query but you charge
+                $0.01. Only 3 of 5 customers use it. Promoting this feature
+                could increase revenue with minimal cost impact.
+              </div>
             </div>
           </div>
         </template>
@@ -328,19 +443,31 @@ const insightCategories = [
                 >
                   {{ insight.severity }}
                 </span>
-                <span class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium bg-primary/10 text-primary">
+                <span
+                  class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium bg-primary/10 text-primary"
+                >
                   {{ insightTypeLabel(insight.insight_type) }}
                 </span>
-                <span v-if="insight.feature_key" class="font-mono text-[10px] bg-muted px-1.5 py-0.5 rounded">{{ insight.feature_key }}</span>
+                <span
+                  v-if="insight.feature_key"
+                  class="font-mono text-[10px] bg-muted px-1.5 py-0.5 rounded"
+                  >{{ insight.feature_key }}</span
+                >
               </div>
               <div class="text-sm font-medium">{{ insight.title }}</div>
-              <div class="text-xs text-muted-foreground">{{ insight.description }}</div>
+              <div class="text-xs text-muted-foreground">
+                {{ insight.description }}
+              </div>
             </div>
           </div>
 
           <!-- No insights yet: show categories -->
           <div v-else-if="!isGenerating" class="space-y-2">
-            <div class="text-xs font-semibold text-muted-foreground uppercase tracking-wider">What you'll get</div>
+            <div
+              class="text-xs font-semibold text-muted-foreground uppercase tracking-wider"
+            >
+              What you'll get
+            </div>
             <div
               v-for="(cat, i) in insightCategories"
               :key="i"
@@ -348,17 +475,23 @@ const insightCategories = [
             >
               <div class="min-w-0">
                 <div class="text-sm font-medium">{{ cat.title }}</div>
-                <div class="text-xs text-muted-foreground">{{ cat.description }}</div>
+                <div class="text-xs text-muted-foreground">
+                  {{ cat.description }}
+                </div>
               </div>
             </div>
           </div>
 
           <!-- Loading state -->
           <div v-if="isGenerating" class="flex items-center gap-3 py-4">
-            <div class="h-8 w-8 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+            <div
+              class="h-8 w-8 rounded-full border-2 border-primary border-t-transparent animate-spin"
+            />
             <div>
               <div class="text-sm font-medium">Analyzing your data...</div>
-              <div class="text-xs text-muted-foreground">This usually takes 5-10 seconds</div>
+              <div class="text-xs text-muted-foreground">
+                This usually takes 5-10 seconds
+              </div>
             </div>
           </div>
 
@@ -371,35 +504,53 @@ const insightCategories = [
               @click="handleGenerate"
             >
               <Sparkles class="h-4 w-4 mr-2" />
-              {{ isGenerating ? 'Analyzing...' : 'Generate Insights' }}
+              {{ isGenerating ? "Analyzing..." : "Generate Insights" }}
             </Button>
             <div v-else class="rounded-lg border bg-muted/30 p-3 text-center">
               <p class="text-sm font-medium mb-1">Upload more data to unlock</p>
-              <p class="text-xs text-muted-foreground">AI Insights needs event data from your SDK or proxy integration to analyze.</p>
+              <p class="text-xs text-muted-foreground">
+                AI Insights needs event data from your SDK or proxy integration
+                to analyze.
+              </p>
             </div>
 
             <!-- Usage info -->
-            <div v-if="insightsUsage && totalEvents >= 10" class="text-xs text-muted-foreground text-center">
+            <div
+              v-if="insightsUsage && totalEvents >= 10"
+              class="text-xs text-muted-foreground text-center"
+            >
               <template v-if="insightsUsage.used === 0">
-                {{ insightsUsage.limit }} free insight{{ insightsUsage.limit === 1 ? '' : 's' }} included
+                {{ insightsUsage.limit }} free insight{{
+                  insightsUsage.limit === 1 ? "" : "s"
+                }}
+                included
               </template>
               <template v-else-if="insightsUsage.remaining > 0">
-                {{ insightsUsage.used }} used, {{ insightsUsage.remaining }} remaining
+                {{ insightsUsage.used }} used,
+                {{ insightsUsage.remaining }} remaining
               </template>
               <template v-else>
                 All {{ insightsUsage.limit }} insights used.
-                <router-link to="/plans" class="text-primary hover:underline">Upgrade to Growth</router-link> for unlimited.
+                <router-link to="/plans" class="text-primary hover:underline"
+                  >Upgrade to Growth</router-link
+                >
+                for unlimited.
               </template>
             </div>
           </div>
 
-          <div v-if="generateError" class="text-sm text-destructive">{{ generateError }}</div>
+          <div v-if="generateError" class="text-sm text-destructive">
+            {{ generateError }}
+          </div>
         </template>
       </div>
     </Sheet>
 
     <!-- Error state -->
-    <div v-if="isError && !isLoading" class="flex flex-col items-center justify-center py-24 text-center">
+    <div
+      v-if="isError && !isLoading"
+      class="flex flex-col items-center justify-center py-24 text-center"
+    >
       <AlertCircle class="h-10 w-10 text-muted-foreground mb-4" />
       <p class="text-muted-foreground mb-4">Failed to load analytics data.</p>
       <Button @click="retry">Try Again</Button>
@@ -427,14 +578,23 @@ const insightCategories = [
       <Database class="h-10 w-10 text-muted-foreground/40 mb-3" />
       <p class="text-sm font-medium mb-1">No data yet</p>
       <p class="text-xs text-muted-foreground mb-4">
-        Connect your AI calls to see cost, revenue, and margin breakdowns by feature, model, and customer.
+        Connect your AI calls to see cost, revenue, and margin breakdowns by
+        feature, model, and customer.
       </p>
       <div class="flex gap-3">
-        <Button size="sm" :disabled="isLoadingSample" @click="switchToSampleData()">
+        <Button
+          size="sm"
+          :disabled="isLoadingSample"
+          @click="switchToSampleData()"
+        >
           <FlaskConical class="h-3.5 w-3.5 mr-1.5" />
-          {{ isLoadingSample ? 'Loading...' : 'Preview with sample data' }}
+          {{ isLoadingSample ? "Loading..." : "Preview with sample data" }}
         </Button>
-        <Button variant="outline" size="sm" @click="router.push('/data-sources')">
+        <Button
+          variant="outline"
+          size="sm"
+          @click="router.push('/data-sources')"
+        >
           Connect your data
         </Button>
       </div>
@@ -449,29 +609,45 @@ const insightCategories = [
       >
         <AlertTriangle class="h-5 w-5 text-warning shrink-0" />
         <span class="text-sm font-medium text-warning-foreground">
-          {{ negativeMarginsInfo.count }} feature{{ negativeMarginsInfo.count === 1 ? '' : 's' }}
-          {{ negativeMarginsInfo.count === 1 ? 'has' : 'have' }} negative margin totaling
-          {{ fmt(negativeMarginsInfo.totalLoss) }} in losses
+          {{ negativeMarginsInfo.count }} feature{{
+            negativeMarginsInfo.count === 1 ? "" : "s"
+          }}
+          {{ negativeMarginsInfo.count === 1 ? "has" : "have" }} negative margin
+          totaling {{ fmt(negativeMarginsInfo.totalLoss) }} in losses
         </span>
       </div>
 
       <!-- KPI cards -->
       <div class="grid grid-cols-3 gap-4">
         <Card class="p-6">
-          <div class="text-sm font-medium text-muted-foreground">Total Cost</div>
-          <div class="text-3xl font-semibold tabular-nums mt-1">{{ fmt(totalCost) }}</div>
+          <div class="text-sm font-medium text-muted-foreground">
+            Total Cost
+          </div>
+          <div class="text-3xl font-semibold tabular-nums mt-1">
+            {{ fmt(totalCost) }}
+          </div>
         </Card>
         <Card class="p-6">
-          <div class="text-sm font-medium text-muted-foreground">Total Revenue</div>
-          <div class="text-3xl font-semibold tabular-nums mt-1">{{ fmt(totalRevenue) }}</div>
+          <div class="text-sm font-medium text-muted-foreground">
+            Total Revenue
+          </div>
+          <div class="text-3xl font-semibold tabular-nums mt-1">
+            {{ fmt(totalRevenue) }}
+          </div>
         </Card>
         <Card class="p-6">
-          <div class="text-sm font-medium text-muted-foreground">Net Margin</div>
+          <div class="text-sm font-medium text-muted-foreground">
+            Net Margin
+          </div>
           <div
             class="text-3xl font-bold tabular-nums mt-1"
-            :class="netMarginPct != null && netMarginPct >= 0 ? 'text-success' : 'text-destructive'"
+            :class="
+              netMarginPct != null && netMarginPct >= 0
+                ? 'text-success'
+                : 'text-destructive'
+            "
           >
-            {{ netMarginPct != null ? fmtPct(netMarginPct) : '—' }}
+            {{ netMarginPct != null ? fmtPct(netMarginPct) : "—" }}
           </div>
         </Card>
       </div>
@@ -479,26 +655,41 @@ const insightCategories = [
       <!-- Tab bar -->
       <div class="flex gap-1 border-b">
         <button
-          v-for="tab in ([
-            { key: 'feature', label: 'By Feature', count: sortedFeatures.length },
+          v-for="tab in [
+            {
+              key: 'feature',
+              label: 'By Feature',
+              count: sortedFeatures.length,
+            },
             { key: 'model', label: 'By Model', count: sortedModels.length },
-            { key: 'customer', label: 'By Customer', count: sortedCustomers.length },
-          ] as const)"
+            {
+              key: 'customer',
+              label: 'By Customer',
+              count: sortedCustomers.length,
+            },
+          ] as const"
           :key="tab.key"
           class="px-4 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px"
-          :class="activeTab === tab.key
-            ? 'border-foreground text-foreground'
-            : 'border-transparent text-muted-foreground hover:text-foreground'"
+          :class="
+            activeTab === tab.key
+              ? 'border-foreground text-foreground'
+              : 'border-transparent text-muted-foreground hover:text-foreground'
+          "
           @click="activeTab = tab.key"
         >
           {{ tab.label }}
-          <span class="ml-1.5 text-xs text-muted-foreground">({{ tab.count }})</span>
+          <span class="ml-1.5 text-xs text-muted-foreground"
+            >({{ tab.count }})</span
+          >
         </button>
       </div>
 
       <!-- Feature tab -->
       <div v-if="activeTab === 'feature'" class="space-y-1">
-        <div v-if="!sortedFeatures.length" class="py-8 text-center text-sm text-muted-foreground">
+        <div
+          v-if="!sortedFeatures.length"
+          class="py-8 text-center text-sm text-muted-foreground"
+        >
           No feature data yet
         </div>
         <div
@@ -506,28 +697,46 @@ const insightCategories = [
           :key="f.feature_key"
           class="flex items-center gap-3 rounded-md px-3 py-2.5 hover:bg-muted/50 transition-colors"
         >
-          <span class="w-36 text-sm font-medium truncate">{{ f.feature_key }}</span>
+          <span class="w-36 text-sm font-medium truncate">{{
+            f.feature_key
+          }}</span>
           <div class="flex-1 h-3 bg-muted rounded-full overflow-hidden">
             <div
               class="h-full rounded-full"
-              :class="f.margin_pct != null && f.margin_pct < 0 ? 'bg-destructive' : 'bg-foreground'"
+              :class="
+                f.margin_pct != null && f.margin_pct < 0
+                  ? 'bg-destructive'
+                  : 'bg-foreground'
+              "
               :style="{ width: `${(f.total_cost / maxFeatureCost) * 100}%` }"
             />
           </div>
-          <span class="w-20 text-right text-sm tabular-nums">{{ fmt(f.total_cost) }}</span>
-          <span class="w-20 text-right text-sm tabular-nums text-muted-foreground">{{ fmt(f.total_revenue) }}</span>
+          <span class="w-20 text-right text-sm tabular-nums">{{
+            fmt(f.total_cost)
+          }}</span>
+          <span
+            class="w-20 text-right text-sm tabular-nums text-muted-foreground"
+            >{{ fmt(f.total_revenue) }}</span
+          >
           <span
             class="w-16 text-right text-sm tabular-nums font-medium"
-            :class="f.margin_pct != null && f.margin_pct < 0 ? 'text-destructive' : 'text-success'"
+            :class="
+              f.margin_pct != null && f.margin_pct < 0
+                ? 'text-destructive'
+                : 'text-success'
+            "
           >
-            {{ f.margin_pct != null ? fmtPct(f.margin_pct) : '—' }}
+            {{ f.margin_pct != null ? fmtPct(f.margin_pct) : "—" }}
           </span>
         </div>
       </div>
 
       <!-- Model tab -->
       <div v-if="activeTab === 'model'" class="space-y-1">
-        <div v-if="!sortedModels.length" class="py-8 text-center text-sm text-muted-foreground">
+        <div
+          v-if="!sortedModels.length"
+          class="py-8 text-center text-sm text-muted-foreground"
+        >
           No model data yet
         </div>
         <div
@@ -538,7 +747,9 @@ const insightCategories = [
         >
           <div class="w-36 min-w-0">
             <div class="text-sm font-medium truncate">{{ m.model }}</div>
-            <div v-if="m.model_provider" class="text-xs text-muted-foreground">{{ m.model_provider }}</div>
+            <div v-if="m.model_provider" class="text-xs text-muted-foreground">
+              {{ m.model_provider }}
+            </div>
           </div>
           <div class="flex-1 h-3 bg-muted rounded-full overflow-hidden">
             <div
@@ -546,20 +757,32 @@ const insightCategories = [
               :style="{ width: `${(m.total_cost / maxModelCost) * 100}%` }"
             />
           </div>
-          <span class="w-20 text-right text-sm tabular-nums">{{ fmt(m.total_cost) }}</span>
-          <span class="w-20 text-right text-sm tabular-nums text-muted-foreground">{{ fmt(m.total_revenue) }}</span>
+          <span class="w-20 text-right text-sm tabular-nums">{{
+            fmt(m.total_cost)
+          }}</span>
+          <span
+            class="w-20 text-right text-sm tabular-nums text-muted-foreground"
+            >{{ fmt(m.total_revenue) }}</span
+          >
           <span
             class="w-16 text-right text-sm tabular-nums font-medium"
-            :class="m.margin_pct != null && m.margin_pct < 0 ? 'text-destructive' : 'text-success'"
+            :class="
+              m.margin_pct != null && m.margin_pct < 0
+                ? 'text-destructive'
+                : 'text-success'
+            "
           >
-            {{ m.margin_pct != null ? fmtPct(m.margin_pct) : '—' }}
+            {{ m.margin_pct != null ? fmtPct(m.margin_pct) : "—" }}
           </span>
         </div>
       </div>
 
       <!-- Customer tab -->
       <div v-if="activeTab === 'customer'" class="space-y-1">
-        <div v-if="!sortedCustomers.length" class="py-8 text-center text-sm text-muted-foreground">
+        <div
+          v-if="!sortedCustomers.length"
+          class="py-8 text-center text-sm text-muted-foreground"
+        >
           No customer data yet
         </div>
         <div
@@ -568,30 +791,53 @@ const insightCategories = [
           class="flex items-center gap-3 rounded-md px-3 py-2.5 hover:bg-muted/50 transition-colors"
         >
           <div class="w-36 min-w-0">
-            <div class="text-sm font-medium truncate">{{ c.customer_name || c.customer_id }}</div>
-            <div v-if="c.customer_name" class="text-xs text-muted-foreground truncate">{{ c.customer_id }}</div>
+            <div class="text-sm font-medium truncate">
+              {{ c.customer_name || c.customer_id }}
+            </div>
+            <div
+              v-if="c.customer_name"
+              class="text-xs text-muted-foreground truncate"
+            >
+              {{ c.customer_id }}
+            </div>
           </div>
           <div class="flex-1 h-3 bg-muted rounded-full overflow-hidden">
             <div
               class="h-full rounded-full"
-              :class="c.margin_pct != null && c.margin_pct < 0 ? 'bg-destructive' : 'bg-foreground'"
+              :class="
+                c.margin_pct != null && c.margin_pct < 0
+                  ? 'bg-destructive'
+                  : 'bg-foreground'
+              "
               :style="{ width: `${(c.total_cost / maxCustomerCost) * 100}%` }"
             />
           </div>
-          <span class="w-20 text-right text-sm tabular-nums">{{ fmt(c.total_cost) }}</span>
-          <span class="w-20 text-right text-sm tabular-nums text-muted-foreground">{{ fmt(c.total_revenue) }}</span>
+          <span class="w-20 text-right text-sm tabular-nums">{{
+            fmt(c.total_cost)
+          }}</span>
+          <span
+            class="w-20 text-right text-sm tabular-nums text-muted-foreground"
+            >{{ fmt(c.total_revenue) }}</span
+          >
           <span
             class="w-16 text-right text-sm tabular-nums font-medium"
-            :class="c.margin_pct != null && c.margin_pct < 0 ? 'text-destructive' : 'text-success'"
+            :class="
+              c.margin_pct != null && c.margin_pct < 0
+                ? 'text-destructive'
+                : 'text-success'
+            "
           >
-            {{ c.margin_pct != null ? fmtPct(c.margin_pct) : '—' }}
+            {{ c.margin_pct != null ? fmtPct(c.margin_pct) : "—" }}
           </span>
         </div>
       </div>
     </template>
 
     <!-- Demo indicator -->
-    <div v-if="isSampleMode" class="text-xs text-muted-foreground text-center py-1.5">
+    <div
+      v-if="isSampleMode"
+      class="text-xs text-muted-foreground text-center py-1.5"
+    >
       Viewing sample data
     </div>
   </div>
