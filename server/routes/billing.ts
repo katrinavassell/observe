@@ -38,7 +38,9 @@ function getPlanKey(subscription: any): string {
   if (!subscription) return 'free'
   const priceId = subscription.items?.data?.[0]?.price?.id
   if (priceId === GROWTH_PRICE_ID) return 'growth'
-  // Check by amount as fallback
+  if (priceId) {
+    console.warn(`[billing] Unrecognized Stripe price ID: ${priceId}, falling back to amount-based detection`)
+  }
   const amount = subscription.items?.data?.[0]?.price?.unit_amount
   if (amount && amount > 0) return 'growth'
   return 'free'
@@ -135,6 +137,7 @@ export function createBillingRoutes(
       let customer: any = null
       let subscription: any = null
       let planKey = 'free'
+      let stripeHealthy = true
 
       if (email) {
         try {
@@ -145,7 +148,8 @@ export function createBillingRoutes(
             planKey = getPlanKey(subscription)
           }
         } catch (err) {
-          console.error('Stripe status error:', err)
+          console.error('[billing/status] Stripe lookup failed, defaulting to free:', err)
+          stripeHealthy = false
         }
       }
 
@@ -206,7 +210,7 @@ export function createBillingRoutes(
           }],
         } : null,
         configured: true,
-        healthy: true,
+        healthy: stripeHealthy,
       })
     } catch (err) {
       console.error('Billing status error:', err)
@@ -247,6 +251,8 @@ export function createBillingRoutes(
         line_items: [{ price: GROWTH_PRICE_ID, quantity: 1 }],
         success_url: `${origin}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
         cancel_url: `${origin}/plans`,
+      }, {
+        idempotencyKey: `subscribe_${customer.id}_${GROWTH_PRICE_ID}`,
       })
 
       res.json({ success: true, checkoutUrl: session.url })
@@ -335,8 +341,8 @@ export function createBillingRoutes(
       const result = await deps.checkFeatureAccess(req.visitorId!, req.params.featureKey, req.accountEmail)
       res.json(result)
     } catch (err) {
-      console.error('Feature check error:', err)
-      res.json({ allowed: false, reason: 'Feature check failed' })
+      console.error('[billing/check] Feature check error:', err)
+      res.status(503).json({ allowed: false, reason: 'Feature check temporarily unavailable. Please retry.' })
     }
   })
 
@@ -366,7 +372,9 @@ export function createBillingRoutes(
             const sub = await getActiveSubscription(stripe, customer.id)
             planKey = getPlanKey(sub)
           }
-        } catch (_) {}
+        } catch (err) {
+          console.error('[billing/usage] Stripe plan lookup failed, defaulting to free:', err)
+        }
       }
 
       const limit = PLAN_LIMITS[planKey]?.ai_insights ?? null
