@@ -79,9 +79,9 @@ function isActive(path: string) {
         <!-- Logo -->
         <div class="flex h-14 items-center gap-3 border-b border-sidebar-border px-4">
           <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground font-semibold text-sm">
-            T
+            O
           </div>
-          <span class="text-base font-semibold">Tanso</span>
+          <span class="text-base font-semibold">Observe</span>
         </div>
 
         <!-- Navigation -->

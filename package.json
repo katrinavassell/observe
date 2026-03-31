@@ -1,5 +1,5 @@
 {
-  "name": "tanso",
+  "name": "observe",
   "private": false,
   "workspaces": [
     "packages/*"

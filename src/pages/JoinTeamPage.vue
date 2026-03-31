@@ -49,7 +49,7 @@ async function acceptInvite() {
         <div class="inline-flex h-12 w-12 items-center justify-center rounded-xl bg-primary text-primary-foreground mb-4">
           <Users class="h-6 w-6" />
         </div>
-        <h1 class="text-2xl font-bold">Join your team on Tanso</h1>
+        <h1 class="text-2xl font-bold">Join your team on Observe</h1>
       </div>
 
       <!-- Loading -->

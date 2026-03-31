@@ -50,7 +50,7 @@ async function sendAlertEmail(to: string, rule: { name: string; metric: string; 
     return
   }
 
-  const fromEmail = process.env.ALERT_FROM_EMAIL || 'alerts@tansohq.com'
+  const fromEmail = process.env.ALERT_FROM_EMAIL || 'alerts@observehq.dev'
   const metricLabel = METRIC_LABELS[rule.metric] || rule.metric
   const operatorLabel = OPERATOR_LABELS[rule.operator] || rule.operator
   const subject = `Alert: ${rule.name} — ${metricLabel} ${operatorLabel} ${formatValue(rule.metric, rule.threshold)}`
@@ -66,7 +66,7 @@ async function sendAlertEmail(to: string, rule: { name: string; metric: string; 
         <div style="color: #666; font-size: 13px;">Current ${metricLabel.toLowerCase()}</div>
       </div>
       <p style="color: #999; font-size: 12px;">
-        Sent by Tanso cost alerts. Manage your alerts in the dashboard.
+        Sent by Observe cost alerts. Manage your alerts in the dashboard.
       </p>
     </div>
   `

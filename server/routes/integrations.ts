@@ -5,7 +5,7 @@ import { type AuthRequest } from './auth.js'
 import { getUncachableStripeClient, createStripeClientFromKey, encryptApiKey, getStripeClientForUser } from '../stripe-client.js'
 import { calculateCostFromTokens, getModelPricing } from '../model-pricing.js'
 
-type TrackTansoUsageFn = (visitorId: string, featureKey: string, eventName: string) => void
+type TrackBillingUsageFn = (visitorId: string, featureKey: string, eventName: string) => void
 
 // Clear sample/demo data when transitioning to real user data
 async function clearSampleData(db: { query: (text: string, params: unknown[]) => Promise<unknown> }, userId: string): Promise<void> {
@@ -139,12 +139,12 @@ export function createIntegrationsRoutes(
   pool: Pool,
   ensureVisitor: any,
   deps: {
-    trackTansoUsage: TrackTansoUsageFn,
+    trackBillingUsage: TrackBillingUsageFn,
     convertReferralIfPending: (visitorId: string) => Promise<void>,
   }
 ) {
   const router = Router()
-  const { trackTansoUsage, convertReferralIfPending } = deps
+  const { trackBillingUsage, convertReferralIfPending } = deps
 
   // POST /integrations/openai/connect - Validate OpenAI API key and store connection
   router.post('/integrations/openai/connect', ensureVisitor, async (req: AuthRequest, res: Response) => {
@@ -249,7 +249,7 @@ export function createIntegrationsRoutes(
       )
 
       // Track OpenAI sync usage in Tanso
-      trackTansoUsage(visitorId, 'openai_sync', 'openai_connected')
+      trackBillingUsage(visitorId, 'openai_sync', 'openai_connected')
 
       res.json({
         success: true,
@@ -409,7 +409,7 @@ export function createIntegrationsRoutes(
       )
 
       // Track Anthropic sync usage in Tanso
-      trackTansoUsage(visitorId, 'anthropic_sync', 'anthropic_connected')
+      trackBillingUsage(visitorId, 'anthropic_sync', 'anthropic_connected')
 
       res.json({
         success: true,
@@ -529,7 +529,7 @@ export function createIntegrationsRoutes(
       )
 
       // Track referral usage in Tanso for both referrer and referred user
-      trackTansoUsage(referrerUserId, 'referrals', 'referral_shared')
+      trackBillingUsage(referrerUserId, 'referrals', 'referral_shared')
 
       res.json({ success: true })
     } catch (err) {
@@ -659,7 +659,7 @@ export function createIntegrationsRoutes(
         console.error('Initial Stripe sync error (connection succeeded):', syncErr)
       }
 
-      trackTansoUsage(visitorId, 'stripe_sync', 'stripe_connected')
+      trackBillingUsage(visitorId, 'stripe_sync', 'stripe_connected')
 
       res.json({
         success: true,
@@ -715,7 +715,7 @@ export function createIntegrationsRoutes(
         [visitorId]
       )
 
-      trackTansoUsage(visitorId, 'stripe_sync', 'stripe_data_synced')
+      trackBillingUsage(visitorId, 'stripe_sync', 'stripe_data_synced')
 
       res.json({ success: true, synced: syncResult })
     } catch (err) {

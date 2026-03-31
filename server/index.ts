@@ -11,7 +11,7 @@ import bcrypt from 'bcryptjs'
 import { createAuthRoutes, createEnsureVisitor, type AuthRequest } from './routes/auth.js'
 import { createDataRoutes } from './routes/data.js'
 // import { createSimulationsRoutes } from './routes/simulations.js'
-import { createTansoRoutes, createCheckTansoFeatureAccess, createTrackTansoUsage } from './routes/tanso.js'
+import { createBillingRoutes, createCheckBillingFeatureAccess, createTrackBillingUsage } from './routes/tanso.js'
 
 // import { createTeamRoutes } from './routes/team.js'
 import { createIntegrationsRoutes, createConvertReferralIfPending, syncStripeDataForUser } from './routes/integrations.js'
@@ -24,22 +24,21 @@ import { z } from 'zod'
 import { getUncachableStripeClient } from './stripe-client.js'
 import { initModelPricing, calculateCostFromTokens as calcCostFromDb, getAllPricing } from './model-pricing.js'
 import {
-  tansoListPlans,
-  tansoListFeatures,
-  tansoGetCustomer,
-  tansoCreateCustomer,
-  tansoCheckEntitlement,
-  tansoListCustomerEntitlements,
-  tansoIngestEvent,
-  tansoCreateSubscription,
-  tansoChangeSubscriptionPlan,
-  tansoCancelSubscription,
-  tansoCancelScheduledCancellation,
-  tansoCancelScheduledPlanChanges,
-  tansoListCustomerInvoices,
-  tansoMarkInvoicePaid,
-  tansoAdminGetFeatureRule,
-  isTansoConfigured,
+  billingListPlans,
+  billingListFeatures,
+  billingGetCustomer,
+  billingCreateCustomer,
+  billingListCustomerEntitlements,
+  billingIngestEvent,
+  billingCreateSubscription,
+  billingChangeSubscriptionPlan,
+  billingCancelSubscription,
+  billingCancelScheduledCancellation,
+  billingCancelScheduledPlanChanges,
+  billingListCustomerInvoices,
+  billingMarkInvoicePaid,
+  billingAdminGetFeatureRule,
+  isBillingConfigured,
 } from './tanso-client.js'
 
 const app = express()
@@ -135,8 +134,8 @@ app.use(session({
 const ensureVisitor = createEnsureVisitor(pool)
 app.use(createAuthRoutes(pool, ensureVisitor))
 
-// ─── Admin visitor ID (shared by proxy dual-write + Tanso usage tracking) ──
-const ADMIN_EMAIL = 'tansoadmin@tansohq.com'
+// ─── Admin visitor ID (shared by proxy dual-write + billing usage tracking) ──
+const ADMIN_EMAIL = 'admin@observehq.dev'
 let cachedAdminVisitorId: string | null = null
 
 async function getAdminVisitorId(): Promise<string | null> {
@@ -156,19 +155,19 @@ async function getAdminVisitorId(): Promise<string | null> {
   return null
 }
 
-// ─── Shared Tanso helpers (used by multiple route modules) ─────────────────
-const checkTansoFeatureAccess = createCheckTansoFeatureAccess(pool)
-const trackTansoUsage = createTrackTansoUsage(pool, getAdminVisitorId)
+// ─── Shared billing helpers (used by multiple route modules) ─────────────────
+const checkBillingFeatureAccess = createCheckBillingFeatureAccess(pool)
+const trackBillingUsage = createTrackBillingUsage(pool, getAdminVisitorId)
 const convertReferralIfPending = createConvertReferralIfPending(pool)
 
 // ─── Extracted route modules ───────────────────────────────────────────────
-app.use(createDataRoutes(pool, ensureVisitor, { checkTansoFeatureAccess, trackTansoUsage, convertReferralIfPending }))
+app.use(createDataRoutes(pool, ensureVisitor, { checkBillingFeatureAccess, trackBillingUsage, convertReferralIfPending }))
 // app.use(createSimulationsRoutes(pool, ensureVisitor))
-app.use(createTansoRoutes(pool, ensureVisitor, { checkTansoFeatureAccess }))
+app.use(createBillingRoutes(pool, ensureVisitor, { checkBillingFeatureAccess }))
 
 // app.use(createTeamRoutes(pool, ensureVisitor))
-app.use(createIntegrationsRoutes(pool, ensureVisitor, { trackTansoUsage, convertReferralIfPending }))
-app.use(createAlertRoutes(pool, ensureVisitor, { checkTansoFeatureAccess }))
+app.use(createIntegrationsRoutes(pool, ensureVisitor, { trackBillingUsage, convertReferralIfPending }))
+app.use(createAlertRoutes(pool, ensureVisitor, { checkBillingFeatureAccess }))
 
 // ─── OpenAI-compatible proxy ───────────────────────────────────────────────
 // Users swap their base URL to route through this proxy. Requests are forwarded
@@ -176,28 +175,28 @@ app.use(createAlertRoutes(pool, ensureVisitor, { checkTansoFeatureAccess }))
 // Helicone-compatible: accepts Helicone-Auth, Helicone-User-Id, Helicone-Property-* headers
 // so teams migrating from Helicone can just change their base URL.
 
-// Extract Helicone-compatible headers, falling back to Tanso-native headers
+// Extract Helicone-compatible headers, falling back to Observe-native headers
 function parseProxyHeaders(req: Request): {
-  tansoKey: string | undefined
+  observeKey: string | undefined
   customerId: string
   featureKey: string
   properties: Record<string, string>
 } {
-  // Auth: Helicone-Auth > x-tanso-key
-  let tansoKey = req.headers['x-tanso-key'] as string | undefined
+  // Auth: Helicone-Auth > x-observe-key
+  let observeKey = req.headers['x-observe-key'] as string | undefined
   const heliconeAuth = req.headers['helicone-auth'] as string | undefined
-  if (!tansoKey && heliconeAuth?.startsWith('Bearer ')) {
-    tansoKey = heliconeAuth.slice(7).trim()
+  if (!observeKey && heliconeAuth?.startsWith('Bearer ')) {
+    observeKey = heliconeAuth.slice(7).trim()
   }
 
-  // Customer: Helicone-User-Id > x-tanso-customer
+  // Customer: Helicone-User-Id > x-observe-customer
   const customerId = (req.headers['helicone-user-id'] as string)
-    || (req.headers['x-tanso-customer'] as string)
+    || (req.headers['x-observe-customer'] as string)
     || 'unknown'
 
-  // Feature: Helicone-Session-Id > x-tanso-feature (default per-endpoint)
+  // Feature: Helicone-Session-Id > x-observe-feature (default per-endpoint)
   const featureKey = (req.headers['helicone-session-id'] as string)
-    || (req.headers['x-tanso-feature'] as string)
+    || (req.headers['x-observe-feature'] as string)
     || ''
 
   // Collect Helicone-Property-* headers as properties
@@ -208,7 +207,7 @@ function parseProxyHeaders(req: Request): {
     }
   }
 
-  return { tansoKey, customerId, featureKey, properties }
+  return { observeKey, customerId, featureKey, properties }
 }
 
 // ── Proxy Response Cache ────────────────────────────────────────────────────
@@ -216,10 +215,10 @@ function parseProxyHeaders(req: Request): {
 function parseCacheHeaders(req: Request): { cacheEnabled: boolean; ttlSeconds: number } {
   const enabled =
     req.headers['helicone-cache-enabled'] === 'true' ||
-    req.headers['x-tanso-cache-enabled'] === 'true'
+    req.headers['x-observe-cache-enabled'] === 'true'
   const rawTtl =
     (req.headers['helicone-cache-ttl'] as string | undefined) ||
-    (req.headers['x-tanso-cache-ttl'] as string | undefined)
+    (req.headers['x-observe-cache-ttl'] as string | undefined)
   const ttlSeconds = rawTtl ? Math.max(1, parseInt(rawTtl, 10) || 86400) : 86400
   return { cacheEnabled: enabled, ttlSeconds }
 }
@@ -293,8 +292,8 @@ async function calculateCost(model: string, inputTokens: number, outputTokens: n
   return calcCostFromDb(pool, model, inputTokens, outputTokens)
 }
 
-async function resolveProxyUserId(tansoKey: string): Promise<string | null> {
-  const keyHash = crypto.createHash('sha256').update(tansoKey).digest('hex')
+async function resolveProxyUserId(observeKey: string): Promise<string | null> {
+  const keyHash = crypto.createHash('sha256').update(observeKey).digest('hex')
   const result = await pool.query(
     'SELECT user_id FROM sdk_api_keys WHERE key_hash = $1 AND revoked_at IS NULL',
     [keyHash]
@@ -334,7 +333,7 @@ async function logProxyEvent(
   )
   checkAlerts(pool, userId).catch(err => console.error('checkAlerts error (proxy event):', err))
 
-  // 2. Mirror to admin account so tansoadmin@tansohq.com sees all activity
+  // 2. Mirror to admin account so admin@observehq.dev sees all activity
   getAdminVisitorId().then(adminId => {
     if (!adminId || adminId === userId) return
     pool.query(
@@ -375,13 +374,13 @@ app.post('/v1/chat/completions', async (req: Request, res: Response) => {
       return res.status(401).json({ error: { message: 'Missing Authorization header (OpenAI key)', type: 'auth_error' } })
     }
 
-    const { tansoKey, customerId, featureKey: feat, properties } = parseProxyHeaders(req)
-    if (!tansoKey) {
-      return res.status(401).json({ error: { message: 'Missing X-Tanso-Key header', type: 'auth_error' } })
+    const { observeKey, customerId, featureKey: feat, properties } = parseProxyHeaders(req)
+    if (!observeKey) {
+      return res.status(401).json({ error: { message: 'Missing X-Observe-Key header', type: 'auth_error' } })
     }
-    const userId = await resolveProxyUserId(tansoKey)
+    const userId = await resolveProxyUserId(observeKey)
     if (!userId) {
-      return res.status(401).json({ error: { message: 'Invalid or revoked X-Tanso-Key', type: 'auth_error' } })
+      return res.status(401).json({ error: { message: 'Invalid or revoked X-Observe-Key', type: 'auth_error' } })
     }
     const featureKey = feat || 'chat_completions'
     const model = req.body.model || 'unknown'
@@ -393,7 +392,7 @@ app.post('/v1/chat/completions', async (req: Request, res: Response) => {
       const cacheKey = generateCacheKey(userId, model, { messages: req.body.messages, model, temperature: req.body.temperature ?? 0 })
       const cached = await lookupCache(userId, cacheKey)
       if (cached) {
-        res.set('X-Tanso-Cache', 'HIT')
+        res.set('X-Observe-Cache', 'HIT')
         res.status(200).json(cached)
         logProxyEvent(userId, model, 0, 0, 0, customerId, featureKey, 'openai', { ...properties, cache_hit: 'true' }, req.body, cached as Record<string, unknown>).catch(err => console.error('logProxyEvent error (openai cache hit):', err))
         return
@@ -411,7 +410,7 @@ app.post('/v1/chat/completions', async (req: Request, res: Response) => {
     })
 
     const data = await openaiResponse.json() as Record<string, unknown>
-    if (isCacheable) res.set('X-Tanso-Cache', 'MISS')
+    if (isCacheable) res.set('X-Observe-Cache', 'MISS')
     res.status(openaiResponse.status).json(data)
 
     // Log + cache write asynchronously
@@ -445,13 +444,13 @@ app.post('/v1/embeddings', async (req: Request, res: Response) => {
       return res.status(401).json({ error: { message: 'Missing Authorization header (OpenAI key)', type: 'auth_error' } })
     }
 
-    const { tansoKey, customerId, featureKey: feat, properties } = parseProxyHeaders(req)
-    if (!tansoKey) {
-      return res.status(401).json({ error: { message: 'Missing X-Tanso-Key header', type: 'auth_error' } })
+    const { observeKey, customerId, featureKey: feat, properties } = parseProxyHeaders(req)
+    if (!observeKey) {
+      return res.status(401).json({ error: { message: 'Missing X-Observe-Key header', type: 'auth_error' } })
     }
-    const userId = await resolveProxyUserId(tansoKey)
+    const userId = await resolveProxyUserId(observeKey)
     if (!userId) {
-      return res.status(401).json({ error: { message: 'Invalid or revoked X-Tanso-Key', type: 'auth_error' } })
+      return res.status(401).json({ error: { message: 'Invalid or revoked X-Observe-Key', type: 'auth_error' } })
     }
     const featureKey = feat || 'embeddings'
     const model = req.body.model || 'unknown'
@@ -463,7 +462,7 @@ app.post('/v1/embeddings', async (req: Request, res: Response) => {
       const cacheKey = generateCacheKey(userId, model, { input: req.body.input, model })
       const cached = await lookupCache(userId, cacheKey)
       if (cached) {
-        res.set('X-Tanso-Cache', 'HIT')
+        res.set('X-Observe-Cache', 'HIT')
         res.status(200).json(cached)
         logProxyEvent(userId, model, 0, 0, 0, customerId, featureKey, 'openai', { ...properties, cache_hit: 'true' }, req.body, cached as Record<string, unknown>).catch(err => console.error('logProxyEvent error (openai cache hit):', err))
         return
@@ -480,7 +479,7 @@ app.post('/v1/embeddings', async (req: Request, res: Response) => {
     })
 
     const data = await openaiResponse.json() as Record<string, unknown>
-    if (isCacheable) res.set('X-Tanso-Cache', 'MISS')
+    if (isCacheable) res.set('X-Observe-Cache', 'MISS')
     res.status(openaiResponse.status).json(data)
 
     // Log + cache write
@@ -519,13 +518,13 @@ app.post('/v1/messages', async (req: Request, res: Response) => {
       return res.status(401).json({ error: { message: 'Missing x-api-key header (Anthropic key)', type: 'auth_error' } })
     }
 
-    const { tansoKey, customerId, featureKey: feat, properties } = parseProxyHeaders(req)
+    const { observeKey, customerId, featureKey: feat, properties } = parseProxyHeaders(req)
     const featureKey = feat || 'messages'
     const model = req.body.model || 'unknown'
 
     let userId: string | null = null
-    if (tansoKey) {
-      userId = await resolveProxyUserId(tansoKey)
+    if (observeKey) {
+      userId = await resolveProxyUserId(observeKey)
     }
 
     const { cacheEnabled, ttlSeconds } = parseCacheHeaders(req)
@@ -537,7 +536,7 @@ app.post('/v1/messages', async (req: Request, res: Response) => {
       const cacheKey = generateCacheKey(userId, model, { messages: req.body.messages, system: req.body.system ?? null, model })
       const cached = await lookupCache(userId, cacheKey)
       if (cached) {
-        res.set('X-Tanso-Cache', 'HIT')
+        res.set('X-Observe-Cache', 'HIT')
         res.status(200).json(cached)
         logProxyEvent(userId, model, 0, 0, 0, customerId, featureKey, 'anthropic', { ...properties, cache_hit: 'true' }, req.body, cached as Record<string, unknown>).catch(err => console.error('logProxyEvent error (anthropic cache hit):', err))
         return
@@ -556,7 +555,7 @@ app.post('/v1/messages', async (req: Request, res: Response) => {
     })
 
     const data = await anthropicResponse.json() as Record<string, unknown>
-    if (isCacheable) res.set('X-Tanso-Cache', 'MISS')
+    if (isCacheable) res.set('X-Observe-Cache', 'MISS')
     res.status(anthropicResponse.status).json(data)
 
     // Log + cache write
@@ -1039,7 +1038,7 @@ const revenueUploadSchema = z.object({
 })
 
 app.post('/data/upload/costs', ensureVisitor, async (req: AuthRequest, res: Response) => {
-  const access = await checkTansoFeatureAccess(req.visitorId!, 'csv_upload', req.accountEmail)
+  const access = await checkBillingFeatureAccess(req.visitorId!, 'csv_upload', req.accountEmail)
   if (!access.allowed) return res.status(403).json({ error: access.reason || 'Upload limit reached. Upgrade your plan.' })
   const client = await pool.connect()
   try {
@@ -1102,7 +1101,7 @@ app.post('/data/upload/costs', ensureVisitor, async (req: AuthRequest, res: Resp
 
     await client.query('COMMIT')
     convertReferralIfPending(req.visitorId!)
-    trackTansoUsage(req.visitorId!, 'csv_upload', 'csv_upload_costs')
+    trackBillingUsage(req.visitorId!, 'csv_upload', 'csv_upload_costs')
     checkAlerts(pool, req.visitorId!).catch(err => console.error('checkAlerts error (csv upload):', err))
     res.json({ success: true, count: records.length })
   } catch (error) {
@@ -1116,7 +1115,7 @@ app.post('/data/upload/costs', ensureVisitor, async (req: AuthRequest, res: Resp
 
 // Upload usage records
 app.post('/data/upload/usage', ensureVisitor, async (req: AuthRequest, res: Response) => {
-  const access = await checkTansoFeatureAccess(req.visitorId!, 'csv_upload', req.accountEmail)
+  const access = await checkBillingFeatureAccess(req.visitorId!, 'csv_upload', req.accountEmail)
   if (!access.allowed) return res.status(403).json({ error: access.reason || 'Upload limit reached. Upgrade your plan.' })
   const client = await pool.connect()
   try {
@@ -1181,7 +1180,7 @@ app.post('/data/upload/usage', ensureVisitor, async (req: AuthRequest, res: Resp
 
     await client.query('COMMIT')
     convertReferralIfPending(req.visitorId!)
-    trackTansoUsage(req.visitorId!, 'csv_upload', 'csv_upload_usage')
+    trackBillingUsage(req.visitorId!, 'csv_upload', 'csv_upload_usage')
     checkAlerts(pool, req.visitorId!).catch(err => console.error('checkAlerts error (csv upload):', err))
     res.json({ success: true, count: records.length })
   } catch (error) {
@@ -1195,7 +1194,7 @@ app.post('/data/upload/usage', ensureVisitor, async (req: AuthRequest, res: Resp
 
 // Upload revenue data (customers, plans, subscriptions)
 app.post('/data/upload/revenue', ensureVisitor, async (req: AuthRequest, res: Response) => {
-  const access = await checkTansoFeatureAccess(req.visitorId!, 'csv_upload', req.accountEmail)
+  const access = await checkBillingFeatureAccess(req.visitorId!, 'csv_upload', req.accountEmail)
   if (!access.allowed) return res.status(403).json({ error: access.reason || 'Upload limit reached. Upgrade your plan.' })
   const client = await pool.connect()
   try {
@@ -1264,7 +1263,7 @@ app.post('/data/upload/revenue', ensureVisitor, async (req: AuthRequest, res: Re
 
     await client.query('COMMIT')
     convertReferralIfPending(req.visitorId!)
-    trackTansoUsage(req.visitorId!, 'csv_upload', 'csv_upload_revenue')
+    trackBillingUsage(req.visitorId!, 'csv_upload', 'csv_upload_revenue')
     res.json({
       success: true,
       counts: {
@@ -1768,7 +1767,7 @@ async function _doDbInit() {
 // MODEL PRICING API
 // =============================================================================
 
-const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || 'tansoadmin@tansohq.com').split(',').map(e => e.trim().toLowerCase())
+const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || 'admin@observehq.dev').split(',').map(e => e.trim().toLowerCase())
 
 function isAdminUser(req: AuthRequest): boolean {
   return !!req.accountEmail && ADMIN_EMAILS.includes(req.accountEmail.toLowerCase())
@@ -1874,7 +1873,7 @@ app.post('/integrations/stripe/connect', ensureVisitor, async (req: AuthRequest,
       console.error('Initial Stripe sync error (connection succeeded):', syncErr)
     }
 
-    trackTansoUsage(visitorId, 'stripe_sync', 'stripe_connected')
+    trackBillingUsage(visitorId, 'stripe_sync', 'stripe_connected')
 
     res.json({
       success: true,
@@ -1926,7 +1925,7 @@ app.post('/integrations/stripe/sync', ensureVisitor, async (req: AuthRequest, re
       [visitorId]
     )
 
-    trackTansoUsage(visitorId, 'stripe_sync', 'stripe_data_synced')
+    trackBillingUsage(visitorId, 'stripe_sync', 'stripe_data_synced')
 
     res.json({ success: true, synced: syncResult })
   } catch (err) {
@@ -2082,8 +2081,8 @@ app.post('/stripe/sync', ensureVisitor, expensiveLimiter, async (req: AuthReques
     await client.query('COMMIT')
     convertReferralIfPending(req.visitorId!)
 
-    // Track Stripe sync usage in Tanso
-    trackTansoUsage(req.visitorId!, 'stripe_sync', 'stripe_data_synced')
+    // Track Stripe sync usage in billing
+    trackBillingUsage(req.visitorId!, 'stripe_sync', 'stripe_data_synced')
 
     res.json({
       success: true,
@@ -3514,18 +3513,6 @@ app.get('/simulations', ensureVisitor, async (req: AuthRequest, res: Response) =
 app.post('/simulations', ensureVisitor, async (req: AuthRequest, res: Response) => {
   const visitorId = req.visitorId!
 
-  // Tanso entitlement check (fail open)
-  if (isTansoConfigured()) {
-    try {
-      const entitlement = await tansoCheckEntitlement(visitorId, 'simulations')
-      if (entitlement && entitlement.allowed === false) {
-        return res.status(403).json({ error: 'Simulation limit reached', usage: entitlement.usage })
-      }
-    } catch (err) {
-      console.error('Tanso entitlement check error (simulations):', err)
-    }
-  }
-
   try {
     const { name, scenarios, time_range } = req.body
     if (!name) {
@@ -3540,22 +3527,6 @@ app.post('/simulations', ensureVisitor, async (req: AuthRequest, res: Response) 
     )
 
     const row = result.rows[0]
-
-    // Track usage in Tanso (fail open)
-    if (isTansoConfigured()) {
-      try {
-        await tansoIngestEvent({
-          eventIdempotencyKey: crypto.randomUUID(),
-          eventName: 'simulation_created',
-          occurredAt: new Date().toISOString(),
-          customerReferenceId: visitorId,
-          featureKey: 'simulations',
-          usageUnits: 1,
-        })
-      } catch (err) {
-        console.error('Tanso usage tracking error (simulations):', err)
-      }
-    }
 
     res.json({
       ...row,
@@ -3931,16 +3902,10 @@ app.get('/insights', ensureVisitor, async (req: AuthRequest, res: Response) => {
 app.post('/insights/generate', ensureVisitor, expensiveLimiter, async (req: AuthRequest, res: Response) => {
   const visitorId = req.visitorId!
 
-  // Tanso entitlement check (fail open)
-  if (isTansoConfigured()) {
-    try {
-      const entitlement = await tansoCheckEntitlement(visitorId, 'ai_insights')
-      if (entitlement && entitlement.allowed === false) {
-        return res.status(403).json({ error: 'AI insights limit reached', usage: entitlement.usage })
-      }
-    } catch (err) {
-      console.error('Tanso entitlement check error (ai_insights):', err)
-    }
+  // Billing entitlement check (fail closed)
+  const aiAccess = await checkBillingFeatureAccess(visitorId, 'ai_insights', req.accountEmail)
+  if (!aiAccess.allowed) {
+    return res.status(403).json({ error: aiAccess.reason || 'AI insights limit reached', usage: aiAccess.usage, limit: aiAccess.limit, remaining: aiAccess.remaining })
   }
 
   try {
@@ -4258,10 +4223,10 @@ Return ONLY the JSON array, no markdown or explanation.`
       [visitorId, costUsd]
     )
 
-    // Track usage in Tanso (fail open)
-    if (isTansoConfigured()) {
+    // Track usage in billing (fail open)
+    if (isBillingConfigured()) {
       try {
-        await tansoIngestEvent({
+        await billingIngestEvent({
           eventIdempotencyKey: crypto.randomUUID(),
           eventName: 'insights_generated',
           occurredAt: new Date().toISOString(),
@@ -4270,7 +4235,7 @@ Return ONLY the JSON array, no markdown or explanation.`
           usageUnits: 1,
         })
       } catch (err) {
-        console.error('Tanso usage tracking error (ai_insights):', err)
+        console.error('Billing usage tracking error (ai_insights):', err)
       }
     }
 
@@ -4299,20 +4264,21 @@ app.delete('/insights', ensureVisitor, async (req: AuthRequest, res: Response) =
 
 // GET /usage/limits — return current usage for ai_insights
 app.get('/usage/limits', ensureVisitor, async (req: AuthRequest, res: Response) => {
-  if (!isTansoConfigured()) return res.json({ configured: false })
+  if (!isBillingConfigured()) return res.json({ configured: false })
   const visitorId = req.visitorId!
   try {
-    const insights = await tansoCheckEntitlement(visitorId, 'ai_insights')
+    const access = await checkBillingFeatureAccess(visitorId, 'ai_insights', req.accountEmail)
     res.json({
       configured: true,
-      ai_insights: { allowed: insights.allowed !== false, usage: insights.usage },
+      ai_insights: { allowed: access.allowed, usage: access.usage, limit: access.limit, remaining: access.remaining },
     })
-  } catch {
-    res.json({ configured: false })
+  } catch (err) {
+    console.error('Usage limits check error:', err)
+    res.status(503).json({ configured: true, error: 'Usage data temporarily unavailable' })
   }
 })
 
-// Tanso monetization routes are mounted via createTansoRoutes() above
+// Billing monetization routes are mounted via createBillingRoutes() above
 // (inline duplicate block removed — was dead code shadowed by the router module)
 // =============================================================================
 // OPENAI & ANTHROPIC INTEGRATION ROUTES
@@ -4430,8 +4396,8 @@ app.post('/integrations/openai/connect', ensureVisitor, async (req: AuthRequest,
       [visitorId, keyPrefix, hasUsageAccess]
     )
 
-    // Track OpenAI sync usage in Tanso
-    trackTansoUsage(visitorId, 'openai_sync', 'openai_connected')
+    // Track OpenAI sync usage in billing
+    trackBillingUsage(visitorId, 'openai_sync', 'openai_connected')
 
     res.json({
       success: true,
@@ -4600,8 +4566,8 @@ app.post('/integrations/anthropic/connect', ensureVisitor, async (req: AuthReque
       [visitorId, keyPrefix, hasUsageAccess]
     )
 
-    // Track Anthropic sync usage in Tanso
-    trackTansoUsage(visitorId, 'anthropic_sync', 'anthropic_connected')
+    // Track Anthropic sync usage in billing
+    trackBillingUsage(visitorId, 'anthropic_sync', 'anthropic_connected')
 
     res.json({
       success: true,
@@ -4722,8 +4688,8 @@ app.post('/referral/record', ensureVisitor, async (req: AuthRequest, res: Respon
       [referrerUserId, visitorId, code]
     )
 
-    // Track referral usage in Tanso for both referrer and referred user
-    trackTansoUsage(referrerUserId, 'referrals', 'referral_shared')
+    // Track referral usage in billing for both referrer and referred user
+    trackBillingUsage(referrerUserId, 'referrals', 'referral_shared')
 
     res.json({ success: true })
   } catch (err) {

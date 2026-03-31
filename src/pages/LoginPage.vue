@@ -100,9 +100,9 @@ const highlights = [
         <!-- Brand -->
         <div class="flex items-center gap-3 mb-10">
           <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground font-semibold">
-            T
+            O
           </div>
-          <span class="text-2xl font-semibold tracking-tight">Tanso</span>
+          <span class="text-2xl font-semibold tracking-tight">Observe</span>
         </div>
 
         <!-- Headline -->
@@ -110,7 +110,7 @@ const highlights = [
           Know the true cost of every feature you ship
         </h2>
         <p class="text-sidebar-foreground/70 text-base leading-relaxed mb-10">
-          Tanso gives SaaS teams real-time visibility into margins, usage costs, and pricing health — so you can price with confidence, not guesswork.
+          Observe gives SaaS teams real-time visibility into margins, usage costs, and pricing health — so you can price with confidence, not guesswork.
         </p>
 
         <!-- Feature highlights -->
@@ -154,7 +154,7 @@ const highlights = [
             <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-primary text-primary-foreground lg:hidden">
               <LayoutDashboard class="h-5 w-5" />
             </div>
-            <span class="text-2xl font-semibold tracking-tight lg:hidden">Tanso</span>
+            <span class="text-2xl font-semibold tracking-tight lg:hidden">Observe</span>
           </div>
 
           <div class="text-center mb-6">

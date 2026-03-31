@@ -4,22 +4,22 @@ import crypto from 'crypto'
 import { type AuthRequest } from './auth.js'
 import { getUncachableStripeClient } from '../stripe-client.js'
 import {
-  tansoListPlans,
-  tansoListFeatures,
-  tansoGetCustomer,
-  tansoCreateCustomer,
-  tansoCheckEntitlement,
-  tansoListCustomerEntitlements,
-  tansoIngestEvent,
-  tansoCreateSubscription,
-  tansoChangeSubscriptionPlan,
-  tansoCancelSubscription,
-  tansoCancelScheduledCancellation,
-  tansoCancelScheduledPlanChanges,
-  tansoListCustomerInvoices,
-  tansoMarkInvoicePaid,
-  tansoAdminGetFeatureRule,
-  isTansoConfigured,
+  billingListPlans,
+  billingListFeatures,
+  billingGetCustomer,
+  billingCreateCustomer,
+  billingCheckEntitlement,
+  billingListCustomerEntitlements,
+  billingIngestEvent,
+  billingCreateSubscription,
+  billingChangeSubscriptionPlan,
+  billingCancelSubscription,
+  billingCancelScheduledCancellation,
+  billingCancelScheduledPlanChanges,
+  billingListCustomerInvoices,
+  billingMarkInvoicePaid,
+  billingAdminGetFeatureRule,
+  isBillingConfigured,
 } from '../tanso-client.js'
 
 // ─── Shared helpers ────────────────────────────────────────────────────────
@@ -42,11 +42,11 @@ function flattenEntitlements(raw: any): any[] {
 async function autoSubscribeToFreePlan(customerReferenceId: string): Promise<void> {
   try {
     // Check if already subscribed
-    const customer = await tansoGetCustomer(customerReferenceId)
+    const customer = await billingGetCustomer(customerReferenceId)
     if (customer?.subscriptions?.some((s: any) => s.isActive)) return
 
     // Find the free plan
-    const plans = await tansoListPlans()
+    const plans = await billingListPlans()
     const planItems = Array.isArray(plans) ? plans : plans?.items ?? plans?.plans ?? []
     const freePlan = planItems.find((p: any) => (p.plan?.key ?? p.key) === 'free')
     const freePlanId = freePlan?.plan?.id ?? freePlan?.id
@@ -55,18 +55,18 @@ async function autoSubscribeToFreePlan(customerReferenceId: string): Promise<voi
       return
     }
 
-    const result = await tansoCreateSubscription(customerReferenceId, freePlanId)
+    const result = await billingCreateSubscription(customerReferenceId, freePlanId)
     // Mark the $0 invoice as paid to activate the subscription
     let invoiceId = result?.invoice?.id
     if (!invoiceId) {
       // Invoice may not be nested in the response -- fetch separately
-      const invoices = await tansoListCustomerInvoices(customerReferenceId)
+      const invoices = await billingListCustomerInvoices(customerReferenceId)
       const items = Array.isArray(invoices) ? invoices : (invoices as any)?.items ?? []
       const unpaid = items.find((inv: any) => inv.status !== 'PAID')
       invoiceId = unpaid?.id
     }
     if (invoiceId) {
-      await tansoMarkInvoicePaid(invoiceId)
+      await billingMarkInvoicePaid(invoiceId)
     }
     console.log('Auto-subscribed', customerReferenceId, 'to free plan')
   } catch (err) {
@@ -74,14 +74,14 @@ async function autoSubscribeToFreePlan(customerReferenceId: string): Promise<voi
   }
 }
 
-async function getOrCreateTansoCustomer(pool: Pool, visitorId: string, email?: string): Promise<string | null> {
-  if (!isTansoConfigured()) return null
+async function getOrCreateBillingCustomer(pool: Pool, visitorId: string, email?: string): Promise<string | null> {
+  if (!isBillingConfigured()) return null
   try {
     const existing = await pool.query('SELECT tanso_customer_id FROM tanso_customers WHERE visitor_id = $1', [visitorId])
     if (existing.rows[0]?.tanso_customer_id) return existing.rows[0].tanso_customer_id
 
     try {
-      const customer = await tansoGetCustomer(visitorId)
+      const customer = await billingGetCustomer(visitorId)
       const customerId = customer?.id || customer?.subscriptions?.[0]?.customer?.id || customer?.externalClientCustomerId
       if (customerId) {
         await pool.query(
@@ -95,29 +95,29 @@ async function getOrCreateTansoCustomer(pool: Pool, visitorId: string, email?: s
         return customerId
       }
     } catch (fetchErr) {
-      console.warn('Tanso customer fetch failed for', visitorId, fetchErr instanceof Error ? fetchErr.message : fetchErr)
+      console.warn('Billing customer fetch failed for', visitorId, fetchErr instanceof Error ? fetchErr.message : fetchErr)
     }
 
     if (!email) {
-      console.error('Tanso customer creation skipped: no email provided for visitor', visitorId)
+      console.error('Billing customer creation skipped: no email provided for visitor', visitorId)
       return null
     }
     try {
-      const created = await tansoCreateCustomer(visitorId, email, undefined)
-      const tansoId = created?.id || created?.customer?.id || null
-      if (tansoId) {
+      const created = await billingCreateCustomer(visitorId, email, undefined)
+      const billingId = created?.id || created?.customer?.id || null
+      if (billingId) {
         await pool.query(
           'INSERT INTO tanso_customers (visitor_id, tanso_customer_id, email) VALUES ($1, $2, $3) ON CONFLICT (visitor_id) DO UPDATE SET tanso_customer_id = $2',
-          [visitorId, tansoId, email || null]
+          [visitorId, billingId, email || null]
         )
         // New customer — auto-subscribe to free plan
         await autoSubscribeToFreePlan(visitorId)
       }
-      return tansoId
+      return billingId
     } catch (createErr: any) {
-      // 409 = customer already exists in Tanso — retry fetch
+      // 409 = customer already exists in billing provider — retry fetch
       if (createErr?.message?.includes('409')) {
-        const retryCustomer = await tansoGetCustomer(visitorId)
+        const retryCustomer = await billingGetCustomer(visitorId)
         const retryId = retryCustomer?.id || retryCustomer?.subscriptions?.[0]?.customer?.id || retryCustomer?.externalClientCustomerId
         if (retryId) {
           await pool.query(
@@ -131,14 +131,14 @@ async function getOrCreateTansoCustomer(pool: Pool, visitorId: string, email?: s
       throw createErr
     }
   } catch (err) {
-    console.error('Tanso customer lookup/create error:', err)
+    console.error('Billing customer lookup/create error:', err)
     return null
   }
 }
 
 async function verifySubscriptionOwnership(visitorId: string, subscriptionId: string): Promise<boolean> {
   try {
-    const customer = await tansoGetCustomer(visitorId)
+    const customer = await billingGetCustomer(visitorId)
     return customer?.subscriptions?.some((s: any) => s.id === subscriptionId) ?? false
   } catch (_) {
     return false
@@ -146,13 +146,13 @@ async function verifySubscriptionOwnership(visitorId: string, subscriptionId: st
 }
 
 // Exported for use by data routes and other modules
-export function createCheckTansoFeatureAccess(pool: Pool) {
-  return async function checkTansoFeatureAccess(visitorId: string, featureKey: string, email?: string): Promise<{ allowed: boolean; reason?: string; usage?: number; limit?: number; remaining?: number }> {
-    if (!isTansoConfigured()) return { allowed: true }
+export function createCheckBillingFeatureAccess(pool: Pool) {
+  return async function checkBillingFeatureAccess(visitorId: string, featureKey: string, email?: string): Promise<{ allowed: boolean; reason?: string; usage?: number; limit?: number; remaining?: number }> {
+    if (!isBillingConfigured()) return { allowed: true }
     try {
-      const tansoId = await getOrCreateTansoCustomer(pool, visitorId, email)
-      if (!tansoId) return { allowed: true }
-      const result = await tansoCheckEntitlement(visitorId, featureKey)
+      const billingId = await getOrCreateBillingCustomer(pool, visitorId, email)
+      if (!billingId) return { allowed: false, reason: 'Billing service unavailable' }
+      const result = await billingCheckEntitlement(visitorId, featureKey)
       const usageData = result?.usage
       return {
         allowed: result?.allowed !== false,
@@ -162,40 +162,40 @@ export function createCheckTansoFeatureAccess(pool: Pool) {
         remaining: usageData?.remaining ?? usageData?.remainingQuota ?? null,
       }
     } catch (err) {
-      console.error('Tanso entitlement check error:', err)
+      console.error('Billing entitlement check error:', err)
       // Fallback: check if feature exists in customer's plan (matches SaaSSubscriptionSite pattern)
       try {
-        const customer = await tansoGetCustomer(visitorId)
+        const customer = await billingGetCustomer(visitorId)
         const activeSub = customer?.subscriptions?.find((s: any) => s.isActive)
         if (activeSub?.plan?.id) {
-          const plans = await tansoListPlans()
+          const plans = await billingListPlans()
           const planItems = Array.isArray(plans) ? plans : plans?.items ?? plans?.plans ?? []
           const plan = planItems.find((p: any) => (p.plan?.id ?? p.id) === activeSub.plan.id)
           const features = plan?.features || []
           const hasFeature = features.some((f: any) => f.key === featureKey)
           return { allowed: hasFeature, reason: hasFeature ? undefined : 'Feature not in plan (fallback)' }
         }
-      } catch (fallbackErr) { console.error('Tanso entitlement fallback also failed:', fallbackErr) }
+      } catch (fallbackErr) { console.error('Billing entitlement fallback also failed:', fallbackErr) }
       return { allowed: false, reason: 'Entitlement service unavailable' }
     }
   }
 }
 
-export function createTrackTansoUsage(pool: Pool, getAdminVisitorId: () => Promise<string | null>) {
-  return function trackTansoUsage(visitorId: string, featureKey: string, eventName: string) {
-    if (!isTansoConfigured()) return
+export function createTrackBillingUsage(pool: Pool, getAdminVisitorId: () => Promise<string | null>) {
+  return function trackBillingUsage(visitorId: string, featureKey: string, eventName: string) {
+    if (!isBillingConfigured()) return
     const occurredAt = new Date().toISOString()
     const idempotencyKey = `${visitorId}-${featureKey}-${Date.now()}`
 
-    // 1. Forward to Tanso billing API
-    tansoIngestEvent({
+    // 1. Forward to billing API
+    billingIngestEvent({
       eventIdempotencyKey: idempotencyKey,
       eventName,
       occurredAt,
       customerReferenceId: visitorId,
       featureKey,
     }).catch((err: unknown) => {
-      console.error('Tanso usage tracking error:', err)
+      console.error('Billing usage tracking error:', err)
     })
 
     // 2. Also record as an observe_event under the admin account (dogfooding)
@@ -216,33 +216,33 @@ export function createTrackTansoUsage(pool: Pool, getAdminVisitorId: () => Promi
 
 // ─── Route factory ─────────────────────────────────────────────────────────
 
-export function createTansoRoutes(
+export function createBillingRoutes(
   pool: Pool,
   ensureVisitor: any,
   deps: {
-    checkTansoFeatureAccess: ReturnType<typeof createCheckTansoFeatureAccess>,
+    checkBillingFeatureAccess: ReturnType<typeof createCheckBillingFeatureAccess>,
   }
 ) {
   const router = Router()
 
-  // Tanso Invoices
-  router.get('/tanso/invoices', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  // Billing Invoices
+  router.get('/billing/invoices', ensureVisitor, async (req: AuthRequest, res: Response) => {
     try {
-      if (!isTansoConfigured()) return res.json({ invoices: [], configured: false })
+      if (!isBillingConfigured()) return res.json({ invoices: [], configured: false })
       const visitorId = req.visitorId!
-      await getOrCreateTansoCustomer(pool, visitorId, req.accountEmail)
-      const invoices = await tansoListCustomerInvoices(visitorId)
+      await getOrCreateBillingCustomer(pool, visitorId, req.accountEmail)
+      const invoices = await billingListCustomerInvoices(visitorId)
       const items = Array.isArray(invoices) ? invoices : invoices?.items ?? []
       res.json({ invoices: items, configured: true })
     } catch (err) {
-      console.error('Tanso invoices error:', err)
-      res.json({ invoices: [], configured: false })
+      console.error('Billing invoices error:', err)
+      res.status(503).json({ invoices: [], configured: true, error: 'Billing service temporarily unavailable' })
     }
   })
 
-  // Tanso Status & Plans
-  router.get('/tanso/status', ensureVisitor, async (req: AuthRequest, res: Response) => {
-    if (!isTansoConfigured()) return res.json({ plans: [], entitlements: [], customer: null, configured: false })
+  // Billing Status & Plans
+  router.get('/billing/status', ensureVisitor, async (req: AuthRequest, res: Response) => {
+    if (!isBillingConfigured()) return res.json({ plans: [], entitlements: [], customer: null, configured: false })
 
     const visitorId = req.visitorId!
     let plansResult: any[] = []
@@ -251,10 +251,10 @@ export function createTansoRoutes(
     let healthy = true
 
     try {
-      const plans = await tansoListPlans()
+      const plans = await billingListPlans()
       plansResult = Array.isArray(plans) ? plans : plans?.items || plans?.plans || []
     } catch (err) {
-      console.error('Tanso status: plans fetch failed:', err instanceof Error ? err.message : err)
+      console.error('Billing status: plans fetch failed:', err instanceof Error ? err.message : err)
       healthy = false
     }
 
@@ -262,21 +262,21 @@ export function createTansoRoutes(
     // Only attempt customer/entitlement lookups if user has an account (is logged in)
     if (req.accountEmail) {
       try {
-        const ent = await tansoListCustomerEntitlements(visitorId)
+        const ent = await billingListCustomerEntitlements(visitorId)
         entitlements = flattenEntitlements(ent)
       } catch (err) {
-        // Customer may not exist in Tanso yet (will be created when Stripe subscription syncs)
+        // Customer may not exist in billing provider yet (will be created when Stripe subscription syncs)
         if (!(err instanceof Error && err.message.includes('404'))) {
-          console.error('Tanso status: entitlements fetch failed:', err instanceof Error ? err.message : err)
+          console.error('Billing status: entitlements fetch failed:', err instanceof Error ? err.message : err)
         }
       }
 
       try {
-        customer = await tansoGetCustomer(visitorId)
+        customer = await billingGetCustomer(visitorId)
       // Normalize scheduledChanges on subscriptions (matches SaaSSubscriptionSite pattern)
       if (customer?.subscriptions) {
         for (const sub of customer.subscriptions) {
-          // Tanso may return scheduledChange (singular) or scheduledChanges (array) or metadata.SubscriptionScheduledChanges
+          // Billing provider may return scheduledChange (singular) or scheduledChanges (array) or metadata.SubscriptionScheduledChanges
           if (!Array.isArray(sub.scheduledChanges) || sub.scheduledChanges.length === 0) {
             if (sub.scheduledChange) {
               sub.scheduledChanges = [{
@@ -291,7 +291,7 @@ export function createTansoRoutes(
       }
     } catch (err) {
         if (!(err instanceof Error && err.message.includes('404'))) {
-          console.error('Tanso status: customer fetch failed:', err instanceof Error ? err.message : err)
+          console.error('Billing status: customer fetch failed:', err instanceof Error ? err.message : err)
         }
       }
     } // end if (req.accountEmail)
@@ -308,7 +308,7 @@ export function createTansoRoutes(
         for (const feature of features) {
           if (!feature.id) continue
           rulePromises.push(
-            tansoAdminGetFeatureRule(plan.id, feature.id)
+            billingAdminGetFeatureRule(plan.id, feature.id)
               .then((rule: any) => { featureRules[plan.id][feature.key || feature.id] = rule })
               .catch(() => { /* rule not found — feature is boolean/unlimited */ })
           )
@@ -316,7 +316,7 @@ export function createTansoRoutes(
       }
       await Promise.all(rulePromises)
     } catch (err) {
-      console.error('Tanso status: feature rules fetch failed:', err instanceof Error ? err.message : err)
+      console.error('Billing status: feature rules fetch failed:', err instanceof Error ? err.message : err)
     }
 
     res.json({
@@ -329,71 +329,71 @@ export function createTansoRoutes(
     })
   })
 
-  router.get('/tanso/plans', ensureVisitor, async (_req: AuthRequest, res: Response) => {
+  router.get('/billing/plans', ensureVisitor, async (_req: AuthRequest, res: Response) => {
     try {
-      if (!isTansoConfigured()) return res.json({ plans: [], configured: false })
-      const plans = await tansoListPlans()
+      if (!isBillingConfigured()) return res.json({ plans: [], configured: false })
+      const plans = await billingListPlans()
       res.json({ plans: Array.isArray(plans) ? plans : plans?.items || plans?.plans || [], configured: true })
     } catch (err) {
-      console.error('Tanso list plans error:', err)
-      res.json({ plans: [], configured: false })
+      console.error('Billing list plans error:', err)
+      res.status(503).json({ plans: [], configured: true, error: 'Billing service temporarily unavailable' })
     }
   })
 
-  router.get('/tanso/features', ensureVisitor, async (_req: AuthRequest, res: Response) => {
+  router.get('/billing/features', ensureVisitor, async (_req: AuthRequest, res: Response) => {
     try {
-      if (!isTansoConfigured()) return res.json({ features: [], configured: false })
-      const features = await tansoListFeatures()
+      if (!isBillingConfigured()) return res.json({ features: [], configured: false })
+      const features = await billingListFeatures()
       res.json({ features: Array.isArray(features) ? features : features?.items || features?.features || [], configured: true })
     } catch (err) {
-      console.error('Tanso list features error:', err)
-      res.json({ features: [], configured: false })
+      console.error('Billing list features error:', err)
+      res.status(503).json({ features: [], configured: true, error: 'Billing service temporarily unavailable' })
     }
   })
 
-  router.get('/tanso/entitlements', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  router.get('/billing/entitlements', ensureVisitor, async (req: AuthRequest, res: Response) => {
     try {
-      if (!isTansoConfigured()) return res.json({ entitlements: [], configured: false })
+      if (!isBillingConfigured()) return res.json({ entitlements: [], configured: false })
       const visitorId = req.visitorId!
-      await getOrCreateTansoCustomer(pool, visitorId, req.accountEmail)
-      const entitlements = await tansoListCustomerEntitlements(visitorId)
+      await getOrCreateBillingCustomer(pool, visitorId, req.accountEmail)
+      const entitlements = await billingListCustomerEntitlements(visitorId)
       res.json({
         entitlements: flattenEntitlements(entitlements),
         configured: true,
       })
     } catch (err) {
-      console.error('Tanso entitlements error:', err)
-      res.json({ entitlements: [], configured: false })
+      console.error('Billing entitlements error:', err)
+      res.status(503).json({ entitlements: [], configured: true, error: 'Billing service temporarily unavailable' })
     }
   })
 
-  router.get('/tanso/subscription', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  router.get('/billing/subscription', ensureVisitor, async (req: AuthRequest, res: Response) => {
     try {
-      if (!isTansoConfigured()) return res.json({ customer: null, configured: false })
+      if (!isBillingConfigured()) return res.json({ customer: null, configured: false })
       const visitorId = req.visitorId!
-      await getOrCreateTansoCustomer(pool, visitorId, req.accountEmail)
-      const customer = await tansoGetCustomer(visitorId)
+      await getOrCreateBillingCustomer(pool, visitorId, req.accountEmail)
+      const customer = await billingGetCustomer(visitorId)
       res.json({ customer, configured: true })
     } catch (err) {
-      console.error('Tanso subscription error:', err)
-      res.json({ customer: null, configured: false })
+      console.error('Billing subscription error:', err)
+      res.status(503).json({ customer: null, configured: true, error: 'Billing service temporarily unavailable' })
     }
   })
 
   // Subscribe / upgrade / downgrade — matches SaaSSubscriptionSite Checkout.tsx pattern
-  router.post('/tanso/subscribe', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  router.post('/billing/subscribe', ensureVisitor, async (req: AuthRequest, res: Response) => {
     try {
-      if (!isTansoConfigured()) return res.status(503).json({ error: 'Billing not configured' })
+      if (!isBillingConfigured()) return res.status(503).json({ error: 'Billing not configured' })
       if (!req.accountEmail) return res.status(401).json({ error: 'Please sign in to subscribe' })
       const visitorId = req.visitorId!
       const { planId } = req.body
       if (!planId) return res.status(400).json({ error: 'planId is required' })
-      await getOrCreateTansoCustomer(pool, visitorId, req.accountEmail)
+      await getOrCreateBillingCustomer(pool, visitorId, req.accountEmail)
 
       // Get current subscription state
       let activeSub: any = null
       try {
-        const customer = await tansoGetCustomer(visitorId)
+        const customer = await billingGetCustomer(visitorId)
         activeSub = customer?.subscriptions?.find((s: any) => s.isActive)
       } catch (_) { /* no existing customer — will create new subscription */ }
 
@@ -405,32 +405,32 @@ export function createTansoRoutes(
       // ── PLAN CHANGE (upgrade or downgrade) ──
       if (activeSub) {
         const currentPrice = Number(activeSub.plan?.priceAmount ?? 0)
-        const plans = await tansoListPlans()
+        const plans = await billingListPlans()
         const planItems = Array.isArray(plans) ? plans : plans?.items ?? plans?.plans ?? []
         const targetPlan = planItems.find((p: any) => (p.plan?.id ?? p.id) === planId)
         const targetPrice = Number(targetPlan?.plan?.priceAmount ?? targetPlan?.priceAmount ?? 0)
 
         if (targetPrice > currentPrice) {
-          // UPGRADE — Tanso handles plan change, Stripe handles proration via auto-charge
-          await tansoChangeSubscriptionPlan(activeSub.id, planId, 'UPGRADE')
-          const updated = await tansoGetCustomer(visitorId)
+          // UPGRADE — Billing provider handles plan change, Stripe handles proration via auto-charge
+          await billingChangeSubscriptionPlan(activeSub.id, planId, 'UPGRADE')
+          const updated = await billingGetCustomer(visitorId)
           const newSub = updated?.subscriptions?.find((s: any) => s.isActive)
           return res.json({ success: true, subscription: newSub, changeType: 'upgrade' })
         } else {
           // DOWNGRADE — scheduled for end of billing period
-          await tansoChangeSubscriptionPlan(activeSub.id, planId, 'DOWNGRADE')
-          const updated = await tansoGetCustomer(visitorId)
+          await billingChangeSubscriptionPlan(activeSub.id, planId, 'DOWNGRADE')
+          const updated = await billingGetCustomer(visitorId)
           const newSub = updated?.subscriptions?.find((s: any) => s.isActive)
           return res.json({ success: true, subscription: newSub, changeType: 'downgrade' })
         }
       }
 
       // ── NEW SUBSCRIPTION ──
-      const result = await tansoCreateSubscription(visitorId, planId)
+      const result = await billingCreateSubscription(visitorId, planId)
       const subscription = result?.subscription ?? result
       const checkoutUrl = result?.checkoutUrl
 
-      // Paid plan — Tanso returns checkoutUrl for Stripe Checkout
+      // Paid plan — billing provider returns checkoutUrl for Stripe Checkout
       if (checkoutUrl) {
         return res.json({ success: true, subscription, checkoutUrl })
       }
@@ -438,13 +438,13 @@ export function createTansoRoutes(
       // Free plan — no payment needed
       res.json({ success: true, subscription })
     } catch (err) {
-      console.error('Tanso subscribe error:', err)
+      console.error('Billing subscribe error:', err)
       res.status(500).json({ error: 'Failed to create subscription' })
     }
   })
 
   // Stripe Customer Portal — lets users manage payment methods, invoices, etc.
-  router.post('/tanso/portal', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  router.post('/billing/portal', ensureVisitor, async (req: AuthRequest, res: Response) => {
     try {
       const stripe = await getUncachableStripeClient()
       const email = req.accountEmail
@@ -468,9 +468,9 @@ export function createTansoRoutes(
   })
 
   // Cancel subscription (supports IMMEDIATE or END_OF_PERIOD)
-  router.post('/tanso/cancel', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  router.post('/billing/cancel', ensureVisitor, async (req: AuthRequest, res: Response) => {
     try {
-      if (!isTansoConfigured()) return res.status(503).json({ error: 'Billing not configured' })
+      if (!isBillingConfigured()) return res.status(503).json({ error: 'Billing not configured' })
       const { subscriptionId, cancelMode = 'IMMEDIATE' } = req.body
       if (!subscriptionId) return res.status(400).json({ error: 'subscriptionId is required' })
       if (cancelMode !== 'IMMEDIATE' && cancelMode !== 'END_OF_PERIOD') {
@@ -484,21 +484,21 @@ export function createTansoRoutes(
 
       // Cancel any scheduled plan changes first to avoid conflicting states
       try {
-        await tansoCancelScheduledPlanChanges(subscriptionId)
+        await billingCancelScheduledPlanChanges(subscriptionId)
       } catch (_) { /* may not have scheduled changes */ }
 
-      const result = await tansoCancelSubscription(subscriptionId, cancelMode)
+      const result = await billingCancelSubscription(subscriptionId, cancelMode)
       res.json({ success: true, subscription: result })
     } catch (err) {
-      console.error('Tanso cancel error:', err)
+      console.error('Billing cancel error:', err)
       res.status(500).json({ error: 'Failed to cancel subscription' })
     }
   })
 
   // Reactivate — cancel a scheduled cancellation (keep subscription active)
-  router.post('/tanso/reactivate', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  router.post('/billing/reactivate', ensureVisitor, async (req: AuthRequest, res: Response) => {
     try {
-      if (!isTansoConfigured()) return res.status(503).json({ error: 'Billing not configured' })
+      if (!isBillingConfigured()) return res.status(503).json({ error: 'Billing not configured' })
       const { subscriptionId } = req.body
       if (!subscriptionId) return res.status(400).json({ error: 'subscriptionId is required' })
 
@@ -506,18 +506,18 @@ export function createTansoRoutes(
         return res.status(403).json({ error: 'Subscription not found' })
       }
 
-      await tansoCancelScheduledCancellation(subscriptionId)
+      await billingCancelScheduledCancellation(subscriptionId)
       res.json({ success: true })
     } catch (err) {
-      console.error('Tanso reactivate error:', err)
+      console.error('Billing reactivate error:', err)
       res.status(500).json({ error: 'Failed to reactivate subscription' })
     }
   })
 
   // Cancel a pending downgrade
-  router.post('/tanso/cancel-scheduled-changes', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  router.post('/billing/cancel-scheduled-changes', ensureVisitor, async (req: AuthRequest, res: Response) => {
     try {
-      if (!isTansoConfigured()) return res.status(503).json({ error: 'Billing not configured' })
+      if (!isBillingConfigured()) return res.status(503).json({ error: 'Billing not configured' })
       const { subscriptionId } = req.body
       if (!subscriptionId) return res.status(400).json({ error: 'subscriptionId is required' })
 
@@ -525,22 +525,22 @@ export function createTansoRoutes(
         return res.status(403).json({ error: 'Subscription not found' })
       }
 
-      await tansoCancelScheduledPlanChanges(subscriptionId)
+      await billingCancelScheduledPlanChanges(subscriptionId)
       res.json({ success: true })
     } catch (err) {
-      console.error('Tanso cancel scheduled changes error:', err)
+      console.error('Billing cancel scheduled changes error:', err)
       res.status(500).json({ error: 'Failed to cancel scheduled changes' })
     }
   })
 
-  router.get('/tanso/check/:featureKey', ensureVisitor, async (req: AuthRequest, res: Response) => {
+  router.get('/billing/check/:featureKey', ensureVisitor, async (req: AuthRequest, res: Response) => {
     try {
       const visitorId = req.visitorId!
       const { featureKey } = req.params
-      const result = await deps.checkTansoFeatureAccess(visitorId, featureKey, req.accountEmail)
+      const result = await deps.checkBillingFeatureAccess(visitorId, featureKey, req.accountEmail)
       res.json(result)
     } catch (err) {
-      console.error('Tanso check error:', err)
+      console.error('Billing check error:', err)
       res.json({ allowed: false, reason: 'Entitlement check failed' })
     }
   })

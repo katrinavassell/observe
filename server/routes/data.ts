@@ -5,8 +5,8 @@ import { type AuthRequest } from './auth.js'
 import rateLimit from 'express-rate-limit'
 import { getUncachableStripeClient } from '../stripe-client.js'
 
-type CheckTansoFeatureAccessFn = (visitorId: string, featureKey: string, email?: string) => Promise<{ allowed: boolean; reason?: string; usage?: number; limit?: number; remaining?: number }>
-type TrackTansoUsageFn = (visitorId: string, featureKey: string, eventName: string) => void
+type CheckBillingFeatureAccessFn = (visitorId: string, featureKey: string, email?: string) => Promise<{ allowed: boolean; reason?: string; usage?: number; limit?: number; remaining?: number }>
+type TrackBillingUsageFn = (visitorId: string, featureKey: string, eventName: string) => void
 type ConvertReferralFn = (visitorId: string) => Promise<void>
 
 // Clear sample/demo data when transitioning to real user data
@@ -77,13 +77,13 @@ export function createDataRoutes(
   pool: Pool,
   ensureVisitor: any,
   deps: {
-    checkTansoFeatureAccess: CheckTansoFeatureAccessFn,
-    trackTansoUsage: TrackTansoUsageFn,
+    checkBillingFeatureAccess: CheckBillingFeatureAccessFn,
+    trackBillingUsage: TrackBillingUsageFn,
     convertReferralIfPending: ConvertReferralFn,
   }
 ) {
   const router = Router()
-  const { checkTansoFeatureAccess, trackTansoUsage, convertReferralIfPending } = deps
+  const { checkBillingFeatureAccess, trackBillingUsage, convertReferralIfPending } = deps
 
   const expensiveLimiter = rateLimit({
     windowMs: 60 * 1000,
@@ -481,7 +481,7 @@ export function createDataRoutes(
 
   // POST /data/upload/costs
   router.post('/data/upload/costs', ensureVisitor, async (req: AuthRequest, res: Response) => {
-    const access = await checkTansoFeatureAccess(req.visitorId!, 'csv_upload', req.accountEmail)
+    const access = await checkBillingFeatureAccess(req.visitorId!, 'csv_upload', req.accountEmail)
     if (!access.allowed) return res.status(403).json({ error: access.reason || 'Upload limit reached. Upgrade your plan.' })
     const client = await pool.connect()
     try {
@@ -544,7 +544,7 @@ export function createDataRoutes(
 
       await client.query('COMMIT')
       convertReferralIfPending(req.visitorId!)
-      trackTansoUsage(req.visitorId!, 'csv_upload', 'csv_upload_costs')
+      trackBillingUsage(req.visitorId!, 'csv_upload', 'csv_upload_costs')
       res.json({ success: true, count: records.length })
     } catch (error) {
       await client.query('ROLLBACK')
@@ -557,7 +557,7 @@ export function createDataRoutes(
 
   // POST /data/upload/usage
   router.post('/data/upload/usage', ensureVisitor, async (req: AuthRequest, res: Response) => {
-    const access = await checkTansoFeatureAccess(req.visitorId!, 'csv_upload', req.accountEmail)
+    const access = await checkBillingFeatureAccess(req.visitorId!, 'csv_upload', req.accountEmail)
     if (!access.allowed) return res.status(403).json({ error: access.reason || 'Upload limit reached. Upgrade your plan.' })
     const client = await pool.connect()
     try {
@@ -621,7 +621,7 @@ export function createDataRoutes(
 
       await client.query('COMMIT')
       convertReferralIfPending(req.visitorId!)
-      trackTansoUsage(req.visitorId!, 'csv_upload', 'csv_upload_usage')
+      trackBillingUsage(req.visitorId!, 'csv_upload', 'csv_upload_usage')
       res.json({ success: true, count: records.length })
     } catch (error) {
       await client.query('ROLLBACK')
@@ -634,7 +634,7 @@ export function createDataRoutes(
 
   // POST /data/upload/revenue
   router.post('/data/upload/revenue', ensureVisitor, async (req: AuthRequest, res: Response) => {
-    const access = await checkTansoFeatureAccess(req.visitorId!, 'csv_upload', req.accountEmail)
+    const access = await checkBillingFeatureAccess(req.visitorId!, 'csv_upload', req.accountEmail)
     if (!access.allowed) return res.status(403).json({ error: access.reason || 'Upload limit reached. Upgrade your plan.' })
     const client = await pool.connect()
     try {
@@ -703,7 +703,7 @@ export function createDataRoutes(
 
       await client.query('COMMIT')
       convertReferralIfPending(req.visitorId!)
-      trackTansoUsage(req.visitorId!, 'csv_upload', 'csv_upload_revenue')
+      trackBillingUsage(req.visitorId!, 'csv_upload', 'csv_upload_revenue')
       res.json({
         success: true,
         counts: {
@@ -911,8 +911,8 @@ export function createDataRoutes(
       await client.query('COMMIT')
       convertReferralIfPending(req.visitorId!)
 
-      // Track Stripe sync usage in Tanso
-      trackTansoUsage(req.visitorId!, 'stripe_sync', 'stripe_data_synced')
+      // Track Stripe sync usage in billing
+      trackBillingUsage(req.visitorId!, 'stripe_sync', 'stripe_data_synced')
 
       res.json({
         success: true,

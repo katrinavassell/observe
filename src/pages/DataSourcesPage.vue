@@ -588,7 +588,7 @@ watch(
         <template v-else>
 
         <p class="text-sm text-muted-foreground">
-          Route your OpenAI/Anthropic calls through Tanso by changing one URL. We forward the request, capture tokens and cost from the response, then log it -zero code changes beyond the base URL.
+          Route your OpenAI/Anthropic calls through Observe by changing one URL. We forward the request, capture tokens and cost from the response, then log it -zero code changes beyond the base URL.
         </p>
 
         <!-- OpenAI snippet -->
@@ -601,9 +601,9 @@ watch(
 <span class="text-emerald-400">const</span> openai = <span class="text-emerald-400">new</span> OpenAI({
   <span class="text-sky-300">baseURL</span>: <span class="text-amber-300">'{{ proxyBaseUrl }}'</span>,
   <span class="text-sky-300">defaultHeaders</span>: {
-    <span class="text-amber-300">'X-Tanso-Key'</span>: <span class="text-amber-300">'{{ apiKeyForSnippet }}'</span>,
-    <span class="text-amber-300">'X-Tanso-Customer'</span>: userId,       <span class="text-zinc-500">// optional</span>
-    <span class="text-amber-300">'X-Tanso-Feature'</span>: <span class="text-amber-300">'ai_chat'</span>,  <span class="text-zinc-500">// optional</span>
+    <span class="text-amber-300">'X-Observe-Key'</span>: <span class="text-amber-300">'{{ apiKeyForSnippet }}'</span>,
+    <span class="text-amber-300">'X-Observe-Customer'</span>: userId,       <span class="text-zinc-500">// optional</span>
+    <span class="text-amber-300">'X-Observe-Feature'</span>: <span class="text-amber-300">'ai_chat'</span>,  <span class="text-zinc-500">// optional</span>
   },
 })
 
@@ -627,7 +627,7 @@ watch(
 <span class="text-emerald-400">const</span> anthropic = <span class="text-emerald-400">new</span> Anthropic({
   <span class="text-sky-300">baseURL</span>: <span class="text-amber-300">'{{ proxyBaseUrl }}'</span>,
   <span class="text-sky-300">defaultHeaders</span>: {
-    <span class="text-amber-300">'X-Tanso-Key'</span>: <span class="text-amber-300">'{{ apiKeyForSnippet }}'</span>,
+    <span class="text-amber-300">'X-Observe-Key'</span>: <span class="text-amber-300">'{{ apiKeyForSnippet }}'</span>,
   },
 })</pre>
             </div>
@@ -654,8 +654,8 @@ watch(
         <div>
           <h3 class="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Optional headers</h3>
           <div class="text-xs space-y-1.5">
-            <div class="flex gap-2"><span class="font-mono bg-muted px-1.5 py-0.5 rounded text-[11px] shrink-0">X-Tanso-Customer</span><span class="text-muted-foreground">Customer ID -attributes cost to a specific customer</span></div>
-            <div class="flex gap-2"><span class="font-mono bg-muted px-1.5 py-0.5 rounded text-[11px] shrink-0">X-Tanso-Feature</span><span class="text-muted-foreground">Feature key -attributes cost to a product feature (defaults to endpoint name)</span></div>
+            <div class="flex gap-2"><span class="font-mono bg-muted px-1.5 py-0.5 rounded text-[11px] shrink-0">X-Observe-Customer</span><span class="text-muted-foreground">Customer ID -attributes cost to a specific customer</span></div>
+            <div class="flex gap-2"><span class="font-mono bg-muted px-1.5 py-0.5 rounded text-[11px] shrink-0">X-Observe-Feature</span><span class="text-muted-foreground">Feature key -attributes cost to a product feature (defaults to endpoint name)</span></div>
           </div>
         </div>
 

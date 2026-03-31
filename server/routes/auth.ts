@@ -222,7 +222,7 @@ export function createAuthRoutes(pool: Pool, ensureVisitor: ReturnType<typeof cr
       if (apiKey) {
         const appUrl = process.env.APP_URL || 'http://localhost:5173'
         const resetUrl = `${appUrl}/reset-password?token=${token}`
-        const fromEmail = process.env.ALERT_FROM_EMAIL || 'alerts@tansohq.com'
+        const fromEmail = process.env.ALERT_FROM_EMAIL || 'alerts@observehq.dev'
 
         await fetch('https://api.resend.com/emails', {
           method: 'POST',

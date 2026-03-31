@@ -65,7 +65,7 @@ function handleSeeMargins() {
 
 function handleDesignPartner() {
   toast.info('Design Partner Program', {
-    description: "We're looking for SaaS companies to help shape Tanso. Email kat@tansohq.com to join.",
+    description: "We're looking for SaaS companies to help shape Observe. Email kat@observehq.dev to join.",
   })
 }
 </script>
@@ -151,7 +151,7 @@ function handleDesignPartner() {
       <div class="mt-6 pt-4 border-t border-amber-200 dark:border-amber-800">
         <div class="flex flex-wrap items-center justify-between gap-4">
           <p class="text-xs text-amber-600 dark:text-amber-400">
-            Tanso Core tracks cost-to-serve at the feature level, giving you the data to make informed pricing decisions.
+            Observe tracks cost-to-serve at the feature level, giving you the data to make informed pricing decisions.
           </p>
           <div class="flex flex-wrap gap-3">
             <Button
