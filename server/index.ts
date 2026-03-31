@@ -2168,15 +2168,18 @@ app.get('/events', ensureVisitor, async (req: AuthRequest, res: Response) => {
 
 // Source priority: proxy/sdk data wins over csv for the same (model, customer, feature, day).
 // CSV rows are excluded when a higher-priority source already covers that slot.
+// $1 = user_id, excludes sample data unless user is in sample mode
 const SOURCE_PRIORITY_CTE = `
   WITH ranked AS (
-    SELECT *,
+    SELECT oe.*,
       ROW_NUMBER() OVER (
-        PARTITION BY user_id, COALESCE(model,''), COALESCE(customer_id,''), COALESCE(feature_key,''), date_trunc('day', timestamp)
-        ORDER BY CASE source WHEN 'proxy' THEN 1 WHEN 'sdk' THEN 2 WHEN 'csv' THEN 3 WHEN 'sample' THEN 4 ELSE 5 END
+        PARTITION BY oe.user_id, COALESCE(oe.model,''), COALESCE(oe.customer_id,''), COALESCE(oe.feature_key,''), date_trunc('day', oe.timestamp)
+        ORDER BY CASE oe.source WHEN 'proxy' THEN 1 WHEN 'sdk' THEN 2 WHEN 'csv' THEN 3 WHEN 'sample' THEN 4 ELSE 5 END
       ) AS _src_rank
-    FROM observe_events
-    WHERE user_id = $1
+    FROM observe_events oe
+    LEFT JOIN user_data_status uds ON uds.user_id = oe.user_id
+    WHERE oe.user_id = $1
+      AND (oe.source != 'sample' OR COALESCE(uds.data_mode, 'none') = 'sample')
   ),
   deduped AS (SELECT * FROM ranked WHERE _src_rank = 1)
 `
