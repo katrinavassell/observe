@@ -190,7 +190,7 @@ async function handleSubscribe(planKey: string) {
     }
 
     if (data.changeType === "downgrade") {
-      toast.success("Subscription will cancel at end of billing period");
+      toast.success("Plan will change to Free at end of billing period");
     } else if (data.changeType === "upgrade") {
       toast.success("Plan upgraded!");
     } else if (data.changeType === "reactivated") {

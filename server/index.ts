@@ -6111,9 +6111,11 @@ app.get(
         configured: true,
         ai_insights: {
           allowed: access.allowed,
-          usage: access.usage,
-          limit: access.limit,
-          remaining: access.remaining,
+          usage: {
+            used: access.usage ?? 0,
+            limit: access.limit ?? 0,
+            remaining: access.remaining ?? 0,
+          },
         },
       });
     } catch (err) {
