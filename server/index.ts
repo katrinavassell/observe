@@ -47,7 +47,6 @@ import {
   calculateCostFromTokens as calcCostFromDb,
   getAllPricing,
 } from "./model-pricing.js";
-// Tanso client removed — billing is now Stripe-direct (see routes/billing.ts)
 
 const app = express();
 

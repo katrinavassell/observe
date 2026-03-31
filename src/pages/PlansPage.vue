@@ -314,7 +314,15 @@ async function handleReactivate() {
 
       <!-- Usage tracking -->
       <div v-if="meteredEntitlements.length > 0" class="space-y-4">
-        <h2 class="text-lg font-semibold">Your Usage</h2>
+        <div class="flex items-center gap-3">
+          <h2 class="text-lg font-semibold">Your Usage</h2>
+          <span
+            v-if="currentPlanKey"
+            class="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium text-muted-foreground"
+          >
+            {{ currentSub?.plan?.name || currentPlanKey }} plan
+          </span>
+        </div>
         <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <div
             v-for="e in meteredEntitlements"
