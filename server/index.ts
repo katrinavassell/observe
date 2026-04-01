@@ -6385,14 +6385,16 @@ app.get(
         "ai_insights",
         req.accountEmail,
       );
+      const isUnlimited = access.limit === undefined || access.limit === null;
       res.json({
         configured: true,
         ai_insights: {
           allowed: access.allowed,
+          unlimited: isUnlimited,
           usage: {
             used: access.usage ?? 0,
-            limit: access.limit ?? 0,
-            remaining: access.remaining ?? 0,
+            limit: isUnlimited ? null : access.limit,
+            remaining: isUnlimited ? null : (access.remaining ?? 0),
           },
         },
       });

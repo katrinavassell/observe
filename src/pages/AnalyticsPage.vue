@@ -54,6 +54,9 @@ const { data: usageLimits } = useQuery({
 const insightsAllowed = computed(
   () => usageLimits.value?.ai_insights?.allowed !== false,
 );
+const insightsUnlimited = computed(
+  () => usageLimits.value?.ai_insights?.unlimited === true,
+);
 const insightsUsage = computed(
   () => usageLimits.value?.ai_insights?.usage ?? null,
 );
@@ -332,43 +335,50 @@ const insightCategories = [
         >
           <div class="flex items-center justify-between text-sm">
             <span class="text-muted-foreground">Insights generated</span>
-            <span class="font-medium"
-              >{{ insightsUsage.used }} / {{ insightsUsage.limit }}</span
-            >
-          </div>
-          <div class="h-2 rounded-full bg-muted overflow-hidden">
-            <div
-              class="h-full rounded-full transition-all"
-              :class="
-                insightsUsage.remaining === 0
-                  ? 'bg-destructive'
-                  : insightsUsage.remaining <= 1
-                    ? 'bg-warning'
-                    : 'bg-primary'
-              "
-              :style="{
-                width: `${insightsUsage.limit > 0 ? Math.min(100, (insightsUsage.used / insightsUsage.limit) * 100) : 0}%`,
-              }"
-            />
-          </div>
-          <div class="text-xs text-muted-foreground">
-            <template v-if="insightsUsage.remaining > 0">
-              {{ insightsUsage.remaining }} insight{{
-                insightsUsage.remaining === 1 ? "" : "s"
-              }}
-              remaining this month
-            </template>
-            <div v-else class="flex items-center gap-2">
-              <Zap class="h-3 w-3 text-primary" />
-              <span
-                >No insights remaining.
-                <router-link to="/plans" class="text-primary hover:underline"
-                  >Upgrade to Growth</router-link
-                >
-                for unlimited.</span
+            <span class="font-medium">
+              <template v-if="insightsUnlimited"
+                >{{ insightsUsage.used }} (unlimited)</template
               >
-            </div>
+              <template v-else
+                >{{ insightsUsage.used }} / {{ insightsUsage.limit }}</template
+              >
+            </span>
           </div>
+          <template v-if="!insightsUnlimited">
+            <div class="h-2 rounded-full bg-muted overflow-hidden">
+              <div
+                class="h-full rounded-full transition-all"
+                :class="
+                  insightsUsage.remaining === 0
+                    ? 'bg-destructive'
+                    : insightsUsage.remaining <= 1
+                      ? 'bg-warning'
+                      : 'bg-primary'
+                "
+                :style="{
+                  width: `${insightsUsage.limit > 0 ? Math.min(100, (insightsUsage.used / insightsUsage.limit) * 100) : 0}%`,
+                }"
+              />
+            </div>
+            <div class="text-xs text-muted-foreground">
+              <template v-if="insightsUsage.remaining > 0">
+                {{ insightsUsage.remaining }} insight{{
+                  insightsUsage.remaining === 1 ? "" : "s"
+                }}
+                remaining this month
+              </template>
+              <div v-else class="flex items-center gap-2">
+                <Zap class="h-3 w-3 text-primary" />
+                <span
+                  >No insights remaining.
+                  <router-link to="/plans" class="text-primary hover:underline"
+                    >Upgrade to Growth</router-link
+                  >
+                  for unlimited.</span
+                >
+              </div>
+            </div>
+          </template>
         </div>
 
         <!-- DEMO MODE: hardcoded preview -->
@@ -538,7 +548,10 @@ const insightCategories = [
               v-if="insightsUsage && totalEvents >= 10"
               class="text-xs text-muted-foreground text-center"
             >
-              <template v-if="insightsUsage.used === 0">
+              <template v-if="insightsUnlimited">
+                {{ insightsUsage.used }} insights generated (unlimited)
+              </template>
+              <template v-else-if="insightsUsage.used === 0">
                 {{ insightsUsage.limit }} free insight{{
                   insightsUsage.limit === 1 ? "" : "s"
                 }}
