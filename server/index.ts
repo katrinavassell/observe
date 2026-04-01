@@ -19,10 +19,12 @@ import {
 import { createDataRoutes } from "./routes/data.js";
 // import { createSimulationsRoutes } from './routes/simulations.js'
 import {
-  createBillingRoutes,
-  createCheckBillingFeatureAccess,
-  createTrackBillingUsage,
-} from "./routes/tanso.js";
+  checkFeatureAccess,
+  trackUsage,
+  createCheckoutSession,
+  createPortalSession,
+  handleWebhook,
+} from "./billing.js";
 
 // import { createTeamRoutes } from './routes/team.js'
 import {
@@ -59,7 +61,14 @@ const pool = new Pool({
 
 const PgStore = pgSession(session);
 
-app.use(express.json({ limit: "2mb" }));
+// Parse JSON for all routes except the Stripe webhook (which needs raw body)
+app.use((req, res, next) => {
+  if (req.path === "/billing/webhook" || req.path === "/api/billing/webhook") {
+    next();
+  } else {
+    express.json({ limit: "2mb" })(req, res, next);
+  }
+});
 
 // Strip /api prefix so routes work in both dev (Vite proxy) and production (same origin)
 app.use((req, _res, next) => {
@@ -166,10 +175,21 @@ async function getAdminVisitorId(): Promise<string | null> {
   return null;
 }
 
-// ─── Shared billing helpers (used by multiple route modules) ─────────────────
-const checkBillingFeatureAccess = createCheckBillingFeatureAccess(pool);
-const trackBillingUsage = createTrackBillingUsage(pool, getAdminVisitorId);
+// ─── Shared helpers ──────────────────────────────────────────────────────────
 const convertReferralIfPending = createConvertReferralIfPending(pool);
+
+const checkBillingFeatureAccess = (
+  visitorId: string,
+  featureKey: string,
+  email?: string,
+) => checkFeatureAccess(pool, visitorId, featureKey, email);
+const trackBillingUsage = (
+  _visitorId: string,
+  _featureKey: string,
+  _eventName: string,
+) => {
+  /* usage counted on read from source tables */
+};
 
 // ─── Extracted route modules ───────────────────────────────────────────────
 app.use(
@@ -177,12 +197,6 @@ app.use(
     checkBillingFeatureAccess,
     trackBillingUsage,
     convertReferralIfPending,
-  }),
-);
-// app.use(createSimulationsRoutes(pool, ensureVisitor))
-app.use(
-  createBillingRoutes(pool, ensureVisitor, {
-    checkBillingFeatureAccess,
   }),
 );
 
@@ -406,25 +420,53 @@ async function logProxyEvent(
   const resJson = responseBody ? JSON.stringify(responseBody) : null;
   const totalTokens = inputTokens + outputTokens;
 
+  // Revenue enrichment: feature_pricing > MRR allocation > 0
+  let revenue = 0;
+  let revenueSource = "none";
+  try {
+    const fpResult = await pool.query(
+      `SELECT revenue_per_unit FROM feature_pricing WHERE user_id = $1 AND feature_key = $2`,
+      [userId, featureKey],
+    );
+    if (fpResult.rows.length > 0) {
+      revenue = parseFloat(fpResult.rows[0].revenue_per_unit);
+      revenueSource = "feature_pricing";
+    } else if (customerId && customerId !== "unknown") {
+      const mrrResult = await pool.query(
+        `SELECT SUM(mrr_override) as mrr FROM subscriptions
+         WHERE user_id = $1 AND is_active = true AND customer_id = $2`,
+        [userId, customerId],
+      );
+      if (mrrResult.rows[0]?.mrr) {
+        revenue = parseFloat(mrrResult.rows[0].mrr) / 30;
+        revenueSource = "mrr_allocation";
+      }
+    }
+  } catch (err) {
+    console.error("Proxy revenue enrichment failed:", err);
+  }
+
   // 1. Log for the user
   await pool.query(
     `INSERT INTO observe_events (
       user_id, customer_id, feature_key, event_name, timestamp,
       cost_amount, cost_unit, revenue_amount, usage_units,
       model, model_provider, source, granularity, is_inferred, properties,
-      request_body, response_body
-    ) VALUES ($1, $2, $3, 'cost', NOW(), $4, 'usd', 0, $5, $6, $7, 'proxy', 'event', false, $8, $9, $10)`,
+      request_body, response_body, revenue_source
+    ) VALUES ($1, $2, $3, 'cost', NOW(), $4, 'usd', $5, $6, $7, $8, 'proxy', 'event', false, $9, $10, $11, $12)`,
     [
       userId,
       customerId,
       featureKey,
       cost,
+      revenue,
       totalTokens,
       model,
       provider,
       propsJson,
       reqJson,
       resJson,
+      revenueSource,
     ],
   );
   checkAlerts(pool, userId).catch((err) =>
@@ -441,19 +483,21 @@ async function logProxyEvent(
         user_id, customer_id, feature_key, event_name, timestamp,
         cost_amount, cost_unit, revenue_amount, usage_units,
         model, model_provider, source, granularity, is_inferred, properties,
-        request_body, response_body
-      ) VALUES ($1, $2, $3, 'cost', NOW(), $4, 'usd', 0, $5, $6, $7, 'proxy', 'event', false, $8, $9, $10)`,
+        request_body, response_body, revenue_source
+      ) VALUES ($1, $2, $3, 'cost', NOW(), $4, 'usd', $5, $6, $7, $8, 'proxy', 'event', false, $9, $10, $11, $12)`,
           [
             adminId,
             customerId,
             featureKey,
             cost,
+            revenue,
             totalTokens,
             model,
             provider,
             propsJson,
             reqJson,
             resJson,
+            revenueSource,
           ],
         )
         .catch((err) => console.error("Admin proxy event mirror error:", err));
@@ -2345,10 +2389,13 @@ async function _doDbInit() {
       )
     `);
 
-    // Add stripe_customer_id column if missing (migration for existing DBs)
-    await pool.query(`
-      ALTER TABLE accounts ADD COLUMN IF NOT EXISTS stripe_customer_id TEXT
-    `);
+    // Add stripe columns if missing (migration for existing DBs)
+    await pool.query(
+      `ALTER TABLE accounts ADD COLUMN IF NOT EXISTS stripe_customer_id TEXT`,
+    );
+    await pool.query(
+      `ALTER TABLE accounts ADD COLUMN IF NOT EXISTS stripe_plan TEXT DEFAULT 'free'`,
+    );
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS password_reset_tokens (
@@ -2357,16 +2404,6 @@ async function _doDbInit() {
         token_hash TEXT NOT NULL,
         expires_at TIMESTAMPTZ NOT NULL,
         used_at TIMESTAMPTZ,
-        created_at TIMESTAMPTZ DEFAULT NOW()
-      )
-    `);
-
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS tanso_customers (
-        id SERIAL PRIMARY KEY,
-        visitor_id TEXT UNIQUE NOT NULL,
-        tanso_customer_id TEXT,
-        email TEXT,
         created_at TIMESTAMPTZ DEFAULT NOW()
       )
     `);
@@ -2477,6 +2514,24 @@ async function _doDbInit() {
         properties JSONB DEFAULT '{}',
         created_at TIMESTAMPTZ DEFAULT NOW()
       )
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS feature_pricing (
+        id SERIAL PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        feature_key TEXT NOT NULL,
+        revenue_per_unit NUMERIC(12, 4) NOT NULL,
+        unit_label TEXT DEFAULT 'call',
+        effective_from TIMESTAMPTZ DEFAULT NOW(),
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(user_id, feature_key)
+      )
+    `);
+
+    // Add revenue_source column to observe_events if missing
+    await pool.query(`
+      ALTER TABLE observe_events ADD COLUMN IF NOT EXISTS revenue_source TEXT DEFAULT 'none'
     `);
 
     await pool.query(`
@@ -2830,6 +2885,201 @@ app.get("/pricing/models", async (_req, res: Response) => {
     res.status(500).json({ error: "Failed to fetch model pricing" });
   }
 });
+
+// =============================================================================
+// FEATURE PRICING (per-feature revenue rates)
+// =============================================================================
+
+// GET /api/feature-pricing — list all feature pricing rules
+app.get(
+  "/api/feature-pricing",
+  ensureVisitor,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const result = await pool.query(
+        `SELECT feature_key, revenue_per_unit, unit_label, effective_from, created_at
+         FROM feature_pricing WHERE user_id = $1 ORDER BY feature_key`,
+        [req.visitorId],
+      );
+      res.json({
+        rules: result.rows.map((r: Record<string, unknown>) => ({
+          ...r,
+          revenue_per_unit: parseFloat(r.revenue_per_unit as string),
+        })),
+      });
+    } catch (error) {
+      console.error("GET /api/feature-pricing error:", error);
+      res.status(500).json({ error: "Failed to fetch feature pricing" });
+    }
+  },
+);
+
+// POST /api/feature-pricing — upsert a feature pricing rule
+app.post(
+  "/api/feature-pricing",
+  ensureVisitor,
+  async (req: AuthRequest, res: Response) => {
+    const { feature_key, revenue_per_unit, unit_label } = req.body;
+    if (!feature_key || revenue_per_unit == null) {
+      res
+        .status(400)
+        .json({ error: "feature_key and revenue_per_unit are required" });
+      return;
+    }
+    try {
+      await pool.query(
+        `INSERT INTO feature_pricing (user_id, feature_key, revenue_per_unit, unit_label)
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT (user_id, feature_key)
+         DO UPDATE SET revenue_per_unit = $3, unit_label = $4`,
+        [req.visitorId, feature_key, revenue_per_unit, unit_label || "call"],
+      );
+      res.json({ ok: true });
+    } catch (error) {
+      console.error("POST /api/feature-pricing error:", error);
+      res.status(500).json({ error: "Failed to save feature pricing" });
+    }
+  },
+);
+
+// DELETE /api/feature-pricing/:featureKey — remove a feature pricing rule
+app.delete(
+  "/api/feature-pricing/:featureKey",
+  ensureVisitor,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      await pool.query(
+        `DELETE FROM feature_pricing WHERE user_id = $1 AND feature_key = $2`,
+        [req.visitorId, req.params.featureKey],
+      );
+      res.json({ ok: true });
+    } catch (error) {
+      console.error("DELETE /api/feature-pricing error:", error);
+      res.status(500).json({ error: "Failed to delete feature pricing" });
+    }
+  },
+);
+
+// GET /api/feature-pricing/features — list distinct feature keys from events (for autocomplete)
+app.get(
+  "/api/feature-pricing/features",
+  ensureVisitor,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const result = await pool.query(
+        `SELECT DISTINCT feature_key FROM observe_events
+         WHERE user_id = $1 AND feature_key != 'unknown'
+         ORDER BY feature_key LIMIT 100`,
+        [req.visitorId],
+      );
+      res.json({
+        features: result.rows.map(
+          (r: { feature_key: string }) => r.feature_key,
+        ),
+      });
+    } catch (error) {
+      console.error("GET /api/feature-pricing/features error:", error);
+      res.status(500).json({ error: "Failed to fetch features" });
+    }
+  },
+);
+
+// =============================================================================
+// OBSERVE BILLING (Stripe Checkout + plan gating)
+// =============================================================================
+
+// GET /api/billing/status — current plan info
+app.get(
+  "/billing/status",
+  ensureVisitor,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const result = await pool.query(
+        `SELECT stripe_plan, stripe_customer_id FROM accounts WHERE visitor_id = $1`,
+        [req.visitorId],
+      );
+      const plan = result.rows[0]?.stripe_plan || "free";
+      const hasStripeCustomer = !!result.rows[0]?.stripe_customer_id;
+      res.json({ plan, hasStripeCustomer });
+    } catch (error) {
+      console.error("GET /api/billing/status error:", error);
+      res.status(500).json({ error: "Failed to fetch billing status" });
+    }
+  },
+);
+
+// POST /api/billing/create-checkout — create Stripe Checkout session
+app.post(
+  "/billing/create-checkout",
+  ensureVisitor,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const { url } = await createCheckoutSession(pool, req.visitorId!);
+      res.json({ url });
+    } catch (error) {
+      console.error("POST /api/billing/create-checkout error:", error);
+      res.status(500).json({
+        error:
+          error instanceof Error ? error.message : "Failed to create checkout",
+      });
+    }
+  },
+);
+
+// POST /api/billing/portal — create Stripe Customer Portal session
+app.post(
+  "/billing/portal",
+  ensureVisitor,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const { url } = await createPortalSession(pool, req.visitorId!);
+      res.json({ url });
+    } catch (error) {
+      console.error("POST /api/billing/portal error:", error);
+      res.status(500).json({
+        error:
+          error instanceof Error
+            ? error.message
+            : "Failed to create portal session",
+      });
+    }
+  },
+);
+
+// POST /api/billing/webhook — Stripe webhook handler
+app.post(
+  "/billing/webhook",
+  express.raw({ type: "application/json" }),
+  async (req: Request, res: Response) => {
+    const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+    if (!webhookSecret) {
+      console.error("STRIPE_WEBHOOK_SECRET not configured");
+      res.status(500).json({ error: "Webhook not configured" });
+      return;
+    }
+
+    try {
+      const stripe = await getUncachableStripeClient();
+      const sig = req.headers["stripe-signature"] as string;
+      const event = stripe.webhooks.constructEvent(
+        req.body,
+        sig,
+        webhookSecret,
+      );
+      await handleWebhook(
+        pool,
+        event as unknown as {
+          type: string;
+          data: { object: Record<string, unknown> };
+        },
+      );
+      res.json({ received: true });
+    } catch (error) {
+      console.error("Webhook error:", error);
+      res.status(400).json({ error: "Webhook signature verification failed" });
+    }
+  },
+);
 
 // =============================================================================
 // STRIPE NATIVE INTEGRATION
@@ -4011,6 +4261,23 @@ app.post("/events/ingest", apiLimiter, async (req: Request, res: Response) => {
       return null;
     }
 
+    // Load feature pricing rules for this user
+    const featurePricingMap = new Map<string, number>();
+    try {
+      const fpResult = await pool.query(
+        `SELECT feature_key, revenue_per_unit FROM feature_pricing WHERE user_id = $1`,
+        [userId],
+      );
+      for (const row of fpResult.rows) {
+        featurePricingMap.set(
+          row.feature_key,
+          parseFloat(row.revenue_per_unit),
+        );
+      }
+    } catch (err) {
+      console.error("Feature pricing lookup failed:", err);
+    }
+
     // Auto-enrich revenue from Stripe: look up MRR for customers in this batch
     const customerIds = [
       ...new Set(validEvents.map((e) => e.customerReferenceId)),
@@ -4053,12 +4320,22 @@ app.post("/events/ingest", apiLimiter, async (req: Request, res: Response) => {
           evt.outputTokens,
         ));
 
-      // Auto-enrich revenue from Stripe MRR if not provided
-      const revenue =
-        evt.revenueAmount ?? mrrByCustomer.get(evt.customerReferenceId) ?? 0;
+      // Revenue enrichment priority: explicit > feature_pricing > MRR allocation > 0
+      let revenue = 0;
+      let revenueSource = "none";
+      if (evt.revenueAmount != null) {
+        revenue = evt.revenueAmount;
+        revenueSource = "explicit";
+      } else if (featurePricingMap.has(evt.featureKey)) {
+        revenue = featurePricingMap.get(evt.featureKey)!;
+        revenueSource = "feature_pricing";
+      } else if (mrrByCustomer.has(evt.customerReferenceId)) {
+        revenue = mrrByCustomer.get(evt.customerReferenceId)!;
+        revenueSource = "mrr_allocation";
+      }
 
       placeholders.push(
-        `($${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, 'sdk', 'event', false, $${paramIdx++})`,
+        `($${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, 'sdk', 'event', false, $${paramIdx++}, $${paramIdx++})`,
       );
       values.push(
         userId,
@@ -4073,6 +4350,7 @@ app.post("/events/ingest", apiLimiter, async (req: Request, res: Response) => {
         evt.model ?? null,
         provider,
         evt.idempotencyKey ?? null,
+        revenueSource,
       );
     }
 
@@ -4080,7 +4358,7 @@ app.post("/events/ingest", apiLimiter, async (req: Request, res: Response) => {
       INSERT INTO observe_events (
         user_id, customer_id, feature_key, event_name, timestamp,
         cost_amount, cost_unit, revenue_amount, usage_units,
-        model, model_provider, source, granularity, is_inferred, idempotency_key
+        model, model_provider, source, granularity, is_inferred, idempotency_key, revenue_source
       ) VALUES ${placeholders.join(", ")}
       ON CONFLICT (user_id, idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING
     `;

@@ -237,9 +237,7 @@ export interface RevenueUploadData {
   }>;
 }
 
-export async function uploadRevenueData(
-  data: RevenueUploadData,
-): Promise<{
+export async function uploadRevenueData(data: RevenueUploadData): Promise<{
   success: boolean;
   counts: { customers: number; plans: number; subscriptions: number };
 }> {
@@ -580,6 +578,50 @@ export async function resetSdkKey(
 }
 
 // =============================================================================
+// FEATURE PRICING
+// =============================================================================
+
+export interface FeaturePricingRule {
+  feature_key: string;
+  revenue_per_unit: number;
+  unit_label: string;
+  effective_from: string;
+  created_at: string;
+}
+
+export async function listFeaturePricing(): Promise<FeaturePricingRule[]> {
+  const data = await request<{ rules: FeaturePricingRule[] }>(
+    "/feature-pricing",
+  );
+  return data.rules;
+}
+
+export async function upsertFeaturePricing(
+  feature_key: string,
+  revenue_per_unit: number,
+  unit_label?: string,
+): Promise<{ ok: boolean }> {
+  return request("/feature-pricing", {
+    method: "POST",
+    body: JSON.stringify({ feature_key, revenue_per_unit, unit_label }),
+  });
+}
+
+export async function deleteFeaturePricing(
+  featureKey: string,
+): Promise<{ ok: boolean }> {
+  return request(`/feature-pricing/${encodeURIComponent(featureKey)}`, {
+    method: "DELETE",
+  });
+}
+
+export async function listFeatureKeys(): Promise<string[]> {
+  const data = await request<{ features: string[] }>(
+    "/feature-pricing/features",
+  );
+  return data.features;
+}
+
 // =============================================================================
 // TEAM / ORGANIZATION
 // =============================================================================
@@ -794,101 +836,25 @@ export async function getUsageLimits(): Promise<UsageLimits> {
   }
 }
 
-export interface TansoPlan {
-  id: string;
-  key: string;
-  name: string;
-  description?: string;
-  priceAmount: string | number;
-  intervalMonths: number;
-  status: string;
-  features?: any[];
+// =============================================================================
+// BILLING
+// =============================================================================
+
+export interface BillingStatus {
+  plan: "free" | "growth";
+  hasStripeCustomer: boolean;
 }
 
-export interface TansoEntitlement {
-  featureKey: string;
-  featureName?: string;
-  allowed: boolean;
-  usageLimit?: number;
-  currentUsage?: number;
-  remainingQuota?: number;
-}
-
-export interface TansoEntitlementCheck {
-  allowed: boolean;
-  usage?: number;
-  limit?: number;
-  remaining?: number;
-}
-
-export async function tansoGetStatus(): Promise<{
-  plans: TansoPlan[];
-  entitlements: TansoEntitlement[];
-  customer: any;
-  configured: boolean;
-}> {
+export async function getBillingStatus(): Promise<BillingStatus> {
   return request("/billing/status");
 }
 
-export async function tansoGetPlans(): Promise<{
-  plans: TansoPlan[];
-  configured: boolean;
-}> {
-  return request("/billing/status");
+export async function createCheckout(): Promise<{ url: string }> {
+  return request("/billing/create-checkout", { method: "POST" });
 }
 
-export async function tansoGetFeatures(): Promise<{
-  features: any[];
-  configured: boolean;
-}> {
-  return request("/billing/status");
-}
-
-export async function tansoGetEntitlements(): Promise<{
-  entitlements: TansoEntitlement[];
-  configured: boolean;
-}> {
-  return request("/billing/status");
-}
-
-export async function tansoGetSubscription(): Promise<{
-  customer: any;
-  configured: boolean;
-}> {
-  return request("/billing/status");
-}
-
-export async function tansoSubscribe(
-  planId: string,
-): Promise<{ success: boolean; subscription: any }> {
-  return request("/billing/subscribe", {
-    method: "POST",
-    body: JSON.stringify({ planId }),
-  });
-}
-
-export async function tansoCheckFeature(
-  featureKey: string,
-): Promise<TansoEntitlementCheck> {
-  return request(`/billing/check/${featureKey}`);
-}
-
-// Invoice types and API
-export interface TansoInvoice {
-  id: string;
-  status: string;
-  amount: number;
-  currency: string;
-  dueDate?: string;
-  createdAt?: string;
-  paidAt?: string;
-}
-
-export async function tansoGetInvoices(): Promise<{
-  invoices: TansoInvoice[];
-  configured: boolean;
-}> {
-  return request("/billing/invoices");
+export async function createPortalSession(): Promise<{ url: string }> {
+  return request("/billing/portal", { method: "POST" });
 }
 
 export interface Account {
@@ -954,9 +920,7 @@ export interface UnderwaterCustomer {
   event_count: number;
 }
 
-export async function fetchModelSwapRecommendations(
-  days = 90,
-): Promise<{
+export async function fetchModelSwapRecommendations(days = 90): Promise<{
   recommendations: ModelSwapRecommendation[];
   total_potential_savings: number;
   days: number;

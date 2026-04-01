@@ -9,6 +9,7 @@ import {
   listInsights,
   generateInsights,
   getUsageLimits,
+  listFeaturePricing,
 } from "@/lib/api";
 import type { AiInsight } from "@/lib/api";
 import {
@@ -160,6 +161,24 @@ const hasData = computed(
     (featureData.value?.length ||
       modelData.value?.length ||
       customerData.value?.length),
+);
+
+// Check if user has configured feature pricing (for margin label)
+const { data: featurePricingRules } = useQuery({
+  queryKey: ["feature-pricing"],
+  queryFn: listFeaturePricing,
+  staleTime: 0,
+});
+const hasFeaturePricing = computed(
+  () => (featurePricingRules.value?.length ?? 0) > 0,
+);
+const marginLabel = computed(() =>
+  hasFeaturePricing.value ? "Net Margin" : "Est. Margin",
+);
+const marginHint = computed(() =>
+  hasFeaturePricing.value
+    ? "Revenue from configured feature pricing"
+    : "Revenue estimated from Stripe MRR allocation. Configure feature pricing for precise margins.",
 );
 
 const totalCost = computed(() => {
@@ -636,8 +655,11 @@ const insightCategories = [
           </div>
         </Card>
         <Card class="p-6">
-          <div class="text-sm font-medium text-muted-foreground">
-            Net Margin
+          <div
+            class="text-sm font-medium text-muted-foreground"
+            :title="marginHint"
+          >
+            {{ marginLabel }}
           </div>
           <div
             class="text-3xl font-bold tabular-nums mt-1"
@@ -648,6 +670,12 @@ const insightCategories = [
             "
           >
             {{ netMarginPct != null ? fmtPct(netMarginPct) : "—" }}
+          </div>
+          <div
+            v-if="!hasFeaturePricing && totalRevenue > 0"
+            class="text-[10px] text-muted-foreground mt-1"
+          >
+            from MRR allocation
           </div>
         </Card>
       </div>
@@ -832,13 +860,5 @@ const insightCategories = [
         </div>
       </div>
     </template>
-
-    <!-- Demo indicator -->
-    <div
-      v-if="isSampleMode"
-      class="text-xs text-muted-foreground text-center py-1.5"
-    >
-      Viewing sample data
-    </div>
   </div>
 </template>

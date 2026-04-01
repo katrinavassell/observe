@@ -1,0 +1,265 @@
+import type { Pool } from "pg";
+import { getUncachableStripeClient } from "./stripe-client.js";
+
+// =============================================================================
+// Plan definitions — single source of truth for feature limits
+// =============================================================================
+
+interface FeatureConfig {
+  limit: number | null; // null = unlimited
+  reset?: "monthly";
+}
+
+interface PlanConfig {
+  name: string;
+  stripePriceId?: string;
+  features: Record<string, FeatureConfig>;
+}
+
+export const OBSERVE_PLANS: Record<string, PlanConfig> = {
+  free: {
+    name: "Free",
+    features: {
+      ai_insights: { limit: 5, reset: "monthly" },
+      csv_upload: { limit: null },
+      stripe_connection: { limit: null },
+      ai_provider_connection: { limit: null },
+    },
+  },
+  growth: {
+    name: "Growth",
+    stripePriceId: process.env.STRIPE_GROWTH_PRICE_ID || "",
+    features: {
+      ai_insights: { limit: null },
+      csv_upload: { limit: null },
+      stripe_connection: { limit: null },
+      ai_provider_connection: { limit: null },
+      cost_alerts: { limit: null },
+    },
+  },
+};
+
+// =============================================================================
+// Feature access check
+// =============================================================================
+
+export async function checkFeatureAccess(
+  pool: Pool,
+  visitorId: string,
+  featureKey: string,
+  _email?: string,
+): Promise<{
+  allowed: boolean;
+  reason?: string;
+  usage?: number;
+  limit?: number;
+  remaining?: number;
+}> {
+  // Look up user's plan
+  const result = await pool.query(
+    `SELECT stripe_plan FROM accounts WHERE visitor_id = $1`,
+    [visitorId],
+  );
+  const plan = result.rows[0]?.stripe_plan || "free";
+  const planConfig = OBSERVE_PLANS[plan] || OBSERVE_PLANS.free;
+  const featureConfig = planConfig.features[featureKey];
+
+  // Feature not defined on this plan = not allowed
+  if (!featureConfig) {
+    return {
+      allowed: false,
+      reason: `${featureKey} is not available on the ${planConfig.name} plan. Upgrade to Growth for access.`,
+    };
+  }
+
+  // Unlimited
+  if (featureConfig.limit === null) {
+    return { allowed: true };
+  }
+
+  // Metered — count usage this month
+  let used = 0;
+  if (featureKey === "ai_insights") {
+    const countResult = await pool.query(
+      `SELECT COUNT(*) as count FROM ai_insights
+       WHERE user_id = $1 AND created_at >= date_trunc('month', NOW())`,
+      [visitorId],
+    );
+    used = parseInt(countResult.rows[0]?.count || "0", 10);
+  }
+
+  const remaining = Math.max(0, featureConfig.limit - used);
+  return {
+    allowed: used < featureConfig.limit,
+    reason:
+      used >= featureConfig.limit
+        ? `You've used ${used}/${featureConfig.limit} ${featureKey} this month. Upgrade to Growth for unlimited access.`
+        : undefined,
+    usage: used,
+    limit: featureConfig.limit,
+    remaining,
+  };
+}
+
+// =============================================================================
+// Usage tracking — no-op for now (usage counted on read from ai_insights table)
+// =============================================================================
+
+export async function trackUsage(
+  _pool: Pool,
+  _visitorId: string,
+  _featureKey: string,
+  _eventName: string,
+): Promise<void> {
+  // No-op: metered features are counted by querying the source table directly
+}
+
+// =============================================================================
+// Stripe Checkout
+// =============================================================================
+
+export async function createCheckoutSession(
+  pool: Pool,
+  visitorId: string,
+): Promise<{ url: string }> {
+  const stripe = await getUncachableStripeClient();
+  const priceId = OBSERVE_PLANS.growth.stripePriceId;
+  if (!priceId) {
+    throw new Error("STRIPE_GROWTH_PRICE_ID not configured");
+  }
+
+  // Get or create Stripe customer
+  const accountResult = await pool.query(
+    `SELECT email, stripe_customer_id FROM accounts WHERE visitor_id = $1`,
+    [visitorId],
+  );
+  const account = accountResult.rows[0];
+  if (!account) throw new Error("Account not found");
+
+  let customerId = account.stripe_customer_id;
+  if (!customerId) {
+    const customer = await stripe.customers.create({
+      email: account.email,
+      metadata: { visitor_id: visitorId },
+    });
+    customerId = customer.id;
+    await pool.query(
+      `UPDATE accounts SET stripe_customer_id = $1 WHERE visitor_id = $2`,
+      [customerId, visitorId],
+    );
+  }
+
+  const baseUrl =
+    process.env.APP_URL || process.env.VERCEL_URL
+      ? `https://${process.env.VERCEL_URL}`
+      : "http://localhost:5004";
+
+  const session = await stripe.checkout.sessions.create({
+    customer: customerId,
+    mode: "subscription",
+    line_items: [{ price: priceId, quantity: 1 }],
+    success_url: `${baseUrl}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
+    cancel_url: `${baseUrl}/plans`,
+    metadata: { visitor_id: visitorId },
+  });
+
+  return { url: session.url! };
+}
+
+// =============================================================================
+// Stripe Customer Portal
+// =============================================================================
+
+export async function createPortalSession(
+  pool: Pool,
+  visitorId: string,
+): Promise<{ url: string }> {
+  const stripe = await getUncachableStripeClient();
+
+  const accountResult = await pool.query(
+    `SELECT stripe_customer_id FROM accounts WHERE visitor_id = $1`,
+    [visitorId],
+  );
+  const customerId = accountResult.rows[0]?.stripe_customer_id;
+  if (!customerId) {
+    throw new Error("No Stripe customer found. Subscribe to a plan first.");
+  }
+
+  const baseUrl =
+    process.env.APP_URL || process.env.VERCEL_URL
+      ? `https://${process.env.VERCEL_URL}`
+      : "http://localhost:5004";
+
+  const session = await stripe.billingPortal.sessions.create({
+    customer: customerId,
+    return_url: `${baseUrl}/plans`,
+  });
+
+  return { url: session.url };
+}
+
+// =============================================================================
+// Stripe Webhook handler
+// =============================================================================
+
+export async function handleWebhook(
+  pool: Pool,
+  event: { type: string; data: { object: Record<string, unknown> } },
+): Promise<void> {
+  switch (event.type) {
+    case "checkout.session.completed": {
+      const session = event.data.object;
+      const customerId = session.customer as string;
+      const visitorId = session.metadata
+        ? (session.metadata as Record<string, string>).visitor_id
+        : null;
+
+      if (visitorId) {
+        await pool.query(
+          `UPDATE accounts SET stripe_plan = 'growth', stripe_customer_id = $1 WHERE visitor_id = $2`,
+          [customerId, visitorId],
+        );
+      } else if (customerId) {
+        // Fallback: find by customer ID
+        await pool.query(
+          `UPDATE accounts SET stripe_plan = 'growth' WHERE stripe_customer_id = $1`,
+          [customerId],
+        );
+      }
+      break;
+    }
+
+    case "customer.subscription.updated": {
+      const sub = event.data.object;
+      const customerId = sub.customer as string;
+      const status = sub.status as string;
+
+      if (status === "active" || status === "trialing") {
+        await pool.query(
+          `UPDATE accounts SET stripe_plan = 'growth' WHERE stripe_customer_id = $1`,
+          [customerId],
+        );
+      } else if (
+        status === "canceled" ||
+        status === "unpaid" ||
+        status === "past_due"
+      ) {
+        await pool.query(
+          `UPDATE accounts SET stripe_plan = 'free' WHERE stripe_customer_id = $1`,
+          [customerId],
+        );
+      }
+      break;
+    }
+
+    case "customer.subscription.deleted": {
+      const sub = event.data.object;
+      const customerId = sub.customer as string;
+      await pool.query(
+        `UPDATE accounts SET stripe_plan = 'free' WHERE stripe_customer_id = $1`,
+        [customerId],
+      );
+      break;
+    }
+  }
+}
