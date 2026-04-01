@@ -405,6 +405,13 @@ async function resolveProxyUserId(observeKey: string): Promise<string | null> {
 // ─── Forward events to Tanso Observe (dogfooding) ─────────────────────────
 const TANSO_API_URL = process.env.TANSO_API_URL;
 const TANSO_API_KEY = process.env.TANSO_OBSERVE_API_KEY;
+if (TANSO_API_URL && TANSO_API_KEY) {
+  console.log(`Tanso forwarding enabled → ${TANSO_API_URL}`);
+} else {
+  console.log(
+    "Tanso forwarding disabled (TANSO_API_URL or TANSO_OBSERVE_API_KEY not set)",
+  );
+}
 
 function forwardToTanso(event: {
   eventName: string;
@@ -440,7 +447,15 @@ function forwardToTanso(event: {
       Authorization: `Bearer ${TANSO_API_KEY}`,
     },
     body: JSON.stringify(body),
-  }).catch((err) => console.error("Tanso forward failed:", err));
+  })
+    .then((res) => {
+      if (!res.ok) {
+        res
+          .text()
+          .then((t) => console.error(`Tanso forward ${res.status}:`, t));
+      }
+    })
+    .catch((err) => console.error("Tanso forward failed:", err));
 }
 
 async function logProxyEvent(
@@ -4385,6 +4400,18 @@ app.post("/events/ingest", apiLimiter, async (req: Request, res: Response) => {
         revenue = mrrByCustomer.get(evt.customerReferenceId)!;
         revenueSource = "mrr_allocation";
       }
+
+      // Forward to Tanso Observe (dogfooding)
+      forwardToTanso({
+        eventName: evt.eventName,
+        featureKey: evt.featureKey,
+        customerReferenceId: evt.customerReferenceId,
+        model: evt.model,
+        modelProvider: evt.modelProvider || inferModelProvider(evt.model),
+        inputTokens: evt.inputTokens,
+        outputTokens: evt.outputTokens,
+        costAmount: evt.costAmount,
+      });
 
       placeholders.push(
         `($${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, 'sdk', 'event', false, $${paramIdx++}, $${paramIdx++})`,
