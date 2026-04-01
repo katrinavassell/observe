@@ -4,6 +4,9 @@
 .env.*.local
 !.env.example
 
+# Local backlog (not committed)
+BACKLOG.md
+
 # Logs
 logs
 *.log

@@ -205,6 +205,27 @@ export function createAuthRoutes(
           );
         }
 
+        // Migrate data from anonymous session to account's visitor ID
+        const anonId = req.visitorId;
+        if (anonId && anonId !== visitorIdToUse) {
+          const tables = [
+            "observe_events",
+            "user_data_status",
+            "ai_insights",
+            "feature_pricing",
+          ];
+          for (const table of tables) {
+            await pool
+              .query(`UPDATE ${table} SET user_id = $1 WHERE user_id = $2`, [
+                visitorIdToUse,
+                anonId,
+              ])
+              .catch((err) =>
+                console.error(`Failed to migrate ${table}:`, err),
+              );
+          }
+        }
+
         await regenerateSession(req);
         req.session.visitorId = visitorIdToUse;
         req.session.accountId = account.id;

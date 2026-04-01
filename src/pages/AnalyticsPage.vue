@@ -536,10 +536,20 @@ const insightCategories = [
               {{ isGenerating ? "Analyzing..." : "Generate Insights" }}
             </Button>
             <div v-else class="rounded-lg border bg-muted/30 p-3 text-center">
-              <p class="text-sm font-medium mb-1">Upload more data to unlock</p>
+              <p class="text-sm font-medium mb-1">
+                {{
+                  totalEvents === 0
+                    ? "Upload data to unlock"
+                    : `${10 - totalEvents} more events needed`
+                }}
+              </p>
               <p class="text-xs text-muted-foreground">
-                AI Insights needs event data from your SDK or proxy integration
-                to analyze.
+                AI Insights needs at least 10 events to analyze.
+                {{
+                  totalEvents > 0
+                    ? `You have ${totalEvents} so far.`
+                    : "Connect your SDK or proxy to start tracking."
+                }}
               </p>
             </div>
 
