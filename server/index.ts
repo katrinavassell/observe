@@ -428,8 +428,14 @@ function forwardToTanso(event: {
     eventName: event.eventName,
     featureKey: event.featureKey,
   };
-  if (event.customerReferenceId)
-    body.customerReferenceId = event.customerReferenceId;
+  if (event.customerReferenceId) {
+    // Use stripeCustomerId if it looks like a Stripe ID so Tanso auto-resolves customer info
+    if (event.customerReferenceId.startsWith("cus_")) {
+      body.stripeCustomerId = event.customerReferenceId;
+    } else {
+      body.customerReferenceId = event.customerReferenceId;
+    }
+  }
   if (event.costAmount != null) {
     body.costAmount = event.costAmount;
   } else if (event.model && (event.inputTokens || event.outputTokens)) {
@@ -6043,7 +6049,7 @@ app.post(
             [req.visitorId],
           ),
           pool.query(
-            `SELECT metric_name, SUM(value)::numeric as total, COUNT(*)::int as records
+            `SELECT metric_name, SUM(metric_value)::numeric as total, COUNT(*)::int as records
            FROM usage_records WHERE user_id = $1 GROUP BY metric_name`,
             [req.visitorId],
           ),
