@@ -1,8 +1,6 @@
 const BILLING_API_KEY =
   process.env.BILLING_API_KEY || process.env.TANSO_API_KEY || "";
-const BILLING_BASE_URL = (
-  process.env.TANSO_MCP_URL || "https://api.tansohq.com/mcp"
-).replace("/mcp", "");
+const BILLING_BASE_URL = (process.env.TANSO_MCP_URL || "").replace("/mcp", "");
 
 // =============================================================================
 // Types

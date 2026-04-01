@@ -146,7 +146,7 @@ const ensureVisitor = createEnsureVisitor(pool);
 app.use(createAuthRoutes(pool, ensureVisitor));
 
 // ─── Admin visitor ID (shared by proxy dual-write + billing usage tracking) ──
-const ADMIN_EMAIL = "admin@observehq.dev";
+const ADMIN_EMAIL = "admin@example.com";
 let cachedAdminVisitorId: string | null = null;
 
 async function getAdminVisitorId(): Promise<string | null> {
@@ -431,7 +431,7 @@ async function logProxyEvent(
     console.error("checkAlerts error (proxy event):", err),
   );
 
-  // 2. Mirror to admin account so admin@observehq.dev sees all activity
+  // 2. Mirror to admin account so admin@example.com sees all activity
   getAdminVisitorId()
     .then((adminId) => {
       if (!adminId || adminId === userId) return;
@@ -2801,7 +2801,7 @@ async function _doDbInit() {
 // MODEL PRICING API
 // =============================================================================
 
-const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || "admin@observehq.dev")
+const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || "admin@example.com")
   .split(",")
   .map((e) => e.trim().toLowerCase());
 
