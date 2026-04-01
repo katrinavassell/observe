@@ -402,6 +402,47 @@ async function resolveProxyUserId(observeKey: string): Promise<string | null> {
   return result.rows[0].user_id;
 }
 
+// ─── Forward events to Tanso Observe (dogfooding) ─────────────────────────
+const TANSO_API_URL = process.env.TANSO_API_URL;
+const TANSO_API_KEY = process.env.TANSO_OBSERVE_API_KEY;
+
+function forwardToTanso(event: {
+  eventName: string;
+  featureKey: string;
+  customerReferenceId?: string;
+  model?: string;
+  modelProvider?: string;
+  inputTokens?: number;
+  outputTokens?: number;
+  costAmount?: number;
+}): void {
+  if (!TANSO_API_URL || !TANSO_API_KEY) return;
+  const body: Record<string, unknown> = {
+    eventName: event.eventName,
+    featureKey: event.featureKey,
+  };
+  if (event.customerReferenceId)
+    body.customerReferenceId = event.customerReferenceId;
+  if (event.costAmount != null) {
+    body.costAmount = event.costAmount;
+  } else if (event.model && (event.inputTokens || event.outputTokens)) {
+    body.costInput = {
+      model: event.model,
+      modelProvider: event.modelProvider,
+      inputTokens: event.inputTokens || 0,
+      outputTokens: event.outputTokens || 0,
+    };
+  }
+  fetch(`${TANSO_API_URL}/api/v1/client/events`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${TANSO_API_KEY}`,
+    },
+    body: JSON.stringify(body),
+  }).catch((err) => console.error("Tanso forward failed:", err));
+}
+
 async function logProxyEvent(
   userId: string,
   model: string,
@@ -472,6 +513,17 @@ async function logProxyEvent(
   checkAlerts(pool, userId).catch((err) =>
     console.error("checkAlerts error (proxy event):", err),
   );
+
+  // Forward to Tanso Observe (dogfooding)
+  forwardToTanso({
+    eventName: "proxy_request",
+    featureKey: featureKey || "proxy",
+    customerReferenceId: customerId !== "unknown" ? customerId : undefined,
+    model,
+    modelProvider: provider,
+    inputTokens,
+    outputTokens,
+  });
 
   // 2. Mirror to admin account so admin@example.com sees all activity
   getAdminVisitorId()
@@ -5094,8 +5146,23 @@ Return ONLY the JSON object, no markdown or explanation.`;
 
         const completion = (await openaiResponse.json()) as {
           choices: Array<{ message: { content: string } }>;
+          usage?: {
+            prompt_tokens: number;
+            completion_tokens: number;
+            total_tokens: number;
+          };
         };
         const content = completion.choices[0]?.message?.content || "{}";
+
+        // Forward to Tanso Observe (dogfooding)
+        forwardToTanso({
+          eventName: "ai_insight_suggestion",
+          featureKey: "ai_insights",
+          model: "gpt-4o-mini",
+          modelProvider: "openai",
+          inputTokens: completion.usage?.prompt_tokens || 0,
+          outputTokens: completion.usage?.completion_tokens || 0,
+        });
 
         try {
           const cleaned = content
@@ -6108,6 +6175,16 @@ Return ONLY the JSON array, no markdown or explanation.`;
         const completionTokens =
           (completion.usage as Record<string, number>)?.completion_tokens || 0;
         costUsd = promptTokens * 0.0000025 + completionTokens * 0.00001;
+
+        // Forward to Tanso Observe (dogfooding)
+        forwardToTanso({
+          eventName: "ai_insight_generation",
+          featureKey: "ai_insights",
+          model: "gpt-4o",
+          modelProvider: "openai",
+          inputTokens: promptTokens,
+          outputTokens: completionTokens,
+        });
 
         try {
           const cleaned = content
