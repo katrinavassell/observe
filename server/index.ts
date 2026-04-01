@@ -476,6 +476,7 @@ async function logProxyEvent(
   properties: Record<string, string> = {},
   requestBody?: Record<string, unknown> | null,
   responseBody?: Record<string, unknown> | null,
+  latencyMs?: number | null,
 ): Promise<void> {
   const propsJson = JSON.stringify(properties);
   const reqJson = requestBody ? JSON.stringify(requestBody) : null;
@@ -514,8 +515,8 @@ async function logProxyEvent(
       user_id, customer_id, feature_key, event_name, timestamp,
       cost_amount, cost_unit, revenue_amount, usage_units,
       model, model_provider, source, granularity, is_inferred, properties,
-      request_body, response_body, revenue_source
-    ) VALUES ($1, $2, $3, 'cost', NOW(), $4, 'usd', $5, $6, $7, $8, 'proxy', 'event', false, $9, $10, $11, $12)`,
+      request_body, response_body, revenue_source, latency_ms
+    ) VALUES ($1, $2, $3, 'cost', NOW(), $4, 'usd', $5, $6, $7, $8, 'proxy', 'event', false, $9, $10, $11, $12, $13)`,
     [
       userId,
       customerId,
@@ -529,6 +530,7 @@ async function logProxyEvent(
       reqJson,
       resJson,
       revenueSource,
+      latencyMs ?? null,
     ],
   );
   checkAlerts(pool, userId).catch((err) =>
@@ -556,8 +558,8 @@ async function logProxyEvent(
         user_id, customer_id, feature_key, event_name, timestamp,
         cost_amount, cost_unit, revenue_amount, usage_units,
         model, model_provider, source, granularity, is_inferred, properties,
-        request_body, response_body, revenue_source
-      ) VALUES ($1, $2, $3, 'cost', NOW(), $4, 'usd', $5, $6, $7, $8, 'proxy', 'event', false, $9, $10, $11, $12)`,
+        request_body, response_body, revenue_source, latency_ms
+      ) VALUES ($1, $2, $3, 'cost', NOW(), $4, 'usd', $5, $6, $7, $8, 'proxy', 'event', false, $9, $10, $11, $12, $13)`,
           [
             adminId,
             customerId,
@@ -571,6 +573,7 @@ async function logProxyEvent(
             reqJson,
             resJson,
             revenueSource,
+            latencyMs ?? null,
           ],
         )
         .catch((err) => console.error("Admin proxy event mirror error:", err));
@@ -676,6 +679,7 @@ app.post("/v1/chat/completions", async (req: Request, res: Response) => {
     }
 
     // Forward to OpenAI
+    const proxyStart = Date.now();
     const openaiResponse = await fetch(
       "https://api.openai.com/v1/chat/completions",
       {
@@ -714,6 +718,7 @@ app.post("/v1/chat/completions", async (req: Request, res: Response) => {
         properties,
         req.body,
         data,
+        Date.now() - proxyStart,
       ).catch((err) => console.error("Proxy event logging failed:", err));
       if (isCacheable) {
         const cacheKey = generateCacheKey(userId, model, {
@@ -810,6 +815,7 @@ app.post("/v1/embeddings", async (req: Request, res: Response) => {
       }
     }
 
+    const proxyStart = Date.now();
     const openaiResponse = await fetch("https://api.openai.com/v1/embeddings", {
       method: "POST",
       headers: {
@@ -844,6 +850,7 @@ app.post("/v1/embeddings", async (req: Request, res: Response) => {
         properties,
         req.body,
         data,
+        Date.now() - proxyStart,
       ).catch((err) => console.error("Proxy event logging failed:", err));
       if (isCacheable) {
         const cacheKey = generateCacheKey(userId, model, {
@@ -942,6 +949,7 @@ app.post("/v1/messages", async (req: Request, res: Response) => {
     }
 
     // Forward to Anthropic
+    const proxyStart = Date.now();
     const anthropicResponse = await fetch(
       "https://api.anthropic.com/v1/messages",
       {
@@ -986,6 +994,7 @@ app.post("/v1/messages", async (req: Request, res: Response) => {
         properties,
         req.body,
         data,
+        Date.now() - proxyStart,
       ).catch((err) =>
         console.error("Anthropic proxy event logging failed:", err),
       );
@@ -2607,6 +2616,11 @@ async function _doDbInit() {
       ALTER TABLE observe_events ADD COLUMN IF NOT EXISTS revenue_source TEXT DEFAULT 'none'
     `);
 
+    // Add latency_ms column to observe_events if missing
+    await pool.query(`
+      ALTER TABLE observe_events ADD COLUMN IF NOT EXISTS latency_ms INTEGER
+    `);
+
     await pool.query(`
       CREATE TABLE IF NOT EXISTS ai_insights (
         id SERIAL PRIMARY KEY,
@@ -3697,6 +3711,31 @@ const SOURCE_PRIORITY_CTE = `
   ),
   deduped AS (SELECT * FROM ranked WHERE _src_rank = 1)
 `;
+
+// GET /events/detail/:id — single event with request/response bodies
+app.get(
+  "/events/detail/:id",
+  ensureVisitor,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const result = await pool.query(
+        `SELECT id, customer_id, feature_key, event_name, timestamp,
+          cost_amount, cost_unit, revenue_amount, usage_units,
+          model, model_provider, source, granularity, properties,
+          request_body, response_body, revenue_source, latency_ms, created_at
+         FROM observe_events WHERE id = $1 AND user_id = $2`,
+        [req.params.id, req.visitorId],
+      );
+      if (result.rows.length === 0) {
+        return res.status(404).json({ error: "Event not found" });
+      }
+      res.json({ event: result.rows[0] });
+    } catch (error) {
+      console.error("GET /events/detail/:id error:", error);
+      res.status(500).json({ error: "Failed to fetch event" });
+    }
+  },
+);
 
 // GET /events/by-feature — aggregate events grouped by feature_key
 app.get(

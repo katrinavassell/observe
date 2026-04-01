@@ -316,6 +316,7 @@ export interface ObserveEvent {
   granularity: string | null;
   is_inferred: boolean;
   properties: Record<string, unknown> | null;
+  latency_ms?: number | null;
   created_at: string;
 }
 
@@ -1006,23 +1007,27 @@ export async function fetchCacheStats(): Promise<CacheStats> {
 
 export interface EventDetail {
   id: number;
-  user_id: string;
   customer_id: string;
-  customer_name?: string;
   feature_key: string;
   event_name: string;
   timestamp: string;
   cost_amount: number;
+  cost_unit: string;
   revenue_amount: number;
   usage_units: number;
   model?: string;
   model_provider?: string;
   source: string;
+  granularity: string;
   properties?: Record<string, string>;
   request_body?: Record<string, unknown> | null;
   response_body?: Record<string, unknown> | null;
+  revenue_source?: string;
+  latency_ms?: number | null;
+  created_at: string;
 }
 
 export async function getEventDetail(id: number): Promise<EventDetail> {
-  return request(`/events/${id}`);
+  const data = await request<{ event: EventDetail }>(`/events/detail/${id}`);
+  return data.event;
 }

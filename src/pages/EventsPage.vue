@@ -1,71 +1,108 @@
 <script setup lang="ts">
-import { ref, computed, reactive } from 'vue'
-import { useQuery } from '@tanstack/vue-query'
-import { useRouter, useRoute } from 'vue-router'
-import { getEvents, getEventsByCustomer, getEventsByModel, getFeatures, getEventDetail, type ObserveEvent, type EventDetail } from '@/lib/api'
-import { Activity, ChevronRight, ChevronDown, ChevronLeft, X, Plug, FlaskConical, MessageSquare, Bot, User } from 'lucide-vue-next'
-import MarginBadge from '@/components/shared/MarginBadge.vue'
-import SourceBadge from '@/components/shared/SourceBadge.vue'
-import { Select, Input, Button, Skeleton } from '@/components/ui'
+import { ref, computed, reactive } from "vue";
+import { useQuery } from "@tanstack/vue-query";
+import { useRouter, useRoute } from "vue-router";
+import {
+  getEvents,
+  getEventsByCustomer,
+  getEventsByModel,
+  getFeatures,
+  getEventDetail,
+  type ObserveEvent,
+  type EventDetail,
+} from "@/lib/api";
+import {
+  Activity,
+  ChevronRight,
+  ChevronDown,
+  ChevronLeft,
+  X,
+  Plug,
+  FlaskConical,
+  MessageSquare,
+  Bot,
+  User,
+} from "lucide-vue-next";
+import MarginBadge from "@/components/shared/MarginBadge.vue";
+import SourceBadge from "@/components/shared/SourceBadge.vue";
+import { Select, Input, Button, Skeleton } from "@/components/ui";
 
-const router = useRouter()
-const route = useRoute()
+const router = useRouter();
+const route = useRoute();
 
 // Initialize filters from URL query params (e.g., navigating from ModelsPage with ?model=gpt-4o)
-const selectedFeature = ref<string | undefined>(route.query.feature as string | undefined)
-const selectedCustomer = ref<string | undefined>(route.query.customer as string | undefined)
-const selectedModel = ref<string | undefined>(route.query.model as string | undefined)
-const selectedSource = ref<string | undefined>(route.query.source as string | undefined)
-const dateFrom = ref<string | undefined>()
-const dateTo = ref<string | undefined>()
-const currentPage = ref(0)
-const PAGE_SIZE = 50
+const selectedFeature = ref<string | undefined>(
+  route.query.feature as string | undefined,
+);
+const selectedCustomer = ref<string | undefined>(
+  route.query.customer as string | undefined,
+);
+const selectedModel = ref<string | undefined>(
+  route.query.model as string | undefined,
+);
+const selectedSource = ref<string | undefined>(
+  route.query.source as string | undefined,
+);
+const dateFrom = ref<string | undefined>();
+const dateTo = ref<string | undefined>();
+const currentPage = ref(0);
+const PAGE_SIZE = 50;
 
 // Expandable event detail
-const expandedIds = reactive(new Set<number>())
-const eventDetails = reactive<Record<number, EventDetail>>({})
-const loadingDetails = reactive(new Set<number>())
+const expandedIds = reactive(new Set<number>());
+const eventDetails = reactive<Record<number, EventDetail>>({});
+const loadingDetails = reactive(new Set<number>());
 
 async function toggleEvent(id: number) {
   if (expandedIds.has(id)) {
-    expandedIds.delete(id)
-    return
+    expandedIds.delete(id);
+    return;
   }
-  expandedIds.add(id)
+  expandedIds.add(id);
   if (!eventDetails[id]) {
-    loadingDetails.add(id)
+    loadingDetails.add(id);
     try {
-      eventDetails[id] = await getEventDetail(id)
-    } catch { /* silently fail */ }
-    loadingDetails.delete(id)
+      eventDetails[id] = await getEventDetail(id);
+    } catch (err) {
+      console.error("Failed to load event detail:", err);
+    }
+    loadingDetails.delete(id);
   }
 }
 
-function formatMessages(body: Record<string, unknown> | null | undefined): Array<{ role: string; content: string }> {
-  if (!body) return []
-  const messages = body.messages as Array<{ role: string; content: string }> | undefined
-  if (!Array.isArray(messages)) return []
-  return messages
+function formatMessages(
+  body: Record<string, unknown> | null | undefined,
+): Array<{ role: string; content: string }> {
+  if (!body) return [];
+  const messages = body.messages as
+    | Array<{ role: string; content: string }>
+    | undefined;
+  if (!Array.isArray(messages)) return [];
+  return messages;
 }
 
-function getResponseContent(body: Record<string, unknown> | null | undefined): string | null {
-  if (!body) return null
+function getResponseContent(
+  body: Record<string, unknown> | null | undefined,
+): string | null {
+  if (!body) return null;
   // OpenAI format
-  const choices = body.choices as Array<{ message?: { content?: string } }> | undefined
-  if (choices?.[0]?.message?.content) return choices[0].message.content
+  const choices = body.choices as
+    | Array<{ message?: { content?: string } }>
+    | undefined;
+  if (choices?.[0]?.message?.content) return choices[0].message.content;
   // Anthropic format
-  const content = body.content as Array<{ text?: string }> | undefined
-  if (content?.[0]?.text) return content[0].text
-  return null
+  const content = body.content as Array<{ text?: string }> | undefined;
+  if (content?.[0]?.text) return content[0].text;
+  return null;
 }
 
 const SOURCES = [
-  { value: 'sdk', label: 'SDK' },
-  { value: 'csv', label: 'CSV Upload' },
-  { value: 'stripe', label: 'Stripe Sync' },
-  { value: 'openai', label: 'OpenAI' },
-  { value: 'anthropic', label: 'Anthropic' },
-]
+  { value: "sdk", label: "SDK" },
+  { value: "csv", label: "CSV Upload" },
+  { value: "stripe", label: "Stripe Sync" },
+  { value: "openai", label: "OpenAI" },
+  { value: "anthropic", label: "Anthropic" },
+];
 
 const query = computed(() => ({
   limit: PAGE_SIZE,
@@ -76,93 +113,114 @@ const query = computed(() => ({
   source: selectedSource.value || undefined,
   date_from: dateFrom.value || undefined,
   date_to: dateTo.value || undefined,
-}))
+}));
 
-const { data: eventsData, isLoading, isError } = useQuery({
-  queryKey: ['events', query],
+const {
+  data: eventsData,
+  isLoading,
+  isError,
+} = useQuery({
+  queryKey: ["events", query],
   queryFn: () => getEvents(query.value),
-})
+});
 
 const { data: features } = useQuery({
-  queryKey: ['features'],
+  queryKey: ["features"],
   queryFn: getFeatures,
-})
+});
 
 const { data: customerAgg } = useQuery({
-  queryKey: ['events-by-customer'],
+  queryKey: ["events-by-customer"],
   queryFn: getEventsByCustomer,
-})
+});
 
 const { data: modelAgg } = useQuery({
-  queryKey: ['events-by-model'],
+  queryKey: ["events-by-model"],
   queryFn: getEventsByModel,
-})
+});
 
 const uniqueModels = computed(() =>
-  (modelAgg.value || []).map(m => m.model).sort()
-)
+  (modelAgg.value || []).map((m) => m.model).sort(),
+);
 
-const ALL = '__all__'
+const ALL = "__all__";
 
 const featureItems = computed(() => [
-  { value: ALL, label: 'All Features' },
-  ...(features.value || []).map(f => ({ value: f.feature_key, label: f.feature_key }))
-])
+  { value: ALL, label: "All Features" },
+  ...(features.value || []).map((f) => ({
+    value: f.feature_key,
+    label: f.feature_key,
+  })),
+]);
 
 const customerItems = computed(() => [
-  { value: ALL, label: 'All Customers' },
-  ...(customerAgg.value || []).map(c => ({ value: c.customer_id, label: c.customer_name || c.customer_id }))
-])
+  { value: ALL, label: "All Customers" },
+  ...(customerAgg.value || []).map((c) => ({
+    value: c.customer_id,
+    label: c.customer_name || c.customer_id,
+  })),
+]);
 
 const modelItems = computed(() => [
-  { value: ALL, label: 'All Models' },
-  ...uniqueModels.value.map(m => ({ value: m, label: m }))
-])
+  { value: ALL, label: "All Models" },
+  ...uniqueModels.value.map((m) => ({ value: m, label: m })),
+]);
 
 const sourceItems = computed(() => [
-  { value: ALL, label: 'All Sources' },
-  ...SOURCES
-])
+  { value: ALL, label: "All Sources" },
+  ...SOURCES,
+]);
 
 function onSelectUpdate(setter: (v: string | undefined) => void) {
   return (val: string) => {
-    setter(val === ALL ? undefined : val)
-    resetPage()
-  }
+    setter(val === ALL ? undefined : val);
+    resetPage();
+  };
 }
 
-const hasFilters = computed(() =>
-  selectedFeature.value || selectedCustomer.value || selectedModel.value ||
-  selectedSource.value || dateFrom.value || dateTo.value
-)
+const hasFilters = computed(
+  () =>
+    selectedFeature.value ||
+    selectedCustomer.value ||
+    selectedModel.value ||
+    selectedSource.value ||
+    dateFrom.value ||
+    dateTo.value,
+);
 
 function clearFilters() {
-  selectedFeature.value = undefined
-  selectedCustomer.value = undefined
-  selectedModel.value = undefined
-  selectedSource.value = undefined
-  dateFrom.value = undefined
-  dateTo.value = undefined
-  currentPage.value = 0
+  selectedFeature.value = undefined;
+  selectedCustomer.value = undefined;
+  selectedModel.value = undefined;
+  selectedSource.value = undefined;
+  dateFrom.value = undefined;
+  dateTo.value = undefined;
+  currentPage.value = 0;
 }
 
-function resetPage() { currentPage.value = 0 }
+function resetPage() {
+  currentPage.value = 0;
+}
 
 function formatCost(val: number | null) {
-  if (val === null) return '—'
-  if (val === 0) return '$0'
-  return `$${val.toFixed(4)}`
+  if (val === null) return "—";
+  if (val === 0) return "$0";
+  return `$${val.toFixed(4)}`;
 }
 
 function formatDate(ts: string) {
-  return new Date(ts).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })
+  return new Date(ts).toLocaleString(undefined, {
+    dateStyle: "short",
+    timeStyle: "short",
+  });
 }
 
 function marginForEvent(event: ObserveEvent): number | null {
-  if (!event.revenue_amount || !event.cost_amount) return null
-  return Math.round(((event.revenue_amount - event.cost_amount) / event.revenue_amount) * 100)
+  if (!event.revenue_amount || !event.cost_amount) return null;
+  return Math.round(
+    ((event.revenue_amount - event.cost_amount) / event.revenue_amount) * 100,
+  );
 }
-
 </script>
 
 <template>
@@ -170,11 +228,17 @@ function marginForEvent(event: ObserveEvent): number | null {
     <div class="flex items-center justify-between">
       <div>
         <h1 class="text-2xl font-semibold tracking-tight">Events</h1>
-        <p class="text-sm text-muted-foreground mt-1">All observed feature usage events with cost and revenue attribution</p>
+        <p class="text-sm text-muted-foreground mt-1">
+          All observed feature usage events with cost and revenue attribution
+        </p>
       </div>
-      <div class="flex items-center gap-2 text-sm text-muted-foreground bg-muted/50 px-3 py-1.5 rounded-full border">
+      <div
+        class="flex items-center gap-2 text-sm text-muted-foreground bg-muted/50 px-3 py-1.5 rounded-full border"
+      >
         <Activity class="h-4 w-4" />
-        <span v-if="eventsData" class="font-medium text-foreground">{{ eventsData.total.toLocaleString() }} total events</span>
+        <span v-if="eventsData" class="font-medium text-foreground"
+          >{{ eventsData.total.toLocaleString() }} total events</span
+        >
       </div>
     </div>
 
@@ -184,28 +248,28 @@ function marginForEvent(event: ObserveEvent): number | null {
         :model-value="selectedFeature || ALL"
         placeholder="Feature"
         :items="featureItems"
-        @update:model-value="onSelectUpdate(v => selectedFeature = v)"
+        @update:model-value="onSelectUpdate((v) => (selectedFeature = v))"
         class="w-[160px]"
       />
       <Select
         :model-value="selectedCustomer || ALL"
         placeholder="Customer"
         :items="customerItems"
-        @update:model-value="onSelectUpdate(v => selectedCustomer = v)"
+        @update:model-value="onSelectUpdate((v) => (selectedCustomer = v))"
         class="w-[180px]"
       />
       <Select
         :model-value="selectedModel || ALL"
         placeholder="Model"
         :items="modelItems"
-        @update:model-value="onSelectUpdate(v => selectedModel = v)"
+        @update:model-value="onSelectUpdate((v) => (selectedModel = v))"
         class="w-[160px]"
       />
       <Select
         :model-value="selectedSource || ALL"
         placeholder="Source"
         :items="sourceItems"
-        @update:model-value="onSelectUpdate(v => selectedSource = v)"
+        @update:model-value="onSelectUpdate((v) => (selectedSource = v))"
         class="w-[160px]"
       />
       <div class="flex items-center gap-2">
@@ -225,7 +289,7 @@ function marginForEvent(event: ObserveEvent): number | null {
           @update:model-value="resetPage"
         />
       </div>
-      
+
       <Button
         v-if="hasFilters"
         variant="ghost"
@@ -242,7 +306,9 @@ function marginForEvent(event: ObserveEvent): number | null {
     <div class="rounded-md border bg-card overflow-hidden">
       <div class="overflow-x-auto">
         <table class="w-full text-sm text-left">
-          <thead class="border-b bg-muted/40 text-muted-foreground text-xs font-medium uppercase tracking-wider">
+          <thead
+            class="border-b bg-muted/40 text-muted-foreground text-xs font-medium uppercase tracking-wider"
+          >
             <tr>
               <th class="w-6"></th>
               <th class="px-4 py-3 font-medium">Timestamp</th>
@@ -257,7 +323,7 @@ function marginForEvent(event: ObserveEvent): number | null {
               <th class="px-4 py-3 text-right font-medium">Margin</th>
             </tr>
           </thead>
-          
+
           <tbody v-if="isLoading" class="divide-y divide-border">
             <tr v-for="i in 10" :key="i">
               <td class="px-4 py-3"><Skeleton class="h-4 w-24" /></td>
@@ -269,10 +335,12 @@ function marginForEvent(event: ObserveEvent): number | null {
               <td class="px-4 py-3"><Skeleton class="h-4 w-12 ml-auto" /></td>
               <td class="px-4 py-3"><Skeleton class="h-4 w-16 ml-auto" /></td>
               <td class="px-4 py-3"><Skeleton class="h-4 w-16 ml-auto" /></td>
-              <td class="px-4 py-3"><Skeleton class="h-5 w-14 rounded-full ml-auto" /></td>
+              <td class="px-4 py-3">
+                <Skeleton class="h-5 w-14 rounded-full ml-auto" />
+              </td>
             </tr>
           </tbody>
-          
+
           <tbody v-else-if="isError" class="divide-y divide-border">
             <tr>
               <td colspan="10" class="px-4 py-8 text-center text-destructive">
@@ -280,22 +348,38 @@ function marginForEvent(event: ObserveEvent): number | null {
               </td>
             </tr>
           </tbody>
-          
-          <tbody v-else-if="!eventsData || eventsData.events.length === 0" class="divide-y divide-border">
+
+          <tbody
+            v-else-if="!eventsData || eventsData.events.length === 0"
+            class="divide-y divide-border"
+          >
             <tr>
               <td colspan="10" class="px-4 py-12 text-center">
                 <template v-if="hasFilters">
-                  <p class="text-muted-foreground mb-3">No events match these filters.</p>
-                  <Button variant="outline" size="sm" @click="clearFilters">Clear Filters</Button>
+                  <p class="text-muted-foreground mb-3">
+                    No events match these filters.
+                  </p>
+                  <Button variant="outline" size="sm" @click="clearFilters"
+                    >Clear Filters</Button
+                  >
                 </template>
                 <template v-else>
-                  <Activity class="h-8 w-8 mx-auto text-muted-foreground/40 mb-3" />
+                  <Activity
+                    class="h-8 w-8 mx-auto text-muted-foreground/40 mb-3"
+                  />
                   <p class="text-sm font-medium mb-1">No events yet</p>
-                  <p class="text-xs text-muted-foreground mb-3 max-w-sm mx-auto">
-                    Events appear when you send data via the SDK, connect an AI provider, or upload CSVs.
-                    The fastest path: add 3 lines to your backend.
+                  <p
+                    class="text-xs text-muted-foreground mb-3 max-w-sm mx-auto"
+                  >
+                    Events appear when you send data via the SDK, connect an AI
+                    provider, or upload CSVs. The fastest path: add 3 lines to
+                    your backend.
                   </p>
-                  <Button variant="outline" size="sm" @click="router.push('/data-sources')">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    @click="router.push('/data-sources')"
+                  >
                     <Plug class="h-3.5 w-3.5 mr-1.5" />
                     Get Started
                   </Button>
@@ -305,121 +389,243 @@ function marginForEvent(event: ObserveEvent): number | null {
           </tbody>
 
           <tbody v-else class="divide-y divide-border">
-            <template
-              v-for="event in eventsData.events"
-              :key="event.id"
-            >
-            <tr
-              class="hover:bg-muted/50 transition-colors cursor-pointer"
-              :class="expandedIds.has(event.id) ? 'bg-muted/30' : ''"
-              @click="toggleEvent(event.id)"
-            >
-              <td class="px-2 py-3 w-6">
-                <ChevronDown v-if="expandedIds.has(event.id)" class="h-3.5 w-3.5 text-muted-foreground" />
-                <ChevronRight v-else class="h-3.5 w-3.5 text-muted-foreground" />
-              </td>
-              <td class="px-4 py-3 text-muted-foreground whitespace-nowrap text-xs">
-                {{ formatDate(event.timestamp) }}
-              </td>
-              <td class="px-4 py-3 text-xs text-foreground">
-                {{ event.event_name }}
-              </td>
-              <td class="px-4 py-3">
-                <span
-                  v-if="event.feature_key"
-                  class="font-mono text-xs bg-muted px-1.5 py-0.5 rounded"
+            <template v-for="event in eventsData.events" :key="event.id">
+              <tr
+                class="hover:bg-muted/50 transition-colors cursor-pointer"
+                :class="expandedIds.has(event.id) ? 'bg-muted/30' : ''"
+                @click="toggleEvent(event.id)"
+              >
+                <td class="px-2 py-3 w-6">
+                  <ChevronDown
+                    v-if="expandedIds.has(event.id)"
+                    class="h-3.5 w-3.5 text-muted-foreground"
+                  />
+                  <ChevronRight
+                    v-else
+                    class="h-3.5 w-3.5 text-muted-foreground"
+                  />
+                </td>
+                <td
+                  class="px-4 py-3 text-muted-foreground whitespace-nowrap text-xs"
                 >
-                  {{ event.feature_key }}
-                </span>
-                <span v-else class="text-muted-foreground text-sm">—</span>
-              </td>
-              <td class="px-4 py-3">
-                <span v-if="event.customer_id" class="text-sm">
-                  {{ event.customer_name || event.customer_id }}
-                </span>
-                <span v-else class="text-muted-foreground text-sm">—</span>
-              </td>
-              <td class="px-4 py-3">
-                <span v-if="event.model" class="font-mono text-xs bg-muted text-muted-foreground px-2 py-0.5 rounded-md border">
-                  {{ event.model }}
-                </span>
-                <span v-else class="text-muted-foreground text-sm">—</span>
-              </td>
-              <td class="px-4 py-3">
-                <SourceBadge v-if="event.is_inferred" source="" :is-inferred="true" />
-                <SourceBadge v-else-if="event.source" :source="event.source" />
-                <span v-else class="text-muted-foreground text-sm">—</span>
-              </td>
-              <td class="px-4 py-3 text-right text-xs text-muted-foreground tabular-nums">
-                {{ event.usage_units != null && event.usage_units !== 0 ? event.usage_units.toLocaleString() : '—' }}
-              </td>
-              <td class="px-4 py-3 text-right text-xs text-foreground tabular-nums">
-                {{ formatCost(event.cost_amount) }}
-              </td>
-              <td class="px-4 py-3 text-right text-xs text-foreground tabular-nums">
-                {{ formatCost(event.revenue_amount) }}
-              </td>
-              <td class="px-4 py-3 text-right">
-                <MarginBadge :margin="marginForEvent(event)" />
-              </td>
-            </tr>
+                  {{ formatDate(event.timestamp) }}
+                </td>
+                <td class="px-4 py-3 text-xs text-foreground">
+                  {{ event.event_name }}
+                </td>
+                <td class="px-4 py-3">
+                  <span
+                    v-if="event.feature_key"
+                    class="font-mono text-xs bg-muted px-1.5 py-0.5 rounded"
+                  >
+                    {{ event.feature_key }}
+                  </span>
+                  <span v-else class="text-muted-foreground text-sm">—</span>
+                </td>
+                <td class="px-4 py-3">
+                  <span v-if="event.customer_id" class="text-sm">
+                    {{ event.customer_name || event.customer_id }}
+                  </span>
+                  <span v-else class="text-muted-foreground text-sm">—</span>
+                </td>
+                <td class="px-4 py-3">
+                  <span
+                    v-if="event.model"
+                    class="font-mono text-xs bg-muted text-muted-foreground px-2 py-0.5 rounded-md border"
+                  >
+                    {{ event.model }}
+                  </span>
+                  <span v-else class="text-muted-foreground text-sm">—</span>
+                </td>
+                <td class="px-4 py-3">
+                  <SourceBadge
+                    v-if="event.is_inferred"
+                    source=""
+                    :is-inferred="true"
+                  />
+                  <SourceBadge
+                    v-else-if="event.source"
+                    :source="event.source"
+                  />
+                  <span v-else class="text-muted-foreground text-sm">—</span>
+                </td>
+                <td
+                  class="px-4 py-3 text-right text-xs text-muted-foreground tabular-nums"
+                >
+                  {{
+                    event.usage_units != null && event.usage_units !== 0
+                      ? event.usage_units.toLocaleString()
+                      : "—"
+                  }}
+                </td>
+                <td
+                  class="px-4 py-3 text-right text-xs text-foreground tabular-nums"
+                >
+                  {{ formatCost(event.cost_amount) }}
+                </td>
+                <td
+                  class="px-4 py-3 text-right text-xs text-foreground tabular-nums"
+                >
+                  {{ formatCost(event.revenue_amount) }}
+                </td>
+                <td class="px-4 py-3 text-right">
+                  <MarginBadge :margin="marginForEvent(event)" />
+                </td>
+              </tr>
 
-            <!-- Expanded detail panel -->
-            <tr v-if="expandedIds.has(event.id)">
-              <td :colspan="11" class="px-0 py-0 bg-muted/20 border-b">
-                <div v-if="loadingDetails.has(event.id)" class="p-6 text-center text-sm text-muted-foreground">
-                  Loading...
-                </div>
-                <div v-else-if="eventDetails[event.id]" class="p-5 space-y-4">
-                  <!-- Request messages -->
-                  <div v-if="eventDetails[event.id].request_body">
-                    <p class="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Request</p>
-                    <div v-if="formatMessages(eventDetails[event.id].request_body).length > 0" class="space-y-2">
-                      <div
-                        v-for="(msg, idx) in formatMessages(eventDetails[event.id].request_body)"
-                        :key="idx"
-                        class="flex gap-2"
+              <!-- Expanded detail panel -->
+              <tr v-if="expandedIds.has(event.id)">
+                <td :colspan="11" class="px-0 py-0 bg-muted/20 border-b">
+                  <div
+                    v-if="loadingDetails.has(event.id)"
+                    class="p-6 text-center text-sm text-muted-foreground"
+                  >
+                    Loading...
+                  </div>
+                  <div v-else-if="eventDetails[event.id]" class="p-5 space-y-4">
+                    <!-- Request messages -->
+                    <div v-if="eventDetails[event.id].request_body">
+                      <p
+                        class="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2"
                       >
-                        <div class="shrink-0 mt-0.5">
-                          <Bot v-if="msg.role === 'system' || msg.role === 'assistant'" class="h-4 w-4 text-muted-foreground" />
-                          <User v-else class="h-4 w-4 text-foreground" />
-                        </div>
-                        <div class="min-w-0">
-                          <span class="text-[10px] font-medium text-muted-foreground uppercase">{{ msg.role }}</span>
-                          <p class="text-sm whitespace-pre-wrap break-words">{{ msg.content }}</p>
+                        Request
+                      </p>
+                      <div
+                        v-if="
+                          formatMessages(eventDetails[event.id].request_body)
+                            .length > 0
+                        "
+                        class="space-y-2"
+                      >
+                        <div
+                          v-for="(msg, idx) in formatMessages(
+                            eventDetails[event.id].request_body,
+                          )"
+                          :key="idx"
+                          class="flex gap-2"
+                        >
+                          <div class="shrink-0 mt-0.5">
+                            <Bot
+                              v-if="
+                                msg.role === 'system' ||
+                                msg.role === 'assistant'
+                              "
+                              class="h-4 w-4 text-muted-foreground"
+                            />
+                            <User v-else class="h-4 w-4 text-foreground" />
+                          </div>
+                          <div class="min-w-0">
+                            <span
+                              class="text-[10px] font-medium text-muted-foreground uppercase"
+                              >{{ msg.role }}</span
+                            >
+                            <p class="text-sm whitespace-pre-wrap break-words">
+                              {{ msg.content }}
+                            </p>
+                          </div>
                         </div>
                       </div>
+                      <pre
+                        v-else
+                        class="text-xs bg-muted rounded-lg p-3 overflow-x-auto max-h-60"
+                        >{{
+                          JSON.stringify(
+                            eventDetails[event.id].request_body,
+                            null,
+                            2,
+                          )
+                        }}</pre
+                      >
                     </div>
-                    <pre v-else class="text-xs bg-muted rounded-lg p-3 overflow-x-auto max-h-60">{{ JSON.stringify(eventDetails[event.id].request_body, null, 2) }}</pre>
-                  </div>
 
-                  <!-- Response content -->
-                  <div v-if="eventDetails[event.id].response_body">
-                    <p class="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Response</p>
-                    <div v-if="getResponseContent(eventDetails[event.id].response_body)" class="flex gap-2">
-                      <Bot class="h-4 w-4 text-success shrink-0 mt-0.5" />
-                      <p class="text-sm whitespace-pre-wrap break-words">{{ getResponseContent(eventDetails[event.id].response_body) }}</p>
+                    <!-- Response content -->
+                    <div v-if="eventDetails[event.id].response_body">
+                      <p
+                        class="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2"
+                      >
+                        Response
+                      </p>
+                      <div
+                        v-if="
+                          getResponseContent(
+                            eventDetails[event.id].response_body,
+                          )
+                        "
+                        class="flex gap-2"
+                      >
+                        <Bot class="h-4 w-4 text-success shrink-0 mt-0.5" />
+                        <p class="text-sm whitespace-pre-wrap break-words">
+                          {{
+                            getResponseContent(
+                              eventDetails[event.id].response_body,
+                            )
+                          }}
+                        </p>
+                      </div>
+                      <pre
+                        v-else
+                        class="text-xs bg-muted rounded-lg p-3 overflow-x-auto max-h-60"
+                        >{{
+                          JSON.stringify(
+                            eventDetails[event.id].response_body,
+                            null,
+                            2,
+                          )
+                        }}</pre
+                      >
                     </div>
-                    <pre v-else class="text-xs bg-muted rounded-lg p-3 overflow-x-auto max-h-60">{{ JSON.stringify(eventDetails[event.id].response_body, null, 2) }}</pre>
-                  </div>
 
-                  <!-- No bodies available -->
-                  <p v-if="!eventDetails[event.id].request_body && !eventDetails[event.id].response_body" class="text-sm text-muted-foreground">
-                    No request/response body recorded for this event.
-                  </p>
+                    <!-- No bodies available -->
+                    <p
+                      v-if="
+                        !eventDetails[event.id].request_body &&
+                        !eventDetails[event.id].response_body
+                      "
+                      class="text-sm text-muted-foreground"
+                    >
+                      No request/response body recorded for this event.
+                    </p>
 
-                  <!-- Metadata -->
-                  <div class="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground border-t pt-3">
-                    <span v-if="eventDetails[event.id].usage_units">{{ eventDetails[event.id].usage_units.toLocaleString() }} tokens</span>
-                    <span v-if="eventDetails[event.id].cost_amount">${{ eventDetails[event.id].cost_amount.toFixed(4) }} cost</span>
-                    <span v-if="eventDetails[event.id].properties?.cache_hit === 'true'" class="text-success">Cache HIT</span>
-                    <span>Source: {{ eventDetails[event.id].source }}</span>
-                    <span>Feature: {{ eventDetails[event.id].feature_key }}</span>
+                    <!-- Metadata -->
+                    <div
+                      class="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground border-t pt-3"
+                    >
+                      <span v-if="eventDetails[event.id].usage_units"
+                        >{{
+                          eventDetails[event.id].usage_units.toLocaleString()
+                        }}
+                        tokens</span
+                      >
+                      <span v-if="eventDetails[event.id].cost_amount"
+                        >${{
+                          eventDetails[event.id].cost_amount.toFixed(4)
+                        }}
+                        cost</span
+                      >
+                      <span
+                        v-if="
+                          eventDetails[event.id].properties?.cache_hit ===
+                          'true'
+                        "
+                        class="text-success"
+                        >Cache HIT</span
+                      >
+                      <span v-if="eventDetails[event.id].latency_ms"
+                        >{{
+                          eventDetails[event.id].latency_ms?.toLocaleString()
+                        }}ms latency</span
+                      >
+                      <span>Source: {{ eventDetails[event.id].source }}</span>
+                      <span
+                        >Feature: {{ eventDetails[event.id].feature_key }}</span
+                      >
+                    </div>
                   </div>
-                </div>
-                <div v-else class="p-4 text-sm text-muted-foreground">Failed to load detail.</div>
-              </td>
-            </tr>
+                  <div v-else class="p-4 text-sm text-muted-foreground">
+                    Failed to load detail.
+                  </div>
+                </td>
+              </tr>
             </template>
           </tbody>
         </table>
@@ -427,11 +633,22 @@ function marginForEvent(event: ObserveEvent): number | null {
     </div>
 
     <!-- Pagination -->
-    <div v-if="eventsData && eventsData.total > PAGE_SIZE" class="flex items-center justify-between">
+    <div
+      v-if="eventsData && eventsData.total > PAGE_SIZE"
+      class="flex items-center justify-between"
+    >
       <span class="text-sm text-muted-foreground">
-        Showing <span class="font-medium text-foreground">{{ eventsData.offset + 1 }}</span> to 
-        <span class="font-medium text-foreground">{{ Math.min(eventsData.offset + PAGE_SIZE, eventsData.total) }}</span> of 
-        <span class="font-medium text-foreground">{{ eventsData.total }}</span> events
+        Showing
+        <span class="font-medium text-foreground">{{
+          eventsData.offset + 1
+        }}</span>
+        to
+        <span class="font-medium text-foreground">{{
+          Math.min(eventsData.offset + PAGE_SIZE, eventsData.total)
+        }}</span>
+        of
+        <span class="font-medium text-foreground">{{ eventsData.total }}</span>
+        events
       </span>
       <div class="flex items-center gap-2">
         <Button
