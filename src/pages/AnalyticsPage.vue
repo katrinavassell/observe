@@ -527,7 +527,7 @@ const insightCategories = [
           <!-- Generate button -->
           <div class="space-y-3 border-t pt-4">
             <Button
-              v-if="totalEvents >= 10"
+              v-if="totalEvents > 0"
               class="w-full"
               :disabled="isGenerating || !insightsAllowed"
               @click="handleGenerate"
@@ -536,26 +536,15 @@ const insightCategories = [
               {{ isGenerating ? "Analyzing..." : "Generate Insights" }}
             </Button>
             <div v-else class="rounded-lg border bg-muted/30 p-3 text-center">
-              <p class="text-sm font-medium mb-1">
-                {{
-                  totalEvents === 0
-                    ? "Upload data to unlock"
-                    : `${10 - totalEvents} more events needed`
-                }}
-              </p>
+              <p class="text-sm font-medium mb-1">Upload data to unlock</p>
               <p class="text-xs text-muted-foreground">
-                AI Insights needs at least 10 events to analyze.
-                {{
-                  totalEvents > 0
-                    ? `You have ${totalEvents} so far.`
-                    : "Connect your SDK or proxy to start tracking."
-                }}
+                Connect your SDK or proxy to start tracking AI costs.
               </p>
             </div>
 
             <!-- Usage info -->
             <div
-              v-if="insightsUsage && totalEvents >= 10"
+              v-if="insightsUsage && totalEvents > 0"
               class="text-xs text-muted-foreground text-center"
             >
               <template v-if="insightsUnlimited">
