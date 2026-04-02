@@ -1,6 +1,6 @@
-import { BatchQueue } from './batch.js';
-import { inferModelProvider } from './providers.js';
-import type { ClientOptions, IngestEvent, ObserveEvent } from './types.js';
+import { BatchQueue } from "./batch.js";
+import { inferModelProvider } from "./providers.js";
+import type { ClientOptions, IngestEvent, ObserveEvent } from "./types.js";
 
 export class TansoObserve {
   private readonly queue: BatchQueue;
@@ -10,7 +10,7 @@ export class TansoObserve {
 
   constructor(options: ClientOptions) {
     this.apiKey = options.apiKey;
-    this.baseUrl = options.baseUrl ?? 'https://app.tanso.io';
+    this.baseUrl = options.baseUrl ?? "https://app.tanso.io";
     this.onError = options.onError;
 
     this.queue = new BatchQueue({
@@ -24,7 +24,8 @@ export class TansoObserve {
   track(event: ObserveEvent): void {
     const ingestEvent: IngestEvent = {
       ...event,
-      modelProvider: event.modelProvider ?? inferModelProvider(event.model) ?? undefined,
+      modelProvider:
+        event.modelProvider ?? inferModelProvider(event.model) ?? undefined,
     };
     this.queue.add(ingestEvent);
   }
@@ -38,16 +39,25 @@ export class TansoObserve {
   }
 
   private async sendBatch(events: IngestEvent[]): Promise<void> {
-    const response = await fetch(`${this.baseUrl}/events/ingest`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${this.apiKey}`,
-      },
-      body: JSON.stringify({ events }),
-    });
-    if (!response.ok) {
-      throw new Error(`Ingest failed: ${response.status} ${response.statusText}`);
+    const maxRetries = 3;
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      const response = await fetch(`${this.baseUrl}/events/ingest`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${this.apiKey}`,
+        },
+        body: JSON.stringify({ events }),
+      });
+      if (response.ok) return;
+      if (attempt < maxRetries) {
+        const delayMs = 1000 * Math.pow(2, attempt);
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+        continue;
+      }
+      throw new Error(
+        `Ingest failed: ${response.status} ${response.statusText}`,
+      );
     }
   }
 }

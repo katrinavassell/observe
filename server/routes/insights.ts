@@ -1,0 +1,721 @@
+import { Router, Response } from "express";
+import type { Pool } from "pg";
+import rateLimit from "express-rate-limit";
+import { type AuthRequest } from "./auth.js";
+
+type CheckBillingFeatureAccessFn = (
+  visitorId: string,
+  featureKey: string,
+  email?: string,
+) => Promise<{
+  allowed: boolean;
+  reason?: string;
+  usage?: number;
+  limit?: number;
+  remaining?: number;
+}>;
+type TrackBillingUsageFn = (
+  visitorId: string,
+  featureKey: string,
+  eventName: string,
+) => void;
+
+export function createInsightsRoutes(
+  pool: Pool,
+  ensureVisitor: any,
+  deps: {
+    checkBillingFeatureAccess: CheckBillingFeatureAccessFn;
+    trackBillingUsage: TrackBillingUsageFn;
+    expensiveLimiter: ReturnType<typeof rateLimit>;
+  },
+) {
+  const router = Router();
+
+  // GET /insights — list all insights for the session
+  router.get(
+    "/insights",
+    ensureVisitor,
+    async (req: AuthRequest, res: Response) => {
+      try {
+        const result = await pool.query(
+          "SELECT * FROM ai_insights WHERE user_id = $1 ORDER BY created_at DESC",
+          [req.visitorId],
+        );
+        res.json(result.rows);
+      } catch (error) {
+        console.error("List insights error:", error);
+        res.status(500).json({ error: "Failed to list insights" });
+      }
+    },
+  );
+
+  // POST /insights/generate — generate AI insights from observe_events data
+  router.post(
+    "/insights/generate",
+    ensureVisitor,
+    deps.expensiveLimiter,
+    async (req: AuthRequest, res: Response) => {
+      const visitorId = req.visitorId!;
+
+      // Billing entitlement check (fail closed)
+      const aiAccess = await deps.checkBillingFeatureAccess(
+        visitorId,
+        "ai_insights",
+        req.accountEmail,
+      );
+      if (!aiAccess.allowed) {
+        return res.status(403).json({
+          error: aiAccess.reason || "AI insights limit reached",
+          usage: aiAccess.usage,
+          limit: aiAccess.limit,
+          remaining: aiAccess.remaining,
+        });
+      }
+
+      try {
+        // Gather rich summary data from observe_events for pricing analysis
+        const [
+          featureRes,
+          customerRes,
+          modelRes,
+          overallRes,
+          featureModelRes,
+          customerFeatureRes,
+          trendRes,
+        ] = await Promise.all([
+          pool.query(
+            `SELECT feature_key,
+             COUNT(*) as event_count,
+             COALESCE(SUM(cost_amount), 0) as total_cost,
+             COALESCE(SUM(revenue_amount), 0) as total_revenue,
+             COALESCE(SUM(usage_units), 0) as total_usage,
+             CASE WHEN COUNT(*) > 0 THEN COALESCE(SUM(cost_amount), 0) / COUNT(*) ELSE 0 END as cost_per_call,
+             CASE WHEN COUNT(*) > 0 THEN COALESCE(SUM(revenue_amount), 0) / COUNT(*) ELSE 0 END as revenue_per_call
+           FROM observe_events WHERE user_id = $1 AND feature_key IS NOT NULL
+           GROUP BY feature_key ORDER BY total_cost DESC`,
+            [req.visitorId],
+          ),
+          pool.query(
+            `SELECT oe.customer_id, c.name as customer_name, c.segment,
+             COUNT(*) as event_count,
+             COALESCE(SUM(oe.cost_amount), 0) as total_cost,
+             COALESCE(SUM(oe.revenue_amount), 0) as total_revenue,
+             CASE WHEN COUNT(*) > 0 THEN COALESCE(SUM(oe.cost_amount), 0) / COUNT(*) ELSE 0 END as cost_per_call
+           FROM observe_events oe
+           LEFT JOIN customers c ON oe.user_id = c.user_id AND oe.customer_id = c.customer_id
+           WHERE oe.user_id = $1
+           GROUP BY oe.customer_id, c.name, c.segment ORDER BY total_cost DESC LIMIT 15`,
+            [req.visitorId],
+          ),
+          pool.query(
+            `SELECT model, model_provider,
+             COUNT(*) as event_count,
+             COALESCE(SUM(cost_amount), 0) as total_cost
+           FROM observe_events WHERE user_id = $1 AND model IS NOT NULL
+           GROUP BY model, model_provider ORDER BY total_cost DESC`,
+            [req.visitorId],
+          ),
+          pool.query(
+            `SELECT
+             COUNT(*) as total_events,
+             COALESCE(SUM(cost_amount), 0) as total_cost,
+             COALESCE(SUM(revenue_amount), 0) as total_revenue
+           FROM observe_events WHERE user_id = $1`,
+            [req.visitorId],
+          ),
+          pool.query(
+            `SELECT feature_key, model,
+             COUNT(*) as event_count,
+             COALESCE(SUM(cost_amount), 0) as total_cost,
+             CASE WHEN COUNT(*) > 0 THEN COALESCE(SUM(cost_amount), 0) / COUNT(*) ELSE 0 END as cost_per_call
+           FROM observe_events
+           WHERE user_id = $1 AND feature_key IS NOT NULL AND model IS NOT NULL
+           GROUP BY feature_key, model ORDER BY feature_key, total_cost DESC`,
+            [req.visitorId],
+          ),
+          pool.query(
+            `SELECT feature_key,
+             COUNT(DISTINCT customer_id) as unique_customers,
+             MIN(ct.calls) as min_calls, MAX(ct.calls) as max_calls,
+             AVG(ct.calls) as avg_calls, STDDEV(ct.calls) as stddev_calls
+           FROM (
+             SELECT feature_key, customer_id, COUNT(*) as calls
+             FROM observe_events
+             WHERE user_id = $1 AND feature_key IS NOT NULL
+             GROUP BY feature_key, customer_id
+           ) ct
+           GROUP BY feature_key`,
+            [req.visitorId],
+          ),
+          pool.query(
+            `SELECT DATE_TRUNC('month', timestamp) as month,
+             COALESCE(SUM(cost_amount), 0) as total_cost,
+             COALESCE(SUM(revenue_amount), 0) as total_revenue,
+             COUNT(*) as event_count
+           FROM observe_events WHERE user_id = $1
+           GROUP BY month ORDER BY month DESC LIMIT 6`,
+            [req.visitorId],
+          ),
+        ]);
+
+        if (featureRes.rows.length === 0) {
+          return res.status(400).json({
+            error:
+              "No data available to analyze. Load sample data or import your own first.",
+          });
+        }
+
+        const overall = overallRes.rows[0];
+        const totalCost = parseFloat(overall.total_cost) || 0;
+        const totalRevenue = parseFloat(overall.total_revenue) || 0;
+        const overallMargin =
+          totalRevenue > 0
+            ? Math.round(((totalRevenue - totalCost) / totalRevenue) * 100)
+            : 0;
+
+        const featureSummary = featureRes.rows
+          .map((r: Record<string, string>) => {
+            const cost = parseFloat(r.total_cost) || 0;
+            const revenue = parseFloat(r.total_revenue) || 0;
+            const margin =
+              revenue > 0 ? Math.round(((revenue - cost) / revenue) * 100) : 0;
+            const costPerCall = parseFloat(r.cost_per_call) || 0;
+            const revenuePerCall = parseFloat(r.revenue_per_call) || 0;
+            return `- ${r.feature_key}: cost=$${cost.toFixed(2)}, revenue=$${revenue.toFixed(2)}, margin=${margin}%, ${r.event_count} events, cost/call=$${costPerCall.toFixed(4)}, revenue/call=$${revenuePerCall.toFixed(4)}`;
+          })
+          .join("\n");
+
+        const customerSummary = customerRes.rows
+          .map((r: Record<string, string>) => {
+            const cost = parseFloat(r.total_cost) || 0;
+            const revenue = parseFloat(r.total_revenue) || 0;
+            const margin =
+              revenue > 0 ? Math.round(((revenue - cost) / revenue) * 100) : 0;
+            const costPerCall = parseFloat(r.cost_per_call) || 0;
+            return `- ${r.customer_name || r.customer_id} (${r.segment || "no segment"}): cost=$${cost.toFixed(2)}, revenue=$${revenue.toFixed(2)}, margin=${margin}%, ${r.event_count} calls, cost/call=$${costPerCall.toFixed(4)}`;
+          })
+          .join("\n");
+
+        const modelSummary = modelRes.rows
+          .map((r: Record<string, string>) => {
+            const cost = parseFloat(r.total_cost) || 0;
+            return `- ${r.model} (${r.model_provider || "unknown"}): cost=$${cost.toFixed(2)}, ${r.event_count} calls`;
+          })
+          .join("\n");
+
+        const featureModelSummary =
+          featureModelRes.rows.length > 0
+            ? featureModelRes.rows
+                .map((r: Record<string, string>) => {
+                  const costPerCall = parseFloat(r.cost_per_call) || 0;
+                  return `- ${r.feature_key} → ${r.model}: ${r.event_count} calls, cost/call=$${costPerCall.toFixed(4)}`;
+                })
+                .join("\n")
+            : "No model-level feature data available.";
+
+        const usageVarianceSummary =
+          customerFeatureRes.rows.length > 0
+            ? customerFeatureRes.rows
+                .map((r: Record<string, string>) => {
+                  const min = parseInt(r.min_calls) || 0;
+                  const max = parseInt(r.max_calls) || 0;
+                  const avg = parseFloat(r.avg_calls) || 0;
+                  const stddev = parseFloat(r.stddev_calls) || 0;
+                  const ratio = min > 0 ? Math.round(max / min) : max;
+                  return `- ${r.feature_key}: ${r.unique_customers} customers, calls range ${min}–${max} (${ratio}x spread), avg=${Math.round(avg)}, stddev=${Math.round(stddev)}`;
+                })
+                .join("\n")
+            : "No per-customer usage variance data available.";
+
+        const trendSummary =
+          trendRes.rows.length > 0
+            ? trendRes.rows
+                .map((r: any) => {
+                  const month = r.month
+                    ? new Date(r.month).toISOString().slice(0, 7)
+                    : "unknown";
+                  const cost = parseFloat(r.total_cost) || 0;
+                  const revenue = parseFloat(r.total_revenue) || 0;
+                  const margin =
+                    revenue > 0
+                      ? Math.round(((revenue - cost) / revenue) * 100)
+                      : 0;
+                  return `- ${month}: cost=$${cost.toFixed(2)}, revenue=$${revenue.toFixed(2)}, margin=${margin}%, ${r.event_count} events`;
+                })
+                .join("\n")
+            : "No trend data available.";
+
+        // Pull historic context (CSV uploads, OpenAI/Anthropic imports)
+        let historicContext = "";
+        try {
+          const [costRecords, usageRecords, importedEvents] = await Promise.all(
+            [
+              pool.query(
+                `SELECT cost_type, SUM(amount)::numeric as total, COUNT(*)::int as records,
+               MIN(period_start) as earliest, MAX(period_end) as latest
+             FROM cost_records WHERE user_id = $1 GROUP BY cost_type`,
+                [req.visitorId],
+              ),
+              pool.query(
+                `SELECT metric_name, SUM(value)::numeric as total, COUNT(*)::int as records
+             FROM usage_records WHERE user_id = $1 GROUP BY metric_name`,
+                [req.visitorId],
+              ),
+              pool.query(
+                `SELECT source, model, model_provider,
+               COUNT(*)::int as event_count,
+               COALESCE(SUM(cost_amount), 0)::numeric as total_cost,
+               MIN(timestamp) as earliest, MAX(timestamp) as latest
+             FROM observe_events
+             WHERE user_id = $1 AND source IN ('openai', 'anthropic', 'csv') AND granularity != 'event'
+             GROUP BY source, model, model_provider`,
+                [req.visitorId],
+              ),
+            ],
+          );
+
+          const parts: string[] = [];
+
+          if (costRecords.rows.length > 0) {
+            const lines = costRecords.rows.map(
+              (r: any) =>
+                `- ${r.cost_type}: $${parseFloat(r.total).toFixed(2)} total (${r.records} records, ${r.earliest?.toISOString().slice(0, 10)} to ${r.latest?.toISOString().slice(0, 10)})`,
+            );
+            parts.push(
+              `Historic cost data (from CSV/imports):\n${lines.join("\n")}`,
+            );
+          }
+
+          if (usageRecords.rows.length > 0) {
+            const lines = usageRecords.rows.map(
+              (r: any) =>
+                `- ${r.metric_name}: ${parseFloat(r.total).toLocaleString()} total (${r.records} records)`,
+            );
+            parts.push(
+              `Historic usage data (from CSV/imports):\n${lines.join("\n")}`,
+            );
+          }
+
+          if (importedEvents.rows.length > 0) {
+            const lines = importedEvents.rows.map(
+              (r: any) =>
+                `- ${r.source} import: ${r.model || "various models"} (${r.model_provider || "unknown"}), $${parseFloat(r.total_cost).toFixed(2)} cost, ${r.event_count} records, ${r.earliest?.toISOString().slice(0, 10)} to ${r.latest?.toISOString().slice(0, 10)}`,
+            );
+            parts.push(
+              `Imported provider data (daily aggregates, no per-customer breakdown):\n${lines.join("\n")}`,
+            );
+          }
+
+          if (parts.length > 0) {
+            historicContext =
+              "\n\nHistoric Context (use to cross-reference with SDK event data above):\n" +
+              parts.join("\n\n");
+          }
+        } catch (err) {
+          console.error("Failed to fetch historic context for insights:", err);
+        }
+
+        const prompt = `You are an AI pricing consultant for SaaS companies that build on AI models. Your client pays you to analyze their cost and usage data and tell them exactly how to price their product. Be specific, quantitative, and actionable — like a $50k/year pricing advisor, not a generic dashboard.
+
+## Client's Data
+
+Overall: ${parseInt(overall.total_events)} events tracked, total cost $${totalCost.toFixed(2)}, total revenue $${totalRevenue.toFixed(2)}, overall margin ${overallMargin}%
+
+### Features (cost, revenue, and unit economics per call)
+${featureSummary}
+
+### Customers (who costs how much to serve)
+${customerSummary}
+
+### AI Models Used
+${modelSummary}
+
+### Which Models Power Which Features
+${featureModelSummary}
+
+### Usage Variance Across Customers (signals for pricing model design)
+${usageVarianceSummary}
+
+### Monthly Trend (most recent first)
+${trendSummary}${historicContext}
+
+## Your Analysis
+
+Return exactly 4-6 insights as a JSON array. Each insight must have:
+- insight_type: one of "pricing_recommendation", "usage_pricing_signal", "model_routing", "margin_alert", "customer_risk", "cost_optimization"
+- title: short headline (under 60 chars)
+- description: 2-3 sentences. Include specific dollar amounts, percentages, and recommended actions. For pricing recommendations, state the exact price point or range.
+- severity: one of "critical", "warning", "info", "positive"
+- feature_key: the relevant feature key if applicable, or null
+- customer_id: the relevant customer id if applicable, or null
+
+### What a great pricing consultant would focus on:
+
+1. **Pricing recommendations**: For each feature with poor margins, calculate what the price per call SHOULD be to hit 50%+ margin. State it explicitly: "Charge $X per call" or "Raise price by Y%".
+
+2. **Usage-based pricing signals**: If some customers use a feature 10x more than others but pay the same, that's a clear signal for usage-based or tiered pricing. Quantify the spread and recommend a pricing model (per-call, tiered, or overage-based).
+
+3. **Model routing opportunities**: If an expensive model is used for a feature where a cheaper model would work, calculate the savings. Be specific: "Routing 70% of summarization calls to haiku instead of sonnet saves $X/month".
+
+4. **Margin trajectory**: If margins are improving or degrading over time, explain why and what to do about it. If model costs dropped but prices stayed flat, the client is leaving margin on the table — or could lower prices to grow volume.
+
+5. **Customer profitability**: Flag customers who cost more to serve than they pay. Recommend whether to reprice, upsell, or accept the loss as acquisition cost.
+
+6. **Cross-reference historic data**: If CSV/import data shows total historic spend, estimate how much went to each feature based on current usage proportions. Flag discrepancies between historic and current patterns.
+
+Prioritize pricing recommendations and usage-based pricing signals — those are the highest-value insights. Every insight should end with a concrete "do this" action, not just an observation.
+
+Return ONLY the JSON array, no markdown or explanation.`;
+
+        // Check for OpenAI API key
+        const openaiKey = process.env.OPENAI_API_KEY;
+        let insights: Array<{
+          insight_type: string;
+          title: string;
+          description: string;
+          severity: string;
+          feature_key?: string;
+          customer_id?: string;
+        }>;
+        let tokensUsed = 0;
+        let costUsd = 0;
+
+        if (openaiKey) {
+          const openaiResponse = await fetch(
+            "https://api.openai.com/v1/chat/completions",
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${openaiKey}`,
+              },
+              body: JSON.stringify({
+                model: "gpt-4o",
+                messages: [{ role: "user", content: prompt }],
+                temperature: 0.3,
+                max_tokens: 3000,
+              }),
+            },
+          );
+
+          if (!openaiResponse.ok) {
+            const errBody = await openaiResponse.text();
+            console.error("OpenAI API error:", errBody);
+            return res.status(502).json({
+              error: "AI service unavailable. Check your OpenAI API key.",
+            });
+          }
+
+          const completion = (await openaiResponse.json()) as {
+            choices: Array<{ message: { content: string } }>;
+            usage?: { total_tokens: number };
+          };
+          const content = completion.choices[0]?.message?.content || "[]";
+          tokensUsed = completion.usage?.total_tokens || 0;
+          const promptTokens =
+            (completion.usage as Record<string, number>)?.prompt_tokens || 0;
+          const completionTokens =
+            (completion.usage as Record<string, number>)?.completion_tokens ||
+            0;
+          costUsd = promptTokens * 0.0000025 + completionTokens * 0.00001;
+
+          try {
+            const cleaned = content
+              .replace(/^```json?\n?/i, "")
+              .replace(/\n?```$/i, "")
+              .trim();
+            let parsed = JSON.parse(cleaned);
+            if (
+              !Array.isArray(parsed) &&
+              parsed.insights &&
+              Array.isArray(parsed.insights)
+            ) {
+              parsed = parsed.insights;
+            }
+            if (!Array.isArray(parsed)) {
+              throw new Error("Expected JSON array from AI");
+            }
+            insights = parsed;
+          } catch {
+            console.error("Failed to parse OpenAI response:", content);
+            return res
+              .status(502)
+              .json({ error: "AI returned invalid response. Try again." });
+          }
+        } else {
+          // Fallback: generate consultant-grade insights locally without OpenAI
+          insights = [];
+
+          // 1. Pricing recommendations for features with poor margins
+          for (const row of featureRes.rows) {
+            const cost = parseFloat(row.total_cost) || 0;
+            const revenue = parseFloat(row.total_revenue) || 0;
+            const margin =
+              revenue > 0 ? Math.round(((revenue - cost) / revenue) * 100) : 0;
+            const costPerCall = parseFloat(row.cost_per_call) || 0;
+            const revenuePerCall = parseFloat(row.revenue_per_call) || 0;
+            const events = parseInt(row.event_count) || 0;
+            const targetRevenuePerCall = costPerCall / 0.5; // 50% margin target
+
+            if (margin < 0) {
+              insights.push({
+                insight_type: "pricing_recommendation",
+                title: `${row.feature_key}: charge $${targetRevenuePerCall.toFixed(4)}/call for 50% margin`,
+                description: `This feature costs $${costPerCall.toFixed(4)}/call but you charge $${revenuePerCall.toFixed(4)}/call (${margin}% margin). To hit 50% margin, set the price to $${targetRevenuePerCall.toFixed(4)}/call. At ${events} calls, that recovers $${((targetRevenuePerCall - revenuePerCall) * events).toFixed(2)} in lost margin.`,
+                severity: "critical",
+                feature_key: row.feature_key,
+              });
+            } else if (margin < 30) {
+              insights.push({
+                insight_type: "pricing_recommendation",
+                title: `${row.feature_key}: raise price to $${targetRevenuePerCall.toFixed(4)}/call`,
+                description: `At ${margin}% margin and $${costPerCall.toFixed(4)} cost/call, this feature is underpriced. Raise per-call price from $${revenuePerCall.toFixed(4)} to $${targetRevenuePerCall.toFixed(4)} to reach 50% margin. That's a ${Math.round(((targetRevenuePerCall - revenuePerCall) / (revenuePerCall || 0.0001)) * 100)}% increase.`,
+                severity: "warning",
+                feature_key: row.feature_key,
+              });
+            }
+          }
+
+          // 2. Usage-based pricing signals from customer variance
+          for (const row of customerFeatureRes.rows) {
+            const min = parseInt(row.min_calls) || 0;
+            const max = parseInt(row.max_calls) || 0;
+            const customers = parseInt(row.unique_customers) || 0;
+            const ratio = min > 0 ? Math.round(max / min) : max;
+
+            if (ratio >= 5 && customers >= 2) {
+              insights.push({
+                insight_type: "usage_pricing_signal",
+                title: `${row.feature_key}: ${ratio}x usage spread across customers`,
+                description: `Your heaviest user of ${row.feature_key} makes ${max} calls vs ${min} for the lightest (${ratio}x spread across ${customers} customers). If they pay the same flat rate, you're subsidizing power users. Consider per-call pricing or usage tiers with an overage charge.`,
+                severity: "warning",
+                feature_key: row.feature_key,
+              });
+            }
+          }
+
+          // 3. Model routing opportunities
+          const featureModels: Record<
+            string,
+            Array<{
+              model: string;
+              cost_per_call: number;
+              event_count: number;
+              total_cost: number;
+            }>
+          > = {};
+          for (const row of featureModelRes.rows) {
+            const key = row.feature_key;
+            if (!featureModels[key]) featureModels[key] = [];
+            featureModels[key].push({
+              model: row.model,
+              cost_per_call: parseFloat(row.cost_per_call) || 0,
+              event_count: parseInt(row.event_count) || 0,
+              total_cost: parseFloat(row.total_cost) || 0,
+            });
+          }
+          for (const [feature, models] of Object.entries(featureModels)) {
+            if (models.length >= 2) {
+              const sorted = [...models].sort(
+                (a, b) => b.cost_per_call - a.cost_per_call,
+              );
+              const expensive = sorted[0];
+              const cheap = sorted[sorted.length - 1];
+              if (expensive.cost_per_call > cheap.cost_per_call * 2) {
+                const savingsIfRouted =
+                  (expensive.cost_per_call - cheap.cost_per_call) *
+                  expensive.event_count *
+                  0.7;
+                insights.push({
+                  insight_type: "model_routing",
+                  title: `Route ${feature} calls from ${expensive.model} to ${cheap.model}`,
+                  description: `${expensive.model} costs $${expensive.cost_per_call.toFixed(4)}/call vs $${cheap.cost_per_call.toFixed(4)} for ${cheap.model} (${Math.round(expensive.cost_per_call / (cheap.cost_per_call || 0.0001))}x more expensive). Routing 70% of ${expensive.event_count} calls to the cheaper model saves ~$${savingsIfRouted.toFixed(2)}/period. Test quality on a sample before switching.`,
+                  severity: "info",
+                  feature_key: feature,
+                });
+              }
+            }
+          }
+
+          // 4. Overall margin health
+          if (overallMargin < 30) {
+            insights.push({
+              insight_type: "margin_alert",
+              title: `Overall margin is ${overallMargin}% — below 30% threshold`,
+              description: `Total costs ($${totalCost.toFixed(2)}) consume ${100 - overallMargin}% of revenue ($${totalRevenue.toFixed(2)}). Healthy AI SaaS targets 50%+ margin. Combine pricing increases on underperforming features with model routing to close the gap.`,
+              severity: overallMargin < 0 ? "critical" : "warning",
+            });
+          } else {
+            insights.push({
+              insight_type: "margin_alert",
+              title: `Overall margin is healthy at ${overallMargin}%`,
+              description: `Revenue ($${totalRevenue.toFixed(2)}) covers costs ($${totalCost.toFixed(2)}) with ${overallMargin}% margin. You could lower prices to grow volume or maintain margin and invest in features.`,
+              severity: "positive",
+            });
+          }
+
+          // 5. Customer profitability risk
+          for (const row of customerRes.rows) {
+            const cost = parseFloat(row.total_cost) || 0;
+            const revenue = parseFloat(row.total_revenue) || 0;
+            const margin =
+              revenue > 0
+                ? Math.round(((revenue - cost) / revenue) * 100)
+                : -100;
+            if (margin < 0 && cost > totalCost * 0.1) {
+              insights.push({
+                insight_type: "customer_risk",
+                title: `${row.customer_name || row.customer_id} is unprofitable at ${margin}% margin`,
+                description: `This customer costs $${cost.toFixed(2)} to serve but pays $${revenue.toFixed(2)} (${margin}% margin, ${Math.round((cost / totalCost) * 100)}% of your total cost). Either reprice their plan, add usage caps, or treat as acquisition cost with a timeline to convert.`,
+                severity: "critical",
+                customer_id: row.customer_id,
+              });
+            }
+          }
+
+          // 6. Margin trend
+          if (trendRes.rows.length >= 2) {
+            const recent = trendRes.rows[0];
+            const older = trendRes.rows[trendRes.rows.length - 1];
+            const recentMargin =
+              parseFloat(recent.total_revenue) > 0
+                ? Math.round(
+                    ((parseFloat(recent.total_revenue) -
+                      parseFloat(recent.total_cost)) /
+                      parseFloat(recent.total_revenue)) *
+                      100,
+                  )
+                : 0;
+            const olderMargin =
+              parseFloat(older.total_revenue) > 0
+                ? Math.round(
+                    ((parseFloat(older.total_revenue) -
+                      parseFloat(older.total_cost)) /
+                      parseFloat(older.total_revenue)) *
+                      100,
+                  )
+                : 0;
+            const delta = recentMargin - olderMargin;
+            if (Math.abs(delta) >= 5) {
+              insights.push({
+                insight_type: delta > 0 ? "cost_optimization" : "margin_alert",
+                title: `Margin ${delta > 0 ? "improved" : "dropped"} ${Math.abs(delta)}pp over ${trendRes.rows.length} months`,
+                description: `Margin moved from ${olderMargin}% to ${recentMargin}% (${delta > 0 ? "+" : ""}${delta}pp). ${delta > 0 ? "If model costs dropped but your prices stayed flat, you could lower prices to grow volume or keep the extra margin." : "Check if usage patterns shifted to more expensive models, or if a specific feature or customer drove the increase."}`,
+                severity: delta < -10 ? "warning" : "info",
+              });
+            }
+          }
+
+          // Prioritize: pricing recommendations first, then signals, then alerts
+          const priority: Record<string, number> = {
+            pricing_recommendation: 0,
+            usage_pricing_signal: 1,
+            model_routing: 2,
+            customer_risk: 3,
+            margin_alert: 4,
+            cost_optimization: 5,
+          };
+          insights.sort(
+            (a, b) =>
+              (priority[a.insight_type] ?? 9) - (priority[b.insight_type] ?? 9),
+          );
+          insights = insights.slice(0, 6);
+        }
+
+        // Store insights
+        const storedInsights: any[] = [];
+        for (const insight of insights) {
+          const result = await pool.query(
+            `INSERT INTO ai_insights (user_id, insight_type, title, description, severity, feature_key, customer_id, tokens_used, cost_usd)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+           RETURNING *`,
+            [
+              req.visitorId,
+              insight.insight_type,
+              insight.title,
+              insight.description,
+              insight.severity || "info",
+              insight.feature_key || null,
+              insight.customer_id || null,
+              tokensUsed,
+              costUsd,
+            ],
+          );
+          storedInsights.push(result.rows[0]);
+        }
+
+        // Log the generation as an observe_event
+        await pool.query(
+          `INSERT INTO observe_events (user_id, customer_id, feature_key, event_name, cost_amount, cost_unit, source, granularity)
+         VALUES ($1, 'system', 'ai_insights', 'insight_generated', $2, 'usd', 'system', 'event')`,
+          [visitorId, costUsd],
+        );
+
+        // Track usage (insights are metered by counting ai_insights rows)
+        deps.trackBillingUsage(visitorId, "ai_insights", "insights_generated");
+
+        res.json({
+          insights: storedInsights,
+          tokens_used: tokensUsed,
+          cost_usd: costUsd,
+          source: openaiKey ? "openai" : "local",
+        });
+      } catch (error) {
+        console.error("Generate insights error:", error);
+        res.status(500).json({ error: "Failed to generate insights" });
+      }
+    },
+  );
+
+  // DELETE /insights — clear all insights
+  router.delete(
+    "/insights",
+    ensureVisitor,
+    async (req: AuthRequest, res: Response) => {
+      try {
+        await pool.query("DELETE FROM ai_insights WHERE user_id = $1", [
+          req.visitorId,
+        ]);
+        res.json({ success: true });
+      } catch (error) {
+        console.error("Clear insights error:", error);
+        res.status(500).json({ error: "Failed to clear insights" });
+      }
+    },
+  );
+
+  // GET /usage/limits — return current usage for ai_insights
+  router.get(
+    "/usage/limits",
+    ensureVisitor,
+    async (req: AuthRequest, res: Response) => {
+      const visitorId = req.visitorId!;
+      try {
+        const access = await deps.checkBillingFeatureAccess(
+          visitorId,
+          "ai_insights",
+          req.accountEmail,
+        );
+        res.json({
+          configured: true,
+          ai_insights: {
+            allowed: access.allowed,
+            usage: {
+              used: access.usage ?? 0,
+              limit: access.limit ?? 0,
+              remaining: access.remaining ?? 0,
+            },
+          },
+        });
+      } catch (err) {
+        console.error("Usage limits check error:", err);
+        res.status(503).json({
+          configured: true,
+          error: "Usage data temporarily unavailable",
+        });
+      }
+    },
+  );
+
+  return router;
+}

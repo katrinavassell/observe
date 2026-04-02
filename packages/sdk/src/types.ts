@@ -1,18 +1,3 @@
-export interface IngestEvent {
-  eventName: string;
-  customerReferenceId: string;
-  featureKey: string;
-  timestamp?: string;
-  costAmount?: number;
-  costUnit?: string;
-  revenueAmount?: number;
-  usageUnits?: number;
-  model?: string;
-  modelProvider?: string;
-  properties?: Record<string, unknown>;
-  idempotencyKey?: string;
-}
-
 export interface ObserveEvent {
   eventName: string;
   customerReferenceId: string;
@@ -27,6 +12,8 @@ export interface ObserveEvent {
   properties?: Record<string, unknown>;
   idempotencyKey?: string;
 }
+
+export type IngestEvent = ObserveEvent;
 
 export interface ClientOptions {
   apiKey: string;

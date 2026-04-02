@@ -295,7 +295,7 @@ async function loadFeatureKeys() {
   }
 }
 
-async function handleSaveFeaturePricing() {
+async function _handleSaveFeaturePricing() {
   if (!newPricingFeature.value || newPricingRevenue.value === "") return;
   isSavingPricing.value = true;
   try {
@@ -319,7 +319,7 @@ async function handleSaveFeaturePricing() {
   }
 }
 
-async function handleDeleteFeaturePricing(featureKey: string) {
+async function _handleDeleteFeaturePricing(featureKey: string) {
   try {
     await deleteFeaturePricing(featureKey);
     featurePricingRules.value = featurePricingRules.value.filter(
@@ -1220,147 +1220,7 @@ watch(
       </CardContent>
     </Card>
 
-    <!-- Feature Pricing (optional per-feature revenue rates) -->
-    <Card>
-      <CardContent class="p-6 space-y-4">
-        <div>
-          <div class="flex items-center justify-between">
-            <div>
-              <h3 class="font-semibold">Feature Pricing</h3>
-              <p class="text-sm text-muted-foreground">
-                Define what you charge per AI call to see per-feature margins.
-                Without this, margins are estimated from subscription MRR.
-              </p>
-            </div>
-            <Button
-              v-if="!isViewer && !showAddPricing"
-              variant="outline"
-              size="sm"
-              @click="
-                showAddPricing = true;
-                loadFeatureKeys();
-              "
-            >
-              <Plus class="h-3 w-3 mr-1" />
-              Add Rule
-            </Button>
-          </div>
-        </div>
-
-        <!-- Add new rule -->
-        <div
-          v-if="showAddPricing"
-          class="rounded-lg border bg-muted/30 p-4 space-y-3"
-        >
-          <div class="flex gap-2 items-end">
-            <div class="flex-1">
-              <label
-                class="text-xs font-medium text-muted-foreground mb-1 block"
-                >Feature</label
-              >
-              <input
-                v-model="newPricingFeature"
-                type="text"
-                list="feature-keys"
-                placeholder="e.g. chat_completion"
-                class="w-full h-8 rounded-md border bg-background px-3 text-sm"
-              />
-              <datalist id="feature-keys">
-                <option
-                  v-for="fk in availableFeatureKeys"
-                  :key="fk"
-                  :value="fk"
-                />
-              </datalist>
-            </div>
-            <div class="w-32">
-              <label
-                class="text-xs font-medium text-muted-foreground mb-1 block"
-                >Revenue per</label
-              >
-              <div class="flex items-center gap-1">
-                <span class="text-sm text-muted-foreground">$</span>
-                <input
-                  v-model="newPricingRevenue"
-                  type="number"
-                  step="0.0001"
-                  min="0"
-                  placeholder="0.015"
-                  class="w-full h-8 rounded-md border bg-background px-2 text-sm"
-                />
-              </div>
-            </div>
-            <div class="w-20">
-              <label
-                class="text-xs font-medium text-muted-foreground mb-1 block"
-                >Unit</label
-              >
-              <input
-                v-model="newPricingUnit"
-                type="text"
-                placeholder="call"
-                class="w-full h-8 rounded-md border bg-background px-2 text-sm"
-              />
-            </div>
-            <Button
-              size="sm"
-              class="h-8"
-              :disabled="
-                isSavingPricing ||
-                !newPricingFeature ||
-                newPricingRevenue === ''
-              "
-              @click="handleSaveFeaturePricing"
-            >
-              Save
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              class="h-8"
-              @click="showAddPricing = false"
-              >Cancel</Button
-            >
-          </div>
-        </div>
-
-        <!-- Existing rules -->
-        <div v-if="featurePricingRules.length > 0" class="space-y-1.5">
-          <div
-            v-for="rule in featurePricingRules"
-            :key="rule.feature_key"
-            class="flex items-center justify-between rounded-md border bg-card px-3 py-2 text-sm"
-          >
-            <div class="flex items-center gap-4">
-              <code class="font-mono text-xs bg-muted px-1.5 py-0.5 rounded">{{
-                rule.feature_key
-              }}</code>
-              <span class="text-muted-foreground"
-                >${{ Number(rule.revenue_per_unit).toFixed(4) }} /
-                {{ rule.unit_label }}</span
-              >
-            </div>
-            <Button
-              v-if="!isViewer"
-              variant="ghost"
-              size="sm"
-              class="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
-              @click="handleDeleteFeaturePricing(rule.feature_key)"
-            >
-              <Trash2 class="h-3 w-3" />
-            </Button>
-          </div>
-        </div>
-
-        <!-- Empty state -->
-        <div v-else-if="!showAddPricing" class="text-center py-3">
-          <p class="text-xs text-muted-foreground">
-            No feature pricing rules configured. Margins will be estimated from
-            Stripe MRR.
-          </p>
-        </div>
-      </CardContent>
-    </Card>
+    <!-- Feature Pricing UI hidden — backend retained for future use -->
 
     <!-- SECTION: Import historic data (optional) -->
     <div v-if="true" class="relative mt-4">

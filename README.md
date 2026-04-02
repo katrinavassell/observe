@@ -3,6 +3,12 @@
 **AI cost observability that connects cost to revenue to margin.**
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
+[![GitHub stars](https://img.shields.io/github/stars/tansohq/observe)](https://github.com/tansohq/observe)
+[![npm](https://img.shields.io/npm/v/@tanso/observe)](https://www.npmjs.com/package/@tanso/observe)
+[![GitHub issues](https://img.shields.io/github/issues/tansohq/observe)](https://github.com/tansohq/observe/issues)
+
+<!-- TODO: Replace with actual screenshot of the analytics dashboard showing margin-by-feature view -->
+<!-- ![Observe Dashboard](docs/images/dashboard-screenshot.png) -->
 
 ---
 
@@ -245,6 +251,13 @@ npm run test        # run tests
 npm run typecheck   # type-check
 npm run lint        # lint
 ```
+
+---
+
+## Community
+
+- [GitHub Issues](https://github.com/tansohq/observe/issues) -- bug reports and feature requests
+- [GitHub Discussions](https://github.com/tansohq/observe/discussions) -- questions, ideas, show & tell
 
 ---
 
