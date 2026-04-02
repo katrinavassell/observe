@@ -11,6 +11,7 @@
 
 import { ref, computed, watch, onMounted, onUnmounted } from "vue";
 import { useRouter } from "vue-router";
+import { useQueryClient } from "@tanstack/vue-query";
 import { toast } from "vue-sonner";
 import {
   TrendingUp,
@@ -23,6 +24,7 @@ import {
   RefreshCw,
   Loader2,
   Unplug,
+  Upload,
 } from "lucide-vue-next";
 import { Card, CardContent, Button } from "@/components/ui";
 import { CostsSection, UsageSection } from "@/components/data-sources";
@@ -40,6 +42,8 @@ import {
   upsertFeaturePricing,
   deleteFeaturePricing,
   listFeatureKeys,
+  syncStripeInvoices,
+  uploadProviderCsv,
 } from "@/lib/api";
 import {
   getStripeStatus,
@@ -50,6 +54,7 @@ import type { SdkKey, FeaturePricingRule } from "@/lib/api";
 import type { StripeStatus } from "@/api/client";
 
 const router = useRouter();
+const queryClient = useQueryClient();
 const { isViewer } = useTeam();
 
 // =============================================================================
@@ -217,6 +222,7 @@ const stripeStatus = ref<StripeStatus>({
 });
 const isSyncingStripe = ref(false);
 const isDisconnectingStripe = ref(false);
+const isSyncingInvoices = ref(false);
 
 async function loadStripeStatus() {
   try {
@@ -244,6 +250,23 @@ async function handleStripeSync() {
     });
   } finally {
     isSyncingStripe.value = false;
+  }
+}
+
+async function handleInvoiceSync() {
+  isSyncingInvoices.value = true;
+  try {
+    const result = await syncStripeInvoices();
+    await refetchDataMode();
+    toast.success(
+      `Imported ${result.line_items} line items from ${result.invoices} invoices`,
+    );
+  } catch (error) {
+    toast.error("Failed to import invoices", {
+      description: error instanceof Error ? error.message : "Please try again.",
+    });
+  } finally {
+    isSyncingInvoices.value = false;
   }
 }
 
@@ -385,6 +408,44 @@ async function handleUsageFileCleared(): Promise<void> {
     toast.error("Failed to clear usage data", {
       description: error instanceof Error ? error.message : "Please try again.",
     });
+  }
+}
+
+// =============================================================================
+// PROVIDER CSV IMPORT
+// =============================================================================
+
+const isUploadingProviderCsv = ref(false);
+const providerCsvFileInput = ref<HTMLInputElement | null>(null);
+
+async function handleProviderCsvFile(event: Event) {
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0];
+  if (!file) return;
+
+  isUploadingProviderCsv.value = true;
+  try {
+    const rawCsv = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = () => reject(new Error("Failed to read file"));
+      reader.readAsText(file);
+    });
+
+    const result = await uploadProviderCsv(rawCsv);
+    toast.success(
+      `Imported ${result.rows} rows from ${result.provider} (${result.models.join(", ")})`,
+    );
+    await refetchDataMode();
+    queryClient.invalidateQueries({ queryKey: ["events"] });
+    queryClient.invalidateQueries({ queryKey: ["costs"] });
+  } catch (error) {
+    toast.error("Failed to import provider CSV", {
+      description: error instanceof Error ? error.message : "Please try again.",
+    });
+  } finally {
+    isUploadingProviderCsv.value = false;
+    if (input) input.value = "";
   }
 }
 
@@ -1196,6 +1257,20 @@ watch(
                   Re-sync
                 </Button>
                 <Button
+                  variant="outline"
+                  size="sm"
+                  :disabled="isSyncingInvoices"
+                  @click="handleInvoiceSync"
+                >
+                  <Loader2
+                    v-if="isSyncingInvoices"
+                    class="h-3 w-3 mr-1 animate-spin"
+                  />
+                  <RefreshCw v-else class="h-3 w-3 mr-1" />
+                  Import Invoices
+                  <span class="text-muted-foreground ml-1">(last 90 days)</span>
+                </Button>
+                <Button
                   variant="ghost"
                   size="sm"
                   class="text-muted-foreground hover:text-destructive"
@@ -1243,6 +1318,40 @@ watch(
         get insights faster.
       </p>
     </div>
+
+    <!-- Quick Import: Provider Billing CSV -->
+    <Card>
+      <CardContent class="p-4 space-y-3">
+        <div class="space-y-1">
+          <h3 class="text-sm font-medium">Quick Import: AI Provider Billing</h3>
+          <p class="text-xs text-muted-foreground">
+            Drop your billing export from OpenAI or Anthropic. We'll auto-detect
+            the format.
+          </p>
+        </div>
+        <input
+          ref="providerCsvFileInput"
+          type="file"
+          accept=".csv"
+          class="hidden"
+          :disabled="isViewer || isUploadingProviderCsv"
+          @change="handleProviderCsvFile"
+        />
+        <Button
+          variant="outline"
+          size="sm"
+          :disabled="isViewer || isUploadingProviderCsv"
+          @click="providerCsvFileInput?.click()"
+        >
+          <Loader2
+            v-if="isUploadingProviderCsv"
+            class="mr-2 h-4 w-4 animate-spin"
+          />
+          <Upload v-else class="mr-2 h-4 w-4" />
+          {{ isUploadingProviderCsv ? "Importing..." : "Choose CSV file" }}
+        </Button>
+      </CardContent>
+    </Card>
 
     <!-- AI Cost CSVs + Provider Connections (hidden in demo mode) -->
     <CostsSection

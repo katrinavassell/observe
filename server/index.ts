@@ -26,6 +26,7 @@ import { createInsightsRoutes } from "./routes/insights.js";
 import { createModelsApiRoutes } from "./routes/models-api.js";
 import { createTeamRoutes } from "./routes/team.js";
 import { createAnalyticsRoutes } from "./routes/analytics.js";
+import { createCohortsRoutes } from "./routes/cohorts.js";
 import { createBillingApiRoutes } from "./routes/billing-api.js";
 import {
   createInferenceRoutes,
@@ -223,6 +224,7 @@ app.use(
 app.use(createModelsApiRoutes(pool, ensureVisitor));
 app.use(createTeamRoutes(pool, ensureVisitor));
 app.use(createAnalyticsRoutes(pool, ensureVisitor));
+app.use(createCohortsRoutes(pool, ensureVisitor));
 app.use(createInferenceRoutes(pool, ensureVisitor));
 
 // ─── Database initialization ────────────────────────────────────────────────
@@ -478,6 +480,21 @@ async function _doDbInit() {
         request_type TEXT NOT NULL DEFAULT 'notify',
         created_at TIMESTAMPTZ DEFAULT NOW(),
         UNIQUE(user_id, integration_name)
+      )
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS customer_health_snapshots (
+        id SERIAL PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        customer_id TEXT NOT NULL,
+        health_score INTEGER NOT NULL,
+        margin_pct INTEGER,
+        adoption_depth INTEGER,
+        active_days INTEGER,
+        snapshot_date DATE NOT NULL DEFAULT CURRENT_DATE,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(user_id, customer_id, snapshot_date)
       )
     `);
 

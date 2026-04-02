@@ -35,6 +35,11 @@ const router = createRouter({
       component: () => import("@/pages/ModelsPage.vue"),
     },
     {
+      path: "/cohorts",
+      name: "cohorts",
+      component: () => import("@/pages/CohortsPage.vue"),
+    },
+    {
       path: "/customers",
       redirect: "/",
     },
@@ -67,7 +72,9 @@ const router = createRouter({
     },
     {
       path: "/onboarding",
-      redirect: "/",
+      name: "onboarding",
+      component: () => import("@/pages/OnboardingPage.vue"),
+      meta: { noLayout: true },
     },
     {
       path: "/onboarding/upload",

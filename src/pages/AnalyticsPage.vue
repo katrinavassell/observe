@@ -6,12 +6,13 @@ import {
   getEventsByFeature,
   getEventsByModel,
   getEventsByCustomer,
+  getMrrMovements,
   listInsights,
   generateInsights,
   getUsageLimits,
   listFeaturePricing,
 } from "@/lib/api";
-import type { AiInsight } from "@/lib/api";
+import type { AiInsight, MrrMovement, MrrSummary } from "@/lib/api";
 import {
   AlertCircle,
   AlertTriangle,
@@ -31,7 +32,7 @@ const queryClient = useQueryClient();
 const { isSampleMode, switchToSampleData, clearSample, isLoadingSample } =
   useDataMode();
 
-type Tab = "feature" | "model" | "customer";
+type Tab = "feature" | "model" | "customer" | "mrr";
 const activeTab = ref<Tab>("feature");
 
 // Insights drawer state
@@ -147,6 +148,19 @@ const {
   queryKey: ["events-by-customer"],
   queryFn: getEventsByCustomer,
 });
+
+const {
+  data: mrrData,
+  isLoading: mrrLoading,
+  isError: mrrError,
+} = useQuery({
+  queryKey: ["mrr-movements"],
+  queryFn: getMrrMovements,
+  enabled: computed(() => activeTab.value === "mrr"),
+});
+
+const mrrMovements = computed(() => mrrData.value?.movements ?? []);
+const mrrSummary = computed(() => mrrData.value?.summary ?? null);
 
 const isLoading = computed(
   () => featuresLoading.value || modelsLoading.value || customersLoading.value,
@@ -609,11 +623,7 @@ const insightCategories = [
           <FlaskConical class="h-3.5 w-3.5 mr-1.5" />
           {{ isLoadingSample ? "Loading..." : "Preview with sample data" }}
         </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          @click="router.push('/data-sources')"
-        >
+        <Button variant="outline" size="sm" @click="router.push('/onboarding')">
           Connect your data
         </Button>
       </div>
@@ -694,6 +704,11 @@ const insightCategories = [
               key: 'customer',
               label: 'By Customer',
               count: sortedCustomers.length,
+            },
+            {
+              key: 'mrr',
+              label: 'MRR Movement',
+              count: mrrMovements.filter((m) => m.category !== 'stable').length,
             },
           ] as const"
           :key="tab.key"
@@ -857,6 +872,160 @@ const insightCategories = [
           >
             {{ c.margin_pct != null ? fmtPct(c.margin_pct) : "—" }}
           </span>
+        </div>
+      </div>
+
+      <!-- MRR Movement tab -->
+      <div v-if="activeTab === 'mrr'">
+        <div
+          v-if="mrrLoading"
+          class="py-8 text-center text-sm text-muted-foreground"
+        >
+          Loading MRR data...
+        </div>
+        <div
+          v-else-if="mrrError"
+          class="py-8 text-center text-sm text-destructive"
+        >
+          Failed to load MRR movements
+        </div>
+        <template v-else-if="mrrSummary">
+          <!-- Summary cards -->
+          <div class="grid grid-cols-5 gap-3 mb-6">
+            <Card class="p-4">
+              <div class="text-xs font-medium text-muted-foreground">
+                New MRR
+              </div>
+              <div class="text-xl font-semibold tabular-nums mt-1 text-success">
+                +{{ fmt(mrrSummary.new_mrr) }}
+              </div>
+            </Card>
+            <Card class="p-4">
+              <div class="text-xs font-medium text-muted-foreground">
+                Expansion
+              </div>
+              <div class="text-xl font-semibold tabular-nums mt-1 text-success">
+                +{{ fmt(mrrSummary.expansion_mrr) }}
+              </div>
+            </Card>
+            <Card class="p-4">
+              <div class="text-xs font-medium text-muted-foreground">
+                Contraction
+              </div>
+              <div
+                class="text-xl font-semibold tabular-nums mt-1"
+                :class="
+                  mrrSummary.contraction_mrr > 0
+                    ? 'text-destructive'
+                    : 'text-muted-foreground'
+                "
+              >
+                -{{ fmt(mrrSummary.contraction_mrr) }}
+              </div>
+            </Card>
+            <Card class="p-4">
+              <div class="text-xs font-medium text-muted-foreground">
+                Churned
+              </div>
+              <div
+                class="text-xl font-semibold tabular-nums mt-1"
+                :class="
+                  mrrSummary.churned_mrr > 0
+                    ? 'text-destructive'
+                    : 'text-muted-foreground'
+                "
+              >
+                -{{ fmt(mrrSummary.churned_mrr) }}
+              </div>
+            </Card>
+            <Card class="p-4 border-foreground/20">
+              <div class="text-xs font-medium text-muted-foreground">
+                Net New MRR
+              </div>
+              <div
+                class="text-xl font-bold tabular-nums mt-1"
+                :class="
+                  mrrSummary.net_new_mrr >= 0
+                    ? 'text-success'
+                    : 'text-destructive'
+                "
+              >
+                {{
+                  mrrSummary.net_new_mrr >= 0
+                    ? "+" + fmt(mrrSummary.net_new_mrr)
+                    : "-" + fmt(Math.abs(mrrSummary.net_new_mrr))
+                }}
+              </div>
+            </Card>
+          </div>
+
+          <!-- Customer movement list -->
+          <div class="space-y-1">
+            <div
+              v-if="!mrrMovements.length"
+              class="py-8 text-center text-sm text-muted-foreground"
+            >
+              No MRR movement data. Import subscription data to see movements.
+            </div>
+            <div
+              v-for="m in mrrMovements"
+              :key="m.customer_id"
+              class="flex items-center gap-3 rounded-md px-3 py-2.5 hover:bg-muted/50 transition-colors"
+            >
+              <div class="w-36 min-w-0">
+                <div class="text-sm font-medium truncate">
+                  {{ m.customer_name }}
+                </div>
+                <div
+                  v-if="m.customer_name !== m.customer_id"
+                  class="text-xs text-muted-foreground truncate"
+                >
+                  {{ m.customer_id }}
+                </div>
+              </div>
+              <span
+                class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium shrink-0"
+                :class="{
+                  'bg-success/10 text-success': m.category === 'new',
+                  'bg-primary/10 text-primary': m.category === 'expansion',
+                  'bg-warning/10 text-warning': m.category === 'contraction',
+                  'bg-destructive/10 text-destructive':
+                    m.category === 'churned',
+                  'bg-muted text-muted-foreground': m.category === 'stable',
+                }"
+              >
+                {{ m.category }}
+              </span>
+              <div class="flex-1" />
+              <span
+                class="w-20 text-right text-xs text-muted-foreground tabular-nums"
+                >{{ fmt(m.prior_mrr) }}</span
+              >
+              <span class="text-xs text-muted-foreground">-></span>
+              <span class="w-20 text-right text-sm tabular-nums font-medium">{{
+                fmt(m.current_mrr)
+              }}</span>
+              <span
+                class="w-20 text-right text-sm tabular-nums font-medium"
+                :class="{
+                  'text-success': m.change > 0,
+                  'text-destructive': m.change < 0,
+                  'text-muted-foreground': m.change === 0,
+                }"
+              >
+                {{
+                  m.change > 0
+                    ? "+" + fmt(m.change)
+                    : m.change < 0
+                      ? "-" + fmt(Math.abs(m.change))
+                      : fmt(0)
+                }}
+              </span>
+            </div>
+          </div>
+        </template>
+        <div v-else class="py-8 text-center text-sm text-muted-foreground">
+          No MRR movement data
         </div>
       </div>
     </template>

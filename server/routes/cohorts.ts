@@ -1,0 +1,688 @@
+import { Router, Response } from "express";
+import type { Pool } from "pg";
+import { type AuthRequest } from "./auth.js";
+import { getAllPricing } from "../model-pricing.js";
+
+type CohortLabel =
+  | "unprofitable"
+  | "at_risk"
+  | "champion"
+  | "inactive"
+  | "rising_cost"
+  | "healthy";
+
+type MrrMovementCategory =
+  | "new"
+  | "expansion"
+  | "contraction"
+  | "churned"
+  | "stable";
+
+function inferModelProvider(model: string | undefined): string | null {
+  if (!model) return null;
+  const m = model.toLowerCase();
+  if (m.startsWith("claude-")) return "anthropic";
+  if (
+    m.startsWith("gpt-") ||
+    m.startsWith("o1") ||
+    m.startsWith("o3") ||
+    m.startsWith("o4") ||
+    m.startsWith("text-embedding-")
+  )
+    return "openai";
+  if (m.startsWith("dall-e-")) return "openai";
+  if (m.startsWith("gemini-")) return "google";
+  if (m.startsWith("mistral-") || m.startsWith("codestral")) return "mistral";
+  if (m.startsWith("llama-")) return "meta";
+  return null;
+}
+
+export function createCohortsRoutes(pool: Pool, ensureVisitor: any) {
+  const router = Router();
+
+  // GET /cohorts — per-customer cohort data with health scores
+  router.get(
+    "/cohorts",
+    ensureVisitor,
+    async (req: AuthRequest, res: Response) => {
+      try {
+        const userId = req.visitorId!;
+
+        // 8 parallel queries
+        const [
+          pnlResult,
+          totalFeaturesResult,
+          subRevenueResult,
+          costTrendResult,
+          stickinessResult,
+          topModelResult,
+          currentMrrResult,
+          priorMrrResult,
+        ] = await Promise.all([
+          // 1. Per-customer P&L
+          pool.query(
+            `SELECT oe.customer_id,
+                    COALESCE(c.name, oe.customer_id) AS customer_name,
+                    c.segment,
+                    COALESCE(SUM(oe.revenue_amount), 0) AS total_revenue,
+                    COALESCE(SUM(oe.cost_amount), 0) AS total_cost,
+                    COUNT(*) AS event_count,
+                    COUNT(DISTINCT oe.feature_key) AS feature_count,
+                    COUNT(DISTINCT oe.model) AS model_count,
+                    MIN(oe.timestamp) AS first_seen,
+                    MAX(oe.timestamp) AS last_seen
+             FROM observe_events oe
+             LEFT JOIN customers c ON oe.user_id = c.user_id AND oe.customer_id = c.customer_id
+             WHERE oe.user_id = $1 AND oe.customer_id IS NOT NULL
+             GROUP BY oe.customer_id, c.name, c.segment`,
+            [userId],
+          ),
+          // 2. Total distinct features
+          pool.query(
+            `SELECT COUNT(DISTINCT feature_key) AS total_features
+             FROM observe_events
+             WHERE user_id = $1 AND feature_key IS NOT NULL`,
+            [userId],
+          ),
+          // 3. Subscription revenue per customer
+          pool.query(
+            `SELECT s.customer_id,
+                    COALESCE(SUM(COALESCE(s.mrr_override, p.price_amount)), 0) AS sub_revenue
+             FROM subscriptions s
+             LEFT JOIN plans p ON s.user_id = p.user_id AND s.plan_id = p.plan_id
+             WHERE s.user_id = $1 AND s.is_active = true
+             GROUP BY s.customer_id`,
+            [userId],
+          ),
+          // 4. Cost trend: current 30d vs prior 30d per customer
+          pool.query(
+            `SELECT customer_id,
+                    COALESCE(SUM(CASE WHEN timestamp >= NOW() - INTERVAL '30 days' THEN cost_amount ELSE 0 END), 0) AS current_cost,
+                    COALESCE(SUM(CASE WHEN timestamp >= NOW() - INTERVAL '60 days' AND timestamp < NOW() - INTERVAL '30 days' THEN cost_amount ELSE 0 END), 0) AS prior_cost
+             FROM observe_events
+             WHERE user_id = $1 AND customer_id IS NOT NULL AND timestamp >= NOW() - INTERVAL '60 days'
+             GROUP BY customer_id`,
+            [userId],
+          ),
+          // 5. Stickiness: distinct active days in last 30d
+          pool.query(
+            `SELECT customer_id,
+                    COUNT(DISTINCT DATE(timestamp)) AS active_days
+             FROM observe_events
+             WHERE user_id = $1 AND customer_id IS NOT NULL AND timestamp >= NOW() - INTERVAL '30 days'
+             GROUP BY customer_id`,
+            [userId],
+          ),
+          // 6. Top model by cost per customer
+          pool.query(
+            `SELECT DISTINCT ON (customer_id) customer_id, model, SUM(cost_amount) AS model_cost
+             FROM observe_events
+             WHERE user_id = $1 AND customer_id IS NOT NULL AND model IS NOT NULL
+             GROUP BY customer_id, model
+             ORDER BY customer_id, model_cost DESC`,
+            [userId],
+          ),
+          // 7. Current MRR per customer (active subs)
+          pool.query(
+            `SELECT s.customer_id,
+                    COALESCE(SUM(COALESCE(s.mrr_override, p.price_amount)), 0) AS mrr
+             FROM subscriptions s
+             LEFT JOIN plans p ON s.user_id = p.user_id AND s.plan_id = p.plan_id
+             WHERE s.user_id = $1 AND s.is_active = true
+             GROUP BY s.customer_id`,
+            [userId],
+          ),
+          // 8. Prior MRR per customer (subs created 60+ days ago)
+          pool.query(
+            `SELECT s.customer_id,
+                    COALESCE(SUM(COALESCE(s.mrr_override, p.price_amount)), 0) AS mrr
+             FROM subscriptions s
+             LEFT JOIN plans p ON s.user_id = p.user_id AND s.plan_id = p.plan_id
+             WHERE s.user_id = $1 AND s.created_at <= NOW() - INTERVAL '60 days'
+             GROUP BY s.customer_id`,
+            [userId],
+          ),
+        ]);
+
+        const totalFeatures =
+          parseInt(totalFeaturesResult.rows[0]?.total_features) || 1;
+
+        // Build lookup maps
+        const subRevenueMap: Record<string, number> = {};
+        for (const row of subRevenueResult.rows) {
+          subRevenueMap[row.customer_id] = parseFloat(row.sub_revenue) || 0;
+        }
+
+        const costTrendMap: Record<string, { current: number; prior: number }> =
+          {};
+        for (const row of costTrendResult.rows) {
+          costTrendMap[row.customer_id] = {
+            current: parseFloat(row.current_cost) || 0,
+            prior: parseFloat(row.prior_cost) || 0,
+          };
+        }
+
+        const stickinessMap: Record<string, number> = {};
+        for (const row of stickinessResult.rows) {
+          stickinessMap[row.customer_id] = parseInt(row.active_days) || 0;
+        }
+
+        const topModelMap: Record<string, { model: string; cost: number }> = {};
+        for (const row of topModelResult.rows) {
+          topModelMap[row.customer_id] = {
+            model: row.model,
+            cost: parseFloat(row.model_cost) || 0,
+          };
+        }
+
+        const currentMrrMap: Record<string, number> = {};
+        for (const row of currentMrrResult.rows) {
+          currentMrrMap[row.customer_id] = parseFloat(row.mrr) || 0;
+        }
+
+        const priorMrrMap: Record<string, number> = {};
+        for (const row of priorMrrResult.rows) {
+          priorMrrMap[row.customer_id] = parseFloat(row.mrr) || 0;
+        }
+
+        // Model swap suggestions — find cheapest same-provider alternative
+        const allPricing = await getAllPricing(pool);
+        const pricingByProvider: Record<
+          string,
+          Array<{ model: string; input_cost: number }>
+        > = {};
+        for (const p of allPricing) {
+          if (!pricingByProvider[p.provider]) {
+            pricingByProvider[p.provider] = [];
+          }
+          pricingByProvider[p.provider].push({
+            model: p.model,
+            input_cost: p.input_cost_per_million,
+          });
+        }
+        for (const models of Object.values(pricingByProvider)) {
+          models.sort((a, b) => a.input_cost - b.input_cost);
+        }
+
+        const inputRateMap: Record<string, number> = {};
+        for (const p of allPricing) {
+          inputRateMap[p.model] = p.input_cost_per_million;
+        }
+
+        // Compute per-customer metrics
+        const customers = pnlResult.rows.map((row) => {
+          const eventRevenue = parseFloat(row.total_revenue) || 0;
+          const subRevenue = subRevenueMap[row.customer_id] || 0;
+          const totalRevenue = eventRevenue + subRevenue;
+          const totalCost = parseFloat(row.total_cost) || 0;
+          const eventCount = parseInt(row.event_count) || 0;
+          const featureCount = parseInt(row.feature_count) || 0;
+          const modelCount = parseInt(row.model_count) || 0;
+
+          const marginPct =
+            totalRevenue > 0
+              ? Math.round(((totalRevenue - totalCost) / totalRevenue) * 100)
+              : totalCost > 0
+                ? -100
+                : null;
+
+          const adoptionDepth = Math.round(
+            (featureCount / totalFeatures) * 100,
+          );
+
+          // Cost trend
+          const trend = costTrendMap[row.customer_id];
+          let costTrend: "up" | "down" | "stable" | "new" = "new";
+          if (trend) {
+            if (trend.prior === 0 && trend.current > 0) {
+              costTrend = "new";
+            } else if (trend.prior > 0) {
+              const ratio = trend.current / trend.prior;
+              if (ratio > 1.15) costTrend = "up";
+              else if (ratio < 0.85) costTrend = "down";
+              else costTrend = "stable";
+            }
+          }
+
+          const activeDays = stickinessMap[row.customer_id] || 0;
+
+          // Health score (0-100)
+          // Margin (40 pts): 40 * clamp(margin/100, 0, 1)
+          const marginScore =
+            marginPct !== null
+              ? 40 * Math.max(0, Math.min(1, marginPct / 100))
+              : 0;
+          // Adoption (25 pts)
+          const adoptionScore = 25 * Math.min(1, adoptionDepth / 100);
+          // Trend (20 pts): up=5, stable=15, down=20, new=10
+          const trendScore =
+            costTrend === "down"
+              ? 20
+              : costTrend === "stable"
+                ? 15
+                : costTrend === "new"
+                  ? 10
+                  : 5;
+          // Recency (15 pts): based on active days in 30d
+          const recencyScore = 15 * Math.min(1, activeDays / 20);
+          const healthScore = Math.round(
+            marginScore + adoptionScore + trendScore + recencyScore,
+          );
+
+          // Model swap suggestion
+          let modelSwapSuggestion: {
+            suggested_model: string;
+            current_cost_per_event: number;
+            suggested_cost_per_event: number;
+            potential_savings_pct: number;
+          } | null = null;
+
+          const topModel = topModelMap[row.customer_id];
+          if (topModel && eventCount > 0) {
+            const currentRate = inputRateMap[topModel.model];
+            const provider = inferModelProvider(topModel.model) || "unknown";
+            const sameProviderModels = pricingByProvider[provider] || [];
+            const cheapest = sameProviderModels.find(
+              (m) =>
+                m.model !== topModel.model &&
+                m.input_cost < (currentRate || Infinity),
+            );
+            if (cheapest && currentRate) {
+              const currentCostPerEvent = topModel.cost / eventCount;
+              const ratio = cheapest.input_cost / currentRate;
+              modelSwapSuggestion = {
+                suggested_model: cheapest.model,
+                current_cost_per_event: currentCostPerEvent,
+                suggested_cost_per_event: currentCostPerEvent * ratio,
+                potential_savings_pct: Math.round((1 - ratio) * 100),
+              };
+            }
+          }
+
+          // MRR movement
+          const currentMrr = currentMrrMap[row.customer_id] || 0;
+          const priorMrr = priorMrrMap[row.customer_id] || 0;
+          let mrrMovement: MrrMovementCategory | null = null;
+          if (currentMrr > 0 && priorMrr === 0) mrrMovement = "new";
+          else if (currentMrr === 0 && priorMrr > 0) mrrMovement = "churned";
+          else if (currentMrr > priorMrr) mrrMovement = "expansion";
+          else if (currentMrr < priorMrr) mrrMovement = "contraction";
+          else if (currentMrr > 0) mrrMovement = "stable";
+
+          // Cohort label
+          let cohort: CohortLabel = "healthy";
+          if (healthScore < 25 && marginPct !== null && marginPct < 0) {
+            cohort = "unprofitable";
+          } else if (healthScore < 40) {
+            cohort = "at_risk";
+          } else if (
+            costTrend === "up" &&
+            marginPct !== null &&
+            marginPct < 30
+          ) {
+            cohort = "rising_cost";
+          } else if (adoptionDepth < 20 && activeDays < 3) {
+            cohort = "inactive";
+          } else if (
+            healthScore >= 70 &&
+            marginPct !== null &&
+            marginPct >= 50
+          ) {
+            cohort = "champion";
+          }
+
+          return {
+            customer_id: row.customer_id,
+            customer_name: row.customer_name,
+            segment: row.segment || null,
+            total_revenue: totalRevenue,
+            total_cost: totalCost,
+            margin_pct: marginPct,
+            event_count: eventCount,
+            feature_count: featureCount,
+            model_count: modelCount,
+            adoption_depth: adoptionDepth,
+            first_seen: row.first_seen,
+            last_seen: row.last_seen,
+            cost_trend: costTrend,
+            active_days_30d: activeDays,
+            health_score: healthScore,
+            top_model: topModel?.model || null,
+            top_model_cost: topModel?.cost || null,
+            model_swap_suggestion: modelSwapSuggestion,
+            mrr_movement: mrrMovement,
+            cohort,
+          };
+        });
+
+        // Summary by cohort
+        const summary: Record<
+          CohortLabel,
+          { count: number; total_revenue: number; total_cost: number }
+        > = {
+          unprofitable: { count: 0, total_revenue: 0, total_cost: 0 },
+          at_risk: { count: 0, total_revenue: 0, total_cost: 0 },
+          champion: { count: 0, total_revenue: 0, total_cost: 0 },
+          inactive: { count: 0, total_revenue: 0, total_cost: 0 },
+          rising_cost: { count: 0, total_revenue: 0, total_cost: 0 },
+          healthy: { count: 0, total_revenue: 0, total_cost: 0 },
+        };
+
+        let totalRevenue = 0;
+        let totalCost = 0;
+        let totalHealthScore = 0;
+
+        for (const c of customers) {
+          summary[c.cohort].count++;
+          summary[c.cohort].total_revenue += c.total_revenue;
+          summary[c.cohort].total_cost += c.total_cost;
+          totalRevenue += c.total_revenue;
+          totalCost += c.total_cost;
+          totalHealthScore += c.health_score;
+        }
+
+        const totals = {
+          customers: customers.length,
+          revenue: totalRevenue,
+          cost: totalCost,
+          margin_pct:
+            totalRevenue > 0
+              ? Math.round(((totalRevenue - totalCost) / totalRevenue) * 100)
+              : null,
+          avg_health_score:
+            customers.length > 0
+              ? Math.round(totalHealthScore / customers.length)
+              : 0,
+        };
+
+        // Fire-and-forget health snapshot insert (batched)
+        if (customers.length > 0) {
+          const values: unknown[] = [];
+          const placeholders: string[] = [];
+          let idx = 1;
+          for (const c of customers) {
+            placeholders.push(
+              `($${idx}, $${idx + 1}, $${idx + 2}, $${idx + 3}, $${idx + 4}, $${idx + 5})`,
+            );
+            values.push(
+              userId,
+              c.customer_id,
+              c.health_score,
+              c.margin_pct,
+              c.adoption_depth,
+              c.active_days_30d,
+            );
+            idx += 6;
+          }
+          pool
+            .query(
+              `INSERT INTO customer_health_snapshots (user_id, customer_id, health_score, margin_pct, adoption_depth, active_days)
+               VALUES ${placeholders.join(", ")}
+               ON CONFLICT (user_id, customer_id, snapshot_date) DO UPDATE SET
+                 health_score = EXCLUDED.health_score,
+                 margin_pct = EXCLUDED.margin_pct,
+                 adoption_depth = EXCLUDED.adoption_depth,
+                 active_days = EXCLUDED.active_days`,
+              values,
+            )
+            .catch((err) =>
+              console.error("Health snapshot insert error:", err),
+            );
+        }
+
+        res.json({ customers, summary, totals });
+      } catch (error) {
+        console.error("GET /cohorts error:", error);
+        res.status(500).json({ error: "Failed to compute cohorts" });
+      }
+    },
+  );
+
+  // POST /cohorts/discover — AI cohort discovery
+  router.post(
+    "/cohorts/discover",
+    ensureVisitor,
+    async (req: AuthRequest, res: Response) => {
+      try {
+        const userId = req.visitorId!;
+
+        // Gather customer summaries
+        const [pnlResult, costTrendResult, stickinessResult] =
+          await Promise.all([
+            pool.query(
+              `SELECT oe.customer_id,
+                      COALESCE(c.name, oe.customer_id) AS customer_name,
+                      c.segment,
+                      COALESCE(SUM(oe.revenue_amount), 0) AS total_revenue,
+                      COALESCE(SUM(oe.cost_amount), 0) AS total_cost,
+                      COUNT(*) AS event_count,
+                      COUNT(DISTINCT oe.feature_key) AS feature_count
+               FROM observe_events oe
+               LEFT JOIN customers c ON oe.user_id = c.user_id AND oe.customer_id = c.customer_id
+               WHERE oe.user_id = $1 AND oe.customer_id IS NOT NULL
+               GROUP BY oe.customer_id, c.name, c.segment`,
+              [userId],
+            ),
+            pool.query(
+              `SELECT customer_id,
+                      COALESCE(SUM(CASE WHEN timestamp >= NOW() - INTERVAL '30 days' THEN cost_amount ELSE 0 END), 0) AS current_cost,
+                      COALESCE(SUM(CASE WHEN timestamp >= NOW() - INTERVAL '60 days' AND timestamp < NOW() - INTERVAL '30 days' THEN cost_amount ELSE 0 END), 0) AS prior_cost
+               FROM observe_events
+               WHERE user_id = $1 AND customer_id IS NOT NULL AND timestamp >= NOW() - INTERVAL '60 days'
+               GROUP BY customer_id`,
+              [userId],
+            ),
+            pool.query(
+              `SELECT customer_id, COUNT(DISTINCT DATE(timestamp)) AS active_days
+               FROM observe_events
+               WHERE user_id = $1 AND customer_id IS NOT NULL AND timestamp >= NOW() - INTERVAL '30 days'
+               GROUP BY customer_id`,
+              [userId],
+            ),
+          ]);
+
+        if (pnlResult.rows.length === 0) {
+          return res.json({ clusters: [], source: "deterministic" as const });
+        }
+
+        // Build summary text for AI
+        const trendMap: Record<string, { current: number; prior: number }> = {};
+        for (const row of costTrendResult.rows) {
+          trendMap[row.customer_id] = {
+            current: parseFloat(row.current_cost) || 0,
+            prior: parseFloat(row.prior_cost) || 0,
+          };
+        }
+        const daysMap: Record<string, number> = {};
+        for (const row of stickinessResult.rows) {
+          daysMap[row.customer_id] = parseInt(row.active_days) || 0;
+        }
+
+        const customerSummaries = pnlResult.rows.map((row) => {
+          const rev = parseFloat(row.total_revenue) || 0;
+          const cost = parseFloat(row.total_cost) || 0;
+          const margin =
+            rev > 0
+              ? Math.round(((rev - cost) / rev) * 100)
+              : cost > 0
+                ? -100
+                : 0;
+          const trend = trendMap[row.customer_id];
+          let trendLabel = "new";
+          if (trend && trend.prior > 0) {
+            const ratio = trend.current / trend.prior;
+            if (ratio > 1.15) trendLabel = "up";
+            else if (ratio < 0.85) trendLabel = "down";
+            else trendLabel = "stable";
+          }
+
+          return {
+            id: row.customer_id,
+            name: row.customer_name,
+            revenue: rev,
+            cost,
+            margin,
+            events: parseInt(row.event_count) || 0,
+            features: parseInt(row.feature_count) || 0,
+            active_days: daysMap[row.customer_id] || 0,
+            cost_trend: trendLabel,
+          };
+        });
+
+        const summaryText = customerSummaries
+          .map(
+            (c) =>
+              `${c.name} (${c.id}): rev=$${c.revenue.toFixed(2)}, cost=$${c.cost.toFixed(2)}, margin=${c.margin}%, events=${c.events}, features=${c.features}, active_days=${c.active_days}, cost_trend=${c.cost_trend}`,
+          )
+          .join("\n");
+
+        // Try AI discovery
+        if (process.env.OPENAI_API_KEY) {
+          try {
+            const response = await fetch(
+              "https://api.openai.com/v1/chat/completions",
+              {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+                },
+                body: JSON.stringify({
+                  model: "gpt-4o",
+                  temperature: 0.3,
+                  messages: [
+                    {
+                      role: "system",
+                      content: `You are a B2B SaaS analytics expert. Given customer data, identify 3-5 hidden clusters or segments that aren't obvious from standard metrics. Focus on actionable patterns.
+
+Return JSON array of objects with these exact fields:
+- name: short cluster name
+- description: 1-2 sentence explanation
+- customer_ids: array of customer IDs belonging to this cluster
+- severity: "critical" | "warning" | "info" | "positive"
+- recommended_action: 1 sentence action item
+
+Return ONLY valid JSON array, no markdown.`,
+                    },
+                    {
+                      role: "user",
+                      content: `Analyze these customers and find hidden patterns:\n\n${summaryText}`,
+                    },
+                  ],
+                }),
+              },
+            );
+
+            if (response.ok) {
+              const data = (await response.json()) as {
+                choices: Array<{ message: { content: string } }>;
+              };
+              const content = data.choices?.[0]?.message?.content;
+              if (content) {
+                const clusters = JSON.parse(content);
+                if (Array.isArray(clusters) && clusters.length > 0) {
+                  return res.json({ clusters, source: "ai" as const });
+                }
+              }
+            }
+          } catch (aiError) {
+            console.error(
+              "AI cohort discovery failed, using fallback:",
+              aiError,
+            );
+          }
+        }
+
+        // Deterministic fallback
+        const clusters: Array<{
+          name: string;
+          description: string;
+          customer_ids: string[];
+          severity: "critical" | "warning" | "info" | "positive";
+          recommended_action: string;
+        }> = [];
+
+        // High-Volume Loss Makers
+        const lossmakers = customerSummaries.filter(
+          (c) => c.margin < 0 && c.events > 10,
+        );
+        if (lossmakers.length > 0) {
+          clusters.push({
+            name: "High-Volume Loss Makers",
+            description: `${lossmakers.length} customers with negative margins despite significant usage. They drive cost without covering it.`,
+            customer_ids: lossmakers.map((c) => c.id),
+            severity: "critical",
+            recommended_action:
+              "Review pricing for these accounts or switch to cheaper models to reduce cost.",
+          });
+        }
+
+        // Shallow Power Users
+        const shallow = customerSummaries.filter(
+          (c) => c.events > 50 && c.features <= 2,
+        );
+        if (shallow.length > 0) {
+          clusters.push({
+            name: "Shallow Power Users",
+            description: `${shallow.length} customers with high event volume but using 2 or fewer features. Expansion opportunity.`,
+            customer_ids: shallow.map((c) => c.id),
+            severity: "info",
+            recommended_action:
+              "Reach out with feature education to drive adoption breadth and stickiness.",
+          });
+        }
+
+        // Margin Compression Risk
+        const compressing = customerSummaries.filter(
+          (c) => c.cost_trend === "up" && c.margin < 30 && c.margin >= 0,
+        );
+        if (compressing.length > 0) {
+          clusters.push({
+            name: "Margin Compression Risk",
+            description: `${compressing.length} customers with rising costs and margins under 30%. At risk of becoming unprofitable.`,
+            customer_ids: compressing.map((c) => c.id),
+            severity: "warning",
+            recommended_action:
+              "Investigate cost drivers and consider model swaps or usage caps before margins go negative.",
+          });
+        }
+
+        res.json({
+          clusters,
+          source: "deterministic" as const,
+        });
+      } catch (error) {
+        console.error("POST /cohorts/discover error:", error);
+        res.status(500).json({ error: "Failed to discover cohorts" });
+      }
+    },
+  );
+
+  // GET /cohorts/:customerId/health-history — last 90 snapshots
+  router.get(
+    "/cohorts/:customerId/health-history",
+    ensureVisitor,
+    async (req: AuthRequest, res: Response) => {
+      try {
+        const userId = req.visitorId!;
+        const customerId = req.params.customerId;
+
+        const result = await pool.query(
+          `SELECT snapshot_date, health_score, margin_pct, adoption_depth, active_days
+           FROM customer_health_snapshots
+           WHERE user_id = $1 AND customer_id = $2
+           ORDER BY snapshot_date DESC
+           LIMIT 90`,
+          [userId, customerId],
+        );
+
+        res.json({ history: result.rows });
+      } catch (error) {
+        console.error("GET /cohorts/:customerId/health-history error:", error);
+        res.status(500).json({ error: "Failed to get health history" });
+      }
+    },
+  );
+
+  return router;
+}

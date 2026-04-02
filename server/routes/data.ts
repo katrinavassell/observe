@@ -1,46 +1,81 @@
-import { Router, Response } from 'express'
-import type { Pool } from 'pg'
-import { z } from 'zod'
-import { type AuthRequest } from './auth.js'
-import rateLimit from 'express-rate-limit'
-import { getUncachableStripeClient } from '../stripe-client.js'
+import { Router, Response } from "express";
+import type { Pool } from "pg";
+import { z } from "zod";
+import { type AuthRequest } from "./auth.js";
+import rateLimit from "express-rate-limit";
+import { getUncachableStripeClient } from "../stripe-client.js";
 
-type CheckBillingFeatureAccessFn = (visitorId: string, featureKey: string, email?: string) => Promise<{ allowed: boolean; reason?: string; usage?: number; limit?: number; remaining?: number }>
-type TrackBillingUsageFn = (visitorId: string, featureKey: string, eventName: string) => void
-type ConvertReferralFn = (visitorId: string) => Promise<void>
+type CheckBillingFeatureAccessFn = (
+  visitorId: string,
+  featureKey: string,
+  email?: string,
+) => Promise<{
+  allowed: boolean;
+  reason?: string;
+  usage?: number;
+  limit?: number;
+  remaining?: number;
+}>;
+type TrackBillingUsageFn = (
+  visitorId: string,
+  featureKey: string,
+  eventName: string,
+) => void;
+type ConvertReferralFn = (visitorId: string) => Promise<void>;
 
 // Clear sample/demo data when transitioning to real user data
 // Uses exact sample IDs to avoid deleting real Stripe data (sub_*, cus_* prefixes match real Stripe IDs)
-const SAMPLE_SUBSCRIPTION_IDS = ['sub_001', 'sub_002', 'sub_003', 'sub_004', 'sub_005']
-const SAMPLE_CUSTOMER_IDS = ['cus_001', 'cus_002', 'cus_003', 'cus_004', 'cus_005']
-const SAMPLE_PLAN_IDS = ['starter', 'pro', 'enterprise']
+const SAMPLE_SUBSCRIPTION_IDS = [
+  "sub_001",
+  "sub_002",
+  "sub_003",
+  "sub_004",
+  "sub_005",
+];
+const SAMPLE_CUSTOMER_IDS = [
+  "cus_001",
+  "cus_002",
+  "cus_003",
+  "cus_004",
+  "cus_005",
+];
+const SAMPLE_PLAN_IDS = ["starter", "pro", "enterprise"];
 
-async function clearSampleData(db: { query: (text: string, params: unknown[]) => Promise<unknown> }, userId: string): Promise<void> {
-  await db.query("DELETE FROM observe_events WHERE user_id = $1 AND source = 'sample'", [userId])
-  await db.query("DELETE FROM cost_records WHERE user_id = $1 AND cost_type = 'ai_inference' AND customer_id IS NULL AND period_start IS NOT NULL", [userId])
+async function clearSampleData(
+  db: { query: (text: string, params: unknown[]) => Promise<unknown> },
+  userId: string,
+): Promise<void> {
+  await db.query(
+    "DELETE FROM observe_events WHERE user_id = $1 AND source = 'sample'",
+    [userId],
+  );
+  await db.query(
+    "DELETE FROM cost_records WHERE user_id = $1 AND cost_type = 'ai_inference' AND customer_id IS NULL AND period_start IS NOT NULL",
+    [userId],
+  );
   await db.query(
     `DELETE FROM subscriptions WHERE user_id = $1 AND subscription_id = ANY($2)`,
-    [userId, SAMPLE_SUBSCRIPTION_IDS]
-  )
+    [userId, SAMPLE_SUBSCRIPTION_IDS],
+  );
   await db.query(
     `DELETE FROM customers WHERE user_id = $1 AND customer_id = ANY($2)`,
-    [userId, SAMPLE_CUSTOMER_IDS]
-  )
-  await db.query(
-    `DELETE FROM plans WHERE user_id = $1 AND plan_id = ANY($2)`,
-    [userId, SAMPLE_PLAN_IDS]
-  )
+    [userId, SAMPLE_CUSTOMER_IDS],
+  );
+  await db.query(`DELETE FROM plans WHERE user_id = $1 AND plan_id = ANY($2)`, [
+    userId,
+    SAMPLE_PLAN_IDS,
+  ]);
 }
 
 // Upload validation schemas
 const costRecordSchema = z.object({
-  month: z.string().regex(/^\d{4}-\d{2}$/, 'month must be YYYY-MM format'),
+  month: z.string().regex(/^\d{4}-\d{2}$/, "month must be YYYY-MM format"),
   cost: z.number({ coerce: true }).nonnegative(),
   customer_id: z.string().optional(),
   provider: z.string().optional(),
-})
+});
 const usageRecordSchema = z.object({
-  month: z.string().regex(/^\d{4}-\d{2}$/, 'month must be YYYY-MM format'),
+  month: z.string().regex(/^\d{4}-\d{2}$/, "month must be YYYY-MM format"),
   customer_id: z.string().optional(),
   metric: z.string().optional(),
   metric_key: z.string().optional(),
@@ -48,710 +83,1458 @@ const usageRecordSchema = z.object({
   metric_value: z.number({ coerce: true }).optional(),
   limit: z.number({ coerce: true }).optional(),
   metric_limit: z.number({ coerce: true }).optional(),
-})
+});
 const revenueUploadSchema = z.object({
-  customers: z.array(z.object({
-    customer_id: z.string(),
-    name: z.string(),
-    email: z.string().optional(),
-    segment: z.string().optional(),
-  })).optional(),
-  plans: z.array(z.object({
-    plan_id: z.string(),
-    name: z.string(),
-    price_amount: z.number({ coerce: true }),
-    interval_months: z.number().optional(),
-  })).optional(),
-  subscriptions: z.array(z.object({
-    subscription_id: z.string(),
-    customer_id: z.string(),
-    plan_id: z.string(),
-    is_active: z.boolean().optional(),
-    mrr_override: z.number({ coerce: true }).optional(),
-    current_period_start: z.string().optional(),
-    current_period_end: z.string().optional(),
-  })).optional(),
-})
+  customers: z
+    .array(
+      z.object({
+        customer_id: z.string(),
+        name: z.string(),
+        email: z.string().optional(),
+        segment: z.string().optional(),
+      }),
+    )
+    .optional(),
+  plans: z
+    .array(
+      z.object({
+        plan_id: z.string(),
+        name: z.string(),
+        price_amount: z.number({ coerce: true }),
+        interval_months: z.number().optional(),
+      }),
+    )
+    .optional(),
+  subscriptions: z
+    .array(
+      z.object({
+        subscription_id: z.string(),
+        customer_id: z.string(),
+        plan_id: z.string(),
+        is_active: z.boolean().optional(),
+        mrr_override: z.number({ coerce: true }).optional(),
+        current_period_start: z.string().optional(),
+        current_period_end: z.string().optional(),
+      }),
+    )
+    .optional(),
+});
 
 export function createDataRoutes(
   pool: Pool,
   ensureVisitor: any,
   deps: {
-    checkBillingFeatureAccess: CheckBillingFeatureAccessFn,
-    trackBillingUsage: TrackBillingUsageFn,
-    convertReferralIfPending: ConvertReferralFn,
-  }
+    checkBillingFeatureAccess: CheckBillingFeatureAccessFn;
+    trackBillingUsage: TrackBillingUsageFn;
+    convertReferralIfPending: ConvertReferralFn;
+  },
 ) {
-  const router = Router()
-  const { checkBillingFeatureAccess, trackBillingUsage, convertReferralIfPending } = deps
+  const router = Router();
+  const {
+    checkBillingFeatureAccess,
+    trackBillingUsage,
+    convertReferralIfPending,
+  } = deps;
 
   const expensiveLimiter = rateLimit({
     windowMs: 60 * 1000,
     max: 5,
     standardHeaders: true,
     legacyHeaders: false,
-    message: { error: 'Too many requests, please try again in a minute' },
-  })
+    message: { error: "Too many requests, please try again in a minute" },
+  });
 
   // GET /data/status
-  router.get('/data/status', ensureVisitor, async (req: AuthRequest, res: Response) => {
-    try {
-      const statusResult = await pool.query('SELECT * FROM user_data_status WHERE user_id = $1', [req.visitorId])
-      const customersResult = await pool.query('SELECT COUNT(*) FROM customers WHERE user_id = $1', [req.visitorId])
-      const costsResult = await pool.query('SELECT COUNT(*) FROM cost_records WHERE user_id = $1', [req.visitorId])
-      const usageResult = await pool.query('SELECT COUNT(*) FROM usage_records WHERE user_id = $1', [req.visitorId])
+  router.get(
+    "/data/status",
+    ensureVisitor,
+    async (req: AuthRequest, res: Response) => {
+      try {
+        const statusResult = await pool.query(
+          "SELECT * FROM user_data_status WHERE user_id = $1",
+          [req.visitorId],
+        );
+        const customersResult = await pool.query(
+          "SELECT COUNT(*) FROM customers WHERE user_id = $1",
+          [req.visitorId],
+        );
+        const costsResult = await pool.query(
+          "SELECT COUNT(*) FROM cost_records WHERE user_id = $1",
+          [req.visitorId],
+        );
+        const usageResult = await pool.query(
+          "SELECT COUNT(*) FROM usage_records WHERE user_id = $1",
+          [req.visitorId],
+        );
 
-      const status = statusResult.rows[0] || { data_mode: 'none' }
-      const customerCount = parseInt(customersResult.rows[0].count)
-      const costsCount = parseInt(costsResult.rows[0].count)
-      const usageCount = parseInt(usageResult.rows[0].count)
+        const status = statusResult.rows[0] || { data_mode: "none" };
+        const customerCount = parseInt(customersResult.rows[0].count);
+        const costsCount = parseInt(costsResult.rows[0].count);
+        const usageCount = parseInt(usageResult.rows[0].count);
 
-      res.json({
-        data_mode: status.data_mode,
-        has_data: customerCount > 0,
-        customer_count: customerCount,
-        has_revenue: customerCount > 0,
-        has_costs: costsCount > 0,
-        has_usage: usageCount > 0,
-        revenue_customer_count: customerCount,
-        costs_record_count: costsCount,
-        usage_record_count: usageCount,
-        last_sync_at: status.updated_at,
-      })
-    } catch (error) {
-      console.error('Get data status error:', error)
-      res.status(500).json({ error: 'Failed to get data status' })
-    }
-  })
+        res.json({
+          data_mode: status.data_mode,
+          has_data: customerCount > 0,
+          customer_count: customerCount,
+          has_revenue: customerCount > 0,
+          has_costs: costsCount > 0,
+          has_usage: usageCount > 0,
+          revenue_customer_count: customerCount,
+          costs_record_count: costsCount,
+          usage_record_count: usageCount,
+          last_sync_at: status.updated_at,
+        });
+      } catch (error) {
+        console.error("Get data status error:", error);
+        res.status(500).json({ error: "Failed to get data status" });
+      }
+    },
+  );
 
   // GET /customers
-  router.get('/customers', ensureVisitor, async (req: AuthRequest, res: Response) => {
-    try {
-      const limit = Math.min(parseInt(req.query.limit as string) || 100, 500)
-      const offset = parseInt(req.query.offset as string) || 0
-      const [result, countResult] = await Promise.all([
-        pool.query(
-          'SELECT * FROM customers WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3',
-          [req.visitorId, limit, offset]
-        ),
-        pool.query('SELECT COUNT(*) FROM customers WHERE user_id = $1', [req.visitorId]),
-      ])
-      res.json({ data: result.rows, total: parseInt(countResult.rows[0].count), limit, offset })
-    } catch (error) {
-      console.error('Get customers error:', error)
-      res.status(500).json({ error: 'Failed to get customers' })
-    }
-  })
+  router.get(
+    "/customers",
+    ensureVisitor,
+    async (req: AuthRequest, res: Response) => {
+      try {
+        const limit = Math.min(parseInt(req.query.limit as string) || 100, 500);
+        const offset = parseInt(req.query.offset as string) || 0;
+        const [result, countResult] = await Promise.all([
+          pool.query(
+            "SELECT * FROM customers WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3",
+            [req.visitorId, limit, offset],
+          ),
+          pool.query("SELECT COUNT(*) FROM customers WHERE user_id = $1", [
+            req.visitorId,
+          ]),
+        ]);
+        res.json({
+          data: result.rows,
+          total: parseInt(countResult.rows[0].count),
+          limit,
+          offset,
+        });
+      } catch (error) {
+        console.error("Get customers error:", error);
+        res.status(500).json({ error: "Failed to get customers" });
+      }
+    },
+  );
 
   // GET /subscriptions
-  router.get('/subscriptions', ensureVisitor, async (req: AuthRequest, res: Response) => {
-    try {
-      const limit = Math.min(parseInt(req.query.limit as string) || 100, 500)
-      const offset = parseInt(req.query.offset as string) || 0
-      const [result, countResult] = await Promise.all([
-        pool.query(
-          'SELECT s.*, c.name as customer_name, c.email as customer_email, p.name as plan_name, p.price_amount FROM subscriptions s LEFT JOIN customers c ON s.user_id = c.user_id AND s.customer_id = c.customer_id LEFT JOIN plans p ON s.user_id = p.user_id AND s.plan_id = p.plan_id WHERE s.user_id = $1 ORDER BY s.created_at DESC LIMIT $2 OFFSET $3',
-          [req.visitorId, limit, offset]
-        ),
-        pool.query('SELECT COUNT(*) FROM subscriptions WHERE user_id = $1', [req.visitorId]),
-      ])
-      res.json({ data: result.rows, total: parseInt(countResult.rows[0].count), limit, offset })
-    } catch (error) {
-      console.error('Get subscriptions error:', error)
-      res.status(500).json({ error: 'Failed to get subscriptions' })
-    }
-  })
+  router.get(
+    "/subscriptions",
+    ensureVisitor,
+    async (req: AuthRequest, res: Response) => {
+      try {
+        const limit = Math.min(parseInt(req.query.limit as string) || 100, 500);
+        const offset = parseInt(req.query.offset as string) || 0;
+        const [result, countResult] = await Promise.all([
+          pool.query(
+            "SELECT s.*, c.name as customer_name, c.email as customer_email, p.name as plan_name, p.price_amount FROM subscriptions s LEFT JOIN customers c ON s.user_id = c.user_id AND s.customer_id = c.customer_id LEFT JOIN plans p ON s.user_id = p.user_id AND s.plan_id = p.plan_id WHERE s.user_id = $1 ORDER BY s.created_at DESC LIMIT $2 OFFSET $3",
+            [req.visitorId, limit, offset],
+          ),
+          pool.query("SELECT COUNT(*) FROM subscriptions WHERE user_id = $1", [
+            req.visitorId,
+          ]),
+        ]);
+        res.json({
+          data: result.rows,
+          total: parseInt(countResult.rows[0].count),
+          limit,
+          offset,
+        });
+      } catch (error) {
+        console.error("Get subscriptions error:", error);
+        res.status(500).json({ error: "Failed to get subscriptions" });
+      }
+    },
+  );
 
   // GET /plans
-  router.get('/plans', ensureVisitor, async (req: AuthRequest, res: Response) => {
-    try {
-      const limit = Math.min(parseInt(req.query.limit as string) || 100, 500)
-      const offset = parseInt(req.query.offset as string) || 0
-      const result = await pool.query(
-        'SELECT * FROM plans WHERE user_id = $1 ORDER BY price_amount ASC LIMIT $2 OFFSET $3',
-        [req.visitorId, limit, offset]
-      )
-      res.json(result.rows)
-    } catch (error) {
-      console.error('Get plans error:', error)
-      res.status(500).json({ error: 'Failed to get plans' })
-    }
-  })
+  router.get(
+    "/plans",
+    ensureVisitor,
+    async (req: AuthRequest, res: Response) => {
+      try {
+        const limit = Math.min(parseInt(req.query.limit as string) || 100, 500);
+        const offset = parseInt(req.query.offset as string) || 0;
+        const result = await pool.query(
+          "SELECT * FROM plans WHERE user_id = $1 ORDER BY price_amount ASC LIMIT $2 OFFSET $3",
+          [req.visitorId, limit, offset],
+        );
+        res.json(result.rows);
+      } catch (error) {
+        console.error("Get plans error:", error);
+        res.status(500).json({ error: "Failed to get plans" });
+      }
+    },
+  );
 
   // GET /usage
-  router.get('/usage', ensureVisitor, async (req: AuthRequest, res: Response) => {
-    try {
-      const limit = Math.min(parseInt(req.query.limit as string) || 100, 500)
-      const offset = parseInt(req.query.offset as string) || 0
-      const [result, countResult] = await Promise.all([
-        pool.query(
-          'SELECT * FROM usage_records WHERE user_id = $1 ORDER BY period_start DESC LIMIT $2 OFFSET $3',
-          [req.visitorId, limit, offset]
-        ),
-        pool.query('SELECT COUNT(*) FROM usage_records WHERE user_id = $1', [req.visitorId]),
-      ])
-      res.json({ data: result.rows, total: parseInt(countResult.rows[0].count), limit, offset })
-    } catch (error) {
-      console.error('Get usage error:', error)
-      res.status(500).json({ error: 'Failed to get usage' })
-    }
-  })
+  router.get(
+    "/usage",
+    ensureVisitor,
+    async (req: AuthRequest, res: Response) => {
+      try {
+        const limit = Math.min(parseInt(req.query.limit as string) || 100, 500);
+        const offset = parseInt(req.query.offset as string) || 0;
+        const [result, countResult] = await Promise.all([
+          pool.query(
+            "SELECT * FROM usage_records WHERE user_id = $1 ORDER BY period_start DESC LIMIT $2 OFFSET $3",
+            [req.visitorId, limit, offset],
+          ),
+          pool.query("SELECT COUNT(*) FROM usage_records WHERE user_id = $1", [
+            req.visitorId,
+          ]),
+        ]);
+        res.json({
+          data: result.rows,
+          total: parseInt(countResult.rows[0].count),
+          limit,
+          offset,
+        });
+      } catch (error) {
+        console.error("Get usage error:", error);
+        res.status(500).json({ error: "Failed to get usage" });
+      }
+    },
+  );
 
   // GET /costs
-  router.get('/costs', ensureVisitor, async (req: AuthRequest, res: Response) => {
-    try {
-      const limit = Math.min(parseInt(req.query.limit as string) || 100, 500)
-      const offset = parseInt(req.query.offset as string) || 0
-      const [result, countResult] = await Promise.all([
-        pool.query(
-          'SELECT * FROM cost_records WHERE user_id = $1 ORDER BY period_start DESC LIMIT $2 OFFSET $3',
-          [req.visitorId, limit, offset]
-        ),
-        pool.query('SELECT COUNT(*) FROM cost_records WHERE user_id = $1', [req.visitorId]),
-      ])
-      res.json({ data: result.rows, total: parseInt(countResult.rows[0].count), limit, offset })
-    } catch (error) {
-      console.error('Get costs error:', error)
-      res.status(500).json({ error: 'Failed to get costs' })
-    }
-  })
+  router.get(
+    "/costs",
+    ensureVisitor,
+    async (req: AuthRequest, res: Response) => {
+      try {
+        const limit = Math.min(parseInt(req.query.limit as string) || 100, 500);
+        const offset = parseInt(req.query.offset as string) || 0;
+        const [result, countResult] = await Promise.all([
+          pool.query(
+            "SELECT * FROM cost_records WHERE user_id = $1 ORDER BY period_start DESC LIMIT $2 OFFSET $3",
+            [req.visitorId, limit, offset],
+          ),
+          pool.query("SELECT COUNT(*) FROM cost_records WHERE user_id = $1", [
+            req.visitorId,
+          ]),
+        ]);
+        res.json({
+          data: result.rows,
+          total: parseInt(countResult.rows[0].count),
+          limit,
+          offset,
+        });
+      } catch (error) {
+        console.error("Get costs error:", error);
+        res.status(500).json({ error: "Failed to get costs" });
+      }
+    },
+  );
 
   // GET /data/analyzer
-  router.get('/data/analyzer', ensureVisitor, async (req: AuthRequest, res: Response) => {
-    try {
-      const analyzerLimit = 5000
-      const [plans, customers, subscriptions, usage, costs] = await Promise.all([
-        pool.query('SELECT * FROM plans WHERE user_id = $1 LIMIT $2', [req.visitorId, analyzerLimit]),
-        pool.query('SELECT * FROM customers WHERE user_id = $1 LIMIT $2', [req.visitorId, analyzerLimit]),
-        pool.query('SELECT * FROM subscriptions WHERE user_id = $1 LIMIT $2', [req.visitorId, analyzerLimit]),
-        pool.query('SELECT * FROM usage_records WHERE user_id = $1 LIMIT $2', [req.visitorId, analyzerLimit]),
-        pool.query('SELECT * FROM cost_records WHERE user_id = $1 LIMIT $2', [req.visitorId, analyzerLimit]),
-      ])
+  router.get(
+    "/data/analyzer",
+    ensureVisitor,
+    async (req: AuthRequest, res: Response) => {
+      try {
+        const analyzerLimit = 5000;
+        const [plans, customers, subscriptions, usage, costs] =
+          await Promise.all([
+            pool.query("SELECT * FROM plans WHERE user_id = $1 LIMIT $2", [
+              req.visitorId,
+              analyzerLimit,
+            ]),
+            pool.query("SELECT * FROM customers WHERE user_id = $1 LIMIT $2", [
+              req.visitorId,
+              analyzerLimit,
+            ]),
+            pool.query(
+              "SELECT * FROM subscriptions WHERE user_id = $1 LIMIT $2",
+              [req.visitorId, analyzerLimit],
+            ),
+            pool.query(
+              "SELECT * FROM usage_records WHERE user_id = $1 LIMIT $2",
+              [req.visitorId, analyzerLimit],
+            ),
+            pool.query(
+              "SELECT * FROM cost_records WHERE user_id = $1 LIMIT $2",
+              [req.visitorId, analyzerLimit],
+            ),
+          ]);
 
-      if (customers.rows.length === 0) {
-        res.json(null)
-        return
+        if (customers.rows.length === 0) {
+          res.json(null);
+          return;
+        }
+
+        res.json({
+          plans: plans.rows.map((p) => ({
+            plan_id: p.plan_id,
+            name: p.name,
+            price_amount: Number(p.price_amount),
+            interval_months: p.interval_months || 1,
+            billing_model: p.billing_model || "recurring",
+          })),
+          customers: customers.rows.map((c) => ({
+            customer_id: c.customer_id,
+            name: c.name,
+            email: c.email || undefined,
+            segment: c.segment || undefined,
+            created_at: c.created_at,
+          })),
+          subscriptions: subscriptions.rows.map((s) => ({
+            subscription_id: s.subscription_id,
+            customer_id: s.customer_id,
+            plan_id: s.plan_id,
+            is_active: s.is_active,
+            mrr_override: s.mrr_override ? Number(s.mrr_override) : undefined,
+            previous_mrr: s.previous_mrr ? Number(s.previous_mrr) : undefined,
+            current_period_start: s.current_period_start,
+            current_period_end: s.current_period_end,
+            cancelled_at: s.cancelled_at,
+          })),
+          usage: usage.rows.map((u) => ({
+            customer_id: u.customer_id,
+            metric_key: u.metric_key,
+            metric_value: Number(u.metric_value),
+            metric_limit: u.metric_limit ? Number(u.metric_limit) : undefined,
+            period_start: u.period_start,
+            period_end: u.period_end,
+          })),
+          costs: costs.rows.map((c) => ({
+            customer_id: c.customer_id || undefined,
+            cost_type: c.cost_type,
+            amount: Number(c.amount),
+            period_start: c.period_start,
+            period_end: c.period_end,
+          })),
+        });
+      } catch (error) {
+        console.error("Get analyzer data error:", error);
+        res.status(500).json({ error: "Failed to get analyzer data" });
       }
-
-      res.json({
-        plans: plans.rows.map(p => ({
-          plan_id: p.plan_id,
-          name: p.name,
-          price_amount: Number(p.price_amount),
-          interval_months: p.interval_months || 1,
-          billing_model: p.billing_model || 'recurring',
-        })),
-        customers: customers.rows.map(c => ({
-          customer_id: c.customer_id,
-          name: c.name,
-          email: c.email || undefined,
-          segment: c.segment || undefined,
-          created_at: c.created_at,
-        })),
-        subscriptions: subscriptions.rows.map(s => ({
-          subscription_id: s.subscription_id,
-          customer_id: s.customer_id,
-          plan_id: s.plan_id,
-          is_active: s.is_active,
-          mrr_override: s.mrr_override ? Number(s.mrr_override) : undefined,
-          previous_mrr: s.previous_mrr ? Number(s.previous_mrr) : undefined,
-          current_period_start: s.current_period_start,
-          current_period_end: s.current_period_end,
-          cancelled_at: s.cancelled_at,
-        })),
-        usage: usage.rows.map(u => ({
-          customer_id: u.customer_id,
-          metric_key: u.metric_key,
-          metric_value: Number(u.metric_value),
-          metric_limit: u.metric_limit ? Number(u.metric_limit) : undefined,
-          period_start: u.period_start,
-          period_end: u.period_end,
-        })),
-        costs: costs.rows.map(c => ({
-          customer_id: c.customer_id || undefined,
-          cost_type: c.cost_type,
-          amount: Number(c.amount),
-          period_start: c.period_start,
-          period_end: c.period_end,
-        })),
-      })
-    } catch (error) {
-      console.error('Get analyzer data error:', error)
-      res.status(500).json({ error: 'Failed to get analyzer data' })
-    }
-  })
+    },
+  );
 
   // POST /data/sample — load sample data
-  router.post('/data/sample', ensureVisitor, async (req: AuthRequest, res: Response) => {
-    const client = await pool.connect()
-    try {
-      await client.query('BEGIN')
+  router.post(
+    "/data/sample",
+    ensureVisitor,
+    async (req: AuthRequest, res: Response) => {
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
 
-      await client.query('DELETE FROM ai_insights WHERE user_id = $1', [req.visitorId])
+        await client.query("DELETE FROM ai_insights WHERE user_id = $1", [
+          req.visitorId,
+        ]);
 
-      await client.query('DELETE FROM observe_events WHERE user_id = $1', [req.visitorId])
-      await client.query('DELETE FROM usage_records WHERE user_id = $1', [req.visitorId])
-      await client.query('DELETE FROM cost_records WHERE user_id = $1', [req.visitorId])
-      await client.query('DELETE FROM subscriptions WHERE user_id = $1', [req.visitorId])
-      await client.query('DELETE FROM customers WHERE user_id = $1', [req.visitorId])
-      await client.query('DELETE FROM plans WHERE user_id = $1', [req.visitorId])
+        await client.query("DELETE FROM observe_events WHERE user_id = $1", [
+          req.visitorId,
+        ]);
+        await client.query("DELETE FROM usage_records WHERE user_id = $1", [
+          req.visitorId,
+        ]);
+        await client.query("DELETE FROM cost_records WHERE user_id = $1", [
+          req.visitorId,
+        ]);
+        await client.query("DELETE FROM subscriptions WHERE user_id = $1", [
+          req.visitorId,
+        ]);
+        await client.query("DELETE FROM customers WHERE user_id = $1", [
+          req.visitorId,
+        ]);
+        await client.query("DELETE FROM plans WHERE user_id = $1", [
+          req.visitorId,
+        ]);
 
-      const plans = [
-        { plan_id: 'starter', name: 'Starter', price_amount: 29, interval_months: 1 },
-        { plan_id: 'pro', name: 'Professional', price_amount: 99, interval_months: 1 },
-        { plan_id: 'enterprise', name: 'Enterprise', price_amount: 299, interval_months: 1 },
-      ]
-      for (const plan of plans) {
-        await client.query(
-          'INSERT INTO plans (user_id, plan_id, name, price_amount, interval_months) VALUES ($1, $2, $3, $4, $5)',
-          [req.visitorId, plan.plan_id, plan.name, plan.price_amount, plan.interval_months]
-        )
-      }
-
-      const customers = [
-        { customer_id: 'cus_001', name: 'Acme Corp', email: 'billing@acme.com', segment: 'Enterprise', created_at: '2025-08-01T00:00:00Z' },
-        { customer_id: 'cus_002', name: 'TechStart Inc', email: 'admin@techstart.io', segment: 'SMB', created_at: '2025-11-15T00:00:00Z' },
-        { customer_id: 'cus_003', name: 'Global Solutions', email: 'accounts@global.com', segment: 'Mid-Market', created_at: '2025-09-10T00:00:00Z' },
-        { customer_id: 'cus_004', name: 'Startup Labs', email: 'hello@startuplabs.co', segment: 'SMB', created_at: '2026-02-01T00:00:00Z' },
-        { customer_id: 'cus_005', name: 'Enterprise Co', email: 'procurement@enterprise.com', segment: 'Enterprise', created_at: '2025-06-01T00:00:00Z' },
-      ]
-      for (const customer of customers) {
-        await client.query(
-          'INSERT INTO customers (user_id, customer_id, name, email, segment, created_at) VALUES ($1, $2, $3, $4, $5, $6)',
-          [req.visitorId, customer.customer_id, customer.name, customer.email, customer.segment, customer.created_at]
-        )
-      }
-
-      const subscriptions = [
-        { subscription_id: 'sub_001', customer_id: 'cus_001', plan_id: 'enterprise', is_active: true, mrr_override: 299, previous_mrr: 99, created_at: '2025-08-01T00:00:00Z', current_period_start: '2026-03-01T00:00:00Z', current_period_end: '2026-04-01T00:00:00Z' },
-        { subscription_id: 'sub_002', customer_id: 'cus_002', plan_id: 'starter', is_active: true, mrr_override: 29, previous_mrr: 0, created_at: '2025-11-15T00:00:00Z', current_period_start: '2026-03-01T00:00:00Z', current_period_end: '2026-04-01T00:00:00Z' },
-        { subscription_id: 'sub_003', customer_id: 'cus_003', plan_id: 'pro', is_active: true, mrr_override: 99, previous_mrr: 29, created_at: '2025-09-10T00:00:00Z', current_period_start: '2026-03-01T00:00:00Z', current_period_end: '2026-04-01T00:00:00Z' },
-        { subscription_id: 'sub_004', customer_id: 'cus_004', plan_id: 'starter', is_active: true, mrr_override: 29, previous_mrr: 0, created_at: '2026-02-01T00:00:00Z', current_period_start: '2026-03-01T00:00:00Z', current_period_end: '2026-04-01T00:00:00Z' },
-        { subscription_id: 'sub_005', customer_id: 'cus_005', plan_id: 'enterprise', is_active: true, mrr_override: 299, previous_mrr: 299, created_at: '2025-06-01T00:00:00Z', current_period_start: '2026-03-01T00:00:00Z', current_period_end: '2026-04-01T00:00:00Z' },
-      ]
-      for (const sub of subscriptions) {
-        await client.query(
-          `INSERT INTO subscriptions (user_id, subscription_id, customer_id, plan_id, is_active, mrr_override, previous_mrr, created_at, current_period_start, current_period_end)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-          [req.visitorId, sub.subscription_id, sub.customer_id, sub.plan_id, sub.is_active, sub.mrr_override, sub.previous_mrr, sub.created_at, sub.current_period_start, sub.current_period_end]
-        )
-      }
-
-      // Sample cost_records — monthly AI costs for the Overview page
-      const now = new Date()
-      for (let i = 5; i >= 0; i--) {
-        const start = new Date(now.getFullYear(), now.getMonth() - i, 1)
-        const end = new Date(now.getFullYear(), now.getMonth() - i + 1, 0)
-        const amount = 3200 + (5 - i) * 600 // growing costs: 3200, 3800, 4400, 5000, 5600, 6200
-        await client.query(
-          'INSERT INTO cost_records (user_id, cost_type, amount, period_start, period_end) VALUES ($1, $2, $3, $4, $5)',
-          [req.visitorId, 'ai_inference', amount, start.toISOString(), end.toISOString()]
-        )
-      }
-
-      // Sample observe_events — feature-level cost+revenue data
-      // Use relative timestamps so demo data is always "fresh"
-      function daysAgo(d: number) { return new Date(Date.now() - d * 86400000).toISOString() }
-      const sampleEvents = [
-        { customer_id: 'cus_001', feature_key: 'ai_summarization', event_name: 'summary_generated', ts: daysAgo(1), cost: 0.24, cost_unit: 'usd', revenue: 0.50, usage: 24, model: 'claude-3-5-sonnet', provider: 'anthropic', source: 'sample' },
-        { customer_id: 'cus_002', feature_key: 'ai_summarization', event_name: 'summary_generated', ts: daysAgo(2), cost: 0.08, cost_unit: 'usd', revenue: 0.20, usage: 8, model: 'gpt-4o', provider: 'openai', source: 'sample' },
-        { customer_id: 'cus_003', feature_key: 'ai_summarization', event_name: 'summary_generated', ts: daysAgo(5), cost: 0.15, cost_unit: 'usd', revenue: 0.35, usage: 15, model: 'claude-3-5-sonnet', provider: 'anthropic', source: 'sample' },
-        { customer_id: 'cus_001', feature_key: 'ai_summarization', event_name: 'summary_generated', ts: daysAgo(10), cost: 0.30, cost_unit: 'usd', revenue: 0.60, usage: 30, model: 'gpt-4o', provider: 'openai', source: 'sample' },
-        { customer_id: 'cus_004', feature_key: 'ai_summarization', event_name: 'summary_generated', ts: daysAgo(14), cost: 0.05, cost_unit: 'usd', revenue: 0.15, usage: 5, model: 'claude-3-haiku', provider: 'anthropic', source: 'sample' },
-        { customer_id: 'cus_001', feature_key: 'image_generation', event_name: 'image_generated', ts: daysAgo(3), cost: 0.04, cost_unit: 'usd', revenue: 0.25, usage: 1, model: 'dall-e-3', provider: 'openai', source: 'sample' },
-        { customer_id: 'cus_003', feature_key: 'image_generation', event_name: 'image_generated', ts: daysAgo(7), cost: 0.04, cost_unit: 'usd', revenue: 0.25, usage: 1, model: 'dall-e-3', provider: 'openai', source: 'sample' },
-        { customer_id: 'cus_005', feature_key: 'image_generation', event_name: 'image_generated', ts: daysAgo(18), cost: 0.02, cost_unit: 'usd', revenue: 0.20, usage: 1, model: 'stable-diffusion-xl', provider: 'stability', source: 'sample' },
-        { customer_id: 'cus_002', feature_key: 'image_generation', event_name: 'image_generated', ts: daysAgo(20), cost: 0.04, cost_unit: 'usd', revenue: 0.25, usage: 1, model: 'dall-e-3', provider: 'openai', source: 'sample' },
-        { customer_id: 'cus_001', feature_key: 'search', event_name: 'search_query', ts: daysAgo(1), cost: 0.002, cost_unit: 'usd', revenue: 0.01, usage: 100, model: 'text-embedding-3-small', provider: 'openai', source: 'sample' },
-        { customer_id: 'cus_002', feature_key: 'search', event_name: 'search_query', ts: daysAgo(4), cost: 0.003, cost_unit: 'usd', revenue: 0.01, usage: 150, model: 'text-embedding-3-small', provider: 'openai', source: 'sample' },
-        { customer_id: 'cus_003', feature_key: 'search', event_name: 'search_query', ts: daysAgo(12), cost: 0.001, cost_unit: 'usd', revenue: 0.005, usage: 50, model: 'text-embedding-3-small', provider: 'openai', source: 'sample' },
-        { customer_id: 'cus_004', feature_key: 'search', event_name: 'search_query', ts: daysAgo(15), cost: 0.004, cost_unit: 'usd', revenue: 0.02, usage: 200, model: 'text-embedding-ada-002', provider: 'openai', source: 'sample' },
-        { customer_id: 'cus_001', feature_key: 'pdf_generation', event_name: 'document_generated', ts: daysAgo(6), cost: 0.12, cost_unit: 'usd', revenue: 0.50, usage: 12, model: null, provider: null, source: 'sample' },
-        { customer_id: 'cus_005', feature_key: 'pdf_generation', event_name: 'document_generated', ts: daysAgo(16), cost: 0.18, cost_unit: 'usd', revenue: 0.70, usage: 18, model: null, provider: null, source: 'sample' },
-        { customer_id: 'cus_002', feature_key: 'email_send', event_name: 'email_sent', ts: daysAgo(8), cost: 0.01, cost_unit: 'usd', revenue: 0.05, usage: 100, model: null, provider: null, source: 'sample' },
-        { customer_id: 'cus_004', feature_key: 'email_send', event_name: 'email_sent', ts: daysAgo(22), cost: 0.015, cost_unit: 'usd', revenue: 0.06, usage: 150, model: null, provider: null, source: 'sample' },
-      ]
-
-      for (const ev of sampleEvents) {
-        await client.query(
-          `INSERT INTO observe_events (user_id, customer_id, feature_key, event_name, timestamp, cost_amount, cost_unit, revenue_amount, usage_units, model, model_provider, source, granularity)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'event')`,
-          [req.visitorId, ev.customer_id, ev.feature_key, ev.event_name, ev.ts, ev.cost, ev.cost_unit, ev.revenue, ev.usage, ev.model, ev.provider, ev.source]
-        )
-      }
-
-      await client.query(
-        'INSERT INTO user_data_status (user_id, data_mode) VALUES ($1, $2) ON CONFLICT (user_id) DO UPDATE SET data_mode = $2, updated_at = NOW()',
-        [req.visitorId, 'sample']
-      )
-
-      await client.query('COMMIT')
-      // Convert referral if this user was referred and just loaded data
-      convertReferralIfPending(req.visitorId!)
-      res.json({ success: true, message: 'Sample data loaded' })
-    } catch (error) {
-      await client.query('ROLLBACK')
-      console.error('Load sample data error:', error)
-      res.status(500).json({ error: 'Failed to load sample data' })
-    } finally {
-      client.release()
-    }
-  })
-
-  // DELETE /data/clear
-  router.delete('/data/clear', ensureVisitor, async (req: AuthRequest, res: Response) => {
-    const client = await pool.connect()
-    try {
-      await client.query('BEGIN')
-      await client.query('DELETE FROM ai_insights WHERE user_id = $1', [req.visitorId])
-
-      await client.query('DELETE FROM observe_events WHERE user_id = $1', [req.visitorId])
-      await client.query('DELETE FROM usage_records WHERE user_id = $1', [req.visitorId])
-      await client.query('DELETE FROM cost_records WHERE user_id = $1', [req.visitorId])
-      await client.query('DELETE FROM subscriptions WHERE user_id = $1', [req.visitorId])
-      await client.query('DELETE FROM customers WHERE user_id = $1', [req.visitorId])
-      await client.query('DELETE FROM plans WHERE user_id = $1', [req.visitorId])
-      await client.query(
-        'UPDATE user_data_status SET data_mode = $2, updated_at = NOW() WHERE user_id = $1',
-        [req.visitorId, 'none']
-      )
-      await client.query('COMMIT')
-      res.json({ success: true })
-    } catch (error) {
-      await client.query('ROLLBACK')
-      console.error('Clear data error:', error)
-      res.status(500).json({ error: 'Failed to clear data' })
-    } finally {
-      client.release()
-    }
-  })
-
-  // DELETE /data/clear/revenue
-  router.delete('/data/clear/revenue', ensureVisitor, async (req: AuthRequest, res: Response) => {
-    const client = await pool.connect()
-    try {
-      await client.query('BEGIN')
-      await client.query("DELETE FROM observe_events WHERE user_id = $1 AND event_name = 'revenue'", [req.visitorId])
-      await client.query('DELETE FROM subscriptions WHERE user_id = $1', [req.visitorId])
-      await client.query('DELETE FROM customers WHERE user_id = $1', [req.visitorId])
-      await client.query('DELETE FROM plans WHERE user_id = $1', [req.visitorId])
-      await client.query('COMMIT')
-      res.json({ success: true })
-    } catch (error) {
-      await client.query('ROLLBACK')
-      res.status(500).json({ error: 'Failed to clear revenue data' })
-    } finally {
-      client.release()
-    }
-  })
-
-  // DELETE /data/clear/costs
-  router.delete('/data/clear/costs', ensureVisitor, async (req: AuthRequest, res: Response) => {
-    const client = await pool.connect()
-    try {
-      await client.query('BEGIN')
-      await client.query("DELETE FROM observe_events WHERE user_id = $1 AND event_name = 'cost'", [req.visitorId])
-      await client.query('DELETE FROM cost_records WHERE user_id = $1', [req.visitorId])
-      await client.query('COMMIT')
-      res.json({ success: true })
-    } catch (error) {
-      await client.query('ROLLBACK')
-      res.status(500).json({ error: 'Failed to clear cost data' })
-    } finally {
-      client.release()
-    }
-  })
-
-  // DELETE /data/clear/usage
-  router.delete('/data/clear/usage', ensureVisitor, async (req: AuthRequest, res: Response) => {
-    const client = await pool.connect()
-    try {
-      await client.query('BEGIN')
-      await client.query("DELETE FROM observe_events WHERE user_id = $1 AND event_name = 'usage'", [req.visitorId])
-      await client.query('DELETE FROM usage_records WHERE user_id = $1', [req.visitorId])
-      await client.query('COMMIT')
-      res.json({ success: true })
-    } catch (error) {
-      await client.query('ROLLBACK')
-      res.status(500).json({ error: 'Failed to clear usage data' })
-    } finally {
-      client.release()
-    }
-  })
-
-  // POST /data/upload/costs
-  router.post('/data/upload/costs', ensureVisitor, async (req: AuthRequest, res: Response) => {
-    const access = await checkBillingFeatureAccess(req.visitorId!, 'csv_upload', req.accountEmail)
-    if (!access.allowed) return res.status(403).json({ error: access.reason || 'Upload limit reached. Upgrade your plan.' })
-    const client = await pool.connect()
-    try {
-      const { records } = req.body
-      if (!Array.isArray(records) || records.length === 0) {
-        return res.status(400).json({ error: 'No records provided' })
-      }
-      if (records.length > 10000) {
-        return res.status(400).json({ error: 'Too many records. Maximum 10,000 per upload.' })
-      }
-      const parseResult = z.array(costRecordSchema).safeParse(records)
-      if (!parseResult.success) {
-        return res.status(400).json({ error: 'Invalid record format', details: parseResult.error.issues.slice(0, 5) })
-      }
-
-      await client.query('BEGIN')
-      await client.query('DELETE FROM cost_records WHERE user_id = $1', [req.visitorId])
-      await client.query("DELETE FROM observe_events WHERE user_id = $1 AND event_name = 'cost'", [req.visitorId])
-
-      // Batch insert cost_records
-      const batchSize = 500
-      for (let i = 0; i < records.length; i += batchSize) {
-        const batch = records.slice(i, i + batchSize)
-        const costValues: unknown[] = []
-        const costPlaceholders: string[] = []
-        const eventValues: unknown[] = []
-        const eventPlaceholders: string[] = []
-        let costIdx = 1
-        let eventIdx = 1
-
-        for (const record of batch) {
-          const periodStart = `${record.month}-01`
-          const periodEnd = new Date(record.month + '-01')
-          periodEnd.setMonth(periodEnd.getMonth() + 1)
-          periodEnd.setDate(0)
-          const periodEndStr = periodEnd.toISOString().split('T')[0]
-
-          costPlaceholders.push(`($${costIdx++}, $${costIdx++}, $${costIdx++}, $${costIdx++}, $${costIdx++}, $${costIdx++})`)
-          costValues.push(req.visitorId, record.customer_id || null, record.provider || 'infrastructure', record.cost, periodStart, periodEndStr)
-
-          eventPlaceholders.push(`($${eventIdx++}, $${eventIdx++}, $${eventIdx++}, 'cost', $${eventIdx++}, $${eventIdx++}, 'usd', 'csv', 'monthly_aggregate', $${eventIdx++})`)
-          eventValues.push(req.visitorId, record.customer_id || '_aggregate', record.provider || 'infrastructure', new Date(`${record.month}-01`).toISOString(), record.cost, record.provider || null)
-        }
-
-        await client.query(
-          `INSERT INTO cost_records (user_id, customer_id, cost_type, amount, period_start, period_end) VALUES ${costPlaceholders.join(', ')}`,
-          costValues
-        )
-        await client.query(
-          `INSERT INTO observe_events (user_id, customer_id, feature_key, event_name, timestamp, cost_amount, cost_unit, source, granularity, model_provider) VALUES ${eventPlaceholders.join(', ')}`,
-          eventValues
-        )
-      }
-
-      await clearSampleData(client, req.visitorId!)
-      await client.query(
-        'UPDATE user_data_status SET data_mode = $2, updated_at = NOW() WHERE user_id = $1',
-        [req.visitorId, 'user']
-      )
-
-      await client.query('COMMIT')
-      convertReferralIfPending(req.visitorId!)
-      trackBillingUsage(req.visitorId!, 'csv_upload', 'csv_upload_costs')
-      res.json({ success: true, count: records.length })
-    } catch (error) {
-      await client.query('ROLLBACK')
-      console.error('Upload costs error:', error)
-      res.status(500).json({ error: 'Failed to upload cost data' })
-    } finally {
-      client.release()
-    }
-  })
-
-  // POST /data/upload/usage
-  router.post('/data/upload/usage', ensureVisitor, async (req: AuthRequest, res: Response) => {
-    const access = await checkBillingFeatureAccess(req.visitorId!, 'csv_upload', req.accountEmail)
-    if (!access.allowed) return res.status(403).json({ error: access.reason || 'Upload limit reached. Upgrade your plan.' })
-    const client = await pool.connect()
-    try {
-      const { records } = req.body
-      if (!Array.isArray(records) || records.length === 0) {
-        return res.status(400).json({ error: 'No records provided' })
-      }
-      if (records.length > 10000) {
-        return res.status(400).json({ error: 'Too many records. Maximum 10,000 per upload.' })
-      }
-      const parseResult = z.array(usageRecordSchema).safeParse(records)
-      if (!parseResult.success) {
-        return res.status(400).json({ error: 'Invalid record format', details: parseResult.error.issues.slice(0, 5) })
-      }
-
-      await client.query('BEGIN')
-      await client.query('DELETE FROM usage_records WHERE user_id = $1', [req.visitorId])
-      await client.query("DELETE FROM observe_events WHERE user_id = $1 AND event_name = 'usage'", [req.visitorId])
-
-      const batchSize = 500
-      for (let i = 0; i < records.length; i += batchSize) {
-        const batch = records.slice(i, i + batchSize)
-        const usageValues: unknown[] = []
-        const usagePlaceholders: string[] = []
-        const eventValues: unknown[] = []
-        const eventPlaceholders: string[] = []
-        let usageIdx = 1
-        let eventIdx = 1
-
-        for (const record of batch) {
-          const periodStart = `${record.month}-01`
-          const periodEnd = new Date(record.month + '-01')
-          periodEnd.setMonth(periodEnd.getMonth() + 1)
-          periodEnd.setDate(0)
-          const periodEndStr = periodEnd.toISOString().split('T')[0]
-          const metricKey = record.metric || record.metric_key
-          const metricValue = record.value ?? record.metric_value
-
-          usagePlaceholders.push(`($${usageIdx++}, $${usageIdx++}, $${usageIdx++}, $${usageIdx++}, $${usageIdx++}, $${usageIdx++}, $${usageIdx++})`)
-          usageValues.push(req.visitorId, record.customer_id, metricKey, metricValue, record.limit || record.metric_limit || null, periodStart, periodEndStr)
-
-          eventPlaceholders.push(`($${eventIdx++}, $${eventIdx++}, $${eventIdx++}, 'usage', $${eventIdx++}, $${eventIdx++}, 'csv', 'monthly_aggregate')`)
-          eventValues.push(req.visitorId, record.customer_id || '_aggregate', metricKey, new Date(`${record.month}-01`).toISOString(), metricValue)
-        }
-
-        await client.query(
-          `INSERT INTO usage_records (user_id, customer_id, metric_key, metric_value, metric_limit, period_start, period_end) VALUES ${usagePlaceholders.join(', ')}`,
-          usageValues
-        )
-        await client.query(
-          `INSERT INTO observe_events (user_id, customer_id, feature_key, event_name, timestamp, usage_units, source, granularity) VALUES ${eventPlaceholders.join(', ')}`,
-          eventValues
-        )
-      }
-
-      await clearSampleData(client, req.visitorId!)
-      await client.query(
-        'UPDATE user_data_status SET data_mode = $2, updated_at = NOW() WHERE user_id = $1',
-        [req.visitorId, 'user']
-      )
-
-      await client.query('COMMIT')
-      convertReferralIfPending(req.visitorId!)
-      trackBillingUsage(req.visitorId!, 'csv_upload', 'csv_upload_usage')
-      res.json({ success: true, count: records.length })
-    } catch (error) {
-      await client.query('ROLLBACK')
-      console.error('Upload usage error:', error)
-      res.status(500).json({ error: 'Failed to upload usage data' })
-    } finally {
-      client.release()
-    }
-  })
-
-  // POST /data/upload/revenue
-  router.post('/data/upload/revenue', ensureVisitor, async (req: AuthRequest, res: Response) => {
-    const access = await checkBillingFeatureAccess(req.visitorId!, 'csv_upload', req.accountEmail)
-    if (!access.allowed) return res.status(403).json({ error: access.reason || 'Upload limit reached. Upgrade your plan.' })
-    const client = await pool.connect()
-    try {
-      const parseResult = revenueUploadSchema.safeParse(req.body)
-      if (!parseResult.success) {
-        return res.status(400).json({ error: 'Invalid revenue data format', details: parseResult.error.issues.slice(0, 5) })
-      }
-      const { customers, plans, subscriptions } = parseResult.data
-
-      await client.query('BEGIN')
-
-      // Clear existing revenue data
-      await client.query('DELETE FROM subscriptions WHERE user_id = $1', [req.visitorId])
-      await client.query('DELETE FROM customers WHERE user_id = $1', [req.visitorId])
-      await client.query('DELETE FROM plans WHERE user_id = $1', [req.visitorId])
-      await client.query("DELETE FROM observe_events WHERE user_id = $1 AND event_name = 'revenue'", [req.visitorId])
-
-      // Insert plans
-      if (Array.isArray(plans)) {
+        const plans = [
+          {
+            plan_id: "starter",
+            name: "Starter",
+            price_amount: 29,
+            interval_months: 1,
+          },
+          {
+            plan_id: "pro",
+            name: "Professional",
+            price_amount: 99,
+            interval_months: 1,
+          },
+          {
+            plan_id: "enterprise",
+            name: "Enterprise",
+            price_amount: 299,
+            interval_months: 1,
+          },
+        ];
         for (const plan of plans) {
           await client.query(
-            'INSERT INTO plans (user_id, plan_id, name, price_amount, interval_months) VALUES ($1, $2, $3, $4, $5)',
-            [req.visitorId, plan.plan_id, plan.name, plan.price_amount, plan.interval_months || 1]
-          )
+            "INSERT INTO plans (user_id, plan_id, name, price_amount, interval_months) VALUES ($1, $2, $3, $4, $5)",
+            [
+              req.visitorId,
+              plan.plan_id,
+              plan.name,
+              plan.price_amount,
+              plan.interval_months,
+            ],
+          );
         }
-      }
 
-      // Insert customers
-      if (Array.isArray(customers)) {
+        const customers = [
+          {
+            customer_id: "cus_001",
+            name: "Acme Corp",
+            email: "billing@acme.com",
+            segment: "Enterprise",
+            created_at: "2025-08-01T00:00:00Z",
+          },
+          {
+            customer_id: "cus_002",
+            name: "TechStart Inc",
+            email: "admin@techstart.io",
+            segment: "SMB",
+            created_at: "2025-11-15T00:00:00Z",
+          },
+          {
+            customer_id: "cus_003",
+            name: "Global Solutions",
+            email: "accounts@global.com",
+            segment: "Mid-Market",
+            created_at: "2025-09-10T00:00:00Z",
+          },
+          {
+            customer_id: "cus_004",
+            name: "Startup Labs",
+            email: "hello@startuplabs.co",
+            segment: "SMB",
+            created_at: "2026-02-01T00:00:00Z",
+          },
+          {
+            customer_id: "cus_005",
+            name: "Enterprise Co",
+            email: "procurement@enterprise.com",
+            segment: "Enterprise",
+            created_at: "2025-06-01T00:00:00Z",
+          },
+        ];
         for (const customer of customers) {
           await client.query(
-            'INSERT INTO customers (user_id, customer_id, name, email, segment) VALUES ($1, $2, $3, $4, $5)',
-            [req.visitorId, customer.customer_id, customer.name, customer.email || null, customer.segment || null]
-          )
+            "INSERT INTO customers (user_id, customer_id, name, email, segment, created_at) VALUES ($1, $2, $3, $4, $5, $6)",
+            [
+              req.visitorId,
+              customer.customer_id,
+              customer.name,
+              customer.email,
+              customer.segment,
+              customer.created_at,
+            ],
+          );
         }
-      }
 
-      // Insert subscriptions
-      if (Array.isArray(subscriptions)) {
+        const subscriptions = [
+          {
+            subscription_id: "sub_001",
+            customer_id: "cus_001",
+            plan_id: "enterprise",
+            is_active: true,
+            mrr_override: 299,
+            previous_mrr: 99,
+            created_at: "2025-08-01T00:00:00Z",
+            current_period_start: "2026-03-01T00:00:00Z",
+            current_period_end: "2026-04-01T00:00:00Z",
+          },
+          {
+            subscription_id: "sub_002",
+            customer_id: "cus_002",
+            plan_id: "starter",
+            is_active: true,
+            mrr_override: 29,
+            previous_mrr: 0,
+            created_at: "2025-11-15T00:00:00Z",
+            current_period_start: "2026-03-01T00:00:00Z",
+            current_period_end: "2026-04-01T00:00:00Z",
+          },
+          {
+            subscription_id: "sub_003",
+            customer_id: "cus_003",
+            plan_id: "pro",
+            is_active: true,
+            mrr_override: 99,
+            previous_mrr: 29,
+            created_at: "2025-09-10T00:00:00Z",
+            current_period_start: "2026-03-01T00:00:00Z",
+            current_period_end: "2026-04-01T00:00:00Z",
+          },
+          {
+            subscription_id: "sub_004",
+            customer_id: "cus_004",
+            plan_id: "starter",
+            is_active: true,
+            mrr_override: 29,
+            previous_mrr: 0,
+            created_at: "2026-02-01T00:00:00Z",
+            current_period_start: "2026-03-01T00:00:00Z",
+            current_period_end: "2026-04-01T00:00:00Z",
+          },
+          {
+            subscription_id: "sub_005",
+            customer_id: "cus_005",
+            plan_id: "enterprise",
+            is_active: true,
+            mrr_override: 299,
+            previous_mrr: 299,
+            created_at: "2025-06-01T00:00:00Z",
+            current_period_start: "2026-03-01T00:00:00Z",
+            current_period_end: "2026-04-01T00:00:00Z",
+          },
+        ];
         for (const sub of subscriptions) {
           await client.query(
-            'INSERT INTO subscriptions (user_id, subscription_id, customer_id, plan_id, is_active, mrr_override, current_period_start, current_period_end) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
-            [req.visitorId, sub.subscription_id, sub.customer_id, sub.plan_id, sub.is_active !== false, sub.mrr_override || null, sub.current_period_start || null, sub.current_period_end || null]
-          )
+            `INSERT INTO subscriptions (user_id, subscription_id, customer_id, plan_id, is_active, mrr_override, previous_mrr, created_at, current_period_start, current_period_end)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+            [
+              req.visitorId,
+              sub.subscription_id,
+              sub.customer_id,
+              sub.plan_id,
+              sub.is_active,
+              sub.mrr_override,
+              sub.previous_mrr,
+              sub.created_at,
+              sub.current_period_start,
+              sub.current_period_end,
+            ],
+          );
         }
-      }
 
-      // Dual-write subscriptions to observe_events (use plan price as MRR fallback)
-      if (Array.isArray(subscriptions)) {
-        const planPriceMap = new Map((plans || []).map((p: { plan_id: string; price_amount: number }) => [p.plan_id, parseFloat(p.price_amount as unknown as string) || 0]))
-        for (const sub of subscriptions) {
-          const mrr = sub.mrr_override || planPriceMap.get(sub.plan_id) || 0
+        // Sample cost_records — monthly AI costs for the Overview page
+        const now = new Date();
+        for (let i = 5; i >= 0; i--) {
+          const start = new Date(now.getFullYear(), now.getMonth() - i, 1);
+          const end = new Date(now.getFullYear(), now.getMonth() - i + 1, 0);
+          const amount = 3200 + (5 - i) * 600; // growing costs: 3200, 3800, 4400, 5000, 5600, 6200
           await client.query(
-            `INSERT INTO observe_events (user_id, customer_id, feature_key, event_name, timestamp, revenue_amount, source, granularity)
+            "INSERT INTO cost_records (user_id, cost_type, amount, period_start, period_end) VALUES ($1, $2, $3, $4, $5)",
+            [
+              req.visitorId,
+              "ai_inference",
+              amount,
+              start.toISOString(),
+              end.toISOString(),
+            ],
+          );
+        }
+
+        // Sample observe_events — feature-level cost+revenue data
+        // Use relative timestamps so demo data is always "fresh"
+        function daysAgo(d: number) {
+          return new Date(Date.now() - d * 86400000).toISOString();
+        }
+        const sampleEvents = [
+          {
+            customer_id: "cus_001",
+            feature_key: "ai_summarization",
+            event_name: "summary_generated",
+            ts: daysAgo(1),
+            cost: 0.24,
+            cost_unit: "usd",
+            revenue: 0.5,
+            usage: 24,
+            model: "claude-3-5-sonnet",
+            provider: "anthropic",
+            source: "sample",
+          },
+          {
+            customer_id: "cus_002",
+            feature_key: "ai_summarization",
+            event_name: "summary_generated",
+            ts: daysAgo(2),
+            cost: 0.08,
+            cost_unit: "usd",
+            revenue: 0.2,
+            usage: 8,
+            model: "gpt-4o",
+            provider: "openai",
+            source: "sample",
+          },
+          {
+            customer_id: "cus_003",
+            feature_key: "ai_summarization",
+            event_name: "summary_generated",
+            ts: daysAgo(5),
+            cost: 0.15,
+            cost_unit: "usd",
+            revenue: 0.35,
+            usage: 15,
+            model: "claude-3-5-sonnet",
+            provider: "anthropic",
+            source: "sample",
+          },
+          {
+            customer_id: "cus_001",
+            feature_key: "ai_summarization",
+            event_name: "summary_generated",
+            ts: daysAgo(10),
+            cost: 0.3,
+            cost_unit: "usd",
+            revenue: 0.6,
+            usage: 30,
+            model: "gpt-4o",
+            provider: "openai",
+            source: "sample",
+          },
+          {
+            customer_id: "cus_004",
+            feature_key: "ai_summarization",
+            event_name: "summary_generated",
+            ts: daysAgo(14),
+            cost: 0.05,
+            cost_unit: "usd",
+            revenue: 0.15,
+            usage: 5,
+            model: "claude-3-haiku",
+            provider: "anthropic",
+            source: "sample",
+          },
+          {
+            customer_id: "cus_001",
+            feature_key: "image_generation",
+            event_name: "image_generated",
+            ts: daysAgo(3),
+            cost: 0.04,
+            cost_unit: "usd",
+            revenue: 0.25,
+            usage: 1,
+            model: "dall-e-3",
+            provider: "openai",
+            source: "sample",
+          },
+          {
+            customer_id: "cus_003",
+            feature_key: "image_generation",
+            event_name: "image_generated",
+            ts: daysAgo(7),
+            cost: 0.04,
+            cost_unit: "usd",
+            revenue: 0.25,
+            usage: 1,
+            model: "dall-e-3",
+            provider: "openai",
+            source: "sample",
+          },
+          {
+            customer_id: "cus_005",
+            feature_key: "image_generation",
+            event_name: "image_generated",
+            ts: daysAgo(18),
+            cost: 0.02,
+            cost_unit: "usd",
+            revenue: 0.2,
+            usage: 1,
+            model: "stable-diffusion-xl",
+            provider: "stability",
+            source: "sample",
+          },
+          {
+            customer_id: "cus_002",
+            feature_key: "image_generation",
+            event_name: "image_generated",
+            ts: daysAgo(20),
+            cost: 0.04,
+            cost_unit: "usd",
+            revenue: 0.25,
+            usage: 1,
+            model: "dall-e-3",
+            provider: "openai",
+            source: "sample",
+          },
+          {
+            customer_id: "cus_001",
+            feature_key: "search",
+            event_name: "search_query",
+            ts: daysAgo(1),
+            cost: 0.002,
+            cost_unit: "usd",
+            revenue: 0.01,
+            usage: 100,
+            model: "text-embedding-3-small",
+            provider: "openai",
+            source: "sample",
+          },
+          {
+            customer_id: "cus_002",
+            feature_key: "search",
+            event_name: "search_query",
+            ts: daysAgo(4),
+            cost: 0.003,
+            cost_unit: "usd",
+            revenue: 0.01,
+            usage: 150,
+            model: "text-embedding-3-small",
+            provider: "openai",
+            source: "sample",
+          },
+          {
+            customer_id: "cus_003",
+            feature_key: "search",
+            event_name: "search_query",
+            ts: daysAgo(12),
+            cost: 0.001,
+            cost_unit: "usd",
+            revenue: 0.005,
+            usage: 50,
+            model: "text-embedding-3-small",
+            provider: "openai",
+            source: "sample",
+          },
+          {
+            customer_id: "cus_004",
+            feature_key: "search",
+            event_name: "search_query",
+            ts: daysAgo(15),
+            cost: 0.004,
+            cost_unit: "usd",
+            revenue: 0.02,
+            usage: 200,
+            model: "text-embedding-ada-002",
+            provider: "openai",
+            source: "sample",
+          },
+          {
+            customer_id: "cus_001",
+            feature_key: "pdf_generation",
+            event_name: "document_generated",
+            ts: daysAgo(6),
+            cost: 0.12,
+            cost_unit: "usd",
+            revenue: 0.5,
+            usage: 12,
+            model: null,
+            provider: null,
+            source: "sample",
+          },
+          {
+            customer_id: "cus_005",
+            feature_key: "pdf_generation",
+            event_name: "document_generated",
+            ts: daysAgo(16),
+            cost: 0.18,
+            cost_unit: "usd",
+            revenue: 0.7,
+            usage: 18,
+            model: null,
+            provider: null,
+            source: "sample",
+          },
+          {
+            customer_id: "cus_002",
+            feature_key: "email_send",
+            event_name: "email_sent",
+            ts: daysAgo(8),
+            cost: 0.01,
+            cost_unit: "usd",
+            revenue: 0.05,
+            usage: 100,
+            model: null,
+            provider: null,
+            source: "sample",
+          },
+          {
+            customer_id: "cus_004",
+            feature_key: "email_send",
+            event_name: "email_sent",
+            ts: daysAgo(22),
+            cost: 0.015,
+            cost_unit: "usd",
+            revenue: 0.06,
+            usage: 150,
+            model: null,
+            provider: null,
+            source: "sample",
+          },
+          // Extra events to create clear cohort differentiation
+          // cus_001 (Acme Corp) — Champion: high volume, high margin, multiple features, active daily
+          ...Array.from({ length: 30 }, (_, i) => ({
+            customer_id: "cus_001",
+            feature_key:
+              i % 3 === 0
+                ? "ai_summarization"
+                : i % 3 === 1
+                  ? "search"
+                  : "image_generation",
+            event_name: "auto_generated",
+            ts: daysAgo(i),
+            cost: i % 3 === 0 ? 0.22 : i % 3 === 1 ? 0.002 : 0.04,
+            cost_unit: "usd",
+            revenue: i % 3 === 0 ? 0.55 : i % 3 === 1 ? 0.01 : 0.25,
+            usage: i % 3 === 0 ? 22 : i % 3 === 1 ? 100 : 1,
+            model:
+              i % 3 === 0
+                ? "claude-3-5-sonnet"
+                : i % 3 === 1
+                  ? "text-embedding-3-small"
+                  : "dall-e-3",
+            provider: i % 3 === 0 ? "anthropic" : "openai",
+            source: "sample" as const,
+          })),
+          // cus_002 (TechStart) — At Risk: low health, only 1 feature, costs rising
+          ...Array.from({ length: 8 }, (_, i) => ({
+            customer_id: "cus_002",
+            feature_key: "ai_summarization",
+            event_name: "auto_generated",
+            ts: daysAgo(i * 4),
+            cost: 0.35 + i * 0.05,
+            cost_unit: "usd",
+            revenue: 0.15,
+            usage: 35 + i * 5,
+            model: "gpt-4o",
+            provider: "openai",
+            source: "sample" as const,
+          })),
+          // cus_003 (Global Solutions) — Healthy: moderate usage, decent margin
+          ...Array.from({ length: 15 }, (_, i) => ({
+            customer_id: "cus_003",
+            feature_key: i % 2 === 0 ? "ai_summarization" : "search",
+            event_name: "auto_generated",
+            ts: daysAgo(i * 2),
+            cost: i % 2 === 0 ? 0.12 : 0.001,
+            cost_unit: "usd",
+            revenue: i % 2 === 0 ? 0.35 : 0.005,
+            usage: i % 2 === 0 ? 12 : 50,
+            model: i % 2 === 0 ? "claude-3-5-sonnet" : "text-embedding-3-small",
+            provider: i % 2 === 0 ? "anthropic" : "openai",
+            source: "sample" as const,
+          })),
+          // cus_004 (Startup Labs) — Unprofitable: cost > revenue on expensive model
+          ...Array.from({ length: 12 }, (_, i) => ({
+            customer_id: "cus_004",
+            feature_key: "ai_summarization",
+            event_name: "auto_generated",
+            ts: daysAgo(i * 3),
+            cost: 0.82,
+            cost_unit: "usd",
+            revenue: 0.15,
+            usage: 80,
+            model: "gpt-4",
+            provider: "openai",
+            source: "sample" as const,
+          })),
+          // cus_005 (Enterprise Co) — Inactive: last activity 45+ days ago
+          ...Array.from({ length: 4 }, (_, i) => ({
+            customer_id: "cus_005",
+            feature_key: "pdf_generation",
+            event_name: "auto_generated",
+            ts: daysAgo(45 + i * 10),
+            cost: 0.1,
+            cost_unit: "usd",
+            revenue: 0.5,
+            usage: 10,
+            model: null as string | null,
+            provider: null as string | null,
+            source: "sample" as const,
+          })),
+          // Prior period events for cus_002 (lower cost) to show rising cost trend
+          ...Array.from({ length: 5 }, (_, i) => ({
+            customer_id: "cus_002",
+            feature_key: "ai_summarization",
+            event_name: "auto_generated",
+            ts: daysAgo(35 + i * 5),
+            cost: 0.12,
+            cost_unit: "usd",
+            revenue: 0.15,
+            usage: 12,
+            model: "gpt-4o-mini",
+            provider: "openai",
+            source: "sample" as const,
+          })),
+        ];
+
+        for (const ev of sampleEvents) {
+          await client.query(
+            `INSERT INTO observe_events (user_id, customer_id, feature_key, event_name, timestamp, cost_amount, cost_unit, revenue_amount, usage_units, model, model_provider, source, granularity)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'event')`,
+            [
+              req.visitorId,
+              ev.customer_id,
+              ev.feature_key,
+              ev.event_name,
+              ev.ts,
+              ev.cost,
+              ev.cost_unit,
+              ev.revenue,
+              ev.usage,
+              ev.model,
+              ev.provider,
+              ev.source,
+            ],
+          );
+        }
+
+        await client.query(
+          "INSERT INTO user_data_status (user_id, data_mode) VALUES ($1, $2) ON CONFLICT (user_id) DO UPDATE SET data_mode = $2, updated_at = NOW()",
+          [req.visitorId, "sample"],
+        );
+
+        await client.query("COMMIT");
+        // Convert referral if this user was referred and just loaded data
+        convertReferralIfPending(req.visitorId!);
+        res.json({ success: true, message: "Sample data loaded" });
+      } catch (error) {
+        await client.query("ROLLBACK");
+        console.error("Load sample data error:", error);
+        res.status(500).json({ error: "Failed to load sample data" });
+      } finally {
+        client.release();
+      }
+    },
+  );
+
+  // DELETE /data/clear
+  router.delete(
+    "/data/clear",
+    ensureVisitor,
+    async (req: AuthRequest, res: Response) => {
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+        await client.query("DELETE FROM ai_insights WHERE user_id = $1", [
+          req.visitorId,
+        ]);
+
+        await client.query("DELETE FROM observe_events WHERE user_id = $1", [
+          req.visitorId,
+        ]);
+        await client.query("DELETE FROM usage_records WHERE user_id = $1", [
+          req.visitorId,
+        ]);
+        await client.query("DELETE FROM cost_records WHERE user_id = $1", [
+          req.visitorId,
+        ]);
+        await client.query("DELETE FROM subscriptions WHERE user_id = $1", [
+          req.visitorId,
+        ]);
+        await client.query("DELETE FROM customers WHERE user_id = $1", [
+          req.visitorId,
+        ]);
+        await client.query("DELETE FROM plans WHERE user_id = $1", [
+          req.visitorId,
+        ]);
+        await client.query(
+          "UPDATE user_data_status SET data_mode = $2, updated_at = NOW() WHERE user_id = $1",
+          [req.visitorId, "none"],
+        );
+        await client.query("COMMIT");
+        res.json({ success: true });
+      } catch (error) {
+        await client.query("ROLLBACK");
+        console.error("Clear data error:", error);
+        res.status(500).json({ error: "Failed to clear data" });
+      } finally {
+        client.release();
+      }
+    },
+  );
+
+  // DELETE /data/clear/revenue
+  router.delete(
+    "/data/clear/revenue",
+    ensureVisitor,
+    async (req: AuthRequest, res: Response) => {
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+        await client.query(
+          "DELETE FROM observe_events WHERE user_id = $1 AND event_name = 'revenue'",
+          [req.visitorId],
+        );
+        await client.query("DELETE FROM subscriptions WHERE user_id = $1", [
+          req.visitorId,
+        ]);
+        await client.query("DELETE FROM customers WHERE user_id = $1", [
+          req.visitorId,
+        ]);
+        await client.query("DELETE FROM plans WHERE user_id = $1", [
+          req.visitorId,
+        ]);
+        await client.query("COMMIT");
+        res.json({ success: true });
+      } catch (error) {
+        await client.query("ROLLBACK");
+        res.status(500).json({ error: "Failed to clear revenue data" });
+      } finally {
+        client.release();
+      }
+    },
+  );
+
+  // DELETE /data/clear/costs
+  router.delete(
+    "/data/clear/costs",
+    ensureVisitor,
+    async (req: AuthRequest, res: Response) => {
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+        await client.query(
+          "DELETE FROM observe_events WHERE user_id = $1 AND event_name = 'cost'",
+          [req.visitorId],
+        );
+        await client.query("DELETE FROM cost_records WHERE user_id = $1", [
+          req.visitorId,
+        ]);
+        await client.query("COMMIT");
+        res.json({ success: true });
+      } catch (error) {
+        await client.query("ROLLBACK");
+        res.status(500).json({ error: "Failed to clear cost data" });
+      } finally {
+        client.release();
+      }
+    },
+  );
+
+  // DELETE /data/clear/usage
+  router.delete(
+    "/data/clear/usage",
+    ensureVisitor,
+    async (req: AuthRequest, res: Response) => {
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+        await client.query(
+          "DELETE FROM observe_events WHERE user_id = $1 AND event_name = 'usage'",
+          [req.visitorId],
+        );
+        await client.query("DELETE FROM usage_records WHERE user_id = $1", [
+          req.visitorId,
+        ]);
+        await client.query("COMMIT");
+        res.json({ success: true });
+      } catch (error) {
+        await client.query("ROLLBACK");
+        res.status(500).json({ error: "Failed to clear usage data" });
+      } finally {
+        client.release();
+      }
+    },
+  );
+
+  // POST /data/upload/costs
+  router.post(
+    "/data/upload/costs",
+    ensureVisitor,
+    async (req: AuthRequest, res: Response) => {
+      const access = await checkBillingFeatureAccess(
+        req.visitorId!,
+        "csv_upload",
+        req.accountEmail,
+      );
+      if (!access.allowed)
+        return res.status(403).json({
+          error: access.reason || "Upload limit reached. Upgrade your plan.",
+        });
+      const client = await pool.connect();
+      try {
+        const { records } = req.body;
+        if (!Array.isArray(records) || records.length === 0) {
+          return res.status(400).json({ error: "No records provided" });
+        }
+        if (records.length > 10000) {
+          return res
+            .status(400)
+            .json({ error: "Too many records. Maximum 10,000 per upload." });
+        }
+        const parseResult = z.array(costRecordSchema).safeParse(records);
+        if (!parseResult.success) {
+          return res.status(400).json({
+            error: "Invalid record format",
+            details: parseResult.error.issues.slice(0, 5),
+          });
+        }
+
+        await client.query("BEGIN");
+        await client.query("DELETE FROM cost_records WHERE user_id = $1", [
+          req.visitorId,
+        ]);
+        await client.query(
+          "DELETE FROM observe_events WHERE user_id = $1 AND event_name = 'cost'",
+          [req.visitorId],
+        );
+
+        // Batch insert cost_records
+        const batchSize = 500;
+        for (let i = 0; i < records.length; i += batchSize) {
+          const batch = records.slice(i, i + batchSize);
+          const costValues: unknown[] = [];
+          const costPlaceholders: string[] = [];
+          const eventValues: unknown[] = [];
+          const eventPlaceholders: string[] = [];
+          let costIdx = 1;
+          let eventIdx = 1;
+
+          for (const record of batch) {
+            const periodStart = `${record.month}-01`;
+            const periodEnd = new Date(record.month + "-01");
+            periodEnd.setMonth(periodEnd.getMonth() + 1);
+            periodEnd.setDate(0);
+            const periodEndStr = periodEnd.toISOString().split("T")[0];
+
+            costPlaceholders.push(
+              `($${costIdx++}, $${costIdx++}, $${costIdx++}, $${costIdx++}, $${costIdx++}, $${costIdx++})`,
+            );
+            costValues.push(
+              req.visitorId,
+              record.customer_id || null,
+              record.provider || "infrastructure",
+              record.cost,
+              periodStart,
+              periodEndStr,
+            );
+
+            eventPlaceholders.push(
+              `($${eventIdx++}, $${eventIdx++}, $${eventIdx++}, 'cost', $${eventIdx++}, $${eventIdx++}, 'usd', 'csv', 'monthly_aggregate', $${eventIdx++})`,
+            );
+            eventValues.push(
+              req.visitorId,
+              record.customer_id || "_aggregate",
+              record.provider || "infrastructure",
+              new Date(`${record.month}-01`).toISOString(),
+              record.cost,
+              record.provider || null,
+            );
+          }
+
+          await client.query(
+            `INSERT INTO cost_records (user_id, customer_id, cost_type, amount, period_start, period_end) VALUES ${costPlaceholders.join(", ")}`,
+            costValues,
+          );
+          await client.query(
+            `INSERT INTO observe_events (user_id, customer_id, feature_key, event_name, timestamp, cost_amount, cost_unit, source, granularity, model_provider) VALUES ${eventPlaceholders.join(", ")}`,
+            eventValues,
+          );
+        }
+
+        await clearSampleData(client, req.visitorId!);
+        await client.query(
+          "UPDATE user_data_status SET data_mode = $2, updated_at = NOW() WHERE user_id = $1",
+          [req.visitorId, "user"],
+        );
+
+        await client.query("COMMIT");
+        convertReferralIfPending(req.visitorId!);
+        trackBillingUsage(req.visitorId!, "csv_upload", "csv_upload_costs");
+        res.json({ success: true, count: records.length });
+      } catch (error) {
+        await client.query("ROLLBACK");
+        console.error("Upload costs error:", error);
+        res.status(500).json({ error: "Failed to upload cost data" });
+      } finally {
+        client.release();
+      }
+    },
+  );
+
+  // POST /data/upload/usage
+  router.post(
+    "/data/upload/usage",
+    ensureVisitor,
+    async (req: AuthRequest, res: Response) => {
+      const access = await checkBillingFeatureAccess(
+        req.visitorId!,
+        "csv_upload",
+        req.accountEmail,
+      );
+      if (!access.allowed)
+        return res.status(403).json({
+          error: access.reason || "Upload limit reached. Upgrade your plan.",
+        });
+      const client = await pool.connect();
+      try {
+        const { records } = req.body;
+        if (!Array.isArray(records) || records.length === 0) {
+          return res.status(400).json({ error: "No records provided" });
+        }
+        if (records.length > 10000) {
+          return res
+            .status(400)
+            .json({ error: "Too many records. Maximum 10,000 per upload." });
+        }
+        const parseResult = z.array(usageRecordSchema).safeParse(records);
+        if (!parseResult.success) {
+          return res.status(400).json({
+            error: "Invalid record format",
+            details: parseResult.error.issues.slice(0, 5),
+          });
+        }
+
+        await client.query("BEGIN");
+        await client.query("DELETE FROM usage_records WHERE user_id = $1", [
+          req.visitorId,
+        ]);
+        await client.query(
+          "DELETE FROM observe_events WHERE user_id = $1 AND event_name = 'usage'",
+          [req.visitorId],
+        );
+
+        const batchSize = 500;
+        for (let i = 0; i < records.length; i += batchSize) {
+          const batch = records.slice(i, i + batchSize);
+          const usageValues: unknown[] = [];
+          const usagePlaceholders: string[] = [];
+          const eventValues: unknown[] = [];
+          const eventPlaceholders: string[] = [];
+          let usageIdx = 1;
+          let eventIdx = 1;
+
+          for (const record of batch) {
+            const periodStart = `${record.month}-01`;
+            const periodEnd = new Date(record.month + "-01");
+            periodEnd.setMonth(periodEnd.getMonth() + 1);
+            periodEnd.setDate(0);
+            const periodEndStr = periodEnd.toISOString().split("T")[0];
+            const metricKey = record.metric || record.metric_key;
+            const metricValue = record.value ?? record.metric_value;
+
+            usagePlaceholders.push(
+              `($${usageIdx++}, $${usageIdx++}, $${usageIdx++}, $${usageIdx++}, $${usageIdx++}, $${usageIdx++}, $${usageIdx++})`,
+            );
+            usageValues.push(
+              req.visitorId,
+              record.customer_id,
+              metricKey,
+              metricValue,
+              record.limit || record.metric_limit || null,
+              periodStart,
+              periodEndStr,
+            );
+
+            eventPlaceholders.push(
+              `($${eventIdx++}, $${eventIdx++}, $${eventIdx++}, 'usage', $${eventIdx++}, $${eventIdx++}, 'csv', 'monthly_aggregate')`,
+            );
+            eventValues.push(
+              req.visitorId,
+              record.customer_id || "_aggregate",
+              metricKey,
+              new Date(`${record.month}-01`).toISOString(),
+              metricValue,
+            );
+          }
+
+          await client.query(
+            `INSERT INTO usage_records (user_id, customer_id, metric_key, metric_value, metric_limit, period_start, period_end) VALUES ${usagePlaceholders.join(", ")}`,
+            usageValues,
+          );
+          await client.query(
+            `INSERT INTO observe_events (user_id, customer_id, feature_key, event_name, timestamp, usage_units, source, granularity) VALUES ${eventPlaceholders.join(", ")}`,
+            eventValues,
+          );
+        }
+
+        await clearSampleData(client, req.visitorId!);
+        await client.query(
+          "UPDATE user_data_status SET data_mode = $2, updated_at = NOW() WHERE user_id = $1",
+          [req.visitorId, "user"],
+        );
+
+        await client.query("COMMIT");
+        convertReferralIfPending(req.visitorId!);
+        trackBillingUsage(req.visitorId!, "csv_upload", "csv_upload_usage");
+        res.json({ success: true, count: records.length });
+      } catch (error) {
+        await client.query("ROLLBACK");
+        console.error("Upload usage error:", error);
+        res.status(500).json({ error: "Failed to upload usage data" });
+      } finally {
+        client.release();
+      }
+    },
+  );
+
+  // POST /data/upload/revenue
+  router.post(
+    "/data/upload/revenue",
+    ensureVisitor,
+    async (req: AuthRequest, res: Response) => {
+      const access = await checkBillingFeatureAccess(
+        req.visitorId!,
+        "csv_upload",
+        req.accountEmail,
+      );
+      if (!access.allowed)
+        return res.status(403).json({
+          error: access.reason || "Upload limit reached. Upgrade your plan.",
+        });
+      const client = await pool.connect();
+      try {
+        const parseResult = revenueUploadSchema.safeParse(req.body);
+        if (!parseResult.success) {
+          return res.status(400).json({
+            error: "Invalid revenue data format",
+            details: parseResult.error.issues.slice(0, 5),
+          });
+        }
+        const { customers, plans, subscriptions } = parseResult.data;
+
+        await client.query("BEGIN");
+
+        // Clear existing revenue data
+        await client.query("DELETE FROM subscriptions WHERE user_id = $1", [
+          req.visitorId,
+        ]);
+        await client.query("DELETE FROM customers WHERE user_id = $1", [
+          req.visitorId,
+        ]);
+        await client.query("DELETE FROM plans WHERE user_id = $1", [
+          req.visitorId,
+        ]);
+        await client.query(
+          "DELETE FROM observe_events WHERE user_id = $1 AND event_name = 'revenue'",
+          [req.visitorId],
+        );
+
+        // Insert plans
+        if (Array.isArray(plans)) {
+          for (const plan of plans) {
+            await client.query(
+              "INSERT INTO plans (user_id, plan_id, name, price_amount, interval_months) VALUES ($1, $2, $3, $4, $5)",
+              [
+                req.visitorId,
+                plan.plan_id,
+                plan.name,
+                plan.price_amount,
+                plan.interval_months || 1,
+              ],
+            );
+          }
+        }
+
+        // Insert customers
+        if (Array.isArray(customers)) {
+          for (const customer of customers) {
+            await client.query(
+              "INSERT INTO customers (user_id, customer_id, name, email, segment) VALUES ($1, $2, $3, $4, $5)",
+              [
+                req.visitorId,
+                customer.customer_id,
+                customer.name,
+                customer.email || null,
+                customer.segment || null,
+              ],
+            );
+          }
+        }
+
+        // Insert subscriptions
+        if (Array.isArray(subscriptions)) {
+          for (const sub of subscriptions) {
+            await client.query(
+              "INSERT INTO subscriptions (user_id, subscription_id, customer_id, plan_id, is_active, mrr_override, current_period_start, current_period_end) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+              [
+                req.visitorId,
+                sub.subscription_id,
+                sub.customer_id,
+                sub.plan_id,
+                sub.is_active !== false,
+                sub.mrr_override || null,
+                sub.current_period_start || null,
+                sub.current_period_end || null,
+              ],
+            );
+          }
+        }
+
+        // Dual-write subscriptions to observe_events (use plan price as MRR fallback)
+        if (Array.isArray(subscriptions)) {
+          const planPriceMap = new Map(
+            (plans || []).map(
+              (p: { plan_id: string; price_amount: number }) => [
+                p.plan_id,
+                parseFloat(p.price_amount as unknown as string) || 0,
+              ],
+            ),
+          );
+          for (const sub of subscriptions) {
+            const mrr = sub.mrr_override || planPriceMap.get(sub.plan_id) || 0;
+            await client.query(
+              `INSERT INTO observe_events (user_id, customer_id, feature_key, event_name, timestamp, revenue_amount, source, granularity)
              VALUES ($1, $2, 'subscription', 'revenue', NOW(), $3, 'csv', 'monthly_aggregate')`,
-            [req.visitorId, sub.customer_id, mrr]
-          )
+              [req.visitorId, sub.customer_id, mrr],
+            );
+          }
         }
+
+        await clearSampleData(client, req.visitorId!);
+        await client.query(
+          "UPDATE user_data_status SET data_mode = $2, updated_at = NOW() WHERE user_id = $1",
+          [req.visitorId, "user"],
+        );
+
+        await client.query("COMMIT");
+        convertReferralIfPending(req.visitorId!);
+        trackBillingUsage(req.visitorId!, "csv_upload", "csv_upload_revenue");
+        res.json({
+          success: true,
+          counts: {
+            customers: customers?.length || 0,
+            plans: plans?.length || 0,
+            subscriptions: subscriptions?.length || 0,
+          },
+        });
+      } catch (error) {
+        await client.query("ROLLBACK");
+        console.error("Upload revenue error:", error);
+        res.status(500).json({ error: "Failed to upload revenue data" });
+      } finally {
+        client.release();
       }
-
-      await clearSampleData(client, req.visitorId!)
-      await client.query(
-        'UPDATE user_data_status SET data_mode = $2, updated_at = NOW() WHERE user_id = $1',
-        [req.visitorId, 'user']
-      )
-
-      await client.query('COMMIT')
-      convertReferralIfPending(req.visitorId!)
-      trackBillingUsage(req.visitorId!, 'csv_upload', 'csv_upload_revenue')
-      res.json({
-        success: true,
-        counts: {
-          customers: customers?.length || 0,
-          plans: plans?.length || 0,
-          subscriptions: subscriptions?.length || 0
-        }
-      })
-    } catch (error) {
-      await client.query('ROLLBACK')
-      console.error('Upload revenue error:', error)
-      res.status(500).json({ error: 'Failed to upload revenue data' })
-    } finally {
-      client.release()
-    }
-  })
+    },
+  );
 
   // GET /metrics/summary
-  router.get('/metrics/summary', ensureVisitor, async (req: AuthRequest, res: Response) => {
-    try {
-      const customersResult = await pool.query('SELECT COUNT(*) FROM customers WHERE user_id = $1', [req.visitorId])
-      const activeSubs = await pool.query('SELECT COUNT(*) FROM subscriptions WHERE user_id = $1 AND is_active = true', [req.visitorId])
-      const mrrResult = await pool.query(
-        'SELECT COALESCE(SUM(COALESCE(s.mrr_override, p.price_amount)), 0) as mrr FROM subscriptions s LEFT JOIN plans p ON s.user_id = p.user_id AND s.plan_id = p.plan_id WHERE s.user_id = $1 AND s.is_active = true',
-        [req.visitorId]
-      )
+  router.get(
+    "/metrics/summary",
+    ensureVisitor,
+    async (req: AuthRequest, res: Response) => {
+      try {
+        const customersResult = await pool.query(
+          "SELECT COUNT(*) FROM customers WHERE user_id = $1",
+          [req.visitorId],
+        );
+        const activeSubs = await pool.query(
+          "SELECT COUNT(*) FROM subscriptions WHERE user_id = $1 AND is_active = true",
+          [req.visitorId],
+        );
+        const mrrResult = await pool.query(
+          "SELECT COALESCE(SUM(COALESCE(s.mrr_override, p.price_amount)), 0) as mrr FROM subscriptions s LEFT JOIN plans p ON s.user_id = p.user_id AND s.plan_id = p.plan_id WHERE s.user_id = $1 AND s.is_active = true",
+          [req.visitorId],
+        );
 
-      const mrr = parseFloat(mrrResult.rows[0].mrr) || 0
-      const customerCount = parseInt(customersResult.rows[0].count)
+        const mrr = parseFloat(mrrResult.rows[0].mrr) || 0;
+        const customerCount = parseInt(customersResult.rows[0].count);
 
-      res.json({
-        total_customers: customerCount,
-        active_subscriptions: parseInt(activeSubs.rows[0].count),
-        mrr: mrr,
-        arr: mrr * 12,
-        arpc: customerCount > 0 ? mrr / customerCount : 0,
-      })
-    } catch (error) {
-      console.error('Get metrics error:', error)
-      res.status(500).json({ error: 'Failed to get metrics' })
-    }
-  })
+        res.json({
+          total_customers: customerCount,
+          active_subscriptions: parseInt(activeSubs.rows[0].count),
+          mrr: mrr,
+          arr: mrr * 12,
+          arpc: customerCount > 0 ? mrr / customerCount : 0,
+        });
+      } catch (error) {
+        console.error("Get metrics error:", error);
+        res.status(500).json({ error: "Failed to get metrics" });
+      }
+    },
+  );
 
   // GET /metrics/source-breakdown
-  router.get('/metrics/source-breakdown', ensureVisitor, async (req: AuthRequest, res: Response) => {
-    try {
-      const result = await pool.query(
-        `SELECT source, is_inferred,
+  router.get(
+    "/metrics/source-breakdown",
+    ensureVisitor,
+    async (req: AuthRequest, res: Response) => {
+      try {
+        const result = await pool.query(
+          `SELECT source, is_inferred,
                 COUNT(*) as event_count,
                 COALESCE(SUM(cost_amount), 0) as total_cost,
                 COALESCE(SUM(revenue_amount), 0) as total_revenue
@@ -759,177 +1542,691 @@ export function createDataRoutes(
          WHERE user_id = $1
          GROUP BY source, is_inferred
          ORDER BY total_cost DESC`,
-        [req.visitorId]
-      )
-      const sources = result.rows.map((r: { source: string; is_inferred: boolean; event_count: string; total_cost: string; total_revenue: string }) => ({
-        source: r.is_inferred ? 'inferred' : r.source,
-        event_count: parseInt(r.event_count),
-        total_cost: parseFloat(r.total_cost) || 0,
-        total_revenue: parseFloat(r.total_revenue) || 0,
-      }))
-      const total_events = sources.reduce((s: number, r: { event_count: number }) => s + r.event_count, 0)
-      res.json({ sources, total_events })
-    } catch (error) {
-      console.error('Get source breakdown error:', error)
-      res.status(500).json({ error: 'Failed to get source breakdown' })
-    }
-  })
+          [req.visitorId],
+        );
+        const sources = result.rows.map(
+          (r: {
+            source: string;
+            is_inferred: boolean;
+            event_count: string;
+            total_cost: string;
+            total_revenue: string;
+          }) => ({
+            source: r.is_inferred ? "inferred" : r.source,
+            event_count: parseInt(r.event_count),
+            total_cost: parseFloat(r.total_cost) || 0,
+            total_revenue: parseFloat(r.total_revenue) || 0,
+          }),
+        );
+        const total_events = sources.reduce(
+          (s: number, r: { event_count: number }) => s + r.event_count,
+          0,
+        );
+        res.json({ sources, total_events });
+      } catch (error) {
+        console.error("Get source breakdown error:", error);
+        res.status(500).json({ error: "Failed to get source breakdown" });
+      }
+    },
+  );
 
   // GET /stripe/status
-  router.get('/stripe/status', ensureVisitor, async (_req: AuthRequest, res: Response) => {
-    try {
-      const stripe = await getUncachableStripeClient()
-      const account = await stripe.accounts.retrieve()
-      res.json({
-        connected: true,
-        account_id: account.id,
-        account_name: (account as { business_profile?: { name?: string }; display_name?: string }).business_profile?.name
-          || (account as { display_name?: string }).display_name
-          || account.id,
-      })
-    } catch (error) {
-      console.error('Stripe status check error:', error)
-      res.json({ connected: false, error: 'Not connected' })
-    }
-  })
+  router.get(
+    "/stripe/status",
+    ensureVisitor,
+    async (_req: AuthRequest, res: Response) => {
+      try {
+        const stripe = await getUncachableStripeClient();
+        const account = await stripe.accounts.retrieve();
+        res.json({
+          connected: true,
+          account_id: account.id,
+          account_name:
+            (
+              account as {
+                business_profile?: { name?: string };
+                display_name?: string;
+              }
+            ).business_profile?.name ||
+            (account as { display_name?: string }).display_name ||
+            account.id,
+        });
+      } catch (error) {
+        console.error("Stripe status check error:", error);
+        res.json({ connected: false, error: "Not connected" });
+      }
+    },
+  );
 
   // POST /stripe/sync
-  router.post('/stripe/sync', ensureVisitor, expensiveLimiter, async (req: AuthRequest, res: Response) => {
-    const client = await pool.connect()
-    try {
-      const stripe = await getUncachableStripeClient()
+  router.post(
+    "/stripe/sync",
+    ensureVisitor,
+    expensiveLimiter,
+    async (req: AuthRequest, res: Response) => {
+      const client = await pool.connect();
+      try {
+        const stripe = await getUncachableStripeClient();
 
-      // Fetch all data from Stripe using auto-pagination
-      const [stripeCustomersList, stripeSubscriptionsList, stripeProductsList, pricesList] = await Promise.all([
-        stripe.customers.list({ limit: 100 }).autoPagingToArray({ limit: 10000 }),
-        stripe.subscriptions.list({ limit: 100, status: 'all' }).autoPagingToArray({ limit: 10000 }),
-        stripe.products.list({ limit: 100, active: true }).autoPagingToArray({ limit: 10000 }),
-        stripe.prices.list({ limit: 100, active: true }).autoPagingToArray({ limit: 10000 }),
-      ])
-      const stripeCustomers = { data: stripeCustomersList }
-      const stripeSubscriptions = { data: stripeSubscriptionsList }
-      const stripeProducts = { data: stripeProductsList }
-      const prices = pricesList
+        // Fetch all data from Stripe using auto-pagination
+        const [
+          stripeCustomersList,
+          stripeSubscriptionsList,
+          stripeProductsList,
+          pricesList,
+        ] = await Promise.all([
+          stripe.customers
+            .list({ limit: 100 })
+            .autoPagingToArray({ limit: 10000 }),
+          stripe.subscriptions
+            .list({ limit: 100, status: "all" })
+            .autoPagingToArray({ limit: 10000 }),
+          stripe.products
+            .list({ limit: 100, active: true })
+            .autoPagingToArray({ limit: 10000 }),
+          stripe.prices
+            .list({ limit: 100, active: true })
+            .autoPagingToArray({ limit: 10000 }),
+        ]);
+        const stripeCustomers = { data: stripeCustomersList };
+        const stripeSubscriptions = { data: stripeSubscriptionsList };
+        const stripeProducts = { data: stripeProductsList };
+        const prices = pricesList;
 
-      await client.query('BEGIN')
+        await client.query("BEGIN");
 
-      // Clear existing revenue data
-      await client.query('DELETE FROM subscriptions WHERE user_id = $1', [req.visitorId])
-      await client.query('DELETE FROM customers WHERE user_id = $1', [req.visitorId])
-      await client.query('DELETE FROM plans WHERE user_id = $1', [req.visitorId])
-      await client.query("DELETE FROM observe_events WHERE user_id = $1 AND source = 'stripe'", [req.visitorId])
+        // Clear existing revenue data
+        await client.query("DELETE FROM subscriptions WHERE user_id = $1", [
+          req.visitorId,
+        ]);
+        await client.query("DELETE FROM customers WHERE user_id = $1", [
+          req.visitorId,
+        ]);
+        await client.query("DELETE FROM plans WHERE user_id = $1", [
+          req.visitorId,
+        ]);
+        await client.query(
+          "DELETE FROM observe_events WHERE user_id = $1 AND source = 'stripe'",
+          [req.visitorId],
+        );
 
-      // Insert plans (from Stripe products + prices) — batched
-      const planIds = new Set<string>()
-      const planRows: { planId: string; name: string; amount: number; intervalMonths: number }[] = []
-      for (const price of prices) {
-        const planId = price.id
-        if (planIds.has(planId)) continue
-        planIds.add(planId)
-        const product = stripeProducts.data.find(p => p.id === (typeof price.product === 'string' ? price.product : price.product?.id))
-        const name = product?.name || planId
-        const amount = (price.unit_amount || 0) / 100
-        const intervalMonths = price.recurring?.interval === 'year' ? 12 : 1
-        planRows.push({ planId, name, amount, intervalMonths })
-      }
-      const batchSize = 500
-      for (let i = 0; i < planRows.length; i += batchSize) {
-        const batch = planRows.slice(i, i + batchSize)
-        const values: unknown[] = []
-        const placeholders: string[] = []
-        let idx = 1
-        for (const p of batch) {
-          placeholders.push(`($${idx++}, $${idx++}, $${idx++}, $${idx++}, $${idx++}, $${idx++})`)
-          values.push(req.visitorId, p.planId, p.name, p.amount, p.intervalMonths, 'recurring')
+        // Insert plans (from Stripe products + prices) — batched
+        const planIds = new Set<string>();
+        const planRows: {
+          planId: string;
+          name: string;
+          amount: number;
+          intervalMonths: number;
+        }[] = [];
+        for (const price of prices) {
+          const planId = price.id;
+          if (planIds.has(planId)) continue;
+          planIds.add(planId);
+          const product = stripeProducts.data.find(
+            (p) =>
+              p.id ===
+              (typeof price.product === "string"
+                ? price.product
+                : price.product?.id),
+          );
+          const name = product?.name || planId;
+          const amount = (price.unit_amount || 0) / 100;
+          const intervalMonths = price.recurring?.interval === "year" ? 12 : 1;
+          planRows.push({ planId, name, amount, intervalMonths });
         }
-        await client.query(
-          `INSERT INTO plans (user_id, plan_id, name, price_amount, interval_months, billing_model) VALUES ${placeholders.join(', ')} ON CONFLICT DO NOTHING`,
-          values
-        )
-      }
-
-      // Insert customers — batched
-      const validCustomers = stripeCustomers.data.filter(c => typeof c !== 'string')
-      for (let i = 0; i < validCustomers.length; i += batchSize) {
-        const batch = validCustomers.slice(i, i + batchSize)
-        const values: unknown[] = []
-        const placeholders: string[] = []
-        let idx = 1
-        for (const customer of batch) {
-          placeholders.push(`($${idx++}, $${idx++}, $${idx++}, $${idx++})`)
-          values.push(req.visitorId, customer.id, customer.email || customer.id, customer.email || null)
+        const batchSize = 500;
+        for (let i = 0; i < planRows.length; i += batchSize) {
+          const batch = planRows.slice(i, i + batchSize);
+          const values: unknown[] = [];
+          const placeholders: string[] = [];
+          let idx = 1;
+          for (const p of batch) {
+            placeholders.push(
+              `($${idx++}, $${idx++}, $${idx++}, $${idx++}, $${idx++}, $${idx++})`,
+            );
+            values.push(
+              req.visitorId,
+              p.planId,
+              p.name,
+              p.amount,
+              p.intervalMonths,
+              "recurring",
+            );
+          }
+          await client.query(
+            `INSERT INTO plans (user_id, plan_id, name, price_amount, interval_months, billing_model) VALUES ${placeholders.join(", ")} ON CONFLICT DO NOTHING`,
+            values,
+          );
         }
-        await client.query(
-          `INSERT INTO customers (user_id, customer_id, name, email) VALUES ${placeholders.join(', ')} ON CONFLICT DO NOTHING`,
-          values
-        )
-      }
 
-      // Insert subscriptions — batched
-      let syncedSubs = 0
-      const subRows: { id: string; customerId: string; priceId: string; isActive: boolean; mrr: number }[] = []
-      for (const sub of stripeSubscriptions.data) {
-        const priceId = sub.items?.data?.[0]?.price?.id
-        if (!priceId) continue
-        const unitAmount = sub.items.data[0].price.unit_amount || 0
-        const mrr = sub.items.data[0].price.recurring?.interval === 'year'
-          ? Math.round(unitAmount / 12 / 100)
-          : Math.round(unitAmount / 100)
-        subRows.push({ id: sub.id, customerId: sub.customer as string, priceId, isActive: sub.status === 'active', mrr })
-        syncedSubs++
-      }
-      for (let i = 0; i < subRows.length; i += batchSize) {
-        const batch = subRows.slice(i, i + batchSize)
-        const subValues: unknown[] = []
-        const subPlaceholders: string[] = []
-        const eventValues: unknown[] = []
-        const eventPlaceholders: string[] = []
-        let subIdx = 1
-        let eventIdx = 1
-        for (const s of batch) {
-          subPlaceholders.push(`($${subIdx++}, $${subIdx++}, $${subIdx++}, $${subIdx++}, $${subIdx++}, $${subIdx++})`)
-          subValues.push(req.visitorId, s.id, s.customerId, s.priceId, s.isActive, s.mrr)
-          eventPlaceholders.push(`($${eventIdx++}, $${eventIdx++}, 'subscription', 'revenue', NOW(), $${eventIdx++}, 'stripe', 'monthly_aggregate')`)
-          eventValues.push(req.visitorId, s.customerId, s.mrr)
+        // Insert customers — batched
+        const validCustomers = stripeCustomers.data.filter(
+          (c) => typeof c !== "string",
+        );
+        for (let i = 0; i < validCustomers.length; i += batchSize) {
+          const batch = validCustomers.slice(i, i + batchSize);
+          const values: unknown[] = [];
+          const placeholders: string[] = [];
+          let idx = 1;
+          for (const customer of batch) {
+            placeholders.push(`($${idx++}, $${idx++}, $${idx++}, $${idx++})`);
+            values.push(
+              req.visitorId,
+              customer.id,
+              customer.email || customer.id,
+              customer.email || null,
+            );
+          }
+          await client.query(
+            `INSERT INTO customers (user_id, customer_id, name, email) VALUES ${placeholders.join(", ")} ON CONFLICT DO NOTHING`,
+            values,
+          );
         }
+
+        // Insert subscriptions — batched
+        let syncedSubs = 0;
+        const subRows: {
+          id: string;
+          customerId: string;
+          priceId: string;
+          isActive: boolean;
+          mrr: number;
+        }[] = [];
+        for (const sub of stripeSubscriptions.data) {
+          const priceId = sub.items?.data?.[0]?.price?.id;
+          if (!priceId) continue;
+          const unitAmount = sub.items.data[0].price.unit_amount || 0;
+          const mrr =
+            sub.items.data[0].price.recurring?.interval === "year"
+              ? Math.round(unitAmount / 12 / 100)
+              : Math.round(unitAmount / 100);
+          subRows.push({
+            id: sub.id,
+            customerId: sub.customer as string,
+            priceId,
+            isActive: sub.status === "active",
+            mrr,
+          });
+          syncedSubs++;
+        }
+        for (let i = 0; i < subRows.length; i += batchSize) {
+          const batch = subRows.slice(i, i + batchSize);
+          const subValues: unknown[] = [];
+          const subPlaceholders: string[] = [];
+          const eventValues: unknown[] = [];
+          const eventPlaceholders: string[] = [];
+          let subIdx = 1;
+          let eventIdx = 1;
+          for (const s of batch) {
+            subPlaceholders.push(
+              `($${subIdx++}, $${subIdx++}, $${subIdx++}, $${subIdx++}, $${subIdx++}, $${subIdx++})`,
+            );
+            subValues.push(
+              req.visitorId,
+              s.id,
+              s.customerId,
+              s.priceId,
+              s.isActive,
+              s.mrr,
+            );
+            eventPlaceholders.push(
+              `($${eventIdx++}, $${eventIdx++}, 'subscription', 'revenue', NOW(), $${eventIdx++}, 'stripe', 'monthly_aggregate')`,
+            );
+            eventValues.push(req.visitorId, s.customerId, s.mrr);
+          }
+          await client.query(
+            `INSERT INTO subscriptions (user_id, subscription_id, customer_id, plan_id, is_active, mrr_override) VALUES ${subPlaceholders.join(", ")} ON CONFLICT DO NOTHING`,
+            subValues,
+          );
+          await client.query(
+            `INSERT INTO observe_events (user_id, customer_id, feature_key, event_name, timestamp, revenue_amount, source, granularity) VALUES ${eventPlaceholders.join(", ")}`,
+            eventValues,
+          );
+        }
+
+        await clearSampleData(client, req.visitorId!);
         await client.query(
-          `INSERT INTO subscriptions (user_id, subscription_id, customer_id, plan_id, is_active, mrr_override) VALUES ${subPlaceholders.join(', ')} ON CONFLICT DO NOTHING`,
-          subValues
-        )
-        await client.query(
-          `INSERT INTO observe_events (user_id, customer_id, feature_key, event_name, timestamp, revenue_amount, source, granularity) VALUES ${eventPlaceholders.join(', ')}`,
-          eventValues
-        )
+          "INSERT INTO user_data_status (user_id, data_mode) VALUES ($1, $2) ON CONFLICT (user_id) DO UPDATE SET data_mode = $2, updated_at = NOW()",
+          [req.visitorId, "user"],
+        );
+
+        await client.query("COMMIT");
+        convertReferralIfPending(req.visitorId!);
+
+        // Track Stripe sync usage in billing
+        trackBillingUsage(req.visitorId!, "stripe_sync", "stripe_data_synced");
+
+        res.json({
+          success: true,
+          synced: {
+            customers: stripeCustomers.data.length,
+            subscriptions: syncedSubs,
+            plans: planIds.size,
+          },
+        });
+      } catch (error) {
+        await client.query("ROLLBACK");
+        console.error("Stripe sync error:", error);
+        res.status(500).json({ error: "Stripe sync failed" });
+      } finally {
+        client.release();
       }
+    },
+  );
 
-      await clearSampleData(client, req.visitorId!)
-      await client.query(
-        'INSERT INTO user_data_status (user_id, data_mode) VALUES ($1, $2) ON CONFLICT (user_id) DO UPDATE SET data_mode = $2, updated_at = NOW()',
-        [req.visitorId, 'user']
-      )
+  // POST /stripe/sync-invoices — import Stripe invoice line items for granular per-customer revenue
+  router.post(
+    "/stripe/sync-invoices",
+    ensureVisitor,
+    expensiveLimiter,
+    async (req: AuthRequest, res: Response) => {
+      const client = await pool.connect();
+      try {
+        const stripe = await getUncachableStripeClient();
 
-      await client.query('COMMIT')
-      convertReferralIfPending(req.visitorId!)
+        const [invoices, products] = await Promise.all([
+          stripe.invoices
+            .list({
+              limit: 100,
+              created: { gte: Math.floor(Date.now() / 1000) - 90 * 86400 },
+            })
+            .autoPagingToArray({ limit: 10000 }),
+          stripe.products
+            .list({ limit: 100 })
+            .autoPagingToArray({ limit: 10000 }),
+        ]);
 
-      // Track Stripe sync usage in billing
-      trackBillingUsage(req.visitorId!, 'stripe_sync', 'stripe_data_synced')
+        const productNameMap = new Map<string, string>();
+        for (const product of products) {
+          productNameMap.set(product.id, product.name);
+        }
 
-      res.json({
-        success: true,
-        synced: {
-          customers: stripeCustomers.data.length,
-          subscriptions: syncedSubs,
-          plans: planIds.size,
-        },
-      })
-    } catch (error) {
-      await client.query('ROLLBACK')
-      console.error('Stripe sync error:', error)
-      res.status(500).json({ error: 'Stripe sync failed' })
-    } finally {
-      client.release()
-    }
-  })
+        await client.query("BEGIN");
+        await client.query(
+          "DELETE FROM observe_events WHERE user_id = $1 AND source = 'stripe' AND granularity = 'invoice'",
+          [req.visitorId],
+        );
 
-  return router
+        const lineItemRows: {
+          customerId: string;
+          featureKey: string;
+          timestamp: Date;
+          revenueAmount: number;
+        }[] = [];
+        let invoiceCount = 0;
+        for (const invoice of invoices) {
+          if (invoice.status !== "paid") continue;
+          invoiceCount++;
+          for (const line of invoice.lines.data) {
+            const productId =
+              typeof line.price?.product === "string"
+                ? line.price.product
+                : (line.price?.product as { id: string } | null)?.id;
+            const featureKey =
+              (productId && productNameMap.get(productId)) || "subscription";
+            lineItemRows.push({
+              customerId: invoice.customer as string,
+              featureKey,
+              timestamp: new Date((line.period?.start || 0) * 1000),
+              revenueAmount: (line.amount || 0) / 100,
+            });
+          }
+        }
+
+        const batchSize = 500;
+        for (let i = 0; i < lineItemRows.length; i += batchSize) {
+          const batch = lineItemRows.slice(i, i + batchSize);
+          const values: unknown[] = [];
+          const placeholders: string[] = [];
+          let idx = 1;
+          for (const item of batch) {
+            placeholders.push(
+              `($${idx++}, $${idx++}, $${idx++}, 'invoice_line_item', $${idx++}, $${idx++}, 'stripe', 'invoice', 'explicit')`,
+            );
+            values.push(
+              req.visitorId,
+              item.customerId,
+              item.featureKey,
+              item.timestamp,
+              item.revenueAmount,
+            );
+          }
+          await client.query(
+            `INSERT INTO observe_events (user_id, customer_id, feature_key, event_name, timestamp, revenue_amount, source, granularity, revenue_source)
+           VALUES ${placeholders.join(", ")}`,
+            values,
+          );
+        }
+
+        await client.query("COMMIT");
+        res.json({
+          success: true,
+          invoices: invoiceCount,
+          line_items: lineItemRows.length,
+        });
+      } catch (error) {
+        await client.query("ROLLBACK");
+        console.error("Stripe invoice sync error:", error);
+        res.status(500).json({ error: "Stripe invoice sync failed" });
+      } finally {
+        client.release();
+      }
+    },
+  );
+
+  // POST /data/upload/provider-csv — auto-detect and import OpenAI/Anthropic billing exports
+  router.post(
+    "/data/upload/provider-csv",
+    ensureVisitor,
+    async (req: AuthRequest, res: Response) => {
+      const access = await checkBillingFeatureAccess(
+        req.visitorId!,
+        "csv_upload",
+        req.accountEmail,
+      );
+      if (!access.allowed)
+        return res
+          .status(403)
+          .json({ error: access.reason || "Upload limit reached." });
+      const client = await pool.connect();
+      try {
+        const { raw_csv } = req.body;
+        if (!raw_csv || typeof raw_csv !== "string") {
+          return res.status(400).json({ error: "raw_csv is required" });
+        }
+
+        const lines = raw_csv.trim().split("\n");
+        if (lines.length < 2) {
+          return res.status(400).json({
+            error: "CSV must have a header row and at least one data row",
+          });
+        }
+
+        const headers = lines[0]
+          .split(",")
+          .map((h) => h.trim().replace(/^"/, "").replace(/"$/, ""));
+        const headersLower = headers.map((h) => h.toLowerCase());
+
+        // Detect provider
+        let provider: "openai" | "anthropic" | null = null;
+        const hasOpenAI =
+          headersLower.some((h) =>
+            [
+              "n_context_tokens",
+              "n_completion_tokens",
+              "input tokens",
+              "output tokens",
+            ].includes(h),
+          ) && headersLower.some((h) => ["cost", "cost ($)"].includes(h));
+        const hasAnthropic =
+          headersLower.some((h) =>
+            ["input_tokens", "input tokens"].includes(h),
+          ) &&
+          headersLower.some((h) =>
+            ["output_tokens", "output tokens"].includes(h),
+          ) &&
+          headersLower.some((h) => ["total_cost", "cost"].includes(h));
+
+        if (hasOpenAI) provider = "openai";
+        else if (hasAnthropic) provider = "anthropic";
+
+        let dateCol: number;
+        let modelCol: number;
+        let costCol: number;
+        let inputTokenCol: number;
+        let outputTokenCol: number;
+        let customerIdCol = -1;
+        let revenueCol = -1;
+        let featureKeyCol = -1;
+
+        if (provider) {
+          // Known provider — use hardcoded column mapping
+          const findCol = (names: string[]): number =>
+            headersLower.findIndex((h) => names.includes(h));
+
+          dateCol = findCol(["date"]);
+          modelCol = findCol(["model"]);
+          costCol = findCol(["cost", "cost ($)", "total_cost"]);
+          inputTokenCol = findCol([
+            "n_context_tokens",
+            "input_tokens",
+            "input tokens",
+          ]);
+          outputTokenCol = findCol([
+            "n_completion_tokens",
+            "output_tokens",
+            "output tokens",
+          ]);
+
+          if (dateCol === -1 || costCol === -1) {
+            return res
+              .status(400)
+              .json({ error: "CSV must have date and cost columns" });
+          }
+        } else {
+          // Unknown format — try AI-powered column mapping
+          const openaiKey = process.env.OPENAI_API_KEY;
+
+          if (!openaiKey) {
+            const sampleRows = lines
+              .slice(1, 6)
+              .map((line) =>
+                line
+                  .split(",")
+                  .map((c) => c.trim().replace(/^"/, "").replace(/"$/, "")),
+              );
+            return res.status(400).json({
+              error: "unknown_format",
+              headers,
+              sample_rows: sampleRows,
+              message:
+                "Unrecognized format. Map columns manually or add an OpenAI API key for auto-detection.",
+            });
+          }
+
+          const sampleRows = lines
+            .slice(1, 6)
+            .map((line) =>
+              line
+                .split(",")
+                .map((c) => c.trim().replace(/^"/, "").replace(/"$/, "")),
+            );
+
+          const mappingPrompt = `You are a data mapping assistant. Given these CSV headers and sample data, identify which columns map to these fields:
+- customer_id: customer/user/account identifier
+- cost_amount: monetary cost value
+- revenue_amount: monetary revenue value
+- model: AI model name (e.g., gpt-4, claude-3)
+- feature_key: feature/product/service name
+- timestamp: date or datetime
+- usage_units: token count or usage metric
+
+CSV Headers: ${JSON.stringify(headers)}
+Sample rows:
+${sampleRows.map((r) => JSON.stringify(r)).join("\n")}
+
+Return a JSON object mapping our field names to the CSV column index (0-based). Only include fields you're confident about (>80% confidence). Example:
+{"customer_id": 0, "cost_amount": 3, "timestamp": 1, "model": 2}`;
+
+          const openaiResponse = await fetch(
+            "https://api.openai.com/v1/chat/completions",
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${openaiKey}`,
+              },
+              body: JSON.stringify({
+                model: "gpt-4o-mini",
+                messages: [{ role: "user", content: mappingPrompt }],
+                temperature: 0.1,
+                max_tokens: 500,
+              }),
+            },
+          );
+
+          if (!openaiResponse.ok) {
+            const errBody = await openaiResponse.text();
+            console.error("OpenAI column mapping error:", errBody);
+            return res.status(400).json({
+              error: "unknown_format",
+              headers,
+              sample_rows: sampleRows,
+              message: "AI column mapping failed. Map columns manually.",
+            });
+          }
+
+          const completion = (await openaiResponse.json()) as {
+            choices: Array<{ message: { content: string } }>;
+          };
+          const content = completion.choices[0]?.message?.content || "{}";
+
+          let mapping: Record<string, number>;
+          try {
+            const cleaned = content
+              .replace(/^```json?\n?/i, "")
+              .replace(/\n?```$/i, "")
+              .trim();
+            mapping = JSON.parse(cleaned);
+          } catch {
+            console.error("Failed to parse AI column mapping:", content);
+            return res.status(400).json({
+              error: "unknown_format",
+              headers,
+              sample_rows: sampleRows,
+              message: "AI returned invalid mapping. Map columns manually.",
+            });
+          }
+
+          // Validate minimum required fields
+          const hasTimestamp = typeof mapping.timestamp === "number";
+          const hasCostOrRevenue =
+            typeof mapping.cost_amount === "number" ||
+            typeof mapping.revenue_amount === "number";
+
+          if (!hasTimestamp || !hasCostOrRevenue) {
+            return res.status(400).json({
+              error: "unknown_format",
+              headers,
+              sample_rows: sampleRows,
+              message:
+                "AI could not confidently map required columns (timestamp + cost or revenue). Map columns manually.",
+            });
+          }
+
+          dateCol = mapping.timestamp;
+          costCol = mapping.cost_amount ?? -1;
+          modelCol = mapping.model ?? -1;
+          inputTokenCol = -1;
+          outputTokenCol = -1;
+          customerIdCol = mapping.customer_id ?? -1;
+          revenueCol = mapping.revenue_amount ?? -1;
+          featureKeyCol = mapping.feature_key ?? -1;
+          if (typeof mapping.usage_units === "number") {
+            inputTokenCol = mapping.usage_units;
+          }
+
+          provider = null;
+        }
+
+        // Parse rows
+        const rows: {
+          date: Date;
+          model: string;
+          cost: number;
+          tokens: number;
+          customerId?: string;
+          revenue?: number;
+          featureKey?: string;
+        }[] = [];
+        const modelSet = new Set<string>();
+        for (let i = 1; i < lines.length; i++) {
+          const cols = lines[i]
+            .split(",")
+            .map((c) => c.trim().replace(/^"/, "").replace(/"$/, ""));
+          if (cols.length < headers.length) continue;
+          const cost = costCol !== -1 ? parseFloat(cols[costCol]) : 0;
+          const revenue = revenueCol !== -1 ? parseFloat(cols[revenueCol]) : 0;
+          if ((isNaN(cost) || cost === 0) && (isNaN(revenue) || revenue === 0))
+            continue;
+          const model = modelCol !== -1 ? cols[modelCol] : "unknown";
+          const inputTokens =
+            inputTokenCol !== -1 ? parseInt(cols[inputTokenCol]) || 0 : 0;
+          const outputTokens =
+            outputTokenCol !== -1 ? parseInt(cols[outputTokenCol]) || 0 : 0;
+          modelSet.add(model);
+          rows.push({
+            date: new Date(cols[dateCol]),
+            model,
+            cost: isNaN(cost) ? 0 : cost,
+            tokens: inputTokens + outputTokens,
+            customerId: customerIdCol !== -1 ? cols[customerIdCol] : undefined,
+            revenue: isNaN(revenue) ? undefined : revenue || undefined,
+            featureKey: featureKeyCol !== -1 ? cols[featureKeyCol] : undefined,
+          });
+        }
+
+        if (rows.length === 0) {
+          return res.status(400).json({ error: "No valid data rows found" });
+        }
+
+        await client.query("BEGIN");
+        await client.query(
+          "DELETE FROM observe_events WHERE user_id = $1 AND source = 'csv' AND event_name = 'provider_import'",
+          [req.visitorId],
+        );
+
+        const batchSize = 500;
+        for (let i = 0; i < rows.length; i += batchSize) {
+          const batch = rows.slice(i, i + batchSize);
+          const values: unknown[] = [];
+          const placeholders: string[] = [];
+          let idx = 1;
+          for (const row of batch) {
+            placeholders.push(
+              `($${idx++}, $${idx++}, $${idx++}, 'provider_import', $${idx++}, $${idx++}, $${idx++}, 'usd', $${idx++}, $${idx++}, 'csv', 'daily_aggregate')`,
+            );
+            values.push(
+              req.visitorId,
+              row.customerId || "_aggregate",
+              row.featureKey || row.model,
+              row.date,
+              row.cost,
+              row.revenue || null,
+              row.tokens,
+              provider,
+            );
+          }
+          await client.query(
+            `INSERT INTO observe_events (user_id, customer_id, feature_key, event_name, timestamp, cost_amount, revenue_amount, cost_unit, usage_units, model_provider, source, granularity)
+           VALUES ${placeholders.join(", ")}`,
+            values,
+          );
+        }
+
+        await clearSampleData(client, req.visitorId!);
+        await client.query(
+          "UPDATE user_data_status SET data_mode = $2, updated_at = NOW() WHERE user_id = $1",
+          [req.visitorId, "user"],
+        );
+        await client.query("COMMIT");
+        trackBillingUsage(req.visitorId!, "csv_upload", "csv_upload_provider");
+
+        res.json({
+          success: true,
+          provider: provider || "ai_mapped",
+          rows: rows.length,
+          models: Array.from(modelSet),
+        });
+      } catch (error) {
+        await client.query("ROLLBACK");
+        console.error("Provider CSV upload error:", error);
+        res.status(500).json({ error: "Failed to import provider CSV" });
+      } finally {
+        client.release();
+      }
+    },
+  );
+
+  return router;
 }

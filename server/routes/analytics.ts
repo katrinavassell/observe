@@ -43,7 +43,7 @@ export function createAnalyticsRoutes(pool: Pool, ensureVisitor: any) {
          LEFT JOIN customers c ON oe.user_id = c.user_id AND oe.customer_id = c.customer_id
          WHERE oe.user_id = $1 AND oe.customer_id IS NOT NULL
          GROUP BY oe.customer_id, c.name
-         ORDER BY total_revenue - total_cost ASC`,
+         ORDER BY COALESCE(SUM(oe.revenue_amount), 0) - COALESCE(SUM(oe.cost_amount), 0) ASC`,
           [userId],
         );
 
@@ -1259,5 +1259,524 @@ Return ONLY the JSON object, no markdown or explanation.`;
     },
   );
 
+  // POST /analytics/suggest-pricing — AI-suggested feature pricing rules
+  router.post(
+    "/analytics/suggest-pricing",
+    ensureVisitor,
+    async (req: AuthRequest, res: Response) => {
+      try {
+        const userId = req.visitorId!;
+
+        const [featureResult, pricingResult, mrrResult] = await Promise.all([
+          pool.query(
+            `SELECT feature_key,
+                  COUNT(*) as event_count,
+                  COUNT(DISTINCT customer_id) as customer_count,
+                  COALESCE(SUM(cost_amount), 0) as total_cost,
+                  COALESCE(AVG(cost_amount), 0) as avg_cost_per_event,
+                  COALESCE(SUM(revenue_amount), 0) as current_revenue
+           FROM observe_events
+           WHERE user_id = $1 AND feature_key IS NOT NULL
+           GROUP BY feature_key
+           ORDER BY total_cost DESC`,
+            [userId],
+          ),
+          pool.query(
+            `SELECT feature_key, revenue_per_unit FROM feature_pricing WHERE user_id = $1`,
+            [userId],
+          ),
+          pool.query(
+            `SELECT COALESCE(SUM(COALESCE(s.mrr_override, p.price_amount)), 0) as total_mrr
+           FROM subscriptions s
+           LEFT JOIN plans p ON s.user_id = p.user_id AND s.plan_id = p.plan_id
+           WHERE s.user_id = $1 AND s.is_active = true`,
+            [userId],
+          ),
+        ]);
+
+        if (featureResult.rows.length === 0) {
+          return res.status(400).json({ error: "No feature data to analyze." });
+        }
+
+        const totalMrr = parseFloat(mrrResult.rows[0]?.total_mrr) || 0;
+        const existingRules = pricingResult.rows.map(
+          (r: Record<string, string>) =>
+            `${r.feature_key}: $${parseFloat(r.revenue_per_unit).toFixed(4)}/call`,
+        );
+
+        const featureSummary = featureResult.rows
+          .map((r: Record<string, string>) => {
+            const cost = parseFloat(r.total_cost) || 0;
+            const avg = parseFloat(r.avg_cost_per_event) || 0;
+            const rev = parseFloat(r.current_revenue) || 0;
+            return `- ${r.feature_key}: ${r.event_count} events, ${r.customer_count} customers, total_cost=$${cost.toFixed(2)}, avg_cost/event=$${avg.toFixed(4)}, current_revenue=$${rev.toFixed(2)}`;
+          })
+          .join("\n");
+
+        // Try LLM-powered suggestions
+        const openaiKey = process.env.OPENAI_API_KEY;
+
+        interface Suggestion {
+          feature_key: string;
+          suggested_price: number;
+          unit_label: string;
+          rationale: string;
+          current_cost_per_unit: number;
+          target_margin_pct: number;
+        }
+
+        let suggestions: Suggestion[];
+
+        if (openaiKey) {
+          const prompt = `You are a pricing analyst for an AI SaaS product. Based on the cost data below, suggest a revenue_per_unit price for each feature that would achieve a healthy margin (target: 60-70% gross margin).
+
+Current cost data per feature:
+${featureSummary}
+
+Current subscription MRR: $${totalMrr.toFixed(2)}/month
+Existing pricing rules: ${existingRules.length > 0 ? existingRules.join(", ") : "None configured"}
+
+For each feature, respond with a JSON array:
+[{"feature_key":"...","suggested_price":0.05,"unit_label":"call","rationale":"One sentence","current_cost_per_unit":0.02,"target_margin_pct":65}]
+
+Only return the JSON array, no other text.`;
+
+          const llmResponse = await fetch(
+            "https://api.openai.com/v1/chat/completions",
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${openaiKey}`,
+              },
+              body: JSON.stringify({
+                model: "gpt-4o-mini",
+                messages: [{ role: "user", content: prompt }],
+                temperature: 0.3,
+              }),
+            },
+          );
+
+          if (llmResponse.ok) {
+            const completion = (await llmResponse.json()) as {
+              choices: Array<{ message: { content: string } }>;
+            };
+            const raw = completion.choices?.[0]?.message?.content || "[]";
+            const cleaned = raw
+              .replace(/```json?\n?/g, "")
+              .replace(/```/g, "")
+              .trim();
+            try {
+              suggestions = JSON.parse(cleaned);
+            } catch {
+              suggestions = buildDeterministicSuggestions(featureResult.rows);
+            }
+          } else {
+            suggestions = buildDeterministicSuggestions(featureResult.rows);
+          }
+        } else {
+          suggestions = buildDeterministicSuggestions(featureResult.rows);
+        }
+
+        res.json({ suggestions });
+      } catch (error) {
+        console.error("POST /analytics/suggest-pricing error:", error);
+        res.status(500).json({ error: "Failed to suggest pricing" });
+      }
+    },
+  );
+
+  // GET /analytics/revenue-confidence — revenue source breakdown and confidence score
+  router.get(
+    "/analytics/revenue-confidence",
+    ensureVisitor,
+    async (req: AuthRequest, res: Response) => {
+      try {
+        const userId = req.visitorId!;
+
+        const result = await pool.query(
+          `SELECT
+            revenue_source,
+            COUNT(*) as event_count,
+            COALESCE(SUM(revenue_amount), 0) as total_revenue,
+            COALESCE(SUM(cost_amount), 0) as total_cost
+          FROM observe_events
+          WHERE user_id = $1
+          GROUP BY revenue_source
+          ORDER BY total_revenue DESC`,
+          [userId],
+        );
+
+        const totalRevenue = result.rows.reduce(
+          (sum, r) => sum + (parseFloat(r.total_revenue) || 0),
+          0,
+        );
+        const totalCost = result.rows.reduce(
+          (sum, r) => sum + (parseFloat(r.total_cost) || 0),
+          0,
+        );
+
+        const breakdown = result.rows.map((row) => {
+          const revenue = parseFloat(row.total_revenue) || 0;
+          return {
+            source: row.revenue_source,
+            event_count: parseInt(row.event_count),
+            revenue,
+            cost: parseFloat(row.total_cost) || 0,
+            pct_of_revenue:
+              totalRevenue > 0 ? Math.round((revenue / totalRevenue) * 100) : 0,
+          };
+        });
+
+        const { score, label } = computeConfidence(breakdown);
+
+        res.json({
+          breakdown,
+          confidence_score: score,
+          confidence_label: label,
+          total_revenue: totalRevenue,
+          total_cost: totalCost,
+        });
+      } catch (error) {
+        console.error("GET /analytics/revenue-confidence error:", error);
+        res
+          .status(500)
+          .json({ error: "Failed to get revenue confidence breakdown" });
+      }
+    },
+  );
+
+  // GET /analytics/trends — monthly margin trends
+  router.get(
+    "/analytics/trends",
+    ensureVisitor,
+    async (req: AuthRequest, res: Response) => {
+      try {
+        const userId = req.visitorId!;
+        const months = Math.min(
+          Math.max(parseInt(String(req.query.months)) || 12, 1),
+          24,
+        );
+
+        const result = await pool.query(
+          `SELECT
+            DATE_TRUNC('month', timestamp) as month,
+            COALESCE(SUM(cost_amount), 0) as total_cost,
+            COALESCE(SUM(revenue_amount), 0) as total_revenue,
+            COUNT(*) as event_count,
+            COUNT(DISTINCT customer_id) as active_customers,
+            COUNT(DISTINCT feature_key) as active_features,
+            COUNT(DISTINCT model) as models_used
+          FROM observe_events
+          WHERE user_id = $1 AND timestamp >= NOW() - MAKE_INTERVAL(months => $2)
+          GROUP BY month
+          ORDER BY month ASC`,
+          [userId, months],
+        );
+
+        const rows = result.rows.map((r) => {
+          const cost = parseFloat(r.total_cost) || 0;
+          const revenue = parseFloat(r.total_revenue) || 0;
+          const marginPct =
+            revenue > 0 ? Math.round(((revenue - cost) / revenue) * 100) : null;
+
+          return {
+            month: r.month
+              ? new Date(r.month).toISOString().slice(0, 7)
+              : "unknown",
+            cost,
+            revenue,
+            margin_pct: marginPct,
+            event_count: parseInt(r.event_count),
+            active_customers: parseInt(r.active_customers),
+            active_features: parseInt(r.active_features),
+            models_used: parseInt(r.models_used),
+          };
+        });
+
+        res.json({ months: rows, period_months: months });
+      } catch (error) {
+        console.error("GET /analytics/trends error:", error);
+        res.status(500).json({ error: "Failed to get margin trends" });
+      }
+    },
+  );
+
+  // GET /analytics/retention — customer retention cohort matrix
+  router.get(
+    "/analytics/retention",
+    ensureVisitor,
+    async (req: AuthRequest, res: Response) => {
+      try {
+        const userId = req.visitorId!;
+
+        const [cohortResult, activeResult] = await Promise.all([
+          pool.query(
+            `SELECT customer_id, DATE_TRUNC('month', MIN(timestamp)) as cohort_month
+             FROM observe_events
+             WHERE user_id = $1 AND customer_id IS NOT NULL
+             GROUP BY customer_id`,
+            [userId],
+          ),
+          pool.query(
+            `SELECT customer_id, DATE_TRUNC('month', timestamp) as active_month
+             FROM observe_events
+             WHERE user_id = $1 AND customer_id IS NOT NULL
+             GROUP BY customer_id, DATE_TRUNC('month', timestamp)`,
+            [userId],
+          ),
+        ]);
+
+        // Build a set of active months per customer
+        const activeMonths = new Map<string, Set<string>>();
+        for (const row of activeResult.rows) {
+          const key = row.customer_id;
+          if (!activeMonths.has(key)) activeMonths.set(key, new Set());
+          activeMonths.get(key)!.add(new Date(row.active_month).toISOString());
+        }
+
+        // Group customers by cohort month
+        const cohortMap = new Map<string, string[]>();
+        for (const row of cohortResult.rows) {
+          const month = new Date(row.cohort_month).toISOString();
+          if (!cohortMap.has(month)) cohortMap.set(month, []);
+          cohortMap.get(month)!.push(row.customer_id);
+        }
+
+        // Limit to last 12 months
+        const cutoff = new Date();
+        cutoff.setMonth(cutoff.getMonth() - 12);
+        cutoff.setDate(1);
+        cutoff.setHours(0, 0, 0, 0);
+
+        const now = new Date();
+        now.setDate(1);
+        now.setHours(0, 0, 0, 0);
+
+        const cohorts = Array.from(cohortMap.entries())
+          .filter(([month]) => new Date(month) >= cutoff)
+          .sort(([a], [b]) => new Date(a).getTime() - new Date(b).getTime())
+          .map(([cohortMonth, customerIds]) => {
+            const cohortDate = new Date(cohortMonth);
+            const maxMonths =
+              (now.getFullYear() - cohortDate.getFullYear()) * 12 +
+              (now.getMonth() - cohortDate.getMonth()) +
+              1;
+
+            const retention: number[] = [];
+            for (let i = 0; i < maxMonths; i++) {
+              const checkDate = new Date(cohortDate);
+              checkDate.setMonth(checkDate.getMonth() + i);
+              const checkKey = checkDate.toISOString();
+              const activeCount = customerIds.filter((cid) =>
+                activeMonths.get(cid)?.has(checkKey),
+              ).length;
+              retention.push(
+                Math.round((activeCount / customerIds.length) * 100),
+              );
+            }
+
+            const label = `${cohortDate.getFullYear()}-${String(cohortDate.getMonth() + 1).padStart(2, "0")}`;
+
+            return {
+              cohort_month: label,
+              size: customerIds.length,
+              retention,
+            };
+          });
+
+        res.json({ cohorts });
+      } catch (error) {
+        console.error("GET /analytics/retention error:", error);
+        res.status(500).json({ error: "Failed to get retention cohorts" });
+      }
+    },
+  );
+
+  // GET /analytics/mrr-movements — MRR movement categories per customer with summary
+  router.get(
+    "/analytics/mrr-movements",
+    ensureVisitor,
+    async (req: AuthRequest, res: Response) => {
+      try {
+        const userId = req.visitorId!;
+
+        const [currentResult, priorResult, customerResult] = await Promise.all([
+          // Current MRR per customer (active subs)
+          pool.query(
+            `SELECT s.customer_id,
+                  COALESCE(SUM(COALESCE(s.mrr_override, p.price_amount)), 0) as mrr
+           FROM subscriptions s
+           LEFT JOIN plans p ON s.user_id = p.user_id AND s.plan_id = p.plan_id
+           WHERE s.user_id = $1 AND s.is_active = true
+           GROUP BY s.customer_id`,
+            [userId],
+          ),
+
+          // Prior period: subs created 60+ days ago (whether active or not)
+          pool.query(
+            `SELECT s.customer_id,
+                  COALESCE(SUM(COALESCE(s.mrr_override, p.price_amount)), 0) as mrr
+           FROM subscriptions s
+           LEFT JOIN plans p ON s.user_id = p.user_id AND s.plan_id = p.plan_id
+           WHERE s.user_id = $1 AND s.created_at <= NOW() - INTERVAL '60 days'
+           GROUP BY s.customer_id`,
+            [userId],
+          ),
+
+          // Customer names
+          pool.query(
+            `SELECT customer_id, name FROM customers WHERE user_id = $1`,
+            [userId],
+          ),
+        ]);
+
+        const currentMrrMap: Record<string, number> = {};
+        for (const row of currentResult.rows) {
+          currentMrrMap[row.customer_id] = parseFloat(row.mrr) || 0;
+        }
+        const priorMrrMap: Record<string, number> = {};
+        for (const row of priorResult.rows) {
+          priorMrrMap[row.customer_id] = parseFloat(row.mrr) || 0;
+        }
+        const nameMap: Record<string, string> = {};
+        for (const row of customerResult.rows) {
+          nameMap[row.customer_id] = row.name;
+        }
+
+        // All customer IDs that appear in either period
+        const allIds = new Set([
+          ...Object.keys(currentMrrMap),
+          ...Object.keys(priorMrrMap),
+        ]);
+
+        type MrrCategory =
+          | "new"
+          | "expansion"
+          | "contraction"
+          | "churned"
+          | "stable";
+
+        const movements: Array<{
+          customer_id: string;
+          customer_name: string;
+          category: MrrCategory;
+          current_mrr: number;
+          prior_mrr: number;
+          change: number;
+        }> = [];
+
+        let new_mrr = 0;
+        let expansion_mrr = 0;
+        let contraction_mrr = 0;
+        let churned_mrr = 0;
+
+        for (const customerId of allIds) {
+          const current = currentMrrMap[customerId] ?? 0;
+          const prior = priorMrrMap[customerId] ?? 0;
+          const change = current - prior;
+
+          let category: MrrCategory;
+          if (current > 0 && prior === 0) {
+            category = "new";
+            new_mrr += change;
+          } else if (current === 0 && prior > 0) {
+            category = "churned";
+            churned_mrr += Math.abs(change);
+          } else if (current > prior) {
+            category = "expansion";
+            expansion_mrr += change;
+          } else if (current < prior) {
+            category = "contraction";
+            contraction_mrr += Math.abs(change);
+          } else {
+            category = "stable";
+          }
+
+          movements.push({
+            customer_id: customerId,
+            customer_name: nameMap[customerId] || customerId,
+            category,
+            current_mrr: current,
+            prior_mrr: prior,
+            change,
+          });
+        }
+
+        // Sort: non-stable first sorted by absolute change desc, then stable
+        movements.sort((a, b) => {
+          if (a.category === "stable" && b.category !== "stable") return 1;
+          if (a.category !== "stable" && b.category === "stable") return -1;
+          return Math.abs(b.change) - Math.abs(a.change);
+        });
+
+        res.json({
+          movements,
+          summary: {
+            new_mrr,
+            expansion_mrr,
+            contraction_mrr,
+            churned_mrr,
+            net_new_mrr:
+              new_mrr + expansion_mrr - contraction_mrr - churned_mrr,
+          },
+        });
+      } catch (error) {
+        console.error("GET /analytics/mrr-movements error:", error);
+        res.status(500).json({ error: "Failed to get MRR movements" });
+      }
+    },
+  );
+
   return router;
+}
+
+function computeConfidence(
+  breakdown: Array<{ source: string; pct_of_revenue: number }>,
+): { score: number; label: string } {
+  const weights: Record<string, number> = {
+    explicit: 1.0,
+    feature_pricing: 0.8,
+    mrr_allocation: 0.4,
+    none: 0,
+  };
+
+  let score = 0;
+  for (const item of breakdown) {
+    const weight = weights[item.source] ?? 0;
+    score += item.pct_of_revenue * weight;
+  }
+  score = Math.round(Math.max(0, Math.min(100, score)));
+
+  let label: string;
+  if (score >= 80) label = "High";
+  else if (score >= 50) label = "Medium";
+  else if (score >= 20) label = "Low";
+  else label = "Very Low";
+
+  return { score, label };
+}
+
+function buildDeterministicSuggestions(
+  rows: Array<Record<string, string>>,
+): Array<{
+  feature_key: string;
+  suggested_price: number;
+  unit_label: string;
+  rationale: string;
+  current_cost_per_unit: number;
+  target_margin_pct: number;
+}> {
+  return rows.map((r) => {
+    const avgCost = parseFloat(r.avg_cost_per_event) || 0;
+    const suggestedPrice = Math.round(avgCost * 2.5 * 10000) / 10000;
+    return {
+      feature_key: r.feature_key,
+      suggested_price: suggestedPrice,
+      unit_label: "call",
+      rationale: "Based on 2.5x cost markup for 60% target margin",
+      current_cost_per_unit: avgCost,
+      target_margin_pct: 60,
+    };
+  });
 }

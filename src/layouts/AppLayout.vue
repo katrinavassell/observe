@@ -7,6 +7,7 @@ import {
   Activity,
   Cpu,
   Bell,
+  Users,
   Settings,
   Eye,
   LogIn,
@@ -61,6 +62,12 @@ const navItems = computed(() => [
     label: "Alerts",
     icon: Bell,
     description: "Cost spike and margin alerts",
+  },
+  {
+    path: "/cohorts",
+    label: "Cohorts",
+    icon: Users,
+    description: "Customer segments by profitability and behavior",
   },
   {
     path: "/data-sources",

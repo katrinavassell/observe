@@ -784,6 +784,232 @@ export async function getMarginAlerts(): Promise<{ alerts: MarginAlert[] }> {
   return request("/analytics/margin-alerts");
 }
 
+export interface RetentionCohort {
+  cohort_month: string;
+  size: number;
+  retention: number[];
+}
+
+export async function getRetentionCohorts(): Promise<{
+  cohorts: RetentionCohort[];
+}> {
+  return request("/analytics/retention");
+}
+
+export interface MonthlyTrend {
+  month: string;
+  cost: number;
+  revenue: number;
+  margin_pct: number | null;
+  event_count: number;
+  active_customers: number;
+  active_features: number;
+  models_used: number;
+}
+
+export async function getMarginTrends(months?: number): Promise<{
+  months: MonthlyTrend[];
+  period_months: number;
+}> {
+  const params = months ? `?months=${months}` : "";
+  return request(`/analytics/trends${params}`);
+}
+
+export interface RevenueConfidenceBreakdown {
+  source: string;
+  event_count: number;
+  revenue: number;
+  cost: number;
+  pct_of_revenue: number;
+}
+
+export interface RevenueConfidence {
+  breakdown: RevenueConfidenceBreakdown[];
+  confidence_score: number;
+  confidence_label: string;
+  total_revenue: number;
+  total_cost: number;
+}
+
+export async function getRevenueConfidence(): Promise<RevenueConfidence> {
+  return request("/analytics/revenue-confidence");
+}
+
+// =============================================================================
+// MRR MOVEMENTS
+// =============================================================================
+
+export interface MrrMovement {
+  customer_id: string;
+  customer_name: string;
+  category: "new" | "expansion" | "contraction" | "churned" | "stable";
+  current_mrr: number;
+  prior_mrr: number;
+  change: number;
+}
+
+export interface MrrSummary {
+  new_mrr: number;
+  expansion_mrr: number;
+  contraction_mrr: number;
+  churned_mrr: number;
+  net_new_mrr: number;
+}
+
+export async function getMrrMovements(): Promise<{
+  movements: MrrMovement[];
+  summary: MrrSummary;
+}> {
+  return request("/analytics/mrr-movements");
+}
+
+// =============================================================================
+// COHORTS
+// =============================================================================
+
+export type CohortLabel =
+  | "unprofitable"
+  | "at_risk"
+  | "champion"
+  | "inactive"
+  | "rising_cost"
+  | "healthy";
+
+export type MrrMovementCategory =
+  | "new"
+  | "expansion"
+  | "contraction"
+  | "churned"
+  | "stable";
+
+export interface ModelSwapSuggestion {
+  suggested_model: string;
+  current_cost_per_event: number;
+  suggested_cost_per_event: number;
+  potential_savings_pct: number;
+}
+
+export interface CohortCustomer {
+  customer_id: string;
+  customer_name: string;
+  segment: string | null;
+  total_revenue: number;
+  total_cost: number;
+  margin_pct: number | null;
+  event_count: number;
+  feature_count: number;
+  model_count: number;
+  adoption_depth: number;
+  first_seen: string;
+  last_seen: string;
+  cost_trend: "up" | "down" | "stable" | "new";
+  active_days_30d: number;
+  health_score: number;
+  top_model: string | null;
+  top_model_cost: number | null;
+  model_swap_suggestion: ModelSwapSuggestion | null;
+  mrr_movement: MrrMovementCategory | null;
+  cohort: CohortLabel;
+}
+
+export interface CohortSummary {
+  count: number;
+  total_revenue: number;
+  total_cost: number;
+}
+
+export interface CohortTotals {
+  customers: number;
+  revenue: number;
+  cost: number;
+  margin_pct: number | null;
+  avg_health_score: number;
+}
+
+export interface DiscoveredCluster {
+  name: string;
+  description: string;
+  customer_ids: string[];
+  severity: "critical" | "warning" | "info" | "positive";
+  recommended_action: string;
+}
+
+export async function discoverCohorts(): Promise<{
+  clusters: DiscoveredCluster[];
+  source: "ai" | "deterministic";
+}> {
+  return request("/cohorts/discover", { method: "POST" });
+}
+
+export interface HealthSnapshot {
+  snapshot_date: string;
+  health_score: number;
+  margin_pct: number | null;
+  adoption_depth: number;
+  active_days: number;
+}
+
+export async function getHealthHistory(
+  customerId: string,
+): Promise<{ history: HealthSnapshot[] }> {
+  return request(`/cohorts/${encodeURIComponent(customerId)}/health-history`);
+}
+
+export async function getCohorts(): Promise<{
+  customers: CohortCustomer[];
+  summary: Record<CohortLabel, CohortSummary>;
+  totals: CohortTotals;
+}> {
+  return request("/cohorts");
+}
+
+// =============================================================================
+// STRIPE INVOICES
+// =============================================================================
+
+export async function syncStripeInvoices(): Promise<{
+  success: boolean;
+  invoices: number;
+  line_items: number;
+}> {
+  return request("/stripe/sync-invoices", { method: "POST" });
+}
+
+// =============================================================================
+// AI PRICING SUGGESTIONS
+// =============================================================================
+
+export interface PricingSuggestion {
+  feature_key: string;
+  suggested_price: number;
+  unit_label: string;
+  rationale: string;
+  current_cost_per_unit: number;
+  target_margin_pct: number;
+}
+
+export async function suggestPricing(): Promise<{
+  suggestions: PricingSuggestion[];
+}> {
+  return request("/analytics/suggest-pricing", { method: "POST" });
+}
+
+// =============================================================================
+// PROVIDER CSV IMPORT
+// =============================================================================
+
+export async function uploadProviderCsv(rawCsv: string): Promise<{
+  success: boolean;
+  provider: string;
+  rows: number;
+  models: string[];
+}> {
+  return request("/data/upload/provider-csv", {
+    method: "POST",
+    body: JSON.stringify({ raw_csv: rawCsv }),
+  });
+}
+
 export interface AiInsight {
   id: string;
   insight_type: string;
