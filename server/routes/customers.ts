@@ -64,7 +64,7 @@ async function clearSampleData(
 
 const costRecordSchema = z.object({
   month: z.string().regex(/^\d{4}-\d{2}$/, "month must be YYYY-MM format"),
-  cost: z.number({ coerce: true }).nonnegative(),
+  cost: z.coerce.number().nonnegative(),
   customer_id: z.string().optional(),
   provider: z.string().optional(),
 });
@@ -73,10 +73,10 @@ const usageRecordSchema = z.object({
   customer_id: z.string().optional(),
   metric: z.string().optional(),
   metric_key: z.string().optional(),
-  value: z.number({ coerce: true }).optional(),
-  metric_value: z.number({ coerce: true }).optional(),
-  limit: z.number({ coerce: true }).optional(),
-  metric_limit: z.number({ coerce: true }).optional(),
+  value: z.coerce.number().optional(),
+  metric_value: z.coerce.number().optional(),
+  limit: z.coerce.number().optional(),
+  metric_limit: z.coerce.number().optional(),
 });
 const revenueUploadSchema = z.object({
   customers: z
@@ -94,7 +94,7 @@ const revenueUploadSchema = z.object({
       z.object({
         plan_id: z.string(),
         name: z.string(),
-        price_amount: z.number({ coerce: true }),
+        price_amount: z.coerce.number(),
         interval_months: z.number().optional(),
       }),
     )
@@ -106,7 +106,7 @@ const revenueUploadSchema = z.object({
         customer_id: z.string(),
         plan_id: z.string(),
         is_active: z.boolean().optional(),
-        mrr_override: z.number({ coerce: true }).optional(),
+        mrr_override: z.coerce.number().optional(),
         current_period_start: z.string().optional(),
         current_period_end: z.string().optional(),
       }),
@@ -999,11 +999,9 @@ export function createCustomersRoutes(
         req.accountEmail,
       );
       if (!access.allowed)
-        return res
-          .status(403)
-          .json({
-            error: access.reason || "Upload limit reached. Upgrade your plan.",
-          });
+        return res.status(403).json({
+          error: access.reason || "Upload limit reached. Upgrade your plan.",
+        });
       const client = await pool.connect();
       try {
         const { records } = req.body;
@@ -1015,12 +1013,10 @@ export function createCustomersRoutes(
             .json({ error: "Too many records. Maximum 10,000 per upload." });
         const parseResult = z.array(costRecordSchema).safeParse(records);
         if (!parseResult.success)
-          return res
-            .status(400)
-            .json({
-              error: "Invalid record format",
-              details: parseResult.error.issues.slice(0, 5),
-            });
+          return res.status(400).json({
+            error: "Invalid record format",
+            details: parseResult.error.issues.slice(0, 5),
+          });
 
         await client.query("BEGIN");
         await clearSampleData(client, req.visitorId!);
@@ -1119,11 +1115,9 @@ export function createCustomersRoutes(
         req.accountEmail,
       );
       if (!access.allowed)
-        return res
-          .status(403)
-          .json({
-            error: access.reason || "Upload limit reached. Upgrade your plan.",
-          });
+        return res.status(403).json({
+          error: access.reason || "Upload limit reached. Upgrade your plan.",
+        });
       const client = await pool.connect();
       try {
         const { records } = req.body;
@@ -1135,12 +1129,10 @@ export function createCustomersRoutes(
             .json({ error: "Too many records. Maximum 10,000 per upload." });
         const parseResult = z.array(usageRecordSchema).safeParse(records);
         if (!parseResult.success)
-          return res
-            .status(400)
-            .json({
-              error: "Invalid record format",
-              details: parseResult.error.issues.slice(0, 5),
-            });
+          return res.status(400).json({
+            error: "Invalid record format",
+            details: parseResult.error.issues.slice(0, 5),
+          });
 
         await client.query("BEGIN");
         await clearSampleData(client, req.visitorId!);
@@ -1241,21 +1233,17 @@ export function createCustomersRoutes(
         req.accountEmail,
       );
       if (!access.allowed)
-        return res
-          .status(403)
-          .json({
-            error: access.reason || "Upload limit reached. Upgrade your plan.",
-          });
+        return res.status(403).json({
+          error: access.reason || "Upload limit reached. Upgrade your plan.",
+        });
       const client = await pool.connect();
       try {
         const parseResult = revenueUploadSchema.safeParse(req.body);
         if (!parseResult.success)
-          return res
-            .status(400)
-            .json({
-              error: "Invalid revenue data format",
-              details: parseResult.error.issues.slice(0, 5),
-            });
+          return res.status(400).json({
+            error: "Invalid revenue data format",
+            details: parseResult.error.issues.slice(0, 5),
+          });
         const { customers, plans, subscriptions } = parseResult.data;
 
         await client.query("BEGIN");

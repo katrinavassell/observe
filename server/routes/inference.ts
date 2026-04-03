@@ -238,7 +238,7 @@ const heliconeEventSchema = z.object({
   total_tokens: z.number().optional(),
   cost: z.number().optional(),
   user_id: z.string().optional(),
-  properties: z.record(z.string()).optional(),
+  properties: z.record(z.string(), z.string()).optional(),
 });
 
 export function createInferenceRoutes(pool: Pool, ensureVisitor: any) {

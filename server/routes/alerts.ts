@@ -7,9 +7,9 @@ const alertRuleSchema = z.object({
   name: z.string().min(1).max(100),
   metric: z.enum(["daily_cost", "margin_percent", "cost_per_event"]),
   operator: z.enum(["gt", "lt", "gte", "lte"]),
-  threshold: z.number({ coerce: true }),
+  threshold: z.coerce.number(),
   email: z.string().email(),
-  cooldown_minutes: z.number({ coerce: true }).int().min(1).default(60),
+  cooldown_minutes: z.coerce.number().int().min(1).default(60),
 });
 
 const METRIC_QUERIES: Record<string, string> = {
@@ -186,12 +186,10 @@ export function createAlertRoutes(
           req.accountEmail,
         );
         if (!access.allowed)
-          return res
-            .status(403)
-            .json({
-              error:
-                "Cost alerts require the Growth plan. Upgrade to create alerts.",
-            });
+          return res.status(403).json({
+            error:
+              "Cost alerts require the Growth plan. Upgrade to create alerts.",
+          });
         const parsed = alertRuleSchema.parse(req.body);
         const { rows } = await pool.query(
           `INSERT INTO alert_rules (user_id, name, metric, operator, threshold, email, cooldown_minutes)
@@ -211,7 +209,7 @@ export function createAlertRoutes(
         if (err instanceof z.ZodError) {
           return res
             .status(400)
-            .json({ error: err.errors[0]?.message || "Invalid input" });
+            .json({ error: err.issues[0]?.message || "Invalid input" });
         }
         console.error("POST /alerts error:", err);
         res.status(500).json({ error: "Failed to create alert" });
