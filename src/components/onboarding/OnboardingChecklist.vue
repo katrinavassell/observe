@@ -14,7 +14,7 @@ import { useDataMode } from "@/composables/useDataMode";
 const router = useRouter();
 const emit = defineEmits<{ (e: "dismiss"): void }>();
 
-const { hasData, hasCosts, hasRevenue } = useDataMode();
+const { hasData, hasCosts, hasRevenue, isSampleMode } = useDataMode();
 
 const insightsGenerated = computed(
   () => localStorage.getItem("observe:insights_generated") === "true",
@@ -22,13 +22,13 @@ const insightsGenerated = computed(
 
 const steps = computed(() => [
   {
-    label: "Load sample data or connect your own",
-    done: hasData.value,
+    label: "Connect your data sources",
+    done: hasCosts.value || hasRevenue.value,
     action: () => router.push("/data-sources"),
   },
   {
-    label: "Connect an integration (Stripe, OpenAI, or Anthropic)",
-    done: hasCosts.value || hasRevenue.value,
+    label: "Send your first event through the proxy",
+    done: hasData.value && !isSampleMode.value,
     action: () => router.push("/data-sources"),
   },
   {
