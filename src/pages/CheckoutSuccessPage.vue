@@ -6,6 +6,7 @@ import { getBillingStatus } from "@/lib/api";
 
 const router = useRouter();
 const planConfirmed = ref(false);
+const timedOut = ref(false);
 
 onMounted(async () => {
   // Poll billing status until plan updates to growth (webhook may be slow)
@@ -21,9 +22,11 @@ onMounted(async () => {
     }
     await new Promise((r) => setTimeout(r, 2000));
   }
-  // Redirect after confirmation or timeout
-  planConfirmed.value = true;
-  setTimeout(() => router.push("/"), 2000);
+  if (planConfirmed.value) {
+    setTimeout(() => router.push("/"), 2000);
+  } else {
+    timedOut.value = true;
+  }
 });
 </script>
 
@@ -42,14 +45,18 @@ onMounted(async () => {
         {{
           planConfirmed
             ? "Welcome to Growth!"
-            : "Confirming your subscription..."
+            : timedOut
+              ? "Still confirming your plan"
+              : "Confirming your subscription..."
         }}
       </h1>
       <p class="text-muted-foreground">
         {{
           planConfirmed
             ? "Redirecting to your dashboard..."
-            : "This may take a few seconds."
+            : timedOut
+              ? "This may take a moment. Check back shortly."
+              : "This may take a few seconds."
         }}
       </p>
     </div>
