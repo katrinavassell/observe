@@ -1,4 +1,5 @@
 import { ref, computed, onMounted } from "vue";
+import { useQueryClient } from "@tanstack/vue-query";
 import { logger } from "@/lib/logger";
 import * as api from "@/lib/api";
 
@@ -26,7 +27,16 @@ const isLoading = ref(true);
 const isLoadingSample = ref(false);
 const isClearingSample = ref(false);
 
+const analyticsQueryKeys = [
+  ["events-by-feature"],
+  ["events-by-model"],
+  ["events-by-customer"],
+  ["data-status"],
+];
+
 export function useDataMode() {
+  const queryClient = useQueryClient();
+
   const dataMode = computed<DataMode>(
     () => dataStatus.value?.data_mode ?? "none",
   );
@@ -86,6 +96,9 @@ export function useDataMode() {
         await api.loadSampleData();
         window.posthog?.capture("sample_data_loaded");
         await refetch();
+        for (const key of analyticsQueryKeys) {
+          queryClient.invalidateQueries({ queryKey: key });
+        }
         isLoadingSample.value = false;
         return;
       } catch (error) {
@@ -106,6 +119,9 @@ export function useDataMode() {
     try {
       await api.clearData();
       await refetch();
+      for (const key of analyticsQueryKeys) {
+        queryClient.invalidateQueries({ queryKey: key });
+      }
     } catch (error) {
       logger.error("Failed to clear sample data", error);
       throw error;

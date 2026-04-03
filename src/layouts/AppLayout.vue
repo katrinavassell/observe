@@ -148,6 +148,11 @@ function isActive(path: string) {
               >
                 <component :is="item.icon" class="h-4 w-4 shrink-0" />
                 <span>{{ item.label }}</span>
+                <span
+                  v-if="item.path === '/alerts'"
+                  class="ml-auto text-[10px] font-medium text-muted-foreground"
+                  >Growth</span
+                >
               </router-link>
             </template>
           </div>

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from "vue";
+import { useQueryClient } from "@tanstack/vue-query";
 import { useRouter } from "vue-router";
 import { toast } from "vue-sonner";
 import {
@@ -22,6 +23,7 @@ import { uploadProviderCsv, createSdkKey } from "@/lib/api";
 import type { StripeStatus, SyncResult } from "@/api/client";
 
 const router = useRouter();
+const queryClient = useQueryClient();
 
 // ---------------------------------------------------------------------------
 // Track selection: Quick Start vs Full Setup
@@ -48,6 +50,10 @@ async function runQuickStart() {
     // Load sample data so the dashboard is populated
     await loadSampleData();
     window.posthog?.capture("sample_data_loaded");
+    queryClient.invalidateQueries({ queryKey: ["events-by-feature"] });
+    queryClient.invalidateQueries({ queryKey: ["events-by-model"] });
+    queryClient.invalidateQueries({ queryKey: ["events-by-customer"] });
+    queryClient.invalidateQueries({ queryKey: ["data-status"] });
 
     // Generate an SDK key (may already exist from signup)
     const result = await createSdkKey("default");

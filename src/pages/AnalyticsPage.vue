@@ -962,11 +962,15 @@ const insightCategories = [
 
           <!-- Customer movement list -->
           <div class="space-y-1">
-            <div
-              v-if="!mrrMovements.length"
-              class="py-8 text-center text-sm text-muted-foreground"
-            >
-              No MRR movement data. Import subscription data to see movements.
+            <div v-if="!mrrMovements.length" class="py-12 text-center">
+              <p class="text-sm font-medium text-muted-foreground">
+                No MRR movement data yet
+              </p>
+              <p class="text-xs text-muted-foreground/70 mt-1 max-w-sm mx-auto">
+                MRR movement data requires multiple months of revenue data.
+                Import subscription history from Stripe or CSV to see new,
+                expansion, contraction, and churned MRR.
+              </p>
             </div>
             <div
               v-for="m in mrrMovements"
