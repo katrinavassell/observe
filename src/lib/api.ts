@@ -1083,6 +1083,29 @@ export async function createPortalSession(): Promise<{ url: string }> {
   return request("/billing/portal", { method: "POST" });
 }
 
+// =============================================================================
+// BONUS CREDITS
+// =============================================================================
+
+export interface CreditsInfo {
+  bonus_credits: number;
+  rewards: { feedback: number; invite_accepted: number };
+  earned: { feedback: boolean; invite_accepted: number };
+}
+
+export async function getCreditsInfo(): Promise<CreditsInfo> {
+  return request("/credits");
+}
+
+export async function submitFeedback(
+  message: string,
+): Promise<{ success: boolean; granted: number; bonus_credits: number }> {
+  return request("/credits/feedback", {
+    method: "POST",
+    body: JSON.stringify({ message }),
+  });
+}
+
 export interface Account {
   id: number;
   email: string;

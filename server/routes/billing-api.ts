@@ -10,7 +10,11 @@ import {
   createCheckoutSession,
   createPortalSession,
   handleWebhook,
+  grantBonusCredits,
+  getBonusCredits,
+  CREDIT_REWARDS,
 } from "../billing.js";
+import type { CreditRewardType } from "../billing.js";
 import { calculateCostFromTokens as calcCostFromDb } from "../model-pricing.js";
 import { syncStripeDataForUser } from "./integrations.js";
 
@@ -175,6 +179,116 @@ export function createBillingApiRoutes(
       } catch (error) {
         console.error("GET /api/billing/status error:", error);
         res.status(500).json({ error: "Failed to fetch billing status" });
+      }
+    },
+  );
+
+  // GET /credits — current bonus credits and reward info
+  router.get(
+    "/credits",
+    ensureVisitor,
+    async (req: AuthRequest, res: Response) => {
+      try {
+        const bonus = await getBonusCredits(pool, req.visitorId!);
+        const result = await pool.query(
+          `SELECT feedback_submitted, invite_credits_granted FROM accounts WHERE visitor_id = $1`,
+          [req.visitorId],
+        );
+        const row = result.rows[0] || {};
+        res.json({
+          bonus_credits: bonus,
+          rewards: CREDIT_REWARDS,
+          earned: {
+            feedback: row.feedback_submitted ?? false,
+            invite_accepted: row.invite_credits_granted ?? 0,
+          },
+        });
+      } catch (error) {
+        console.error("GET /credits error:", error);
+        res.status(500).json({ error: "Failed to fetch credits" });
+      }
+    },
+  );
+
+  // POST /credits/feedback — grant credits for submitting feedback
+  router.post(
+    "/credits/feedback",
+    ensureVisitor,
+    async (req: AuthRequest, res: Response) => {
+      try {
+        const { message } = req.body || {};
+        if (
+          !message ||
+          typeof message !== "string" ||
+          message.trim().length < 10
+        ) {
+          return res
+            .status(400)
+            .json({ error: "Feedback must be at least 10 characters" });
+        }
+
+        // Check if already submitted feedback this month
+        const check = await pool.query(
+          `SELECT feedback_submitted FROM accounts WHERE visitor_id = $1`,
+          [req.visitorId],
+        );
+        if (check.rows[0]?.feedback_submitted) {
+          return res
+            .status(409)
+            .json({ error: "Feedback credits already claimed this month" });
+        }
+
+        // Store feedback
+        await pool.query(
+          `INSERT INTO feedback (user_id, message) VALUES ($1, $2)`,
+          [req.visitorId, message.trim()],
+        );
+
+        // Grant credits and mark as submitted
+        const result = await grantBonusCredits(
+          pool,
+          req.visitorId!,
+          "feedback",
+        );
+        await pool.query(
+          `UPDATE accounts SET feedback_submitted = true WHERE visitor_id = $1`,
+          [req.visitorId],
+        );
+
+        // Email feedback to Kat
+        const resendKey = process.env.RESEND_API_KEY;
+        if (resendKey) {
+          const acct = await pool.query(
+            `SELECT email, name FROM accounts WHERE visitor_id = $1`,
+            [req.visitorId],
+          );
+          const sender = acct.rows[0]?.email || "unknown";
+          const senderName = acct.rows[0]?.name || sender;
+          fetch("https://api.resend.com/emails", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${resendKey}`,
+            },
+            body: JSON.stringify({
+              from: "Observe <notifications@updates.tanso.io>",
+              to: "kat@tansohq.com",
+              subject: `Feedback from ${senderName}`,
+              html: `<p><strong>From:</strong> ${senderName} (${sender})</p><p>${message.trim()}</p>`,
+            }),
+          }).catch((err: unknown) =>
+            console.error("Failed to email feedback:", err),
+          );
+        }
+
+        res.json({
+          success: true,
+          granted: result.granted,
+          bonus_credits: result.bonus_credits,
+        });
+      } catch (error) {
+        console.error("POST /credits/feedback error:", error);
+        res.status(500).json({ error: "Failed to submit feedback" });
       }
     },
   );

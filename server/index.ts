@@ -297,6 +297,24 @@ async function _doDbInit() {
     await pool.query(
       `ALTER TABLE accounts ADD COLUMN IF NOT EXISTS stripe_plan TEXT DEFAULT 'free'`,
     );
+    await pool.query(
+      `ALTER TABLE accounts ADD COLUMN IF NOT EXISTS bonus_credits INTEGER DEFAULT 0`,
+    );
+    await pool.query(
+      `ALTER TABLE accounts ADD COLUMN IF NOT EXISTS feedback_submitted BOOLEAN DEFAULT false`,
+    );
+    await pool.query(
+      `ALTER TABLE accounts ADD COLUMN IF NOT EXISTS invite_credits_granted INTEGER DEFAULT 0`,
+    );
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS feedback (
+        id SERIAL PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        message TEXT NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS password_reset_tokens (

@@ -31,12 +31,11 @@ onMounted(async () => {
 
 async function handleUpgrade() {
   if (!isLoggedIn.value) {
-    toast.error("Sign in to upgrade", {
-      description: "You need an account to subscribe to a plan.",
-    });
-    router.push("/login");
+    window.posthog?.capture("upgrade_clicked_logged_out");
+    router.push("/signup");
     return;
   }
+  window.posthog?.capture("upgrade_clicked");
   isUpgrading.value = true;
   try {
     const { url } = await createCheckout();

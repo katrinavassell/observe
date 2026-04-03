@@ -30,12 +30,13 @@ If you're running an AI product and you're losing money on a subset of customers
 | **Analytics dashboard** | Revenue, costs, and margin overview with trend charts |
 | **AI model breakdown** | Cost and volume by model (gpt-4o, claude-sonnet, etc.) |
 | **Cost alerts** | Threshold-based alerts with email notifications |
-| **AI insights** | AI-generated recommendations about margin compression and pricing opportunities |
+| **AI credits** | AI-generated recommendations about margin compression and pricing (5 free/month, 100 on Growth) |
+| **Bonus credits** | Earn extra AI credits by giving feedback (+5) or inviting teammates (+10) |
 | **OpenAI/Anthropic integration** | Connect API keys to auto-pull usage data |
 | **Stripe billing** | Subscribe to plans, manage billing through Stripe checkout |
 | **CSV upload** | Upload cost, usage, and revenue data without any API integration |
 | **Team collaboration** | Invite team members with admin/viewer roles |
-| **Sample data** | Explore with a realistic pre-populated dataset |
+| **Sample data** | Guests see a pre-populated dashboard automatically |
 
 ---
 
@@ -287,6 +288,7 @@ npm run lint        # lint
 
 ## Community
 
+- [Discord](https://discord.gg/zSVwxgvxCj) -- chat with the team and other users
 - [GitHub Issues](https://github.com/katrinalaszlo/observe/issues) -- bug reports and feature requests
 - [GitHub Discussions](https://github.com/katrinalaszlo/observe/discussions) -- questions, ideas, show & tell
 

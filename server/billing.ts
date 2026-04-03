@@ -30,7 +30,7 @@ export const OBSERVE_PLANS: Record<string, PlanConfig> = {
     name: "Growth",
     stripePriceId: process.env.STRIPE_GROWTH_PRICE_ID || "",
     features: {
-      ai_insights: { limit: null },
+      ai_insights: { limit: 100, reset: "monthly" },
       csv_upload: { limit: null },
       stripe_connection: { limit: null },
       ai_provider_connection: { limit: null },
@@ -88,17 +88,66 @@ export async function checkFeatureAccess(
     used = parseInt(countResult.rows[0]?.count || "0", 10);
   }
 
-  const remaining = Math.max(0, featureConfig.limit - used);
+  // Add bonus credits to the effective limit
+  const bonusResult = await pool.query(
+    `SELECT bonus_credits FROM accounts WHERE visitor_id = $1`,
+    [visitorId],
+  );
+  const bonusCredits = bonusResult.rows[0]?.bonus_credits ?? 0;
+  const effectiveLimit = featureConfig.limit + bonusCredits;
+
+  const remaining = Math.max(0, effectiveLimit - used);
   return {
-    allowed: used < featureConfig.limit,
+    allowed: used < effectiveLimit,
     reason:
-      used >= featureConfig.limit
-        ? `You've used ${used}/${featureConfig.limit} ${featureKey} this month. Upgrade to Growth for unlimited access.`
+      used >= effectiveLimit
+        ? `You've used ${used}/${effectiveLimit} ${featureKey} this month. Upgrade to Growth for more.`
         : undefined,
     usage: used,
-    limit: featureConfig.limit,
+    limit: effectiveLimit,
     remaining,
   };
+}
+
+// =============================================================================
+// Bonus credits
+// =============================================================================
+
+export const CREDIT_REWARDS = {
+  feedback: 5,
+  invite_accepted: 10,
+} as const;
+
+export type CreditRewardType = keyof typeof CREDIT_REWARDS;
+
+export async function grantBonusCredits(
+  pool: Pool,
+  visitorId: string,
+  rewardType: CreditRewardType,
+): Promise<{ bonus_credits: number; granted: number }> {
+  const amount = CREDIT_REWARDS[rewardType];
+  const result = await pool.query(
+    `UPDATE accounts
+     SET bonus_credits = COALESCE(bonus_credits, 0) + $1
+     WHERE visitor_id = $2
+     RETURNING bonus_credits`,
+    [amount, visitorId],
+  );
+  return {
+    bonus_credits: result.rows[0]?.bonus_credits ?? 0,
+    granted: amount,
+  };
+}
+
+export async function getBonusCredits(
+  pool: Pool,
+  visitorId: string,
+): Promise<number> {
+  const result = await pool.query(
+    `SELECT bonus_credits FROM accounts WHERE visitor_id = $1`,
+    [visitorId],
+  );
+  return result.rows[0]?.bonus_credits ?? 0;
 }
 
 // =============================================================================
