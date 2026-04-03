@@ -1,19 +1,13 @@
 <script setup lang="ts">
 import { ref, computed } from "vue";
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
-import {
-  getCohorts,
-  suggestPricing,
-  upsertFeaturePricing,
-  discoverCohorts,
-} from "@/lib/api";
+import { getCohorts, discoverCohorts } from "@/lib/api";
 import type {
   CohortCustomer,
   CohortLabel,
   CohortSummary,
   CohortTotals,
   DiscoveredCluster,
-  PricingSuggestion,
   ModelSwapSuggestion,
 } from "@/lib/api";
 import {
@@ -22,12 +16,10 @@ import {
   TrendingUp,
   TrendingDown,
   Minus,
-  ArrowRight,
   ChevronDown,
   ChevronRight,
   Sparkles,
   Loader2,
-  Check,
 } from "lucide-vue-next";
 import { Card, Skeleton, Button } from "@/components/ui";
 import { formatCurrency as fmt, formatPct as fmtPct } from "@/lib/format";
@@ -64,45 +56,12 @@ function toggleRow(id: string) {
   expandedRows.value = next;
 }
 
-// Pricing suggestions
-const pricingLoading = ref(false);
-const pricingLoaded = ref(false);
-const pricingSuggestions = ref<PricingSuggestion[]>([]);
-const applyingKeys = ref<Set<string>>(new Set());
-
-async function loadPricingSuggestions() {
-  pricingLoading.value = true;
-  try {
-    const res = await suggestPricing();
-    pricingSuggestions.value = res.suggestions;
-    pricingLoaded.value = true;
-  } catch (e: any) {
-    toast.error(e?.message || "Failed to generate pricing suggestions");
-  } finally {
-    pricingLoading.value = false;
-  }
-}
-
-async function applyPricing(s: PricingSuggestion) {
-  applyingKeys.value = new Set([...applyingKeys.value, s.feature_key]);
-  try {
-    await upsertFeaturePricing(s.feature_key, s.suggested_price, s.unit_label);
-    toast.success(`Pricing applied for ${s.feature_key}`);
-    queryClient.invalidateQueries({ queryKey: ["feature-pricing"] });
-  } catch (e: any) {
-    toast.error(e?.message || "Failed to apply pricing");
-  } finally {
-    const next = new Set(applyingKeys.value);
-    next.delete(s.feature_key);
-    applyingKeys.value = next;
-  }
-}
-
 // AI discovery
 const discoveryClusters = ref<DiscoveredCluster[]>([]);
 const discoverySource = ref<"ai" | "deterministic" | null>(null);
 const discoveryLoading = ref(false);
 const discoveryLoaded = ref(false);
+const discoveryExpanded = ref(false);
 const discoveryFilter = ref<string | null>(null);
 const activeClusterName = ref<string | null>(null);
 
@@ -113,6 +72,8 @@ async function loadDiscovery() {
     discoveryClusters.value = res.clusters;
     discoverySource.value = res.source;
     discoveryLoaded.value = true;
+    discoveryExpanded.value = true;
+    window.posthog?.capture("ai_discovery_run");
   } catch (e: any) {
     toast.error(e?.message || "Failed to discover patterns");
   } finally {
@@ -288,91 +249,49 @@ const filteredCustomers = computed(() => {
         </button>
       </div>
 
-      <!-- Pricing suggestions -->
+      <!-- AI discovery -->
       <Card class="p-4">
-        <div class="flex items-center justify-between mb-3">
-          <h2 class="text-sm font-medium">Pricing Suggestions</h2>
-          <Button
-            v-if="!pricingLoaded"
-            size="sm"
-            variant="outline"
-            :disabled="pricingLoading"
-            @click="loadPricingSuggestions"
+        <div class="flex items-center justify-between">
+          <button
+            v-if="discoveryLoaded"
+            class="flex items-center gap-1.5 text-sm font-medium hover:text-foreground transition-colors"
+            @click="discoveryExpanded = !discoveryExpanded"
           >
-            <Loader2
-              v-if="pricingLoading"
-              class="h-3.5 w-3.5 mr-1.5 animate-spin"
-            />
-            <Sparkles v-else class="h-3.5 w-3.5 mr-1.5" />
-            Suggest Pricing
-          </Button>
-        </div>
-        <div
-          v-if="pricingLoaded && pricingSuggestions.length"
-          class="flex gap-3 overflow-x-auto pb-2"
-        >
-          <Card
-            v-for="s in pricingSuggestions"
-            :key="s.feature_key"
-            class="p-3 min-w-[240px] flex-shrink-0 space-y-2"
-          >
-            <p class="text-xs font-medium truncate">{{ s.feature_key }}</p>
-            <p class="text-xs text-muted-foreground">{{ s.rationale }}</p>
-            <div class="flex items-center gap-2 text-xs">
-              <span>{{ fmt(s.current_cost_per_unit) }}/unit</span>
-              <ArrowRight class="h-3 w-3 text-muted-foreground" />
-              <span class="font-medium text-green-600"
-                >{{ fmt(s.suggested_price) }}/unit</span
-              >
-            </div>
+            <ChevronDown v-if="discoveryExpanded" class="h-4 w-4" />
+            <ChevronRight v-else class="h-4 w-4" />
+            AI Discovery
+            <span class="text-xs text-muted-foreground font-normal ml-1">
+              {{ discoveryClusters.length }} patterns found
+            </span>
+          </button>
+          <h2 v-else class="text-sm font-medium">AI Discovery</h2>
+          <div class="flex items-center gap-2">
+            <span
+              v-if="discoveryLoaded"
+              class="text-[10px] text-muted-foreground"
+            >
+              1 AI credit used
+            </span>
             <Button
               size="sm"
               variant="outline"
-              class="w-full"
-              :disabled="applyingKeys.has(s.feature_key)"
-              @click="applyPricing(s)"
+              :disabled="discoveryLoading"
+              @click="loadDiscovery"
             >
-              <Check
-                v-if="applyingKeys.has(s.feature_key)"
-                class="h-3 w-3 mr-1"
+              <Loader2
+                v-if="discoveryLoading"
+                class="h-3.5 w-3.5 mr-1.5 animate-spin"
               />
-              Apply
+              <Sparkles v-else class="h-3.5 w-3.5 mr-1.5" />
+              {{ discoveryLoaded ? "Run Again" : "Discover Hidden Patterns" }}
             </Button>
-          </Card>
-        </div>
-        <p
-          v-else-if="pricingLoaded && !pricingSuggestions.length"
-          class="text-xs text-muted-foreground"
-        >
-          No suggestions available. More event data needed.
-        </p>
-      </Card>
-
-      <!-- AI discovery -->
-      <Card class="p-4">
-        <div class="flex items-center justify-between mb-3">
-          <h2 class="text-sm font-medium">AI Discovery</h2>
-          <Button
-            v-if="!discoveryLoaded"
-            size="sm"
-            variant="outline"
-            :disabled="discoveryLoading"
-            @click="loadDiscovery"
-          >
-            <Loader2
-              v-if="discoveryLoading"
-              class="h-3.5 w-3.5 mr-1.5 animate-spin"
-            />
-            <Sparkles v-else class="h-3.5 w-3.5 mr-1.5" />
-            Discover Hidden Patterns
-          </Button>
-          <span v-else class="text-xs text-muted-foreground">
-            Source: {{ discoverySource }}
-          </span>
+          </div>
         </div>
         <div
-          v-if="discoveryLoaded && discoveryClusters.length"
-          class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"
+          v-if="
+            discoveryExpanded && discoveryLoaded && discoveryClusters.length
+          "
+          class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mt-3"
         >
           <Card
             v-for="cluster in discoveryClusters"
@@ -400,8 +319,10 @@ const filteredCustomers = computed(() => {
           </Card>
         </div>
         <p
-          v-else-if="discoveryLoaded && !discoveryClusters.length"
-          class="text-xs text-muted-foreground"
+          v-else-if="
+            discoveryExpanded && discoveryLoaded && !discoveryClusters.length
+          "
+          class="text-xs text-muted-foreground mt-3"
         >
           No hidden patterns discovered.
         </p>
