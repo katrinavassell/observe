@@ -466,17 +466,11 @@ async function handleProviderCsvFile(event: Event) {
 // =============================================================================
 
 // Restore file display state when returning to page with existing data
+// Only restore file display for real user uploads — never for sample data
 watch(
-  [hasRevenue, hasCosts, hasUsage, () => dataMode.value],
-  ([_hasRev, hasCst, hasUsg, mode]) => {
-    if (mode === "sample") {
-      if (hasCst && !costsFile.value) {
-        costsFile.value = { name: "sample-costs.csv", isSample: true };
-      }
-      if (hasUsg && !usageFile.value) {
-        usageFile.value = { name: "sample-usage.csv", isSample: true };
-      }
-    } else if (mode === "user") {
+  [hasCosts, hasUsage, () => dataMode.value],
+  ([hasCst, hasUsg, mode]) => {
+    if (mode === "user") {
       if (hasCst && !costsFile.value) {
         costsFile.value = { name: "costs.csv", isSample: false };
       }
