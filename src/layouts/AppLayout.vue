@@ -332,7 +332,7 @@ function isActive(path: string) {
 
     <!-- Main Content -->
     <main class="flex-1 min-h-screen overflow-x-hidden pt-14 md:pt-0 md:ml-64">
-      <!-- Guest / sample data banner -->
+      <!-- Guest banner -->
       <div
         v-if="!isLoggedIn && isSampleMode"
         class="flex items-center justify-between px-4 py-2 bg-blue-50 text-blue-700 border-b border-blue-200 text-sm"
@@ -343,18 +343,6 @@ function isActive(path: string) {
         </div>
         <router-link to="/signup" class="font-medium hover:underline">
           Sign up to connect your data
-        </router-link>
-      </div>
-      <div
-        v-else-if="isLoggedIn && isSampleMode"
-        class="flex items-center justify-between px-4 py-2 bg-blue-50 text-blue-700 border-b border-blue-200 text-sm"
-      >
-        <div class="flex items-center gap-2">
-          <Database class="h-4 w-4" />
-          <span>Viewing sample data</span>
-        </div>
-        <router-link to="/data-sources" class="font-medium hover:underline">
-          Connect your data
         </router-link>
       </div>
       <div class="p-6">

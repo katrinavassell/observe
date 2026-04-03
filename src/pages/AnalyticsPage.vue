@@ -339,8 +339,8 @@ const insightCategories = [
           </p>
         </div>
 
-        <!-- DEMO MODE: hardcoded preview -->
-        <template v-if="isSampleMode">
+        <!-- DEMO MODE: hardcoded preview (guests only) -->
+        <template v-if="isSampleMode && !isLoggedIn">
           <div
             class="rounded-lg bg-muted/50 border border-dashed px-3 py-2 text-xs text-muted-foreground"
           >
