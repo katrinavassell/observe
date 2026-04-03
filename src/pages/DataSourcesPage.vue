@@ -542,9 +542,11 @@ watch(
   <span class="text-sky-300">baseURL</span>: <span class="text-amber-300">'{{ proxyBaseUrl }}'</span>,
   <span class="text-sky-300">defaultHeaders</span>: {
     <span class="text-amber-300">'x-tanso-key'</span>: <span class="text-amber-300">'{{ apiKeyForSnippet }}'</span>,
+    <span class="text-amber-300">'x-tanso-customer'</span>: customerId,       <span class="text-zinc-500">// Stripe ID (cus_...) or your user ID</span>
+    <span class="text-amber-300">'x-tanso-feature'</span>: <span class="text-amber-300">'ai_chat'</span>,          <span class="text-zinc-500">// which product feature</span>
   },
 })
-<span class="text-zinc-500">// Every call is now tracked. Cost, model, tokens — automatic.</span></pre>
+<span class="text-zinc-500">// Every call is tracked with cost, model, customer, and feature.</span></pre>
         </div>
 
         <!-- API Key section — compact -->
@@ -701,34 +703,6 @@ watch(
             Add another key
           </Button>
         </div>
-
-        <!-- Per-customer attribution (collapsed) -->
-        <details class="group">
-          <summary
-            class="text-xs font-medium text-muted-foreground cursor-pointer hover:text-foreground transition-colors"
-          >
-            Add per-customer attribution (optional)
-          </summary>
-          <div
-            class="mt-3 rounded-md bg-zinc-950 border border-zinc-800 p-4 font-mono text-xs leading-relaxed overflow-x-auto"
-          >
-            <pre
-              class="whitespace-pre text-zinc-100"
-            ><span class="text-emerald-400">const</span> openai = <span class="text-emerald-400">new</span> OpenAI({
-  <span class="text-sky-300">baseURL</span>: <span class="text-amber-300">'{{ proxyBaseUrl }}'</span>,
-  <span class="text-sky-300">defaultHeaders</span>: {
-    <span class="text-amber-300">'x-tanso-key'</span>: <span class="text-amber-300">'{{ apiKeyForSnippet }}'</span>,
-    <span class="text-amber-300">'x-tanso-customer'</span>: userId,        <span class="text-zinc-500">// your customer ID</span>
-    <span class="text-amber-300">'x-tanso-feature'</span>: <span class="text-amber-300">'ai_chat'</span>,     <span class="text-zinc-500">// which product feature</span>
-  },
-})</pre>
-          </div>
-          <p class="text-[11px] text-muted-foreground mt-2">
-            Without these headers, customer defaults to
-            <span class="font-mono">"default"</span>
-            and feature is auto-derived from the endpoint.
-          </p>
-        </details>
 
         <!-- Other integration methods (collapsed) -->
         <details class="group">
