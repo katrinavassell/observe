@@ -3,12 +3,11 @@
 **AI cost observability that connects cost to revenue to margin.**
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
-[![GitHub stars](https://img.shields.io/github/stars/tansohq/observe)](https://github.com/tansohq/observe)
+[![GitHub stars](https://img.shields.io/github/stars/katrinalaszlo/observe)](https://github.com/katrinalaszlo/observe)
 [![npm](https://img.shields.io/npm/v/@tanso/observe)](https://www.npmjs.com/package/@tanso/observe)
-[![GitHub issues](https://img.shields.io/github/issues/tansohq/observe)](https://github.com/tansohq/observe/issues)
+[![GitHub issues](https://img.shields.io/github/issues/katrinalaszlo/observe)](https://github.com/katrinalaszlo/observe/issues)
 
-<!-- TODO: Replace with actual screenshot of the analytics dashboard showing margin-by-feature view -->
-<!-- ![Observe Dashboard](docs/images/dashboard-screenshot.png) -->
+![Observe Dashboard](docs/images/dashboard-screenshot.png)
 
 ---
 
@@ -45,7 +44,7 @@ If you're running an AI product and you're losing money on a subset of customers
 ### Docker (recommended)
 
 ```bash
-git clone https://github.com/tansohq/observe.git
+git clone https://github.com/katrinalaszlo/observe.git
 cd observe
 docker compose up
 ```
@@ -63,7 +62,7 @@ SESSION_SECRET=your-secret docker compose up
 **Prerequisites:** Node.js 20+, PostgreSQL 16+
 
 ```bash
-git clone https://github.com/tansohq/observe.git
+git clone https://github.com/katrinalaszlo/observe.git
 cd observe
 npm install
 ```
@@ -288,8 +287,8 @@ npm run lint        # lint
 
 ## Community
 
-- [GitHub Issues](https://github.com/tansohq/observe/issues) -- bug reports and feature requests
-- [GitHub Discussions](https://github.com/tansohq/observe/discussions) -- questions, ideas, show & tell
+- [GitHub Issues](https://github.com/katrinalaszlo/observe/issues) -- bug reports and feature requests
+- [GitHub Discussions](https://github.com/katrinalaszlo/observe/discussions) -- questions, ideas, show & tell
 
 ---
 
