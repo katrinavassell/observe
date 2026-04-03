@@ -722,18 +722,21 @@ watch(
               <h4 class="text-xs font-semibold mb-2">SDK Wrapper</h4>
               <p class="text-[11px] text-muted-foreground mb-2">
                 <span class="font-mono">npm install @tanso/observe</span> —
-                wraps your client for automatic tracking.
+                three calls, zero header plumbing.
               </p>
               <div
                 class="rounded-md bg-zinc-950 border border-zinc-800 p-4 font-mono text-xs leading-relaxed overflow-x-auto"
               >
                 <pre
                   class="whitespace-pre text-zinc-100"
-                ><span class="text-emerald-400">import</span> { TansoObserve } <span class="text-emerald-400">from</span> <span class="text-amber-300">'@tanso/observe'</span>
-<span class="text-emerald-400">import</span> { wrapOpenAI } <span class="text-emerald-400">from</span> <span class="text-amber-300">'@tanso/observe/openai'</span>
+                ><span class="text-emerald-400">import</span> { Observe } <span class="text-emerald-400">from</span> <span class="text-amber-300">'@tanso/observe'</span>
+<span class="text-emerald-400">import</span> OpenAI <span class="text-emerald-400">from</span> <span class="text-amber-300">'openai'</span>
 
-<span class="text-emerald-400">const</span> observe = <span class="text-emerald-400">new</span> TansoObserve({ apiKey: <span class="text-amber-300">'{{ apiKeyForSnippet }}'</span> })
-<span class="text-emerald-400">const</span> openai = wrapOpenAI(<span class="text-emerald-400">new</span> OpenAI(), observe)</pre>
+Observe.configure({ <span class="text-sky-300">apiKey</span>: <span class="text-amber-300">'{{ apiKeyForSnippet }}'</span> })
+Observe.identify({ <span class="text-sky-300">customerId</span>: user.stripeId })  <span class="text-zinc-500">// call once on login</span>
+
+<span class="text-emerald-400">const</span> openai = Observe.wrap(<span class="text-emerald-400">new</span> OpenAI())
+<span class="text-zinc-500">// All calls auto-tracked — no headers to manage</span></pre>
               </div>
             </div>
             <!-- REST API -->
