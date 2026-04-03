@@ -216,18 +216,7 @@ function isActive(path: string) {
 
     <!-- Main Content -->
     <main class="ml-64 flex-1 min-h-screen overflow-x-hidden">
-      <!-- Signup nudge for anonymous users -->
-      <div
-        v-if="!isLoggedIn"
-        class="flex items-center justify-between px-4 py-2 bg-emerald-50 text-emerald-700 border-b border-emerald-200 text-sm"
-      >
-        <span>Sign up to save your data, get API keys, and set up alerts</span>
-        <router-link
-          to="/signup"
-          class="font-medium hover:underline whitespace-nowrap ml-4"
-          >Create free account</router-link
-        >
-      </div>
+      <!-- Signup CTA is in the sidebar; no top banner needed -->
       <!-- Sample data banner -->
       <div
         v-if="isSampleMode"
