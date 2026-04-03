@@ -30,6 +30,7 @@ import { Card, CardContent, Button } from "@/components/ui";
 import { CostsSection, UsageSection } from "@/components/data-sources";
 import StripeApiKeyModal from "@/components/integrations/StripeApiKeyModal.vue";
 import { useDataMode } from "@/composables/useDataMode";
+import { useAuth } from "@/composables/useAuth";
 import { useTeam } from "@/composables/useTeam";
 import {
   clearCostData,
@@ -55,7 +56,11 @@ import type { StripeStatus } from "@/api/client";
 
 const router = useRouter();
 const queryClient = useQueryClient();
+const { isLoggedIn } = useAuth();
 const { isViewer } = useTeam();
+
+/** True when the user can interact with data sources (logged in + not a viewer) */
+const canEdit = computed(() => isLoggedIn.value && !isViewer.value);
 
 // =============================================================================
 // STATE MANAGEMENT
@@ -363,6 +368,7 @@ async function _handleDeleteFeaturePricing(featureKey: string) {
 }
 
 onMounted(async () => {
+  if (!isLoggedIn.value) return;
   await Promise.all([
     loadSdkKeys(),
     loadStripeStatus(),
@@ -536,7 +542,18 @@ watch(
         </div>
 
         <!-- API Key section — compact -->
-        <div v-if="!isViewer">
+        <div
+          v-if="!isLoggedIn"
+          class="rounded-lg border border-dashed border-muted-foreground/30 p-4 text-center"
+        >
+          <p class="text-sm text-muted-foreground mb-2">
+            Sign up to generate an API key and start tracking.
+          </p>
+          <Button size="sm" @click="router.push('/signup')"
+            >Sign up to get started</Button
+          >
+        </div>
+        <div v-else-if="!isViewer">
           <div class="flex items-center justify-between mb-2">
             <h3
               class="text-xs font-semibold text-muted-foreground uppercase tracking-wider"
@@ -686,8 +703,12 @@ watch(
           >
             Add per-customer attribution (optional)
           </summary>
-          <div class="mt-3 rounded-md bg-zinc-950 border border-zinc-800 p-4 font-mono text-xs leading-relaxed overflow-x-auto">
-            <pre class="whitespace-pre text-zinc-100"><span class="text-emerald-400">const</span> openai = <span class="text-emerald-400">new</span> OpenAI({
+          <div
+            class="mt-3 rounded-md bg-zinc-950 border border-zinc-800 p-4 font-mono text-xs leading-relaxed overflow-x-auto"
+          >
+            <pre
+              class="whitespace-pre text-zinc-100"
+            ><span class="text-emerald-400">const</span> openai = <span class="text-emerald-400">new</span> OpenAI({
   <span class="text-sky-300">baseURL</span>: <span class="text-amber-300">'{{ proxyBaseUrl }}'</span>,
   <span class="text-sky-300">defaultHeaders</span>: {
     <span class="text-amber-300">'x-tanso-key'</span>: <span class="text-amber-300">'{{ apiKeyForSnippet }}'</span>,
@@ -697,7 +718,8 @@ watch(
 })</pre>
           </div>
           <p class="text-[11px] text-muted-foreground mt-2">
-            Without these headers, customer defaults to <span class="font-mono">"default"</span>
+            Without these headers, customer defaults to
+            <span class="font-mono">"default"</span>
             and feature is auto-derived from the endpoint.
           </p>
         </details>
@@ -714,10 +736,15 @@ watch(
             <div>
               <h4 class="text-xs font-semibold mb-2">SDK Wrapper</h4>
               <p class="text-[11px] text-muted-foreground mb-2">
-                <span class="font-mono">npm install @tanso/observe</span> — wraps your client for automatic tracking.
+                <span class="font-mono">npm install @tanso/observe</span> —
+                wraps your client for automatic tracking.
               </p>
-              <div class="rounded-md bg-zinc-950 border border-zinc-800 p-4 font-mono text-xs leading-relaxed overflow-x-auto">
-                <pre class="whitespace-pre text-zinc-100"><span class="text-emerald-400">import</span> { TansoObserve } <span class="text-emerald-400">from</span> <span class="text-amber-300">'@tanso/observe'</span>
+              <div
+                class="rounded-md bg-zinc-950 border border-zinc-800 p-4 font-mono text-xs leading-relaxed overflow-x-auto"
+              >
+                <pre
+                  class="whitespace-pre text-zinc-100"
+                ><span class="text-emerald-400">import</span> { TansoObserve } <span class="text-emerald-400">from</span> <span class="text-amber-300">'@tanso/observe'</span>
 <span class="text-emerald-400">import</span> { wrapOpenAI } <span class="text-emerald-400">from</span> <span class="text-amber-300">'@tanso/observe/openai'</span>
 
 <span class="text-emerald-400">const</span> observe = <span class="text-emerald-400">new</span> TansoObserve({ apiKey: <span class="text-amber-300">'{{ apiKeyForSnippet }}'</span> })
@@ -727,8 +754,12 @@ watch(
             <!-- REST API -->
             <div>
               <h4 class="text-xs font-semibold mb-2">REST API</h4>
-              <div class="rounded-md bg-zinc-950 border border-zinc-800 p-4 font-mono text-xs leading-relaxed overflow-x-auto">
-                <pre class="whitespace-pre text-zinc-100">curl -X POST <span class="text-amber-300">'{{ ingestUrl }}'</span> \
+              <div
+                class="rounded-md bg-zinc-950 border border-zinc-800 p-4 font-mono text-xs leading-relaxed overflow-x-auto"
+              >
+                <pre
+                  class="whitespace-pre text-zinc-100"
+                >curl -X POST <span class="text-amber-300">'{{ ingestUrl }}'</span> \
   -H <span class="text-amber-300">'Authorization: Bearer {{ apiKeyForSnippet }}'</span> \
   -H <span class="text-amber-300">'Content-Type: application/json'</span> \
   -d <span class="text-amber-300">'{"events":[{"eventName":"chat","customerReferenceId":"cus_123","featureKey":"ai_chat","model":"gpt-4o"}]}'</span></pre>
@@ -740,15 +771,21 @@ watch(
         <!-- Supported endpoints -->
         <div class="text-xs space-y-1 border-t pt-3">
           <div class="flex gap-2">
-            <span class="font-mono bg-muted px-1.5 py-0.5 rounded text-[11px]">POST /v1/chat/completions</span>
+            <span class="font-mono bg-muted px-1.5 py-0.5 rounded text-[11px]"
+              >POST /v1/chat/completions</span
+            >
             <span class="text-muted-foreground">OpenAI chat</span>
           </div>
           <div class="flex gap-2">
-            <span class="font-mono bg-muted px-1.5 py-0.5 rounded text-[11px]">POST /v1/embeddings</span>
+            <span class="font-mono bg-muted px-1.5 py-0.5 rounded text-[11px]"
+              >POST /v1/embeddings</span
+            >
             <span class="text-muted-foreground">OpenAI embeddings</span>
           </div>
           <div class="flex gap-2">
-            <span class="font-mono bg-muted px-1.5 py-0.5 rounded text-[11px]">POST /v1/messages</span>
+            <span class="font-mono bg-muted px-1.5 py-0.5 rounded text-[11px]"
+              >POST /v1/messages</span
+            >
             <span class="text-muted-foreground">Anthropic messages</span>
           </div>
         </div>
@@ -771,16 +808,21 @@ watch(
               <div>
                 <h3 class="font-semibold">Connect Stripe</h3>
                 <p class="text-sm text-muted-foreground">
-                  Auto-sync customers, subscriptions, and MRR. Revenue enriches events automatically.
+                  Auto-sync customers, subscriptions, and MRR. Revenue enriches
+                  events automatically.
                 </p>
               </div>
             </div>
-            <Button
-              v-if="!isViewer"
-              class="ml-4"
-              @click="showStripeModal = true"
-            >
+            <Button v-if="canEdit" class="ml-4" @click="showStripeModal = true">
               Connect
+            </Button>
+            <Button
+              v-else-if="!isLoggedIn"
+              variant="outline"
+              class="ml-4"
+              @click="router.push('/signup')"
+            >
+              Sign up to connect
             </Button>
           </div>
         </template>
@@ -817,7 +859,7 @@ watch(
                   </p>
                 </div>
               </div>
-              <div v-if="!isViewer" class="flex items-center gap-2">
+              <div v-if="canEdit" class="flex items-center gap-2">
                 <Button
                   variant="outline"
                   size="sm"
@@ -874,37 +916,47 @@ watch(
           <p class="text-xs text-muted-foreground flex-1">
             Drop your billing export from OpenAI or Anthropic to quick-import.
           </p>
-          <input
-            ref="providerCsvFileInput"
-            type="file"
-            accept=".csv"
-            class="hidden"
-            :disabled="isViewer || isUploadingProviderCsv"
-            @change="handleProviderCsvFile"
-          />
+          <template v-if="canEdit">
+            <input
+              ref="providerCsvFileInput"
+              type="file"
+              accept=".csv"
+              class="hidden"
+              :disabled="isUploadingProviderCsv"
+              @change="handleProviderCsvFile"
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              :disabled="isUploadingProviderCsv"
+              @click="providerCsvFileInput?.click()"
+            >
+              <Loader2
+                v-if="isUploadingProviderCsv"
+                class="mr-2 h-4 w-4 animate-spin"
+              />
+              <Upload v-else class="mr-2 h-4 w-4" />
+              {{ isUploadingProviderCsv ? "Importing..." : "Quick Import CSV" }}
+            </Button>
+          </template>
           <Button
+            v-else-if="!isLoggedIn"
             variant="outline"
             size="sm"
-            :disabled="isViewer || isUploadingProviderCsv"
-            @click="providerCsvFileInput?.click()"
+            @click="router.push('/signup')"
           >
-            <Loader2
-              v-if="isUploadingProviderCsv"
-              class="mr-2 h-4 w-4 animate-spin"
-            />
-            <Upload v-else class="mr-2 h-4 w-4" />
-            {{ isUploadingProviderCsv ? "Importing..." : "Quick Import CSV" }}
+            Sign up to upload
           </Button>
         </div>
         <CostsSection
           :file="costsFile"
-          :readonly="isViewer"
+          :readonly="!canEdit"
           @file-uploaded="handleCostsFileUploaded"
           @file-cleared="handleCostsFileCleared"
         />
         <UsageSection
           :file="usageFile"
-          :readonly="isViewer"
+          :readonly="!canEdit"
           @file-uploaded="handleUsageFileUploaded"
           @file-cleared="handleUsageFileCleared"
         />

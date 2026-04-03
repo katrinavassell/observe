@@ -23,8 +23,10 @@ import {
   Zap,
 } from "lucide-vue-next";
 import { useDataMode } from "@/composables/useDataMode";
+import { useAuth } from "@/composables/useAuth";
 import Sheet from "@/components/ui/sheet.vue";
 import { Card, Skeleton, Button } from "@/components/ui";
+import OnboardingChecklist from "@/components/onboarding/OnboardingChecklist.vue";
 import { formatCurrency as fmt, formatPct as fmtPct } from "@/lib/format";
 
 const router = useRouter();
@@ -59,12 +61,22 @@ const insightsUsage = computed(
   () => usageLimits.value?.ai_insights?.usage ?? null,
 );
 
+const { isLoggedIn } = useAuth();
+const onboardingDismissed = ref(
+  localStorage.getItem("observe:onboarding_dismissed") === "true",
+);
+function dismissOnboarding() {
+  localStorage.setItem("observe:onboarding_dismissed", "true");
+  onboardingDismissed.value = true;
+}
+
 async function handleGenerate() {
   isGenerating.value = true;
   generateError.value = null;
   try {
     await generateInsights();
     window.posthog?.capture("ai_insights_generated");
+    localStorage.setItem("observe:insights_generated", "true");
     await refetchInsights();
     // Refresh usage limits
     queryClient.invalidateQueries({ queryKey: ["usage-limits"] });
@@ -579,6 +591,12 @@ const insightCategories = [
         </template>
       </div>
     </Sheet>
+
+    <!-- Onboarding checklist for authenticated users -->
+    <OnboardingChecklist
+      v-if="isLoggedIn && !onboardingDismissed"
+      @dismiss="dismissOnboarding"
+    />
 
     <!-- Error state -->
     <div
