@@ -115,7 +115,7 @@ export function createAuthRoutes(
             .json({ error: "An account with this email already exists" });
         }
 
-        const passwordHash = await bcrypt.hash(password, 10);
+        const passwordHash = await bcrypt.hash(password, 12);
         const result = await pool.query(
           "INSERT INTO accounts (email, password_hash, name, visitor_id) VALUES ($1, $2, $3, $4) RETURNING id, email, name",
           [normalizedEmail, passwordHash, name?.trim() || null, req.visitorId],
@@ -400,7 +400,7 @@ export function createAuthRoutes(
         }
 
         const { id: tokenId, account_id: accountId } = result.rows[0];
-        const passwordHash = await bcrypt.hash(password, 10);
+        const passwordHash = await bcrypt.hash(password, 12);
 
         await pool.query(
           "UPDATE accounts SET password_hash = $1, updated_at = NOW() WHERE id = $2",

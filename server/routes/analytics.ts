@@ -1368,7 +1368,8 @@ Only return the JSON array, no other text.`;
               .trim();
             try {
               suggestions = JSON.parse(cleaned);
-            } catch {
+            } catch (err) {
+              console.error("Failed to parse AI suggestions response:", err);
               suggestions = buildDeterministicSuggestions(featureResult.rows);
             }
           } else {

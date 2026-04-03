@@ -1060,6 +1060,7 @@ export function createDataRoutes(
         await client.query("COMMIT");
         res.json({ success: true });
       } catch (error) {
+        console.error("Failed to clear revenue data:", error);
         await client.query("ROLLBACK");
         res.status(500).json({ error: "Failed to clear revenue data" });
       } finally {
@@ -1086,6 +1087,7 @@ export function createDataRoutes(
         await client.query("COMMIT");
         res.json({ success: true });
       } catch (error) {
+        console.error("Failed to clear cost data:", error);
         await client.query("ROLLBACK");
         res.status(500).json({ error: "Failed to clear cost data" });
       } finally {
@@ -1112,6 +1114,7 @@ export function createDataRoutes(
         await client.query("COMMIT");
         res.json({ success: true });
       } catch (error) {
+        console.error("Failed to clear usage data:", error);
         await client.query("ROLLBACK");
         res.status(500).json({ error: "Failed to clear usage data" });
       } finally {

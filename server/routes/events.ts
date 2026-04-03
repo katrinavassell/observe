@@ -573,8 +573,8 @@ export function createEventsRoutes(
               // MRR / 30 = daily revenue share per event
               mrrByCustomer.set(row.customer_id, parseFloat(row.mrr) / 30);
             }
-          } catch {
-            // Non-critical: if lookup fails, just skip enrichment
+          } catch (err) {
+            console.error("MRR enrichment lookup failed:", err);
           }
         }
 
