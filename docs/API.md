@@ -261,35 +261,39 @@ Generate new AI insights from current data.
 
 ---
 
-## Tanso Billing Endpoints
+## Billing Endpoints
 
-### GET /tanso/plans
+### GET /billing/status
 
-List available subscription plans.
+Check billing subscription status for the current user.
 
-### GET /tanso/features
+### POST /billing/create-checkout
 
-List plan features.
+Create a Stripe checkout session for subscription purchase.
 
-### GET /tanso/entitlements
+### POST /billing/portal
 
-List current user's entitlements.
+Create a Stripe customer portal session for billing management.
 
-### GET /tanso/check/:featureKey
+### POST /billing/webhook
 
-Check if user has access to a specific feature.
+Stripe webhook handler (no auth required).
 
-### POST /tanso/subscribe
+### GET /api/feature-pricing
 
-Create a new subscription.
+List feature pricing rules for the current user.
 
-### POST /tanso/cancel
+### POST /api/feature-pricing
 
-Cancel current subscription.
+Create or update a feature pricing rule.
 
-### GET /tanso/invoices
+### DELETE /api/feature-pricing/:featureKey
 
-List user's invoices.
+Delete a feature pricing rule.
+
+### GET /api/feature-pricing/features
+
+List features available for pricing rules.
 
 ---
 

@@ -26,8 +26,8 @@ Technical architecture of Observe -- AI cost observability for SaaS companies.
 │  │   Auth       │  │  Data CRUD   │  │   Stripe     │              │
 │  │  (accounts)  │  │  (pg Pool)   │  │  (checkout)  │              │
 │  ├──────────────┤  ├──────────────┤  ├──────────────┤              │
-│  │ Integrations │  │    Tanso     │  │    Alerts    │              │
-│  │ (OpenAI/Ant) │  │  (billing)   │  │  (rules)     │              │
+│  │ Integrations │  │   Billing    │  │    Alerts    │              │
+│  │ (OpenAI/Ant) │  │  (Stripe)    │  │  (rules)     │              │
 │  └──────────────┘  └──────────────┘  └──────────────┘              │
 │  ┌──────────────┐  ┌──────────────┐                                │
 │  │  AI Proxy    │  │    Team      │                                │
@@ -141,7 +141,6 @@ src/
 │   ├── AlertsPage.vue           # Threshold-based cost alerts
 │   ├── DataSourcesPage.vue      # CSV upload, integrations
 │   ├── PlansPage.vue            # Subscription plans & billing
-│   ├── CheckoutPage.vue         # Stripe checkout flow
 │   ├── CheckoutSuccessPage.vue  # Post-checkout confirmation
 │   ├── LoginPage.vue            # Login / signup (also used for /signup)
 │   ├── TeamSettingsPage.vue     # Team management, invites
@@ -159,8 +158,6 @@ src/
 ├── composables/            # Shared reactive state
 │   ├── useAuth.ts          # Login, signup, session management
 │   ├── useDataMode.ts      # Data mode tracking (none/sample/user)
-│   ├── useDemoMode.ts      # Demo mode for unauthenticated browsing
-│   ├── useEntitlement.ts   # Tanso feature entitlement checks
 │   ├── useOnline.ts        # Network connectivity detection
 │   └── useTeam.ts          # Team info, roles, invites
 ├── layouts/
@@ -192,7 +189,7 @@ The sidebar shows these items in order:
 | Data Sources | `/data-sources` | DataSourcesPage |
 | Plans & Billing | `/plans` | PlansPage |
 
-Additional routes (not in sidebar): `/login`, `/signup`, `/checkout`, `/checkout/success`, `/team`, `/join/:token`.
+Additional routes (not in sidebar): `/login`, `/signup`, `/checkout/success`, `/team`, `/join/:token`.
 
 Several legacy routes (`/features`, `/customers`, `/insights`, `/pricing`) redirect to `/`.
 
@@ -202,8 +199,6 @@ Several legacy routes (`/features`, `/customers`, `/insights`, `/pricing`) redir
 |------------|---------|
 | `useAuth` | Login, signup, logout, password reset, session state |
 | `useDataMode` | Track data mode (none/sample/user) via `/data/status` |
-| `useDemoMode` | Allow unauthenticated users to explore with sample data |
-| `useEntitlement` | Check Tanso feature flags (e.g., plan-gated features) |
 | `useOnline` | Detect network connectivity for offline-aware UI |
 | `useTeam` | Fetch team info, roles, manage invites |
 
@@ -221,11 +216,18 @@ Single Express app on port 3001, proxied by Vite at `/api/*`. The `/api` prefix 
 |--------|---------|
 | `auth.ts` | Signup, login, logout, password reset, session init |
 | `data.ts` | CSV upload, sample data, Stripe sync, data status |
-| `integrations.ts` | OpenAI/Anthropic API key connection, usage sync |
-| `tanso.ts` | Billing plans, subscriptions, entitlements, checkout |
+| `billing-api.ts` | Billing status, Stripe checkout/portal/webhook, feature pricing, integrations, referrals |
+| `events.ts` | Event CRUD, aggregations (by-feature/customer/model), SDK key management, batch ingestion |
 | `alerts.ts` | Alert rule CRUD, threshold evaluation, email dispatch |
-
-Additional endpoints are defined inline in `server/index.ts` (events, analytics, proxy, models, insights, team, SDK keys, referrals).
+| `analytics.ts` | Customer P&L, margin alerts |
+| `proxy.ts` | AI proxy (OpenAI/Anthropic forwarding with cost logging) |
+| `models-api.ts` | Model listing and pricing |
+| `insights.ts` | AI-generated insights |
+| `team.ts` | Team management and invites |
+| `features.ts` | Feature listing |
+| `customers.ts` | Customer CRUD |
+| `cohorts.ts` | Cohort analysis |
+| `inference.ts` | Inference profile computation |
 
 ### Supporting Modules
 
@@ -259,7 +261,7 @@ Account-based auth with email/password:
 3. All DB queries filter by user_id = visitorId
 ```
 
-Demo mode allows unauthenticated exploration with sample data. An auth guard redirects unauthenticated users to `/signup`.
+An auth guard redirects unauthenticated users to `/signup`.
 
 ### Data Isolation
 

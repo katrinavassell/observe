@@ -12,7 +12,6 @@ Vue components and composables in Observe.
 | `AlertsPage.vue` | `/alerts` | Threshold-based cost alert rules |
 | `DataSourcesPage.vue` | `/data-sources` | CSV upload, integrations, sample data |
 | `PlansPage.vue` | `/plans` | Subscription plans and billing management |
-| `CheckoutPage.vue` | `/checkout` | Stripe checkout flow |
 | `CheckoutSuccessPage.vue` | `/checkout/success` | Post-checkout confirmation |
 | `LoginPage.vue` | `/login`, `/signup` | Authentication (login and signup) |
 | `TeamSettingsPage.vue` | `/team` | Team management and member invites |
@@ -151,26 +150,6 @@ const { dataMode, hasData, hasRevenue, hasCosts, hasUsage, refetch } = useDataMo
 ```
 
 Polls `/data/status` to track what data is loaded.
-
-### useDemoMode
-
-Demo mode for unauthenticated browsing.
-
-```typescript
-const { isDemoMode, enableDemoMode, disableDemoMode } = useDemoMode()
-```
-
-Allows users to explore with sample data without creating an account.
-
-### useEntitlement
-
-Tanso billing entitlement checks.
-
-```typescript
-const { checkEntitlement, hasFeature } = useEntitlement()
-```
-
-Gates features behind plan tiers using Tanso feature flags.
 
 ### useOnline
 
