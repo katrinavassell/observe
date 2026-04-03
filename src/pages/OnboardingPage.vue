@@ -47,6 +47,7 @@ async function runQuickStart() {
   try {
     // Load sample data so the dashboard is populated
     await loadSampleData();
+    window.posthog?.capture("sample_data_loaded");
 
     // Generate an SDK key (may already exist from signup)
     const result = await createSdkKey("default");
@@ -179,6 +180,7 @@ async function handleCsvUpload(event: Event) {
 
     const result = await uploadProviderCsv(rawCsv);
     csvResult.value = result;
+    window.posthog?.capture("csv_uploaded");
     toast.success(
       `Imported ${result.rows} rows from ${result.provider} (${result.models.join(", ")})`,
     );

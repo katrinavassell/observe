@@ -5,8 +5,8 @@
  * Uses the Anthropic Admin API to fetch usage data.
  * Requires an Admin API key (different from regular API key).
  */
-import { ref, computed } from 'vue'
-import { toast } from 'vue-sonner'
+import { ref, computed } from "vue";
+import { toast } from "vue-sonner";
 import {
   X,
   Key,
@@ -16,79 +16,80 @@ import {
   EyeOff,
   DollarSign,
   Zap,
-} from 'lucide-vue-next'
-import { Button, Input } from '@/components/ui'
-import { connectAnthropic } from '@/api/client'
+} from "lucide-vue-next";
+import { Button, Input } from "@/components/ui";
+import { connectAnthropic } from "@/api/client";
 
 defineProps<{
-  open: boolean
-}>()
+  open: boolean;
+}>();
 
 const emit = defineEmits<{
-  close: []
-  connected: [provider: string]
-}>()
+  close: [];
+  connected: [provider: string];
+}>();
 
-const apiKey = ref('')
-const showKey = ref(false)
-const isConnecting = ref(false)
+const apiKey = ref("");
+const showKey = ref(false);
+const isConnecting = ref(false);
 
 const isKeyValid = computed(() => {
-  const key = apiKey.value.trim()
+  const key = apiKey.value.trim();
   // Anthropic admin keys start with 'sk-ant-admin'
-  return key.startsWith('sk-ant-admin') || key.startsWith('sk-ant-api')
-})
+  return key.startsWith("sk-ant-admin") || key.startsWith("sk-ant-api");
+});
 
 function resetForm() {
-  apiKey.value = ''
-  showKey.value = false
+  apiKey.value = "";
+  showKey.value = false;
 }
 
 async function handleSubmit() {
-  if (!apiKey.value.trim()) return
+  if (!apiKey.value.trim()) return;
 
-  const key = apiKey.value.trim()
+  const key = apiKey.value.trim();
 
   // Validate key format
-  if (!key.startsWith('sk-ant-')) {
-    toast.error('Invalid API key format', {
-      description: 'Anthropic API keys should start with sk-ant-',
-    })
-    return
+  if (!key.startsWith("sk-ant-")) {
+    toast.error("Invalid API key format", {
+      description: "Anthropic API keys should start with sk-ant-",
+    });
+    return;
   }
 
-  isConnecting.value = true
+  isConnecting.value = true;
 
   try {
-    const result = await connectAnthropic(key)
+    const result = await connectAnthropic(key);
 
     if (result.success) {
-      toast.success('Anthropic connected!', {
+      window.posthog?.capture("anthropic_connected");
+      toast.success("Anthropic connected!", {
         description: result.has_usage_access
           ? `Synced $${result.cost_synced.toFixed(2)} in costs.`
-          : 'Usage data will sync when available.',
-      })
+          : "Usage data will sync when available.",
+      });
 
-      resetForm()
-      emit('connected', 'anthropic')
-      emit('close')
+      resetForm();
+      emit("connected", "anthropic");
+      emit("close");
     } else {
-      toast.error('Failed to connect', {
+      toast.error("Failed to connect", {
         description: result.message,
-      })
+      });
     }
   } catch (error) {
-    toast.error('Failed to connect', {
-      description: error instanceof Error ? error.message : 'Invalid API key',
-    })
+    toast.error("Failed to connect", {
+      description: error instanceof Error ? error.message : "Invalid API key",
+    });
   } finally {
-    isConnecting.value = false
+    isConnecting.value = false;
   }
 }
 
 function handleClose() {
-  resetForm()
-  emit('close')
+  resetForm();
+  emit("close");
 }
 </script>
 
@@ -103,7 +104,9 @@ function handleClose() {
         <!-- Header -->
         <div class="flex items-center justify-between mb-4">
           <div class="flex items-center gap-2">
-            <div class="h-8 w-8 rounded-lg bg-[#D4A574]/10 flex items-center justify-center">
+            <div
+              class="h-8 w-8 rounded-lg bg-[#D4A574]/10 flex items-center justify-center"
+            >
               <span class="text-lg font-semibold text-[#D4A574]">A</span>
             </div>
             <h2 class="text-lg font-semibold">Connect Anthropic</h2>
@@ -116,14 +119,18 @@ function handleClose() {
         <div class="space-y-4">
           <!-- What we'll sync -->
           <div class="grid grid-cols-2 gap-2">
-            <div class="flex items-center gap-2 rounded-md border bg-muted/30 p-2.5">
+            <div
+              class="flex items-center gap-2 rounded-md border bg-muted/30 p-2.5"
+            >
               <DollarSign class="h-4 w-4 text-primary" />
               <div>
                 <p class="text-sm font-medium">Usage Costs</p>
                 <p class="text-xs text-muted-foreground">Monthly spend</p>
               </div>
             </div>
-            <div class="flex items-center gap-2 rounded-md border bg-muted/30 p-2.5">
+            <div
+              class="flex items-center gap-2 rounded-md border bg-muted/30 p-2.5"
+            >
               <Zap class="h-4 w-4 text-primary" />
               <div>
                 <p class="text-sm font-medium">Token Usage</p>
@@ -134,7 +141,9 @@ function handleClose() {
 
           <!-- Instructions -->
           <div class="text-sm text-muted-foreground">
-            <p>Enter your Anthropic API key to automatically sync usage costs.</p>
+            <p>
+              Enter your Anthropic API key to automatically sync usage costs.
+            </p>
             <a
               href="https://console.anthropic.com/settings/keys"
               target="_blank"
@@ -181,9 +190,7 @@ function handleClose() {
               <Key v-else class="h-4 w-4 mr-2" />
               Connect
             </Button>
-            <Button variant="outline" @click="handleClose">
-              Cancel
-            </Button>
+            <Button variant="outline" @click="handleClose"> Cancel </Button>
           </div>
         </div>
       </div>

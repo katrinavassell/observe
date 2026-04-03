@@ -59,6 +59,7 @@ async function handleSubmit() {
     const result = await connectStripeWithApiKey(key);
 
     if (result.success) {
+      window.posthog?.capture("stripe_connected");
       toast.success("Stripe connected!", {
         description: `Synced ${result.account_name}. Revenue will auto-enrich on SDK events.`,
       });

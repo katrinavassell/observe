@@ -158,6 +158,7 @@ async function processFile(file: File): Promise<void> {
 
     const result = await api.uploadCostData(records);
     emit("fileUploaded", { name: file.name, isSample: false });
+    window.posthog?.capture("csv_uploaded");
 
     // Show success with validation summary
     const description =

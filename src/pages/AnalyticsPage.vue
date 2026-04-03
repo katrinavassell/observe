@@ -64,6 +64,7 @@ async function handleGenerate() {
   generateError.value = null;
   try {
     await generateInsights();
+    window.posthog?.capture("ai_insights_generated");
     await refetchInsights();
     // Refresh usage limits
     queryClient.invalidateQueries({ queryKey: ["usage-limits"] });

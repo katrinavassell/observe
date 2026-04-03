@@ -84,6 +84,7 @@ export function useDataMode() {
     for (let attempt = 0; attempt < retries; attempt++) {
       try {
         await api.loadSampleData();
+        window.posthog?.capture("sample_data_loaded");
         await refetch();
         isLoadingSample.value = false;
         return;
