@@ -26,6 +26,67 @@ function isStreamResponse(response: any): boolean {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
+function trackMessage(
+  observe: TansoObserve,
+  response: any,
+  defaults?: WrapDefaults,
+): void {
+  const model: string = response.model ?? "";
+  const inputTokens: number = response.usage?.input_tokens ?? 0;
+  const outputTokens: number = response.usage?.output_tokens ?? 0;
+  const cost = estimateCost(model, inputTokens, outputTokens);
+
+  observe.track({
+    eventName: "llm.messages.create",
+    customerReferenceId: defaults?.customerReferenceId ?? "unknown",
+    featureKey: defaults?.featureKey ?? "anthropic-messages",
+    model,
+    modelProvider: "anthropic",
+    usageUnits: inputTokens + outputTokens,
+    costAmount: cost,
+    costUnit: "usd",
+    properties: {
+      inputTokens,
+      outputTokens,
+    },
+  });
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function wrapStream(
+  stream: any,
+  observe: TansoObserve,
+  defaults?: WrapDefaults,
+): any {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let finalChunk: any = null;
+
+  const originalIterator = stream[Symbol.asyncIterator].bind(stream);
+
+  stream[Symbol.asyncIterator] = function () {
+    const iterator = originalIterator();
+    return {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      async next(): Promise<IteratorResult<any>> {
+        const result = await iterator.next();
+        if (!result.done) {
+          finalChunk = result.value;
+        } else if (finalChunk?.usage) {
+          try {
+            trackMessage(observe, finalChunk, defaults);
+          } catch (_) {
+            // tracking failure should not break the caller's stream
+          }
+        }
+        return result;
+      },
+    };
+  };
+
+  return stream;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function wrapAnthropic(
   client: any,
   observe: TansoObserve,
@@ -47,29 +108,11 @@ export function wrapAnthropic(
             const response = await original(...args);
 
             if (isStreamResponse(response)) {
-              return response;
+              return wrapStream(response, observe, defaults);
             }
 
             try {
-              const model: string = response.model ?? "";
-              const inputTokens: number = response.usage?.input_tokens ?? 0;
-              const outputTokens: number = response.usage?.output_tokens ?? 0;
-              const cost = estimateCost(model, inputTokens, outputTokens);
-
-              observe.track({
-                eventName: "llm.messages.create",
-                customerReferenceId: defaults?.customerReferenceId ?? "unknown",
-                featureKey: defaults?.featureKey ?? "anthropic-messages",
-                model,
-                modelProvider: "anthropic",
-                usageUnits: inputTokens + outputTokens,
-                costAmount: cost,
-                costUnit: "usd",
-                properties: {
-                  inputTokens,
-                  outputTokens,
-                },
-              });
+              trackMessage(observe, response, defaults);
             } catch (_) {
               // tracking failure should not break the caller
             }

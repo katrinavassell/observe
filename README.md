@@ -79,7 +79,7 @@ SESSION_SECRET=any-random-string-at-least-32-chars
 npm run dev
 ```
 
-Frontend: `http://localhost:5173` | API: `http://localhost:3001`
+Frontend: `http://localhost:5000` | API: `http://localhost:3001`
 
 The database schema is created automatically on first start.
 

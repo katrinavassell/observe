@@ -90,7 +90,7 @@ cp .env.example .env
 npm run dev
 ```
 
-Frontend: `http://localhost:5173` | API + Proxy: `http://localhost:3001`
+Frontend: `http://localhost:5000` | API + Proxy: `http://localhost:3001`
 
 Only two env vars are required:
 
