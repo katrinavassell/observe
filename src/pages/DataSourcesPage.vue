@@ -542,12 +542,17 @@ watch(
   <span class="text-sky-300">baseURL</span>: <span class="text-amber-300">'{{ proxyBaseUrl }}'</span>,
   <span class="text-sky-300">defaultHeaders</span>: {
     <span class="text-amber-300">'x-tanso-key'</span>: <span class="text-amber-300">'{{ apiKeyForSnippet }}'</span>,
-    <span class="text-amber-300">'x-tanso-customer'</span>: customerId,       <span class="text-zinc-500">// your internal customer/org ID</span>
+    <span class="text-amber-300">'x-tanso-customer'</span>: user.stripeId,    <span class="text-zinc-500">// Stripe customer ID (cus_...)</span>
     <span class="text-amber-300">'x-tanso-feature'</span>: <span class="text-amber-300">'ai_chat'</span>,          <span class="text-zinc-500">// which product feature</span>
   },
 })
 <span class="text-zinc-500">// Every call is tracked with cost, model, customer, and feature.</span></pre>
         </div>
+        <p class="text-[11px] text-muted-foreground">
+          Use your Stripe customer ID so Observe can automatically join costs
+          with revenue. No Stripe yet? Any stable customer ID works — you can
+          map it later.
+        </p>
 
         <!-- API Key section — compact -->
         <div
