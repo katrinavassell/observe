@@ -511,10 +511,16 @@ watch(
     <Card class="border-success/20">
       <CardContent class="p-6 space-y-5">
         <div>
-          <h2 class="font-semibold text-lg">Start tracking</h2>
+          <div class="flex items-center gap-2">
+            <h2 class="font-semibold text-lg">Live tracking</h2>
+            <span
+              class="text-[10px] font-medium bg-sky-100 text-sky-700 px-2 py-0.5 rounded-full"
+              >Real-time, per-call</span
+            >
+          </div>
           <p class="text-sm text-muted-foreground">
-            Point your OpenAI or Anthropic SDK at Observe. One header. That's
-            it.
+            Route your AI calls through the Observe proxy. Every call is logged
+            with model, tokens, cost, customer, and feature — automatically.
           </p>
         </div>
 
@@ -800,10 +806,16 @@ watch(
                 <CreditCard class="h-5 w-5 text-[#635bff]" />
               </div>
               <div>
-                <h3 class="font-semibold">Connect Stripe</h3>
+                <div class="flex items-center gap-2">
+                  <h3 class="font-semibold">Connect Stripe</h3>
+                  <span
+                    class="text-[10px] font-medium bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full"
+                    >Revenue data</span
+                  >
+                </div>
                 <p class="text-sm text-muted-foreground">
-                  Auto-sync customers, subscriptions, and MRR. Revenue enriches
-                  events automatically.
+                  Auto-sync customers, subscriptions, and MRR so Observe can
+                  calculate margins per feature and customer.
                 </p>
               </div>
             </div>
@@ -903,13 +915,18 @@ watch(
       <summary
         class="text-sm font-medium text-muted-foreground cursor-pointer hover:text-foreground transition-colors"
       >
-        Import historic data (CSV upload)
+        Backfill historic data
+        <span class="text-[10px] font-normal ml-1"
+          >(monthly aggregates via CSV or API key)</span
+        >
       </summary>
       <div class="mt-3 space-y-3">
+        <p class="text-xs text-muted-foreground px-1">
+          Already have cost data? Import past months so your trend charts have
+          history. This data appears as monthly aggregates — for per-call
+          tracking, use the proxy above.
+        </p>
         <div class="flex items-center gap-3 px-1">
-          <p class="text-xs text-muted-foreground flex-1">
-            Drop your billing export from OpenAI or Anthropic to quick-import.
-          </p>
           <template v-if="canEdit">
             <input
               ref="providerCsvFileInput"
