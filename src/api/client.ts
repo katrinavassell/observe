@@ -493,7 +493,7 @@ export interface DataStatus {
 }
 
 export async function getDataStatus(): Promise<DataStatus> {
-  return request("/data-status");
+  return request("/data/status");
 }
 
 export interface SampleDataResult {
@@ -515,14 +515,14 @@ export interface SampleDataResult {
  * @returns Success status with record counts
  */
 export async function loadSampleData(): Promise<SampleDataResult> {
-  return request("/sample-data/load", { method: "POST" });
+  return request("/data/sample", { method: "POST" });
 }
 
 export async function clearSampleData(): Promise<{
   success: boolean;
   message: string;
 }> {
-  return request("/sample-data/clear", { method: "POST" });
+  return request("/data/clear", { method: "DELETE" });
 }
 
 export async function downloadTemplate(dataType: string): Promise<Blob> {

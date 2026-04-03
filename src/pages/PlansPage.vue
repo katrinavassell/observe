@@ -74,7 +74,7 @@ const plans = [
       "OpenAI & Anthropic cost import",
       "SDK & Proxy tracking",
       "Per-feature margin analysis",
-      "5 AI insights per month",
+      "5 AI credits per month",
     ],
   },
   {
@@ -84,12 +84,14 @@ const plans = [
     interval: "/month",
     features: [
       "Everything in Free",
-      "Unlimited AI insights",
+      "100 AI credits per month",
       "Cost spike alerts",
       "Priority support",
     ],
   },
 ];
+
+const repoUrl = "https://github.com/katrinalaszlo/observe";
 </script>
 
 <template>
@@ -129,7 +131,7 @@ const plans = [
           <!-- Price -->
           <div>
             <span class="text-3xl font-bold">{{ plan.price }}</span>
-            <span class="text-muted-foreground text-sm">{{
+            <span class="text-muted-foreground text-sm ml-1">{{
               plan.interval
             }}</span>
           </div>
@@ -175,6 +177,23 @@ const plans = [
           </div>
         </CardContent>
       </Card>
+    </div>
+
+    <!-- Open source callout -->
+    <div class="max-w-2xl text-sm text-muted-foreground">
+      <p>
+        Observe is free and open source. Self-host for free with no limits, or
+        use our hosted version above.
+        <a
+          :href="repoUrl"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="inline-flex items-center gap-1 text-foreground hover:underline font-medium"
+        >
+          View on GitHub
+          <ExternalLink class="h-3 w-3" />
+        </a>
+      </p>
     </div>
   </div>
 </template>

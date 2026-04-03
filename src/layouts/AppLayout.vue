@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
+import { useQuery } from "@tanstack/vue-query";
 import {
   BarChart3,
   Plug,
@@ -16,17 +17,27 @@ import {
   CreditCard,
   Menu,
   X,
+  Sparkles,
 } from "lucide-vue-next";
 import { toast } from "vue-sonner";
 import ErrorBoundary from "@/components/shared/ErrorBoundary.vue";
 import { useTeam } from "@/composables/useTeam";
 import { useAuth } from "@/composables/useAuth";
 import { useDataMode } from "@/composables/useDataMode";
+import { getUsageLimits } from "@/lib/api";
 
 const route = useRoute();
 const { myRole, isViewer, fetchTeamInfo } = useTeam();
 const { account, isLoggedIn, logout } = useAuth();
 const { isSampleMode, clearSample, isClearingSample } = useDataMode();
+
+const { data: usageLimits } = useQuery({
+  queryKey: ["usage-limits"],
+  queryFn: getUsageLimits,
+  staleTime: 60_000,
+});
+
+const aiCredits = computed(() => usageLimits.value?.ai_insights?.usage ?? null);
 
 async function handleClearSample() {
   try {
@@ -263,7 +274,27 @@ function isActive(path: string) {
 
     <!-- Main Content -->
     <main class="flex-1 min-h-screen overflow-x-hidden pt-14 md:pt-0 md:ml-64">
-      <!-- Signup CTA is in the sidebar; no top banner needed -->
+      <!-- AI credits indicator -->
+      <div
+        v-if="aiCredits"
+        class="flex items-center justify-end px-6 pt-3 pb-0"
+      >
+        <router-link
+          to="/plans"
+          class="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+          :title="`${aiCredits.remaining} of ${aiCredits.limit} AI credits remaining this month`"
+        >
+          <Sparkles class="h-3 w-3" />
+          <span
+            :class="
+              aiCredits.remaining === 0 ? 'text-destructive font-medium' : ''
+            "
+          >
+            {{ aiCredits.remaining }}/{{ aiCredits.limit }} AI credits
+          </span>
+        </router-link>
+      </div>
+
       <!-- Sample data banner -->
       <div
         v-if="isSampleMode"
