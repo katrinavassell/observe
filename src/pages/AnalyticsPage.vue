@@ -339,52 +339,6 @@ const insightCategories = [
           </p>
         </div>
 
-        <!-- Usage -->
-        <div
-          v-if="insightsUsage"
-          class="rounded-lg border bg-muted/30 p-3 space-y-2"
-        >
-          <div class="flex items-center justify-between text-sm">
-            <span class="text-muted-foreground">Insights generated</span>
-            <span class="font-medium"
-              >{{ insightsUsage.used }} / {{ insightsUsage.limit }}</span
-            >
-          </div>
-          <div class="h-2 rounded-full bg-muted overflow-hidden">
-            <div
-              class="h-full rounded-full transition-all"
-              :class="
-                insightsUsage.remaining === 0
-                  ? 'bg-destructive'
-                  : insightsUsage.remaining <= 1
-                    ? 'bg-warning'
-                    : 'bg-primary'
-              "
-              :style="{
-                width: `${insightsUsage.limit > 0 ? Math.min(100, (insightsUsage.used / insightsUsage.limit) * 100) : 0}%`,
-              }"
-            />
-          </div>
-          <div class="text-xs text-muted-foreground">
-            <template v-if="insightsUsage.remaining > 0">
-              {{ insightsUsage.remaining }} insight{{
-                insightsUsage.remaining === 1 ? "" : "s"
-              }}
-              remaining this month
-            </template>
-            <div v-else class="flex items-center gap-2">
-              <Zap class="h-3 w-3 text-primary" />
-              <span
-                >No insights remaining.
-                <router-link to="/plans" class="text-primary hover:underline"
-                  >Upgrade to Growth</router-link
-                >
-                for unlimited.</span
-              >
-            </div>
-          </div>
-        </div>
-
         <!-- DEMO MODE: hardcoded preview -->
         <template v-if="isSampleMode">
           <div
