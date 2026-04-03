@@ -124,15 +124,10 @@ const router = createRouter({
   ],
 });
 
-// Auth guard — import the refs directly to avoid composable lifecycle issues
-import { useAuth } from "@/composables/useAuth";
-const { isLoggedIn, isInitialized } = useAuth();
-
-router.beforeEach((to) => {
-  if (to.meta?.noLayout) return;
-  if (isInitialized.value && !isLoggedIn.value) {
-    return { name: "signup" };
-  }
+// Initialize session on app load — no auth guard, anonymous browsing is allowed
+import { initialize } from "@/composables/useAuth";
+router.beforeEach(async () => {
+  await initialize();
 });
 
 export default router;

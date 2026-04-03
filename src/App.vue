@@ -1,34 +1,42 @@
 <script setup lang="ts">
-import { computed, watch } from 'vue'
-import { RouterView, useRoute, useRouter } from 'vue-router'
-import { Toaster } from 'vue-sonner'
-import { WifiOff } from 'lucide-vue-next'
-import AppLayout from '@/layouts/AppLayout.vue'
-import { useOnline } from '@/composables/useOnline'
-import { useAuth } from '@/composables/useAuth'
-import { recordReferral } from '@/lib/api'
+import { computed, watch } from "vue";
+import { RouterView, useRoute, useRouter } from "vue-router";
+import { Toaster } from "vue-sonner";
+import { WifiOff } from "lucide-vue-next";
+import AppLayout from "@/layouts/AppLayout.vue";
+import { useOnline } from "@/composables/useOnline";
+import { initialize, useAuth } from "@/composables/useAuth";
+import { recordReferral } from "@/lib/api";
 
-const { isOnline } = useOnline()
-const { isLoading, isInitialized } = useAuth()
-const route = useRoute()
-const router = useRouter()
-const noLayout = computed(() => !!route.meta?.noLayout)
+const { isOnline } = useOnline();
+const { isLoading, isInitialized } = useAuth();
+initialize();
+const route = useRoute();
+const router = useRouter();
+const noLayout = computed(() => !!route.meta?.noLayout);
 
-watch(isInitialized, async (initialized) => {
-  if (!initialized) return
-  const params = new URLSearchParams(window.location.search)
-  const refCode = params.get('ref')
-  if (!refCode) return
-  try {
-    await recordReferral(refCode)
-  } catch {
-    // Silently ignore referral recording errors
-  }
-  // Remove the ref param from the URL without reloading
-  const url = new URL(window.location.href)
-  url.searchParams.delete('ref')
-  router.replace({ path: url.pathname, query: Object.fromEntries(url.searchParams) })
-}, { immediate: true })
+watch(
+  isInitialized,
+  async (initialized) => {
+    if (!initialized) return;
+    const params = new URLSearchParams(window.location.search);
+    const refCode = params.get("ref");
+    if (!refCode) return;
+    try {
+      await recordReferral(refCode);
+    } catch {
+      // Silently ignore referral recording errors
+    }
+    // Remove the ref param from the URL without reloading
+    const url = new URL(window.location.href);
+    url.searchParams.delete("ref");
+    router.replace({
+      path: url.pathname,
+      query: Object.fromEntries(url.searchParams),
+    });
+  },
+  { immediate: true },
+);
 </script>
 
 <template>
@@ -42,14 +50,13 @@ watch(isInitialized, async (initialized) => {
   </div>
 
   <!-- Toast notifications (global) -->
-  <Toaster
-    position="top-center"
-    richColors
-  />
+  <Toaster position="top-center" richColors />
 
   <!-- Loading state while session initializes -->
   <div v-if="isLoading" class="flex items-center justify-center min-h-screen">
-    <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+    <div
+      class="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"
+    ></div>
   </div>
 
   <!-- Pages without the sidebar layout (e.g. invite acceptance) -->

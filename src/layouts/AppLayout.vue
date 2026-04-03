@@ -109,6 +109,23 @@ function isActive(path: string) {
           <span class="text-base font-semibold">Observe</span>
         </div>
 
+        <!-- Sign in CTA for anonymous users -->
+        <div v-if="!isLoggedIn" class="px-3 pt-3 pb-1">
+          <router-link
+            to="/signup"
+            class="flex items-center justify-center gap-2 rounded-md bg-sidebar-primary text-sidebar-primary-foreground px-3 py-2 text-sm font-medium transition-colors hover:opacity-90"
+          >
+            <LogIn class="h-4 w-4 shrink-0" />
+            Sign Up Free
+          </router-link>
+          <router-link
+            to="/login"
+            class="flex items-center justify-center gap-2 rounded-md px-3 py-1.5 mt-1 text-xs text-sidebar-foreground/60 hover:text-sidebar-foreground transition-colors"
+          >
+            Already have an account? Sign in
+          </router-link>
+        </div>
+
         <!-- Navigation -->
         <nav class="flex-1 overflow-y-auto px-3 py-3">
           <!-- Main section -->
@@ -190,30 +207,27 @@ function isActive(path: string) {
               <LogOut class="h-4 w-4" />
             </button>
           </div>
-          <router-link
-            v-else
-            to="/login"
-            :class="[
-              'flex items-center gap-3 rounded-lg px-3 py-2.5 transition-colors',
-              isActive('/login')
-                ? 'bg-accent text-accent-foreground'
-                : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
-            ]"
-          >
-            <LogIn class="h-4 w-4 shrink-0" />
-            <div class="min-w-0">
-              <div class="text-sm font-medium">Sign In</div>
-              <div class="text-[10px] opacity-60">
-                Create an account or log in
-              </div>
-            </div>
-          </router-link>
+          <div v-else class="px-3 py-2.5 text-xs text-muted-foreground">
+            Browsing as guest
+          </div>
         </div>
       </div>
     </aside>
 
     <!-- Main Content -->
     <main class="ml-64 flex-1 min-h-screen overflow-x-hidden">
+      <!-- Signup nudge for anonymous users -->
+      <div
+        v-if="!isLoggedIn"
+        class="flex items-center justify-between px-4 py-2 bg-emerald-50 text-emerald-700 border-b border-emerald-200 text-sm"
+      >
+        <span>Sign up to save your data, get API keys, and set up alerts</span>
+        <router-link
+          to="/signup"
+          class="font-medium hover:underline whitespace-nowrap ml-4"
+          >Create free account</router-link
+        >
+      </div>
       <!-- Sample data banner -->
       <div
         v-if="isSampleMode"

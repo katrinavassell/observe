@@ -1,4 +1,4 @@
-import { ref, onMounted, computed } from "vue";
+import { ref, computed } from "vue";
 import * as api from "@/lib/api";
 import type { Account } from "@/lib/api";
 import { logger } from "@/lib/logger";
@@ -12,12 +12,13 @@ async function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-export function useAuth() {
-  const isLoggedIn = computed(() => !!account.value);
+let initPromise: Promise<void> | null = null;
 
-  async function initialize(retries = 10, delay = 1000) {
-    if (isInitialized.value && visitorId.value) return;
+export async function initialize(retries = 10, delay = 1000) {
+  if (isInitialized.value && visitorId.value) return;
+  if (initPromise) return initPromise;
 
+  initPromise = (async () => {
     for (let attempt = 0; attempt < retries; attempt++) {
       try {
         const result = await api.initSession();
@@ -38,7 +39,13 @@ export function useAuth() {
     }
     isLoading.value = false;
     isInitialized.value = true;
-  }
+  })();
+
+  return initPromise;
+}
+
+export function useAuth() {
+  const isLoggedIn = computed(() => !!account.value);
 
   async function login(email: string, password: string) {
     const result = await api.login(email, password);
@@ -75,12 +82,9 @@ export function useAuth() {
     account.value = null;
     visitorId.value = null;
     isInitialized.value = false;
+    initPromise = null;
     window.location.href = "/login";
   }
-
-  onMounted(() => {
-    initialize();
-  });
 
   return {
     visitorId,
