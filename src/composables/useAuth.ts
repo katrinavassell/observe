@@ -43,16 +43,34 @@ export function useAuth() {
   async function login(email: string, password: string) {
     const result = await api.login(email, password);
     account.value = result.account;
+    if (result.account && window.posthog) {
+      window.posthog.identify(result.account.id, {
+        email: result.account.email,
+        name: result.account.name,
+      });
+    }
     return result;
   }
 
   async function signup(email: string, password: string, name?: string) {
     const result = await api.signup(email, password, name);
     account.value = result.account;
+    if (result.account && window.posthog) {
+      window.posthog.identify(result.account.id, {
+        email: result.account.email,
+        name: result.account.name,
+      });
+      window.posthog.capture("user_signed_up", {
+        email: result.account.email,
+      });
+    }
     return result;
   }
 
   async function logout() {
+    if (window.posthog) {
+      window.posthog.reset();
+    }
     await api.logout();
     account.value = null;
     visitorId.value = null;
