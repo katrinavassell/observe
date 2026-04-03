@@ -130,6 +130,11 @@ export function useDataMode() {
     }
   }
 
+  function reset() {
+    dataStatus.value = null;
+    refetch();
+  }
+
   onMounted(() => {
     if (dataStatus.value === null) {
       refetch();
@@ -153,6 +158,7 @@ export function useDataMode() {
     switchToSampleData,
     clearSample,
     refetch,
+    reset,
     isLoadingSample: computed(() => isLoadingSample.value),
     isClearingSample: computed(() => isClearingSample.value),
   };
