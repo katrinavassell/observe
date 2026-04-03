@@ -29,6 +29,8 @@ import {
 import { Card, CardContent, Button } from "@/components/ui";
 import { CostsSection, UsageSection } from "@/components/data-sources";
 import StripeApiKeyModal from "@/components/integrations/StripeApiKeyModal.vue";
+import OpenAIApiKeyModal from "@/components/integrations/OpenAIApiKeyModal.vue";
+import AnthropicApiKeyModal from "@/components/integrations/AnthropicApiKeyModal.vue";
 import { useDataMode } from "@/composables/useDataMode";
 import { useAuth } from "@/composables/useAuth";
 import { useTeam } from "@/composables/useTeam";
@@ -223,6 +225,10 @@ function scrollToStripe() {
     .getElementById("stripe-section")
     ?.scrollIntoView({ behavior: "smooth" });
 }
+
+/** Provider modals */
+const showOpenAIModal = ref(false);
+const showAnthropicModal = ref(false);
 
 /** Stripe connection state */
 const showStripeModal = ref(false);
@@ -865,38 +871,27 @@ watch(
                   </p>
                 </div>
               </div>
-              <div v-if="canEdit" class="flex items-center gap-2">
+              <div v-if="canEdit" class="flex items-center gap-1">
                 <Button
-                  variant="outline"
+                  variant="ghost"
                   size="sm"
+                  class="h-7 w-7 p-0 text-muted-foreground"
                   :disabled="isSyncingStripe"
+                  title="Re-sync Stripe data"
                   @click="handleStripeSync"
                 >
                   <Loader2
                     v-if="isSyncingStripe"
-                    class="h-3 w-3 mr-1 animate-spin"
+                    class="h-3 w-3 animate-spin"
                   />
-                  <RefreshCw v-else class="h-3 w-3 mr-1" />
-                  Re-sync
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  :disabled="isSyncingInvoices"
-                  @click="handleInvoiceSync"
-                >
-                  <Loader2
-                    v-if="isSyncingInvoices"
-                    class="h-3 w-3 mr-1 animate-spin"
-                  />
-                  <RefreshCw v-else class="h-3 w-3 mr-1" />
-                  Import Invoices
+                  <RefreshCw v-else class="h-3 w-3" />
                 </Button>
                 <Button
                   variant="ghost"
                   size="sm"
-                  class="text-muted-foreground hover:text-destructive"
+                  class="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
                   :disabled="isDisconnectingStripe"
+                  title="Disconnect Stripe"
                   @click="handleStripeDisconnect"
                 >
                   <Unplug class="h-3 w-3" />
@@ -909,75 +904,150 @@ watch(
     </Card>
 
     <!-- ================================================================== -->
-    <!-- HISTORIC DATA: collapsed by default                                -->
+    <!-- GRANULARITY CALLOUT                                                -->
     <!-- ================================================================== -->
-    <details class="group">
-      <summary
-        class="text-sm font-medium text-muted-foreground cursor-pointer hover:text-foreground transition-colors"
-      >
-        Backfill historic data
-        <span class="text-[10px] font-normal ml-1"
-          >(monthly aggregates via CSV or API key)</span
-        >
-      </summary>
-      <div class="mt-3 space-y-3">
-        <p class="text-xs text-muted-foreground px-1">
-          Already have cost data? Import past months so your trend charts have
-          history. This data appears as monthly aggregates — for per-call
-          tracking, use the proxy above.
+    <div
+      class="flex items-start gap-3 rounded-lg border border-dashed p-4 text-sm text-muted-foreground"
+    >
+      <span class="font-medium text-foreground shrink-0">Data sources:</span>
+      <span>
+        The proxy above logs every individual call with model, tokens, and cost.
+        The imports below bring in monthly totals for trend history. Both show
+        on the dashboard — use the Source filter on the Events page to tell them
+        apart.
+      </span>
+    </div>
+
+    <!-- ================================================================== -->
+    <!-- IMPORT HISTORICAL DATA                                             -->
+    <!-- ================================================================== -->
+    <div class="space-y-4">
+      <div>
+        <h2 class="text-base font-semibold">Import Historical Data</h2>
+        <p class="text-sm text-muted-foreground">
+          Pull monthly aggregates from your provider dashboards or upload CSVs.
         </p>
-        <div class="flex items-center gap-3 px-1">
-          <template v-if="canEdit">
-            <input
-              ref="providerCsvFileInput"
-              type="file"
-              accept=".csv"
-              class="hidden"
-              :disabled="isUploadingProviderCsv"
-              @change="handleProviderCsvFile"
-            />
+      </div>
+
+      <!-- OpenAI connect -->
+      <Card>
+        <CardContent class="p-4">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <div
+                class="h-10 w-10 rounded-lg bg-black flex items-center justify-center"
+              >
+                <svg class="h-5 w-5" viewBox="0 0 24 24" fill="white">
+                  <path
+                    d="M22.282 9.821a5.985 5.985 0 0 0-.516-4.91 6.046 6.046 0 0 0-6.51-2.9A6.065 6.065 0 0 0 4.981 4.18a5.985 5.985 0 0 0-3.998 2.9 6.046 6.046 0 0 0 .743 7.097 5.98 5.98 0 0 0 .51 4.911 6.051 6.051 0 0 0 6.515 2.9A5.985 5.985 0 0 0 13.26 24a6.056 6.056 0 0 0 5.772-4.206 5.99 5.99 0 0 0 3.997-2.9 6.056 6.056 0 0 0-.747-7.073zM13.26 22.43a4.476 4.476 0 0 1-2.876-1.04l.141-.081 4.779-2.758a.795.795 0 0 0 .392-.681v-6.737l2.02 1.168a.071.071 0 0 1 .038.052v5.583a4.504 4.504 0 0 1-4.494 4.494zM3.6 18.304a4.47 4.47 0 0 1-.535-3.014l.142.085 4.783 2.759a.771.771 0 0 0 .78 0l5.843-3.369v2.332a.08.08 0 0 1-.033.062L9.74 19.95a4.5 4.5 0 0 1-6.14-1.646zM2.34 7.896a4.485 4.485 0 0 1 2.366-1.973V11.6a.766.766 0 0 0 .388.676l5.815 3.355-2.02 1.168a.076.076 0 0 1-.071 0l-4.83-2.786A4.504 4.504 0 0 1 2.34 7.872zm16.597 3.855l-5.833-3.387L15.119 7.2a.076.076 0 0 1 .071 0l4.83 2.791a4.494 4.494 0 0 1-.676 8.105v-5.678a.79.79 0 0 0-.407-.667zm2.01-3.023l-.141-.085-4.774-2.782a.776.776 0 0 0-.785 0L9.409 9.23V6.897a.066.066 0 0 1 .028-.061l4.83-2.787a4.5 4.5 0 0 1 6.68 4.66zm-12.64 4.135l-2.02-1.164a.08.08 0 0 1-.038-.057V6.075a4.5 4.5 0 0 1 7.375-3.453l-.142.08-4.778 2.758a.795.795 0 0 0-.393.681zm1.097-2.365l2.602-1.5 2.607 1.5v2.999l-2.597 1.5-2.607-1.5z"
+                  />
+                </svg>
+              </div>
+              <div>
+                <p class="font-medium">OpenAI</p>
+                <p class="text-xs text-muted-foreground">
+                  Pull monthly token usage from your OpenAI dashboard
+                </p>
+              </div>
+            </div>
             <Button
+              v-if="canEdit"
               variant="outline"
               size="sm"
-              :disabled="isUploadingProviderCsv"
-              @click="providerCsvFileInput?.click()"
+              @click="showOpenAIModal = true"
             >
-              <Loader2
-                v-if="isUploadingProviderCsv"
-                class="mr-2 h-4 w-4 animate-spin"
-              />
-              <Upload v-else class="mr-2 h-4 w-4" />
-              {{ isUploadingProviderCsv ? "Importing..." : "Quick Import CSV" }}
+              Connect
             </Button>
-          </template>
-          <Button
-            v-else-if="!isLoggedIn"
-            variant="outline"
-            size="sm"
-            @click="router.push('/signup')"
-          >
-            Sign up to upload
-          </Button>
-        </div>
-        <CostsSection
-          :file="costsFile"
-          :readonly="!canEdit"
-          @file-uploaded="handleCostsFileUploaded"
-          @file-cleared="handleCostsFileCleared"
+          </div>
+        </CardContent>
+      </Card>
+
+      <!-- Anthropic connect -->
+      <Card>
+        <CardContent class="p-4">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <div
+                class="h-10 w-10 rounded-lg bg-[#D4A574]/10 flex items-center justify-center"
+              >
+                <span class="text-lg font-semibold text-[#D4A574]">A</span>
+              </div>
+              <div>
+                <p class="font-medium">Anthropic</p>
+                <p class="text-xs text-muted-foreground">
+                  Pull monthly token usage from your Anthropic console
+                </p>
+              </div>
+            </div>
+            <Button
+              v-if="canEdit"
+              variant="outline"
+              size="sm"
+              @click="showAnthropicModal = true"
+            >
+              Connect
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      <!-- Provider CSV quick-import -->
+      <div v-if="canEdit" class="flex items-center gap-3 px-1">
+        <p class="text-xs text-muted-foreground flex-1">
+          Or drop a billing export CSV from OpenAI or Anthropic to quick-import.
+        </p>
+        <input
+          ref="providerCsvFileInput"
+          type="file"
+          accept=".csv"
+          class="hidden"
+          :disabled="isUploadingProviderCsv"
+          @change="handleProviderCsvFile"
         />
-        <UsageSection
-          :file="usageFile"
-          :readonly="!canEdit"
-          @file-uploaded="handleUsageFileUploaded"
-          @file-cleared="handleUsageFileCleared"
-        />
+        <Button
+          variant="outline"
+          size="sm"
+          :disabled="isUploadingProviderCsv"
+          @click="providerCsvFileInput?.click()"
+        >
+          <Loader2
+            v-if="isUploadingProviderCsv"
+            class="mr-2 h-4 w-4 animate-spin"
+          />
+          <Upload v-else class="mr-2 h-4 w-4" />
+          {{ isUploadingProviderCsv ? "Importing..." : "Quick Import CSV" }}
+        </Button>
       </div>
-    </details>
+
+      <!-- CSV uploads -->
+      <CostsSection
+        :file="costsFile"
+        :readonly="!canEdit"
+        @file-uploaded="handleCostsFileUploaded"
+        @file-cleared="handleCostsFileCleared"
+      />
+      <UsageSection
+        :file="usageFile"
+        :readonly="!canEdit"
+        @file-uploaded="handleUsageFileUploaded"
+        @file-cleared="handleUsageFileCleared"
+      />
+    </div>
   </div>
 
   <StripeApiKeyModal
     :open="showStripeModal"
     @close="showStripeModal = false"
     @connected="handleStripeConnected"
+  />
+  <OpenAIApiKeyModal
+    :open="showOpenAIModal"
+    @close="showOpenAIModal = false"
+    @connected="refetchDataMode"
+  />
+  <AnthropicApiKeyModal
+    :open="showAnthropicModal"
+    @close="showAnthropicModal = false"
+    @connected="refetchDataMode"
   />
 </template>
