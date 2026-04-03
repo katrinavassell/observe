@@ -148,7 +148,7 @@ observe.track({
 ## Environment Variables
 
 ```env
-OBSERVE_API_KEY=obs_...            # SDK key from Data Sources > API Keys
+OBSERVE_API_KEY=sk_live_...            # SDK key from Data Sources > API Keys
 OBSERVE_URL=http://localhost:3001  # Self-hosted URL (optional)
 ```
 

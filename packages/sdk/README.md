@@ -12,7 +12,7 @@ from openai import OpenAI
 client = OpenAI(
     api_key="sk-...",
     base_url="https://app.tanso.io/v1",
-    default_headers={"x-tanso-key": "obs_..."},
+    default_headers={"x-tanso-key": "sk_live_..."},
 )
 # Every call is now tracked. No SDK needed.
 ```
@@ -115,10 +115,9 @@ import OpenAI from 'openai';
 import { TansoObserve } from '@tanso/observe';
 import { wrapOpenAI } from '@tanso/observe/openai';
 
-const client = new OpenAI();
 const observe = new TansoObserve({ apiKey: 'your-api-key' });
 
-wrapOpenAI(client, observe, {
+const client = wrapOpenAI(new OpenAI(), observe, {
   customerReferenceId: 'user-123',
   featureKey: 'chat',
 });
@@ -147,10 +146,9 @@ import Anthropic from '@anthropic-ai/sdk';
 import { TansoObserve } from '@tanso/observe';
 import { wrapAnthropic } from '@tanso/observe/anthropic';
 
-const client = new Anthropic();
 const observe = new TansoObserve({ apiKey: 'your-api-key' });
 
-wrapAnthropic(client, observe, {
+const client = wrapAnthropic(new Anthropic(), observe, {
   customerReferenceId: 'user-123',
   featureKey: 'chat',
 });

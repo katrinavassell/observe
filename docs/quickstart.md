@@ -12,7 +12,7 @@ from openai import OpenAI
 client = OpenAI(
     api_key="sk-...",
     base_url="https://app.tanso.io/v1",     # your Observe instance
-    default_headers={"x-tanso-key": "obs_..."}, # SDK key from Data Sources
+    default_headers={"x-tanso-key": "sk_live_..."}, # SDK key from Data Sources
 )
 
 response = client.chat.completions.create(
@@ -30,7 +30,7 @@ import OpenAI from 'openai'
 const client = new OpenAI({
   apiKey: 'sk-...',
   baseURL: 'https://app.tanso.io/v1',
-  defaultHeaders: { 'x-tanso-key': 'obs_...' },
+  defaultHeaders: { 'x-tanso-key': 'sk_live_...' },
 })
 ```
 
@@ -42,7 +42,7 @@ import anthropic
 client = anthropic.Anthropic(
     api_key="sk-ant-...",
     base_url="https://app.tanso.io",
-    default_headers={"x-tanso-key": "obs_..."},
+    default_headers={"x-tanso-key": "sk_live_..."},
 )
 ```
 
@@ -59,7 +59,7 @@ client = OpenAI(
     api_key="sk-...",
     base_url="https://app.tanso.io/v1",
     default_headers={
-        "x-tanso-key":      "obs_...",
+        "x-tanso-key":      "sk_live_...",
         "x-tanso-customer": "cus_acme",      # your customer ID
         "x-tanso-feature":  "ai-assistant",   # which feature this is
     },
@@ -127,7 +127,7 @@ npm install @tanso/observe
 import { TansoObserve } from '@tanso/observe'
 import { wrapOpenAI } from '@tanso/observe/openai'
 
-const observe = new TansoObserve({ apiKey: 'obs_...' })
+const observe = new TansoObserve({ apiKey: 'sk_live_...' })
 const openai = wrapOpenAI(new OpenAI(), observe)
 
 // Every call is automatically tracked

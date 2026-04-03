@@ -41,7 +41,7 @@ export class TansoObserve {
   private async sendBatch(events: IngestEvent[]): Promise<void> {
     const maxRetries = 3;
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
-      const response = await fetch(`${this.baseUrl}/events/ingest`, {
+      const response = await fetch(`${this.baseUrl}/api/events/ingest`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

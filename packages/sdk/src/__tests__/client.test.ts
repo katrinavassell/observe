@@ -29,7 +29,7 @@ describe("TansoObserve", () => {
     await vi.advanceTimersByTimeAsync(0);
 
     expect(fetch).toHaveBeenCalledWith(
-      "https://app.tanso.io/events/ingest",
+      "https://app.tanso.io/api/events/ingest",
       expect.objectContaining({
         method: "POST",
         headers: expect.objectContaining({
@@ -105,14 +105,17 @@ describe("TansoObserve", () => {
 
     await vi.advanceTimersByTimeAsync(0);
 
-    expect(fetch).toHaveBeenCalledWith("https://custom.api.io/events/ingest", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: "Bearer sk-test-123",
+    expect(fetch).toHaveBeenCalledWith(
+      "https://custom.api.io/api/events/ingest",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer sk-test-123",
+        },
+        body: expect.stringContaining('"customerReferenceId":"cust-42"'),
       },
-      body: expect.stringContaining('"customerReferenceId":"cust-42"'),
-    });
+    );
 
     const body = JSON.parse(
       (fetch as ReturnType<typeof vi.fn>).mock.calls[0][1].body,

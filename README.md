@@ -95,7 +95,7 @@ from openai import OpenAI
 client = OpenAI(
     api_key="sk-...",
     base_url="http://localhost:3001/v1",         # your Observe instance
-    default_headers={"x-tanso-key": "obs_..."},  # SDK key from Data Sources
+    default_headers={"x-tanso-key": "sk_live_..."},  # SDK key from Data Sources
 )
 
 # That's it. Cost, model, and tokens are logged for every call.
@@ -113,7 +113,7 @@ client = OpenAI(
     api_key="sk-...",
     base_url="http://localhost:3001/v1",
     default_headers={
-        "x-tanso-key":      "obs_...",
+        "x-tanso-key":      "sk_live_...",
         "x-tanso-customer": "cus_acme",      # your customer ID
         "x-tanso-feature":  "ai-assistant",   # which feature
     },
@@ -131,7 +131,7 @@ import anthropic
 client = anthropic.Anthropic(
     api_key="sk-ant-...",
     base_url="http://localhost:3001",
-    default_headers={"x-tanso-key": "obs_..."},
+    default_headers={"x-tanso-key": "sk_live_..."},
 )
 ```
 
@@ -192,7 +192,7 @@ For providers without proxy or SDK support, or when you need to attach revenue d
 
 ```bash
 curl -X POST http://localhost:3001/events/ingest \
-  -H "Authorization: Bearer obs_..." \
+  -H "Authorization: Bearer sk_live_..." \
   -H "Content-Type: application/json" \
   -d '{
     "events": [{

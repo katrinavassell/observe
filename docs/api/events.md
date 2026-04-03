@@ -16,8 +16,8 @@ Returns paginated list of events for the current session.
 | `feature_key` | string | Filter by feature |
 | `model` | string | Filter by AI model |
 | `source` | string | Filter by source (`csv`, `stripe`, `sample`) |
-| `start_date` | ISO 8601 | Events after this date |
-| `end_date` | ISO 8601 | Events before this date |
+| `date_from` | ISO 8601 | Events after this date |
+| `date_to` | ISO 8601 | Events before this date |
 | `limit` | number | Page size (default: 50, max: 200) |
 | `offset` | number | Pagination offset |
 
@@ -143,13 +143,13 @@ Returns cost and volume grouped by AI model. Only includes events where `model` 
 
 ---
 
-## Ingest Events (Future SDK)
+## Ingest Events
 
 ```
 POST /api/events/ingest
 ```
 
-> **Not yet implemented.** The table schema supports this endpoint. It will accept single events or batches for real-time SDK ingestion. For now, use CSV upload or Stripe sync.
+Accepts single events or batches for real-time SDK ingestion. Requires a valid SDK API key passed as a Bearer token in the `Authorization` header.
 
 ### Request Body
 
