@@ -138,15 +138,16 @@ const ensureVisitor = createEnsureVisitor(pool);
 app.use(createAuthRoutes(pool, ensureVisitor));
 
 // ─── Admin visitor ID (shared by proxy dual-write + billing usage tracking) ──
-const ADMIN_EMAIL = "admin@example.com";
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL || "";
 let cachedAdminVisitorId: string | null = null;
 
 async function getAdminVisitorId(): Promise<string | null> {
+  if (!ADMIN_EMAIL) return null;
   if (cachedAdminVisitorId) return cachedAdminVisitorId;
   try {
     const result = await pool.query(
       "SELECT visitor_id FROM accounts WHERE LOWER(email) = $1 LIMIT 1",
-      [ADMIN_EMAIL],
+      [ADMIN_EMAIL.toLowerCase()],
     );
     if (result.rows[0]?.visitor_id) {
       cachedAdminVisitorId = result.rows[0].visitor_id;

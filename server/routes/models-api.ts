@@ -3,9 +3,9 @@ import type { Pool } from "pg";
 import { type AuthRequest } from "./auth.js";
 import { getAllPricing } from "../model-pricing.js";
 
-const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || "admin@example.com")
-  .split(",")
-  .map((e) => e.trim().toLowerCase());
+const ADMIN_EMAILS = process.env.ADMIN_EMAILS
+  ? process.env.ADMIN_EMAILS.split(",").map((e) => e.trim().toLowerCase())
+  : [];
 
 function isAdminUser(req: AuthRequest): boolean {
   return (

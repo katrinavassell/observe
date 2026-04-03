@@ -325,7 +325,7 @@ export function createEventsRoutes(
     },
   );
 
-  // GET /sdk-keys — List all active SDK API keys (includes full key if encrypted_key exists)
+  // GET /sdk-keys — List all active SDK API keys (never returns full key)
   router.get(
     "/sdk-keys",
     ensureVisitor,
@@ -333,16 +333,14 @@ export function createEventsRoutes(
       try {
         const userId = req.visitorId!;
         const result = await pool.query(
-          "SELECT id, key_prefix, encrypted_key, name, created_at, last_used_at FROM sdk_api_keys WHERE user_id = $1 AND revoked_at IS NULL ORDER BY created_at DESC",
+          "SELECT id, key_prefix, name, created_at FROM sdk_api_keys WHERE user_id = $1 AND revoked_at IS NULL ORDER BY created_at DESC",
           [userId],
         );
         const keys = result.rows.map((row) => ({
           id: row.id,
           key_prefix: row.key_prefix,
-          full_key: row.encrypted_key ? decryptApiKey(row.encrypted_key) : null,
-          name: row.name,
+          label: row.name,
           created_at: row.created_at,
-          last_used_at: row.last_used_at,
         }));
         res.json(keys);
       } catch (error) {

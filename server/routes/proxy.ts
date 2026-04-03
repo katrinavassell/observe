@@ -307,17 +307,22 @@ export function createProxyRoutes(
         featureKey: feat,
         properties,
       } = parseProxyHeaders(req);
-      let userId: string | null = null;
-      if (observeKey) {
-        userId = await resolveProxyUserId(observeKey);
-        if (!userId) {
-          return res.status(401).json({
-            error: {
-              message: "Invalid or revoked observe key",
-              type: "auth_error",
-            },
-          });
-        }
+      if (!observeKey) {
+        return res.status(401).json({
+          error: {
+            message: "Missing observe key (x-tanso-key header)",
+            type: "auth_error",
+          },
+        });
+      }
+      const userId = await resolveProxyUserId(observeKey);
+      if (!userId) {
+        return res.status(401).json({
+          error: {
+            message: "Invalid or revoked observe key",
+            type: "auth_error",
+          },
+        });
       }
       const featureKey = feat || "chat_completions";
       const model = req.body.model || "unknown";
@@ -442,17 +447,22 @@ export function createProxyRoutes(
         featureKey: feat,
         properties,
       } = parseProxyHeaders(req);
-      let userId: string | null = null;
-      if (observeKey) {
-        userId = await resolveProxyUserId(observeKey);
-        if (!userId) {
-          return res.status(401).json({
-            error: {
-              message: "Invalid or revoked observe key",
-              type: "auth_error",
-            },
-          });
-        }
+      if (!observeKey) {
+        return res.status(401).json({
+          error: {
+            message: "Missing observe key (x-tanso-key header)",
+            type: "auth_error",
+          },
+        });
+      }
+      const userId = await resolveProxyUserId(observeKey);
+      if (!userId) {
+        return res.status(401).json({
+          error: {
+            message: "Invalid or revoked observe key",
+            type: "auth_error",
+          },
+        });
       }
       const featureKey = feat || "embeddings";
       const model = req.body.model || "unknown";
@@ -569,13 +579,25 @@ export function createProxyRoutes(
         featureKey: feat,
         properties,
       } = parseProxyHeaders(req);
+      if (!observeKey) {
+        return res.status(401).json({
+          error: {
+            message: "Missing observe key (x-tanso-key header)",
+            type: "auth_error",
+          },
+        });
+      }
+      const userId = await resolveProxyUserId(observeKey);
+      if (!userId) {
+        return res.status(401).json({
+          error: {
+            message: "Invalid or revoked observe key",
+            type: "auth_error",
+          },
+        });
+      }
       const featureKey = feat || "messages";
       const model = req.body.model || "unknown";
-
-      let userId: string | null = null;
-      if (observeKey) {
-        userId = await resolveProxyUserId(observeKey);
-      }
 
       const { cacheEnabled, ttlSeconds } = parseCacheHeaders(req);
       // Anthropic defaults temperature to 1 when omitted — only cache explicit temperature: 0
