@@ -245,7 +245,7 @@ function isActive(path: string) {
             <span>Viewer access</span>
           </div>
           <router-link
-            to="/team"
+            :to="isLoggedIn ? '/team' : '/signup'"
             :class="[
               'flex items-center gap-3 rounded-lg px-3 py-2.5 transition-colors',
               isActive('/team')
@@ -353,18 +353,9 @@ function isActive(path: string) {
           <Database class="h-4 w-4" />
           <span>Viewing sample data</span>
         </div>
-        <div class="flex items-center gap-3">
-          <router-link to="/data-sources" class="font-medium hover:underline">
-            Connect your data
-          </router-link>
-          <button
-            class="text-blue-500 hover:text-blue-700 text-xs disabled:opacity-50"
-            :disabled="isClearingSample"
-            @click="handleClearSample"
-          >
-            {{ isClearingSample ? "Clearing..." : "Clear" }}
-          </button>
-        </div>
+        <router-link to="/data-sources" class="font-medium hover:underline">
+          Connect your data
+        </router-link>
       </div>
       <div class="p-6">
         <ErrorBoundary>
