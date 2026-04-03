@@ -37,7 +37,15 @@ const {
   isClearingSample,
   switchToSampleData,
   hasData,
+  reset: resetDataMode,
 } = useDataMode();
+
+// Reset data status when auth state changes (signup clears sample data)
+watch(isLoggedIn, (loggedIn) => {
+  if (loggedIn) {
+    resetDataMode();
+  }
+});
 
 const { data: usageLimits } = useQuery({
   queryKey: ["usage-limits"],
