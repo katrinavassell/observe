@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import {
   BarChart3,
@@ -14,6 +14,8 @@ import {
   LogOut,
   Database,
   CreditCard,
+  Menu,
+  X,
 } from "lucide-vue-next";
 import { toast } from "vue-sonner";
 import ErrorBoundary from "@/components/shared/ErrorBoundary.vue";
@@ -84,6 +86,15 @@ const navItems = computed(() => [
   },
 ]);
 
+const sidebarOpen = ref(false);
+
+watch(
+  () => route.path,
+  () => {
+    sidebarOpen.value = false;
+  },
+);
+
 function isActive(path: string) {
   if (path === "/") return route.path === "/";
   return route.path === path || route.path.startsWith(path + "/");
@@ -92,9 +103,40 @@ function isActive(path: string) {
 
 <template>
   <div class="flex min-h-screen">
+    <!-- Mobile top bar -->
+    <div
+      class="fixed top-0 left-0 right-0 z-50 flex h-14 items-center gap-3 border-b bg-sidebar text-sidebar-foreground px-4 md:hidden"
+    >
+      <button
+        @click="sidebarOpen = !sidebarOpen"
+        class="p-1.5 rounded-md hover:bg-sidebar-accent transition-colors"
+        aria-label="Toggle menu"
+      >
+        <Menu v-if="!sidebarOpen" class="h-5 w-5" />
+        <X v-else class="h-5 w-5" />
+      </button>
+      <div
+        class="flex h-8 w-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground font-semibold text-sm"
+      >
+        O
+      </div>
+      <span class="text-base font-semibold">Observe</span>
+    </div>
+
+    <!-- Mobile backdrop -->
+    <div
+      v-if="sidebarOpen"
+      class="fixed inset-0 z-40 bg-black/50 md:hidden"
+      @click="sidebarOpen = false"
+    />
+
     <!-- Sidebar -->
     <aside
-      class="fixed left-0 top-0 z-40 h-screen w-64 border-r bg-sidebar text-sidebar-foreground"
+      :class="[
+        'fixed left-0 top-0 z-40 h-screen w-64 border-r bg-sidebar text-sidebar-foreground transition-transform duration-200 ease-in-out',
+        sidebarOpen ? 'translate-x-0' : '-translate-x-full',
+        'md:translate-x-0',
+      ]"
     >
       <div class="flex h-full flex-col">
         <!-- Logo -->
@@ -220,7 +262,7 @@ function isActive(path: string) {
     </aside>
 
     <!-- Main Content -->
-    <main class="ml-64 flex-1 min-h-screen overflow-x-hidden">
+    <main class="flex-1 min-h-screen overflow-x-hidden pt-14 md:pt-0 md:ml-64">
       <!-- Signup CTA is in the sidebar; no top banner needed -->
       <!-- Sample data banner -->
       <div
