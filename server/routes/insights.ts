@@ -458,18 +458,24 @@ Return ONLY the JSON array, no markdown or explanation.`;
             const targetRevenuePerCall = costPerCall / 0.5; // 50% margin target
 
             if (margin < 0) {
+              const lostPerPeriod = (cost - revenue).toFixed(2);
               insights.push({
                 insight_type: "pricing_recommendation",
-                title: `${row.feature_key}: charge $${targetRevenuePerCall.toFixed(4)}/call for 50% margin`,
-                description: `This feature costs $${costPerCall.toFixed(4)}/call but you charge $${revenuePerCall.toFixed(4)}/call (${margin}% margin). To hit 50% margin, set the price to $${targetRevenuePerCall.toFixed(4)}/call. At ${events} calls, that recovers $${((targetRevenuePerCall - revenuePerCall) * events).toFixed(2)} in lost margin.`,
+                title: `${row.feature_key} is losing you $${lostPerPeriod} every period`,
+                description: `You pay $${costPerCall.toFixed(4)}/call to run this but charge $${revenuePerCall.toFixed(4)} (${margin}% margin). That's negative unit economics on ${events.toLocaleString()} calls. Price at $${targetRevenuePerCall.toFixed(4)}/call for 50% margin — or decide this is an acquisition feature and cap usage.`,
                 severity: "critical",
                 feature_key: row.feature_key,
               });
             } else if (margin < 30) {
+              const gapPercent = Math.round(
+                ((targetRevenuePerCall - revenuePerCall) /
+                  (revenuePerCall || 0.0001)) *
+                  100,
+              );
               insights.push({
                 insight_type: "pricing_recommendation",
-                title: `${row.feature_key}: raise price to $${targetRevenuePerCall.toFixed(4)}/call`,
-                description: `At ${margin}% margin and $${costPerCall.toFixed(4)} cost/call, this feature is underpriced. Raise per-call price from $${revenuePerCall.toFixed(4)} to $${targetRevenuePerCall.toFixed(4)} to reach 50% margin. That's a ${Math.round(((targetRevenuePerCall - revenuePerCall) / (revenuePerCall || 0.0001)) * 100)}% increase.`,
+                title: `${row.feature_key} is underpriced by ${gapPercent}%`,
+                description: `At $${costPerCall.toFixed(4)} cost and $${revenuePerCall.toFixed(4)} revenue per call, you're leaving margin on the table. A ${gapPercent}% price increase to $${targetRevenuePerCall.toFixed(4)}/call gets you to 50% margin. At ${events.toLocaleString()} calls, that's $${((targetRevenuePerCall - revenuePerCall) * events).toFixed(2)} recovered.`,
                 severity: "warning",
                 feature_key: row.feature_key,
               });
@@ -486,8 +492,8 @@ Return ONLY the JSON array, no markdown or explanation.`;
             if (ratio >= 5 && customers >= 2) {
               insights.push({
                 insight_type: "usage_pricing_signal",
-                title: `${row.feature_key}: ${ratio}x usage spread across customers`,
-                description: `Your heaviest user of ${row.feature_key} makes ${max} calls vs ${min} for the lightest (${ratio}x spread across ${customers} customers). If they pay the same flat rate, you're subsidizing power users. Consider per-call pricing or usage tiers with an overage charge.`,
+                title: `${row.feature_key}: one customer uses ${ratio}x more than another — same price`,
+                description: `Heaviest user makes ${max.toLocaleString()} calls, lightest makes ${min.toLocaleString()} (${ratio}x gap across ${customers} customers). Flat-rate pricing here means you're subsidizing power users. This is a usage-based pricing signal — charge per call or add overage tiers.`,
                 severity: "warning",
                 feature_key: row.feature_key,
               });
@@ -526,10 +532,13 @@ Return ONLY the JSON array, no markdown or explanation.`;
                   (expensive.cost_per_call - cheap.cost_per_call) *
                   expensive.event_count *
                   0.7;
+                const multiplier = Math.round(
+                  expensive.cost_per_call / (cheap.cost_per_call || 0.0001),
+                );
                 insights.push({
                   insight_type: "model_routing",
-                  title: `Route ${feature} calls from ${expensive.model} to ${cheap.model}`,
-                  description: `${expensive.model} costs $${expensive.cost_per_call.toFixed(4)}/call vs $${cheap.cost_per_call.toFixed(4)} for ${cheap.model} (${Math.round(expensive.cost_per_call / (cheap.cost_per_call || 0.0001))}x more expensive). Routing 70% of ${expensive.event_count} calls to the cheaper model saves ~$${savingsIfRouted.toFixed(2)}/period. Test quality on a sample before switching.`,
+                  title: `${feature}: burning ${expensive.model} on tasks ${cheap.model} handles — ${multiplier}x overpay`,
+                  description: `You're running ${expensive.event_count.toLocaleString()} calls on ${expensive.model} ($${expensive.cost_per_call.toFixed(4)}/call) when ${cheap.model} does it for $${cheap.cost_per_call.toFixed(4)}. Route 70% of traffic to the cheaper model and save ~$${savingsIfRouted.toFixed(2)}/period. Test quality on a sample first.`,
                   severity: "info",
                   feature_key: feature,
                 });
@@ -538,18 +547,25 @@ Return ONLY the JSON array, no markdown or explanation.`;
           }
 
           // 4. Overall margin health
-          if (overallMargin < 30) {
+          if (overallMargin < 0) {
             insights.push({
               insight_type: "margin_alert",
-              title: `Overall margin is ${overallMargin}% — below 30% threshold`,
-              description: `Total costs ($${totalCost.toFixed(2)}) consume ${100 - overallMargin}% of revenue ($${totalRevenue.toFixed(2)}). Healthy AI SaaS targets 50%+ margin. Combine pricing increases on underperforming features with model routing to close the gap.`,
-              severity: overallMargin < 0 ? "critical" : "warning",
+              title: `You're losing money — overall margin is ${overallMargin}%`,
+              description: `You spend $${totalCost.toFixed(2)} to earn $${totalRevenue.toFixed(2)}. Every request makes the hole deeper. This needs pricing changes, model routing, or usage caps — not incremental tweaks.`,
+              severity: "critical",
+            });
+          } else if (overallMargin < 30) {
+            insights.push({
+              insight_type: "margin_alert",
+              title: `Overall margin is ${overallMargin}% — you're leaving money on the table`,
+              description: `AI SaaS targets 50%+ margin. At ${overallMargin}%, costs ($${totalCost.toFixed(2)}) eat too much of revenue ($${totalRevenue.toFixed(2)}). Combine pricing increases on underperforming features with model routing to close the gap.`,
+              severity: "warning",
             });
           } else {
             insights.push({
               insight_type: "margin_alert",
-              title: `Overall margin is healthy at ${overallMargin}%`,
-              description: `Revenue ($${totalRevenue.toFixed(2)}) covers costs ($${totalCost.toFixed(2)}) with ${overallMargin}% margin. You could lower prices to grow volume or maintain margin and invest in features.`,
+              title: `Margins are healthy at ${overallMargin}%`,
+              description: `Revenue ($${totalRevenue.toFixed(2)}) covers costs ($${totalCost.toFixed(2)}) with room to spare. You could lower prices to grow volume or hold margin and reinvest.`,
               severity: "positive",
             });
           }
@@ -563,10 +579,12 @@ Return ONLY the JSON array, no markdown or explanation.`;
                 ? Math.round(((revenue - cost) / revenue) * 100)
                 : -100;
             if (margin < 0 && cost > totalCost * 0.1) {
+              const costPct = Math.round((cost / totalCost) * 100);
+              const name = row.customer_name || row.customer_id;
               insights.push({
                 insight_type: "customer_risk",
-                title: `${row.customer_name || row.customer_id} is unprofitable at ${margin}% margin`,
-                description: `This customer costs $${cost.toFixed(2)} to serve but pays $${revenue.toFixed(2)} (${margin}% margin, ${Math.round((cost / totalCost) * 100)}% of your total cost). Either reprice their plan, add usage caps, or treat as acquisition cost with a timeline to convert.`,
+                title: `${name} costs $${cost.toFixed(2)} to serve but pays $${revenue.toFixed(2)}`,
+                description: `${margin}% margin — this customer is ${costPct}% of your total cost. You had no idea. Reprice their plan, add usage caps, or decide this is acquisition cost with a deadline to convert.`,
                 severity: "critical",
                 customer_id: row.customer_id,
               });
@@ -599,8 +617,14 @@ Return ONLY the JSON array, no markdown or explanation.`;
             if (Math.abs(delta) >= 5) {
               insights.push({
                 insight_type: delta > 0 ? "cost_optimization" : "margin_alert",
-                title: `Margin ${delta > 0 ? "improved" : "dropped"} ${Math.abs(delta)}pp over ${trendRes.rows.length} months`,
-                description: `Margin moved from ${olderMargin}% to ${recentMargin}% (${delta > 0 ? "+" : ""}${delta}pp). ${delta > 0 ? "If model costs dropped but your prices stayed flat, you could lower prices to grow volume or keep the extra margin." : "Check if usage patterns shifted to more expensive models, or if a specific feature or customer drove the increase."}`,
+                title:
+                  delta > 0
+                    ? `Margins up ${Math.abs(delta)}pp — are you capturing it or giving it away?`
+                    : `Margin dropped ${Math.abs(delta)}pp — something changed`,
+                description:
+                  delta > 0
+                    ? `Margin went from ${olderMargin}% to ${recentMargin}%. If model costs dropped but your prices stayed flat, you're sitting on free margin. Lower prices to grow volume or pocket the difference.`
+                    : `Margin fell from ${olderMargin}% to ${recentMargin}%. Check if usage shifted to more expensive models, or if one customer or feature drove the spike. This is your cost alert.`,
                 severity: delta < -10 ? "warning" : "info",
               });
             }

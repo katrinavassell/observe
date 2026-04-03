@@ -143,12 +143,32 @@ export function createAuthRoutes(
           req.visitorId,
         ]);
 
+        // Auto-generate an SDK key so onboarding can show it immediately
+        let sdkKey: string | null = null;
+        try {
+          const rawKey = `obs_${crypto.randomBytes(24).toString("hex")}`;
+          const keyHash = crypto
+            .createHash("sha256")
+            .update(rawKey)
+            .digest("hex");
+          const keyPrefix = rawKey.slice(0, 11);
+          await pool.query(
+            `INSERT INTO sdk_api_keys (user_id, key_hash, key_prefix, name) VALUES ($1, $2, $3, $4)
+             ON CONFLICT DO NOTHING`,
+            [req.visitorId, keyHash, keyPrefix, "default"],
+          );
+          sdkKey = rawKey;
+        } catch (keyErr) {
+          console.error("Auto SDK key generation failed (non-fatal):", keyErr);
+        }
+
         await regenerateSession(req);
         req.session.accountId = account.id;
         req.session.accountEmail = account.email;
 
         res.json({
           account: { id: account.id, email: account.email, name: account.name },
+          sdkKey,
         });
       } catch (error: any) {
         if (error.code === "23505") {

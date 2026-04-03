@@ -45,8 +45,8 @@ If you're running an AI product and you're losing money on a subset of customers
 ### Docker (recommended)
 
 ```bash
-git clone https://github.com/tansohq/metrics-onboarding.git
-cd metrics-onboarding
+git clone https://github.com/tansohq/observe.git
+cd observe
 docker compose up
 ```
 
@@ -63,8 +63,8 @@ SESSION_SECRET=your-secret docker compose up
 **Prerequisites:** Node.js 20+, PostgreSQL 16+
 
 ```bash
-git clone https://github.com/tansohq/metrics-onboarding.git
-cd metrics-onboarding
+git clone https://github.com/tansohq/observe.git
+cd observe
 npm install
 ```
 
@@ -87,39 +87,55 @@ The database schema is created automatically on first start.
 
 ## Proxy setup (one line)
 
-Point your OpenAI or Anthropic client at your Observe instance. Your API key goes in the auth header as normal. Observe forwards the request transparently and logs the cost in the background.
-
-### OpenAI
+Point your OpenAI or Anthropic client at Observe. Add one header. Every call is tracked automatically.
 
 ```python
 from openai import OpenAI
 
 client = OpenAI(
     api_key="sk-...",
-    base_url="http://localhost:3001/v1",     # swap this line
+    base_url="http://localhost:3001/v1",         # your Observe instance
+    default_headers={"x-tanso-key": "obs_..."},  # SDK key from Data Sources
 )
 
-response = client.chat.completions.create(
-    model="gpt-4o-mini",
-    messages=[{"role": "user", "content": "Hello"}],
-    extra_headers={
-        "x-tanso-key":      "obs_...",       # your Observe SDK key
-        "x-tanso-customer": "cus_acme",
-        "x-tanso-feature":  "chat",
+# That's it. Cost, model, and tokens are logged for every call.
+```
+
+No customer ID or feature key required to start. Observe auto-derives the feature from the endpoint and defaults the customer to `"default"`.
+
+<details>
+<summary>Per-customer attribution (optional)</summary>
+
+Add headers when you need cost breakdowns per customer and feature:
+
+```python
+client = OpenAI(
+    api_key="sk-...",
+    base_url="http://localhost:3001/v1",
+    default_headers={
+        "x-tanso-key":      "obs_...",
+        "x-tanso-customer": "cus_acme",      # your customer ID
+        "x-tanso-feature":  "ai-assistant",   # which feature
     },
 )
 ```
 
-### Anthropic
+</details>
+
+<details>
+<summary>Anthropic proxy</summary>
 
 ```python
 import anthropic
 
 client = anthropic.Anthropic(
     api_key="sk-ant-...",
-    base_url="http://localhost:3001",         # swap this line
+    base_url="http://localhost:3001",
+    default_headers={"x-tanso-key": "obs_..."},
 )
 ```
+
+</details>
 
 **Supported proxy endpoints:**
 
@@ -129,7 +145,7 @@ client = anthropic.Anthropic(
 | `POST /v1/embeddings` | OpenAI embeddings |
 | `POST /v1/messages` | Anthropic messages |
 
-Without `x-tanso-key`, the request is still proxied but no event is logged. The proxy never blocks or modifies your request. Responses can be cached to reduce costs (see proxy cache in the architecture docs).
+Without `x-tanso-key`, the request is still proxied but no event is logged. The proxy never blocks or modifies your request.
 
 ---
 
@@ -239,6 +255,22 @@ All data -- proxy, SDK, Stripe, CSV -- lands in a single `observe_events` table 
 | Backend | Express 5, Node.js 20 |
 | Database | PostgreSQL 16 (Neon serverless or standard pg) |
 | Billing | Tanso SDK + Stripe |
+
+---
+
+## Documentation
+
+Full docs are in the [`docs/`](docs/README.md) directory:
+
+- [Quickstart](docs/quickstart.md) -- get running in 60 seconds
+- [Configuration](docs/configuration.md) -- environment variable reference
+- [Self-Hosting Guide](docs/self-hosting.md) -- production deployment with Docker, reverse proxy, and PostgreSQL
+- [Security Model](docs/security.md) -- authentication, data isolation, rate limiting
+- [Next.js Integration](docs/guides/nextjs.md) -- SDK setup in Next.js apps
+- [LangChain Integration](docs/guides/langchain.md) -- proxy mode with LangChain
+- [API Reference](docs/API.md) -- all backend endpoints
+- [Architecture](docs/ARCHITECTURE.md) -- system design and data flow
+- [Troubleshooting](docs/troubleshooting.md) -- common issues and fixes
 
 ---
 

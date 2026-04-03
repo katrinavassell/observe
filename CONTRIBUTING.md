@@ -10,8 +10,8 @@ Thanks for your interest in contributing! This guide will help you get set up.
 ## Setup
 
 ```bash
-git clone https://github.com/tansohq/metrics-onboarding.git
-cd metrics-onboarding
+git clone https://github.com/tansohq/observe.git
+cd observe
 npm install
 cp .env.example .env
 # Edit .env with your DATABASE_URL and a SESSION_SECRET

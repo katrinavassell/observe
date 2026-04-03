@@ -2,13 +2,23 @@
 
 Developer docs for Observe -- AI cost observability for SaaS companies.
 
+## Getting Started
+
+- [Quickstart](./quickstart.md) -- Get running in 60 seconds
+- [Configuration](./configuration.md) -- Environment variable reference
+- [Contributing](../CONTRIBUTING.md) -- Set up a dev environment and submit PRs
+
 ## Guides
 
-- [Quickstart](./quickstart.md) -- Get running in 5 minutes
 - [Connecting Data Sources](./data-sources.md) -- AI providers, Stripe, CSV uploads, SDK
 - [Feature Economics](./feature-economics.md) -- Understanding margins and the analytics dashboard
 - [Pricing Simulator](./simulator.md) -- Model pricing changes before you ship
 - [AI Insights](./ai-insights.md) -- AI-powered margin analysis
+
+## Integration Guides
+
+- [Next.js](./guides/nextjs.md) -- SDK and wrapper setup in Next.js apps
+- [LangChain](./guides/langchain.md) -- Proxy mode and callback tracking with LangChain
 
 ## API Reference
 
@@ -31,3 +41,10 @@ Developer docs for Observe -- AI cost observability for SaaS companies.
 - [Event Schema](./concepts/event-schema.md) -- The `observe_event` data model
 - [Margin Calculation](./concepts/margins.md) -- How margins are computed and categorized
 - [Data Sources & Granularity](./concepts/data-sources.md) -- How imported data maps to events
+
+## Self-Hosting & Operations
+
+- [Self-Hosting Guide](./self-hosting.md) -- Production deployment with Docker, reverse proxy, and database setup
+- [Security Model](./security.md) -- Authentication, data isolation, rate limiting, and hardening
+- [Upgrading](./upgrading.md) -- How to upgrade between versions
+- [Troubleshooting](./troubleshooting.md) -- Common issues and fixes

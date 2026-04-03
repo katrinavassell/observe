@@ -1,83 +1,149 @@
 # Quickstart
 
-Get Observe running and see your first analytics in under 5 minutes.
+## Start tracking in 30 seconds
 
-## 1. Start the App
+Point your OpenAI or Anthropic SDK at Observe. One header. That's it.
 
-### Docker (fastest)
+### OpenAI (Python)
+
+```python
+from openai import OpenAI
+
+client = OpenAI(
+    api_key="sk-...",
+    base_url="https://app.tanso.io/v1",     # your Observe instance
+    default_headers={"x-tanso-key": "obs_..."}, # SDK key from Data Sources
+)
+
+response = client.chat.completions.create(
+    model="gpt-4o-mini",
+    messages=[{"role": "user", "content": "Hello"}],
+)
+# Cost, model, and tokens are logged automatically.
+```
+
+### OpenAI (TypeScript)
+
+```typescript
+import OpenAI from 'openai'
+
+const client = new OpenAI({
+  apiKey: 'sk-...',
+  baseURL: 'https://app.tanso.io/v1',
+  defaultHeaders: { 'x-tanso-key': 'obs_...' },
+})
+```
+
+### Anthropic (Python)
+
+```python
+import anthropic
+
+client = anthropic.Anthropic(
+    api_key="sk-ant-...",
+    base_url="https://app.tanso.io",
+    default_headers={"x-tanso-key": "obs_..."},
+)
+```
+
+No customer ID or feature key required. Observe auto-derives the feature from the endpoint (`chat_completions`, `embeddings`, `messages`) and defaults the customer to `"default"`. Add attribution headers later when you need per-customer breakdowns.
+
+---
+
+## Optional: per-customer attribution
+
+When you're ready to track costs per customer and feature, add two more headers:
+
+```python
+client = OpenAI(
+    api_key="sk-...",
+    base_url="https://app.tanso.io/v1",
+    default_headers={
+        "x-tanso-key":      "obs_...",
+        "x-tanso-customer": "cus_acme",      # your customer ID
+        "x-tanso-feature":  "ai-assistant",   # which feature this is
+    },
+)
+```
+
+---
+
+## Running Observe
+
+### Docker (recommended)
 
 ```bash
-git clone https://github.com/tansohq/metrics-onboarding.git
-cd metrics-onboarding
+git clone https://github.com/tansohq/observe.git
+cd observe
 docker compose up
 ```
 
-Open `http://localhost:3000`.
+App: `http://localhost:3000` | Proxy: `http://localhost:3000/v1`
 
-### Local Development
+### Local development
 
 ```bash
-git clone https://github.com/tansohq/metrics-onboarding.git
-cd metrics-onboarding
+git clone https://github.com/tansohq/observe.git
+cd observe
 npm install
 cp .env.example .env
-# Edit .env with your DATABASE_URL and SESSION_SECRET
 npm run dev
 ```
 
-Open `http://localhost:5173`.
+Frontend: `http://localhost:5173` | API + Proxy: `http://localhost:3001`
 
-## 2. Create an Account
+Only two env vars are required:
 
-Sign up with email and password. Or click **Try Demo** to explore with sample data without an account.
+| Variable | Purpose |
+|---|---|
+| `DATABASE_URL` | PostgreSQL connection string |
+| `SESSION_SECRET` | Signs session cookies (any random string) |
 
-## 3. Load Data
+---
 
-Go to **Data Sources** in the sidebar. You have several options:
+## Load your data
 
-### Option A: Sample Data (fastest)
-Click **Load Sample Data**. This creates customers, plans, features, and months of history with AI model cost data. You'll have a fully populated dashboard in seconds.
+Go to **Data Sources** in the sidebar. Pick whichever fits:
 
-### Option B: Connect an AI Provider
-Connect your OpenAI or Anthropic API key to automatically pull usage and cost data from your provider.
+**Sample data (fastest)** -- Click **Load Sample Data**. Dashboard is populated in seconds.
 
-### Option C: Upload CSVs
-Upload your own data files:
+**Connect Stripe** -- Sync customers, subscriptions, and plans for revenue data.
 
-- **Revenue CSV** -- customers, plans, subscriptions
-- **Cost CSV** -- infrastructure and AI model costs
-- **Usage CSV** -- per-feature usage volumes
+**Connect an AI provider** -- Add your OpenAI or Anthropic API key to pull usage and cost data.
 
-The column mapper helps you map your columns to Observe's schema.
+**Upload CSVs** -- Bring your own revenue, cost, and usage files.
 
-### Option D: Connect Stripe
-Sync your customers, subscriptions, and plans from Stripe for revenue data.
+---
 
-## 4. Explore Your Data
+## SDK integration (alternative to proxy)
 
-Once data is loaded, check these pages:
+If you prefer fire-and-forget tracking from your backend instead of the proxy:
 
-- **Analytics** (home) -- revenue, costs, and margin overview
-- **Events** -- browse the raw event stream
-- **Models** -- see which AI models cost the most
-- **Alerts** -- set up threshold-based cost alerts
+```bash
+npm install @tanso/observe
+```
 
-## 5. Set Up Alerts
+```typescript
+import { TansoObserve } from '@tanso/observe'
+import { wrapOpenAI } from '@tanso/observe/openai'
 
-Go to **Alerts** and create rules to get notified when costs exceed thresholds. Alerts can send email notifications (requires Resend API key in `.env`).
+const observe = new TansoObserve({ apiKey: 'obs_...' })
+const openai = wrapOpenAI(new OpenAI(), observe)
 
-## 6. Integrate Your App
+// Every call is automatically tracked
+const response = await openai.chat.completions.create({
+  model: 'gpt-4o',
+  messages: [{ role: 'user', content: 'Hello' }],
+})
+```
 
-For production use, integrate Observe into your app:
+See the [SDK README](../packages/sdk/README.md) for full options.
 
-- **Proxy mode** -- point your OpenAI/Anthropic client at Observe's URL
-- **SDK** -- `npm install @tanso/observe` and call `tanso.track()`
-- **HTTP API** -- `POST /events/ingest` with an SDK key
+---
 
-See the main [README](../README.md) for integration examples.
+## Next steps
 
-## Next Steps
-
-- [Connecting Data Sources](./data-sources.md) -- detailed guide for each import method
-- [Feature Economics](./feature-economics.md) -- understanding margin analysis
-- [Events API](./api/events.md) -- query events programmatically
+- [Configuration](./configuration.md) -- environment variable reference
+- [Next.js Integration](./guides/nextjs.md) -- SDK setup in Next.js apps
+- [LangChain Integration](./guides/langchain.md) -- proxy mode with LangChain
+- [API Reference](./API.md) -- all backend endpoints

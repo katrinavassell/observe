@@ -13,21 +13,25 @@ function parseProxyHeaders(req: Request): {
   featureKey: string;
   properties: Record<string, string>;
 } {
-  // Auth: Helicone-Auth > x-observe-key
-  let observeKey = req.headers["x-observe-key"] as string | undefined;
+  // Auth: x-tanso-key > x-observe-key > Helicone-Auth
+  let observeKey =
+    (req.headers["x-tanso-key"] as string | undefined) ||
+    (req.headers["x-observe-key"] as string | undefined);
   const heliconeAuth = req.headers["helicone-auth"] as string | undefined;
   if (!observeKey && heliconeAuth?.startsWith("Bearer ")) {
     observeKey = heliconeAuth.slice(7).trim();
   }
 
-  // Customer: Helicone-User-Id > x-observe-customer
+  // Customer: x-tanso-customer > Helicone-User-Id > x-observe-customer > "default"
   const customerId =
+    (req.headers["x-tanso-customer"] as string) ||
     (req.headers["helicone-user-id"] as string) ||
     (req.headers["x-observe-customer"] as string) ||
-    "unknown";
+    "default";
 
-  // Feature: Helicone-Session-Id > x-observe-feature (default per-endpoint)
+  // Feature: x-tanso-feature > Helicone-Session-Id > x-observe-feature (auto-derived per endpoint)
   const featureKey =
+    (req.headers["x-tanso-feature"] as string) ||
     (req.headers["helicone-session-id"] as string) ||
     (req.headers["x-observe-feature"] as string) ||
     "";
@@ -303,31 +307,29 @@ export function createProxyRoutes(
         featureKey: feat,
         properties,
       } = parseProxyHeaders(req);
-      if (!observeKey) {
-        return res.status(401).json({
-          error: {
-            message: "Missing X-Observe-Key header",
-            type: "auth_error",
-          },
-        });
-      }
-      const userId = await resolveProxyUserId(observeKey);
-      if (!userId) {
-        return res.status(401).json({
-          error: {
-            message: "Invalid or revoked X-Observe-Key",
-            type: "auth_error",
-          },
-        });
+      let userId: string | null = null;
+      if (observeKey) {
+        userId = await resolveProxyUserId(observeKey);
+        if (!userId) {
+          return res.status(401).json({
+            error: {
+              message: "Invalid or revoked observe key",
+              type: "auth_error",
+            },
+          });
+        }
       }
       const featureKey = feat || "chat_completions";
       const model = req.body.model || "unknown";
       const { cacheEnabled, ttlSeconds } = parseCacheHeaders(req);
       const isCacheable =
-        cacheEnabled && !req.body.stream && !(req.body.temperature > 0);
+        cacheEnabled &&
+        !req.body.stream &&
+        !(req.body.temperature > 0) &&
+        userId;
 
       // Cache lookup
-      if (isCacheable) {
+      if (isCacheable && userId) {
         const cacheKey = generateCacheKey(userId, model, {
           messages: req.body.messages,
           model,
@@ -440,30 +442,25 @@ export function createProxyRoutes(
         featureKey: feat,
         properties,
       } = parseProxyHeaders(req);
-      if (!observeKey) {
-        return res.status(401).json({
-          error: {
-            message: "Missing X-Observe-Key header",
-            type: "auth_error",
-          },
-        });
-      }
-      const userId = await resolveProxyUserId(observeKey);
-      if (!userId) {
-        return res.status(401).json({
-          error: {
-            message: "Invalid or revoked X-Observe-Key",
-            type: "auth_error",
-          },
-        });
+      let userId: string | null = null;
+      if (observeKey) {
+        userId = await resolveProxyUserId(observeKey);
+        if (!userId) {
+          return res.status(401).json({
+            error: {
+              message: "Invalid or revoked observe key",
+              type: "auth_error",
+            },
+          });
+        }
       }
       const featureKey = feat || "embeddings";
       const model = req.body.model || "unknown";
       const { cacheEnabled, ttlSeconds } = parseCacheHeaders(req);
-      const isCacheable = cacheEnabled && !req.body.stream;
+      const isCacheable = cacheEnabled && !req.body.stream && userId;
 
       // Cache lookup (embeddings are always deterministic)
-      if (isCacheable) {
+      if (isCacheable && userId) {
         const cacheKey = generateCacheKey(userId, model, {
           input: req.body.input,
           model,
