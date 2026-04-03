@@ -1,27 +1,6 @@
 # @tanso/observe
 
-Zero-latency AI cost observability SDK. Track every LLM call with 3 lines of code.
-
-## Fastest option: Proxy mode
-
-If you just want to track costs with zero code changes, use the proxy instead of this SDK. Set your OpenAI/Anthropic base URL to your Observe instance and add one header:
-
-```python
-from openai import OpenAI
-
-client = OpenAI(
-    api_key="sk-...",
-    base_url="https://app.tanso.io/v1",
-    default_headers={"x-tanso-key": "sk_live_..."},
-)
-# Every call is now tracked. No SDK needed.
-```
-
-Use the SDK below when you want more control: custom event tracking, manual cost attribution, or non-OpenAI/Anthropic providers.
-
----
-
-Events are queued in memory and flushed in batches -- your app's latency is never affected. Failed sends are retried with exponential backoff before being passed to an optional error callback.
+AI cost observability SDK. Track every LLM call with 3 lines of code.
 
 ## Install
 
@@ -29,7 +8,84 @@ Events are queued in memory and flushed in batches -- your app's latency is neve
 npm install @tanso/observe
 ```
 
-## Quickstart
+## Quickstart (recommended)
+
+```ts
+import { Observe } from '@tanso/observe'
+import OpenAI from 'openai'
+
+// 1. Configure once at startup
+Observe.configure({ apiKey: 'obs_your_api_key' })
+
+// 2. Identify customer once on login
+Observe.identify({ customerId: 'cus_123' })
+
+// 3. Wrap your client -- all calls auto-tracked
+const openai = Observe.wrap(new OpenAI())
+
+const response = await openai.chat.completions.create({
+  model: 'gpt-4o',
+  messages: [{ role: 'user', content: 'Hello' }],
+})
+// Cost, model, tokens, customer, and feature tracked automatically.
+```
+
+### How it works
+
+`Observe.wrap()` sets your client's `baseURL` to the Observe proxy and injects tracking headers. Your OpenAI/Anthropic API key still authenticates with the provider -- Observe just logs the call on the way through.
+
+### API
+
+| Method | Description |
+|---|---|
+| `Observe.configure({ apiKey, baseUrl? })` | Set API key. Call once at startup. `baseUrl` defaults to `https://app.tanso.io` |
+| `Observe.identify({ customerId, name?, email? })` | Set customer context globally. Call once on login |
+| `Observe.feature(featureKey)` | Set default feature attribution |
+| `Observe.wrap(client, overrides?)` | Wrap an OpenAI or Anthropic client. Returns the same instance |
+
+Per-call overrides use the client's native options:
+
+```ts
+await openai.chat.completions.create(
+  { model: 'gpt-4o', messages },
+  { headers: { 'x-tanso-feature': 'export_report' } }
+)
+```
+
+### Self-hosted
+
+```ts
+Observe.configure({
+  apiKey: 'obs_your_api_key',
+  baseUrl: 'https://your-instance.example.com',
+})
+```
+
+---
+
+## Alternative: Direct proxy (no SDK)
+
+Set your OpenAI/Anthropic base URL to Observe and add one header:
+
+```python
+from openai import OpenAI
+
+client = OpenAI(
+    api_key="sk-...",
+    base_url="https://app.tanso.io/v1",
+    default_headers={
+        "x-tanso-key": "obs_your_api_key",
+        "x-tanso-customer": user.stripe_id,
+        "x-tanso-feature": "ai_chat",
+    },
+)
+```
+
+---
+
+## Alternative: Manual event tracking
+
+For non-OpenAI/Anthropic providers or custom cost attribution:
 
 ```ts
 import { TansoObserve } from '@tanso/observe';

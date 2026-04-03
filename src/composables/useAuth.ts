@@ -55,6 +55,9 @@ export function useAuth() {
         email: result.account.email,
         name: result.account.name,
       });
+      window.posthog.capture("user_logged_in", {
+        email: result.account.email,
+      });
     }
     return result;
   }
@@ -76,6 +79,7 @@ export function useAuth() {
 
   async function logout() {
     if (window.posthog) {
+      window.posthog.capture("user_logged_out");
       window.posthog.reset();
     }
     await api.logout();

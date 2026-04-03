@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { toast } from 'vue-sonner'
+import { ref, onMounted } from "vue";
+import { toast } from "vue-sonner";
 import {
   Users,
   UserPlus,
@@ -12,9 +12,9 @@ import {
   Pencil,
   Link as LinkIcon,
   Loader2,
-} from 'lucide-vue-next'
-import { useTeam } from '@/composables/useTeam'
-import type { OrgMember } from '@/lib/api'
+} from "lucide-vue-next";
+import { useTeam } from "@/composables/useTeam";
+import type { OrgMember } from "@/lib/api";
 import {
   Button,
   Card,
@@ -25,7 +25,7 @@ import {
   Input,
   Badge,
   Select,
-} from '@/components/ui'
+} from "@/components/ui";
 
 const {
   isLoading,
@@ -39,95 +39,107 @@ const {
   inviteMember,
   changeRole,
   removeMember,
-} = useTeam()
+} = useTeam();
 
-const inviteEmail = ref('')
-const inviteRole = ref<'admin' | 'viewer'>('viewer')
-const isInviting = ref(false)
-const inviteLink = ref('')
-const copiedLink = ref(false)
+const inviteEmail = ref("");
+const inviteRole = ref<"admin" | "viewer">("viewer");
+const isInviting = ref(false);
+const inviteLink = ref("");
+const copiedLink = ref(false);
 
-const editingName = ref(false)
-const nameInput = ref('')
-const isSavingName = ref(false)
+const editingName = ref(false);
+const nameInput = ref("");
+const isSavingName = ref(false);
 
 const roleItems = [
-  { value: 'viewer', label: 'Viewer' },
-  { value: 'admin', label: 'Admin' },
-]
+  { value: "viewer", label: "Viewer" },
+  { value: "admin", label: "Admin" },
+];
 
 onMounted(() => {
-  fetchTeamInfo()
-})
+  fetchTeamInfo();
+});
 
 function startEditName() {
-  nameInput.value = org.value?.name ?? ''
-  editingName.value = true
+  nameInput.value = org.value?.name ?? "";
+  editingName.value = true;
 }
 
 async function saveName() {
-  if (!nameInput.value.trim()) return
-  isSavingName.value = true
+  if (!nameInput.value.trim()) return;
+  isSavingName.value = true;
   try {
-    await renameTeam(nameInput.value.trim())
-    editingName.value = false
-    toast.success('Team name updated')
+    await renameTeam(nameInput.value.trim());
+    editingName.value = false;
+    toast.success("Team name updated");
   } catch (e) {
-    toast.error(e instanceof Error ? e.message : 'Failed to update name')
+    toast.error(e instanceof Error ? e.message : "Failed to update name");
   } finally {
-    isSavingName.value = false
+    isSavingName.value = false;
   }
 }
 
 async function handleInvite() {
-  isInviting.value = true
-  inviteLink.value = ''
+  isInviting.value = true;
+  inviteLink.value = "";
   try {
-    const result = await inviteMember(inviteEmail.value.trim(), inviteRole.value)
-    inviteLink.value = `${window.location.origin}/join/${result.invite_token}`
-    inviteEmail.value = ''
-    toast.success('Invite link generated')
-    await fetchTeamInfo()
+    const result = await inviteMember(
+      inviteEmail.value.trim(),
+      inviteRole.value,
+    );
+    inviteLink.value = `${window.location.origin}/join/${result.invite_token}`;
+    inviteEmail.value = "";
+    toast.success("Invite link generated");
+    window.posthog?.capture("team_invite_sent", { role: inviteRole.value });
+    await fetchTeamInfo();
   } catch (e) {
-    toast.error(e instanceof Error ? e.message : 'Failed to create invite')
+    toast.error(e instanceof Error ? e.message : "Failed to create invite");
   } finally {
-    isInviting.value = false
+    isInviting.value = false;
   }
 }
 
 async function copyInviteLink() {
-  await navigator.clipboard.writeText(inviteLink.value)
-  copiedLink.value = true
-  toast.success('Link copied to clipboard')
-  setTimeout(() => { copiedLink.value = false }, 2000)
+  await navigator.clipboard.writeText(inviteLink.value);
+  copiedLink.value = true;
+  toast.success("Link copied to clipboard");
+  setTimeout(() => {
+    copiedLink.value = false;
+  }, 2000);
 }
 
 async function handleRoleChange(member: OrgMember, role: string) {
   try {
-    await changeRole(member.id, role as 'admin' | 'viewer')
-    toast.success('Role updated')
+    await changeRole(member.id, role as "admin" | "viewer");
+    toast.success("Role updated");
   } catch (e) {
-    toast.error(e instanceof Error ? e.message : 'Failed to change role')
+    toast.error(e instanceof Error ? e.message : "Failed to change role");
   }
 }
 
 async function handleRemove(member: OrgMember) {
-  if (!confirm(`Remove ${member.invited_email || 'this member'} from the team?`)) return
+  if (
+    !confirm(`Remove ${member.invited_email || "this member"} from the team?`)
+  )
+    return;
   try {
-    await removeMember(member.id)
-    toast.success('Member removed')
+    await removeMember(member.id);
+    toast.success("Member removed");
   } catch (e) {
-    toast.error(e instanceof Error ? e.message : 'Failed to remove member')
+    toast.error(e instanceof Error ? e.message : "Failed to remove member");
   }
 }
 
 function formatDate(dateStr: string | null) {
-  if (!dateStr) return '—'
-  return new Date(dateStr).toLocaleDateString()
+  if (!dateStr) return "—";
+  return new Date(dateStr).toLocaleDateString();
 }
 
 function memberLabel(member: OrgMember) {
-  return member.invited_email || `Anonymous (${member.visitor_id?.slice(0, 8) ?? '?'}...)`
+  return (
+    member.invited_email ||
+    `Anonymous (${member.visitor_id?.slice(0, 8) ?? "?"}...)`
+  );
 }
 </script>
 
@@ -135,10 +147,15 @@ function memberLabel(member: OrgMember) {
   <div class="space-y-6 max-w-2xl">
     <div>
       <h1 class="text-2xl font-bold tracking-tight">Team Settings</h1>
-      <p class="text-muted-foreground mt-1">Manage your workspace and team members.</p>
+      <p class="text-muted-foreground mt-1">
+        Manage your workspace and team members.
+      </p>
     </div>
 
-    <div v-if="isLoading" class="flex items-center gap-2 text-muted-foreground py-8">
+    <div
+      v-if="isLoading"
+      class="flex items-center gap-2 text-muted-foreground py-8"
+    >
       <Loader2 class="h-4 w-4 animate-spin" />
       Loading team info…
     </div>
@@ -160,7 +177,10 @@ function memberLabel(member: OrgMember) {
                 @keydown.escape="editingName = false"
               />
               <Button size="sm" :disabled="isSavingName" @click="saveName">
-                <Loader2 v-if="isSavingName" class="h-3 w-3 animate-spin mr-1.5" />
+                <Loader2
+                  v-if="isSavingName"
+                  class="h-3 w-3 animate-spin mr-1.5"
+                />
                 Save
               </Button>
               <Button variant="outline" size="sm" @click="editingName = false">
@@ -181,7 +201,10 @@ function memberLabel(member: OrgMember) {
             </template>
           </div>
           <p class="text-sm text-muted-foreground mt-2">
-            Your role: <Badge variant="secondary" class="ml-1 capitalize">{{ myRole }}</Badge>
+            Your role:
+            <Badge variant="secondary" class="ml-1 capitalize">{{
+              myRole
+            }}</Badge>
           </p>
         </CardContent>
       </Card>
@@ -192,7 +215,9 @@ function memberLabel(member: OrgMember) {
             <UserPlus class="h-4 w-4" />
             Invite Teammate
           </CardTitle>
-          <CardDescription>Generate a shareable invite link for your team</CardDescription>
+          <CardDescription
+            >Generate a shareable invite link for your team</CardDescription
+          >
         </CardHeader>
         <CardContent class="space-y-4">
           <div class="flex gap-2 flex-wrap">
@@ -215,9 +240,15 @@ function memberLabel(member: OrgMember) {
             </Button>
           </div>
 
-          <div v-if="inviteLink" class="flex items-center gap-2 rounded-md border bg-muted/50 p-3">
+          <div
+            v-if="inviteLink"
+            class="flex items-center gap-2 rounded-md border bg-muted/50 p-3"
+          >
             <LinkIcon class="h-4 w-4 text-muted-foreground shrink-0" />
-            <code class="flex-1 text-xs break-all text-muted-foreground select-all">{{ inviteLink }}</code>
+            <code
+              class="flex-1 text-xs break-all text-muted-foreground select-all"
+              >{{ inviteLink }}</code
+            >
             <Button
               variant="ghost"
               size="icon"
@@ -231,8 +262,13 @@ function memberLabel(member: OrgMember) {
         </CardContent>
       </Card>
 
-      <div v-if="!isAdmin" class="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-800 p-4 text-sm text-amber-800 dark:text-amber-300">
-        You have <strong>Viewer</strong> access to this workspace. You can see all data but cannot modify it, upload data, or invite teammates. Contact your admin to change your role.
+      <div
+        v-if="!isAdmin"
+        class="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-800 p-4 text-sm text-amber-800 dark:text-amber-300"
+      >
+        You have <strong>Viewer</strong> access to this workspace. You can see
+        all data but cannot modify it, upload data, or invite teammates. Contact
+        your admin to change your role.
       </div>
 
       <Card>
@@ -242,11 +278,18 @@ function memberLabel(member: OrgMember) {
               <Users class="h-4 w-4" />
               Team Members
             </CardTitle>
-            <span class="text-sm text-muted-foreground">{{ members.length }} member{{ members.length !== 1 ? 's' : '' }}</span>
+            <span class="text-sm text-muted-foreground"
+              >{{ members.length }} member{{
+                members.length !== 1 ? "s" : ""
+              }}</span
+            >
           </div>
         </CardHeader>
         <CardContent class="p-0">
-          <div v-if="members.length === 0" class="p-6 text-center text-sm text-muted-foreground">
+          <div
+            v-if="members.length === 0"
+            class="p-6 text-center text-sm text-muted-foreground"
+          >
             No members yet. Invite your first teammate above.
           </div>
 
@@ -256,22 +299,37 @@ function memberLabel(member: OrgMember) {
               :key="member.id"
               class="flex items-center gap-3 px-6 py-4"
             >
-              <div class="h-8 w-8 rounded-full bg-muted flex items-center justify-center shrink-0">
-                <Crown v-if="member.role === 'admin'" class="h-4 w-4 text-muted-foreground" />
+              <div
+                class="h-8 w-8 rounded-full bg-muted flex items-center justify-center shrink-0"
+              >
+                <Crown
+                  v-if="member.role === 'admin'"
+                  class="h-4 w-4 text-muted-foreground"
+                />
                 <Eye v-else class="h-4 w-4 text-muted-foreground" />
               </div>
 
               <div class="flex-1 min-w-0">
-                <div class="text-sm font-medium truncate">{{ memberLabel(member) }}</div>
-                <div class="text-xs text-muted-foreground flex items-center gap-1.5">
+                <div class="text-sm font-medium truncate">
+                  {{ memberLabel(member) }}
+                </div>
+                <div
+                  class="text-xs text-muted-foreground flex items-center gap-1.5"
+                >
                   <Badge
-                    :variant="member.status === 'active' ? 'success' : 'warning'"
+                    :variant="
+                      member.status === 'active' ? 'success' : 'warning'
+                    "
                     class="text-[10px] px-1.5 py-0"
                   >
-                    {{ member.status === 'active' ? 'Active' : 'Pending' }}
+                    {{ member.status === "active" ? "Active" : "Pending" }}
                   </Badge>
-                  <span v-if="member.joined_at">Joined {{ formatDate(member.joined_at) }}</span>
-                  <span v-else>Invited {{ formatDate(member.created_at) }}</span>
+                  <span v-if="member.joined_at"
+                    >Joined {{ formatDate(member.joined_at) }}</span
+                  >
+                  <span v-else
+                    >Invited {{ formatDate(member.created_at) }}</span
+                  >
                 </div>
               </div>
 
@@ -293,7 +351,9 @@ function memberLabel(member: OrgMember) {
                 </Button>
               </template>
               <template v-else>
-                <Badge variant="outline" class="capitalize">{{ member.role }}</Badge>
+                <Badge variant="outline" class="capitalize">{{
+                  member.role
+                }}</Badge>
               </template>
             </li>
           </ul>

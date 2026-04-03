@@ -114,6 +114,7 @@ async function handleGenerateKey() {
     generatedKey.value = result.key;
     newKeyName.value = "";
     await loadSdkKeys();
+    window.posthog?.capture("sdk_key_created");
   } catch (error) {
     toast.error("Failed to generate API key", {
       description: error instanceof Error ? error.message : "Please try again.",
@@ -128,6 +129,7 @@ async function handleRevokeKey(id: number) {
     await revokeSdkKey(id);
     sdkKeys.value = sdkKeys.value.filter((k) => k.id !== id);
     toast.success("API key revoked");
+    window.posthog?.capture("sdk_key_revoked");
   } catch (error) {
     toast.error("Failed to revoke key", {
       description: error instanceof Error ? error.message : "Please try again.",
@@ -298,6 +300,7 @@ async function handleStripeDisconnect() {
     };
     await refetchDataMode();
     toast.success("Stripe disconnected");
+    window.posthog?.capture("stripe_disconnected");
   } catch (error) {
     toast.error("Failed to disconnect Stripe", {
       description: error instanceof Error ? error.message : "Please try again.",
