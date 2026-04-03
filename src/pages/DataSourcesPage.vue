@@ -542,7 +542,7 @@ watch(
   <span class="text-sky-300">baseURL</span>: <span class="text-amber-300">'{{ proxyBaseUrl }}'</span>,
   <span class="text-sky-300">defaultHeaders</span>: {
     <span class="text-amber-300">'x-tanso-key'</span>: <span class="text-amber-300">'{{ apiKeyForSnippet }}'</span>,
-    <span class="text-amber-300">'x-tanso-customer'</span>: customerId,       <span class="text-zinc-500">// Stripe ID (cus_...) or your user ID</span>
+    <span class="text-amber-300">'x-tanso-customer'</span>: customerId,       <span class="text-zinc-500">// your internal customer/org ID</span>
     <span class="text-amber-300">'x-tanso-feature'</span>: <span class="text-amber-300">'ai_chat'</span>,          <span class="text-zinc-500">// which product feature</span>
   },
 })
