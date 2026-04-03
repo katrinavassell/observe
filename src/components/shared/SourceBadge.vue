@@ -1,20 +1,48 @@
 <script setup lang="ts">
 const props = defineProps<{
-  source: string
-  isInferred?: boolean
-}>()
+  source: string;
+  isInferred?: boolean;
+}>();
 
 const config: Record<string, { label: string; classes: string }> = {
-  sdk: { label: 'SDK', classes: 'bg-green-100 text-green-700 border-green-200' },
-  csv: { label: 'CSV', classes: 'bg-gray-100 text-gray-700 border-gray-200' },
-  stripe: { label: 'Stripe', classes: 'bg-purple-100 text-purple-700 border-purple-200' },
-  openai: { label: 'OpenAI', classes: 'bg-emerald-100 text-emerald-700 border-emerald-200' },
-  anthropic: { label: 'Anthropic', classes: 'bg-orange-100 text-orange-700 border-orange-200' },
-  sample: { label: 'Sample', classes: 'bg-blue-100 text-blue-700 border-blue-200' },
-}
+  proxy: { label: "Proxy", classes: "bg-sky-100 text-sky-700 border-sky-200" },
+  sdk: {
+    label: "SDK",
+    classes: "bg-green-100 text-green-700 border-green-200",
+  },
+  csv: {
+    label: "CSV Import",
+    classes: "bg-gray-100 text-gray-700 border-gray-200",
+  },
+  stripe: {
+    label: "Stripe",
+    classes: "bg-purple-100 text-purple-700 border-purple-200",
+  },
+  openai: {
+    label: "OpenAI",
+    classes: "bg-emerald-100 text-emerald-700 border-emerald-200",
+  },
+  anthropic: {
+    label: "Anthropic",
+    classes: "bg-orange-100 text-orange-700 border-orange-200",
+  },
+  internal: {
+    label: "System",
+    classes: "bg-zinc-100 text-zinc-600 border-zinc-200",
+  },
+  sample: {
+    label: "Sample",
+    classes: "bg-blue-100 text-blue-700 border-blue-200",
+  },
+};
 
 function badgeConfig(source: string) {
-  return config[source] ?? { label: source, classes: 'bg-muted text-muted-foreground border-border' }
+  return (
+    config[source] ?? {
+      label: source,
+      classes: "bg-muted text-muted-foreground border-border",
+    }
+  );
 }
 </script>
 

@@ -11,6 +11,7 @@ import {
   generateInsights,
   getUsageLimits,
   listFeaturePricing,
+  getSourceBreakdown,
 } from "@/lib/api";
 import type { AiInsight, MrrMovement, MrrSummary } from "@/lib/api";
 import {
@@ -26,6 +27,7 @@ import { useAuth } from "@/composables/useAuth";
 import Sheet from "@/components/ui/sheet.vue";
 import { Card, Skeleton, Button } from "@/components/ui";
 import OnboardingChecklist from "@/components/onboarding/OnboardingChecklist.vue";
+import SourceBadge from "@/components/shared/SourceBadge.vue";
 import { formatCurrency as fmt, formatPct as fmtPct } from "@/lib/format";
 
 const router = useRouter();
@@ -131,6 +133,19 @@ function insightTypeLabel(type: string) {
       return type.replace(/_/g, " ");
   }
 }
+
+// Source breakdown for data attribution
+const { data: sourceBreakdown } = useQuery({
+  queryKey: ["source-breakdown"],
+  queryFn: getSourceBreakdown,
+});
+
+const activeSources = computed(() => {
+  if (!sourceBreakdown.value?.sources) return [];
+  return sourceBreakdown.value.sources
+    .filter((s) => s.event_count > 0 && s.source !== "sample")
+    .sort((a, b) => b.event_count - a.event_count);
+});
 
 // Analytics data
 const {
@@ -312,7 +327,16 @@ const insightCategories = [
     <div class="flex items-start justify-between">
       <div>
         <h1 class="text-2xl font-semibold tracking-tight">Analytics</h1>
-        <p class="text-muted-foreground mt-1">Where your AI spend is going</p>
+        <div class="flex items-center gap-2 mt-1">
+          <p class="text-muted-foreground">Where your AI spend is going</p>
+          <div v-if="activeSources.length" class="flex items-center gap-1">
+            <SourceBadge
+              v-for="s in activeSources"
+              :key="s.source"
+              :source="s.source"
+            />
+          </div>
+        </div>
       </div>
       <Button variant="outline" size="sm" @click="insightsOpen = true">
         <Sparkles class="h-3.5 w-3.5 mr-1.5" />
