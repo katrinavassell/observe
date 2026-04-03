@@ -18,7 +18,6 @@ import {
   AlertTriangle,
   Database,
   Plug,
-  FlaskConical,
   Sparkles,
   Zap,
 } from "lucide-vue-next";
@@ -31,8 +30,7 @@ import { formatCurrency as fmt, formatPct as fmtPct } from "@/lib/format";
 
 const router = useRouter();
 const queryClient = useQueryClient();
-const { isSampleMode, switchToSampleData, clearSample, isLoadingSample } =
-  useDataMode();
+const { isSampleMode } = useDataMode();
 
 type Tab = "feature" | "model" | "customer" | "mrr";
 const activeTab = ref<Tab>("feature");
@@ -316,21 +314,10 @@ const insightCategories = [
         <h1 class="text-2xl font-semibold tracking-tight">Analytics</h1>
         <p class="text-muted-foreground mt-1">Where your AI spend is going</p>
       </div>
-      <div class="flex items-center gap-2">
-        <Button
-          v-if="isSampleMode"
-          variant="ghost"
-          size="sm"
-          :disabled="isLoadingSample"
-          @click="clearSample()"
-        >
-          {{ isLoadingSample ? "Loading..." : "Exit preview" }}
-        </Button>
-        <Button variant="outline" size="sm" @click="insightsOpen = true">
-          <Sparkles class="h-3.5 w-3.5 mr-1.5" />
-          AI Insights
-        </Button>
-      </div>
+      <Button variant="outline" size="sm" @click="insightsOpen = true">
+        <Sparkles class="h-3.5 w-3.5 mr-1.5" />
+        AI Insights
+      </Button>
     </div>
 
     <!-- AI Insights Drawer -->
@@ -622,30 +609,21 @@ const insightCategories = [
       </Card>
     </div>
 
-    <!-- Empty state -->
+    <!-- Empty state (logged-in users only — guests auto-load sample data) -->
     <div
       v-else-if="!hasData"
       class="flex flex-col items-center justify-center py-16 text-center max-w-md mx-auto"
     >
-      <Database class="h-10 w-10 text-muted-foreground/40 mb-3" />
-      <p class="text-sm font-medium mb-1">No data yet</p>
+      <Plug class="h-10 w-10 text-muted-foreground/40 mb-3" />
+      <p class="text-sm font-medium mb-1">Connect your data</p>
       <p class="text-xs text-muted-foreground mb-4">
-        Connect your AI calls to see cost, revenue, and margin breakdowns by
-        feature, model, and customer.
+        Point your OpenAI or Anthropic SDK at Observe to see cost, revenue, and
+        margin breakdowns by feature, model, and customer.
       </p>
-      <div class="flex gap-3">
-        <Button
-          size="sm"
-          :disabled="isLoadingSample"
-          @click="switchToSampleData()"
-        >
-          <FlaskConical class="h-3.5 w-3.5 mr-1.5" />
-          {{ isLoadingSample ? "Loading..." : "Preview with sample data" }}
-        </Button>
-        <Button variant="outline" size="sm" @click="router.push('/onboarding')">
-          Connect your data
-        </Button>
-      </div>
+      <Button size="sm" @click="router.push('/data-sources')">
+        <Plug class="h-3.5 w-3.5 mr-1.5" />
+        Go to Data Sources
+      </Button>
     </div>
 
     <!-- Data loaded -->

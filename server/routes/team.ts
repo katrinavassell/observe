@@ -2,6 +2,7 @@ import { Router, Request, Response } from "express";
 import type { Pool } from "pg";
 import crypto from "crypto";
 import { type AuthRequest } from "./auth.js";
+import { grantBonusCredits } from "../billing.js";
 
 export function createTeamRoutes(pool: Pool, ensureVisitor: any) {
   const router = Router();
@@ -253,6 +254,24 @@ export function createTeamRoutes(pool: Pool, ensureVisitor: any) {
           [visitorId, invite.organization_id],
         );
 
+        // Grant bonus credits to the org owner who invited
+        try {
+          const orgOwner = await pool.query(
+            `SELECT owner_visitor_id FROM organizations WHERE id = $1`,
+            [invite.organization_id],
+          );
+          const ownerVisitorId = orgOwner.rows[0]?.owner_visitor_id;
+          if (ownerVisitorId) {
+            await grantBonusCredits(pool, ownerVisitorId, "invite_accepted");
+            await pool.query(
+              `UPDATE accounts SET invite_credits_granted = COALESCE(invite_credits_granted, 0) + 1 WHERE visitor_id = $1`,
+              [ownerVisitorId],
+            );
+          }
+        } catch (creditErr) {
+          console.error("Failed to grant invite bonus credits:", creditErr);
+        }
+
         res.json({
           success: true,
           org_id: String(invite.organization_id),
@@ -305,11 +324,9 @@ export function createTeamRoutes(pool: Pool, ensureVisitor: any) {
             [org.id],
           );
           if (parseInt(adminCount.rows[0].count) <= 1) {
-            return res
-              .status(400)
-              .json({
-                error: "Cannot demote yourself — you are the only admin",
-              });
+            return res.status(400).json({
+              error: "Cannot demote yourself — you are the only admin",
+            });
           }
         }
 

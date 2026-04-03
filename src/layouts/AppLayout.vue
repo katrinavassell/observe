@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
-import { useQuery } from "@tanstack/vue-query";
+import { useQuery, useQueryClient } from "@tanstack/vue-query";
 import {
   BarChart3,
   Plug,
@@ -18,9 +18,11 @@ import {
   Menu,
   X,
   Sparkles,
+  MessageSquare,
 } from "lucide-vue-next";
 import { toast } from "vue-sonner";
 import ErrorBoundary from "@/components/shared/ErrorBoundary.vue";
+import FeedbackModal from "@/components/shared/FeedbackModal.vue";
 import { useTeam } from "@/composables/useTeam";
 import { useAuth } from "@/composables/useAuth";
 import { useDataMode } from "@/composables/useDataMode";
@@ -29,7 +31,13 @@ import { getUsageLimits } from "@/lib/api";
 const route = useRoute();
 const { myRole, isViewer, fetchTeamInfo } = useTeam();
 const { account, isLoggedIn, logout } = useAuth();
-const { isSampleMode, clearSample, isClearingSample } = useDataMode();
+const {
+  isSampleMode,
+  clearSample,
+  isClearingSample,
+  switchToSampleData,
+  hasData,
+} = useDataMode();
 
 const { data: usageLimits } = useQuery({
   queryKey: ["usage-limits"],
@@ -39,6 +47,13 @@ const { data: usageLimits } = useQuery({
 
 const aiCredits = computed(() => usageLimits.value?.ai_insights?.usage ?? null);
 
+const feedbackOpen = ref(false);
+const queryClient = useQueryClient();
+
+function handleFeedbackCredited() {
+  queryClient.invalidateQueries({ queryKey: ["usage-limits"] });
+}
+
 async function handleClearSample() {
   try {
     await clearSample();
@@ -47,8 +62,16 @@ async function handleClearSample() {
   }
 }
 
-onMounted(() => {
+onMounted(async () => {
   fetchTeamInfo();
+  // Auto-load sample data for guests so they see a populated dashboard
+  if (!isLoggedIn.value && !hasData.value && !isSampleMode.value) {
+    try {
+      await switchToSampleData();
+    } catch {
+      // Non-critical — guest will see empty state
+    }
+  }
 });
 
 const navItems = computed(() => [
@@ -268,36 +291,62 @@ function isActive(path: string) {
           <div v-else class="px-3 py-2.5 text-xs text-muted-foreground">
             Browsing as guest
           </div>
+          <!-- Feedback & Discord -->
+          <div class="flex items-center gap-1 px-2 pt-1">
+            <button
+              v-if="isLoggedIn"
+              class="flex items-center gap-1.5 px-1.5 py-1 text-xs text-muted-foreground hover:text-foreground transition-colors rounded-md hover:bg-accent"
+              @click="feedbackOpen = true"
+            >
+              <MessageSquare class="h-3 w-3" />
+              Feedback
+            </button>
+            <a
+              href="https://discord.gg/zSVwxgvxCj"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="flex items-center gap-1.5 px-1.5 py-1 text-xs text-muted-foreground hover:text-foreground transition-colors rounded-md hover:bg-accent"
+            >
+              Discord
+            </a>
+          </div>
+          <!-- AI credits in sidebar -->
+          <router-link
+            v-if="aiCredits"
+            to="/plans"
+            class="flex items-center gap-1.5 px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+            :title="`${aiCredits.remaining} of ${aiCredits.limit} AI credits remaining this month`"
+          >
+            <Sparkles class="h-3 w-3" />
+            <span
+              :class="
+                aiCredits.remaining === 0 ? 'text-destructive font-medium' : ''
+              "
+            >
+              {{ aiCredits.remaining }}/{{ aiCredits.limit }} AI credits
+            </span>
+          </router-link>
         </div>
       </div>
     </aside>
 
     <!-- Main Content -->
     <main class="flex-1 min-h-screen overflow-x-hidden pt-14 md:pt-0 md:ml-64">
-      <!-- AI credits indicator -->
+      <!-- Guest / sample data banner -->
       <div
-        v-if="aiCredits"
-        class="flex items-center justify-end px-6 pt-3 pb-0"
+        v-if="!isLoggedIn && isSampleMode"
+        class="flex items-center justify-between px-4 py-2 bg-blue-50 text-blue-700 border-b border-blue-200 text-sm"
       >
-        <router-link
-          to="/plans"
-          class="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-          :title="`${aiCredits.remaining} of ${aiCredits.limit} AI credits remaining this month`"
-        >
-          <Sparkles class="h-3 w-3" />
-          <span
-            :class="
-              aiCredits.remaining === 0 ? 'text-destructive font-medium' : ''
-            "
-          >
-            {{ aiCredits.remaining }}/{{ aiCredits.limit }} AI credits
-          </span>
+        <div class="flex items-center gap-2">
+          <Database class="h-4 w-4" />
+          <span>Browsing as guest with sample data</span>
+        </div>
+        <router-link to="/signup" class="font-medium hover:underline">
+          Sign up to connect your data
         </router-link>
       </div>
-
-      <!-- Sample data banner -->
       <div
-        v-if="isSampleMode"
+        v-else-if="isLoggedIn && isSampleMode"
         class="flex items-center justify-between px-4 py-2 bg-blue-50 text-blue-700 border-b border-blue-200 text-sm"
       >
         <div class="flex items-center gap-2">
@@ -305,9 +354,9 @@ function isActive(path: string) {
           <span>Viewing sample data</span>
         </div>
         <div class="flex items-center gap-3">
-          <router-link to="/data-sources" class="font-medium hover:underline"
-            >Connect your data</router-link
-          >
+          <router-link to="/data-sources" class="font-medium hover:underline">
+            Connect your data
+          </router-link>
           <button
             class="text-blue-500 hover:text-blue-700 text-xs disabled:opacity-50"
             :disabled="isClearingSample"
@@ -323,5 +372,11 @@ function isActive(path: string) {
         </ErrorBoundary>
       </div>
     </main>
+
+    <FeedbackModal
+      :open="feedbackOpen"
+      @close="feedbackOpen = false"
+      @credited="handleFeedbackCredited"
+    />
   </div>
 </template>
