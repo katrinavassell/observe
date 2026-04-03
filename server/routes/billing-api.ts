@@ -190,17 +190,20 @@ export function createBillingApiRoutes(
     async (req: AuthRequest, res: Response) => {
       try {
         const bonus = await getBonusCredits(pool, req.visitorId!);
-        const result = await pool.query(
-          `SELECT feedback_submitted, invite_credits_granted FROM accounts WHERE visitor_id = $1`,
+        const feedbackCheck = await pool.query(
+          `SELECT 1 FROM feedback WHERE user_id = $1 AND created_at >= date_trunc('month', NOW()) LIMIT 1`,
           [req.visitorId],
         );
-        const row = result.rows[0] || {};
+        const inviteResult = await pool.query(
+          `SELECT invite_credits_granted FROM accounts WHERE visitor_id = $1`,
+          [req.visitorId],
+        );
         res.json({
           bonus_credits: bonus,
           rewards: CREDIT_REWARDS,
           earned: {
-            feedback: row.feedback_submitted ?? false,
-            invite_accepted: row.invite_credits_granted ?? 0,
+            feedback: feedbackCheck.rows.length > 0,
+            invite_accepted: inviteResult.rows[0]?.invite_credits_granted ?? 0,
           },
         });
       } catch (error) {
@@ -229,10 +232,12 @@ export function createBillingApiRoutes(
 
         // Check if already submitted feedback this month
         const check = await pool.query(
-          `SELECT feedback_submitted FROM accounts WHERE visitor_id = $1`,
+          `SELECT created_at FROM feedback
+           WHERE user_id = $1 AND created_at >= date_trunc('month', NOW())
+           LIMIT 1`,
           [req.visitorId],
         );
-        if (check.rows[0]?.feedback_submitted) {
+        if (check.rows.length > 0) {
           return res
             .status(409)
             .json({ error: "Feedback credits already claimed this month" });

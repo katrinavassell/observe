@@ -1,76 +1,88 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
-import { useQuery, useQueryClient } from '@tanstack/vue-query'
-import { useRouter } from 'vue-router'
-import { toast } from 'vue-sonner'
-import { Bell, Plus, Trash2, Loader2, Lock, Zap } from 'lucide-vue-next'
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, Button } from '@/components/ui'
-import { listAlertRules, createAlertRule, updateAlertRule, deleteAlertRule } from '@/lib/api'
-import type { AlertRule } from '@/lib/api'
+import { ref, computed } from "vue";
+import { useQuery, useQueryClient } from "@tanstack/vue-query";
+import { useRouter } from "vue-router";
+import { toast } from "vue-sonner";
+import { Bell, Plus, Trash2, Loader2, Lock, Zap } from "lucide-vue-next";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+  Button,
+} from "@/components/ui";
+import {
+  listAlertRules,
+  createAlertRule,
+  updateAlertRule,
+  deleteAlertRule,
+} from "@/lib/api";
+import type { AlertRule } from "@/lib/api";
 
-const router = useRouter()
-const queryClient = useQueryClient()
+const router = useRouter();
+const queryClient = useQueryClient();
 
 const { data, isLoading } = useQuery({
-  queryKey: ['alert-rules'],
+  queryKey: ["alert-rules"],
   queryFn: listAlertRules,
-})
+});
 
-const isGated = computed(() => data.value?.gated === true)
+const isGated = computed(() => data.value?.gated === true);
 
-const showForm = ref(false)
-const isSubmitting = ref(false)
+const showForm = ref(false);
+const isSubmitting = ref(false);
 
 // Form state
-const formName = ref('')
-const formMetric = ref<AlertRule['metric']>('daily_cost')
-const formOperator = ref<AlertRule['operator']>('gt')
-const formThreshold = ref<number>(0)
-const formEmail = ref('')
-const formCooldown = ref(60)
+const formName = ref("");
+const formMetric = ref<AlertRule["metric"]>("daily_cost");
+const formOperator = ref<AlertRule["operator"]>("gt");
+const formThreshold = ref<number>(0);
+const formEmail = ref("");
+const formCooldown = ref(60);
 
 const METRICS = [
-  { value: 'daily_cost', label: 'Daily cost ($)' },
-  { value: 'margin_percent', label: 'Margin (%)' },
-  { value: 'cost_per_event', label: 'Avg cost per event ($)' },
-]
+  { value: "daily_cost", label: "Daily cost ($)" },
+  { value: "margin_percent", label: "Margin (%)" },
+  { value: "cost_per_event", label: "Avg cost per event ($)" },
+];
 
 const OPERATORS = [
-  { value: 'gt', label: '>' },
-  { value: 'lt', label: '<' },
-  { value: 'gte', label: '>=' },
-  { value: 'lte', label: '<=' },
-]
+  { value: "gt", label: ">" },
+  { value: "lt", label: "<" },
+  { value: "gte", label: ">=" },
+  { value: "lte", label: "<=" },
+];
 
 function operatorLabel(op: string) {
-  return OPERATORS.find(o => o.value === op)?.label || op
+  return OPERATORS.find((o) => o.value === op)?.label || op;
 }
 
 function metricLabel(m: string) {
-  return METRICS.find(x => x.value === m)?.label || m
+  return METRICS.find((x) => x.value === m)?.label || m;
 }
 
 function formatThreshold(metric: string, threshold: number) {
-  if (metric === 'margin_percent') return `${threshold}%`
-  return `$${threshold}`
+  if (metric === "margin_percent") return `${threshold}%`;
+  return `$${threshold}`;
 }
 
 function resetForm() {
-  formName.value = ''
-  formMetric.value = 'daily_cost'
-  formOperator.value = 'gt'
-  formThreshold.value = 0
-  formEmail.value = ''
-  formCooldown.value = 60
-  showForm.value = false
+  formName.value = "";
+  formMetric.value = "daily_cost";
+  formOperator.value = "gt";
+  formThreshold.value = 0;
+  formEmail.value = "";
+  formCooldown.value = 60;
+  showForm.value = false;
 }
 
 async function handleCreate() {
   if (!formName.value || !formEmail.value) {
-    toast.error('Name and email are required')
-    return
+    toast.error("Name and email are required");
+    return;
   }
-  isSubmitting.value = true
+  isSubmitting.value = true;
   try {
     await createAlertRule({
       name: formName.value,
@@ -79,33 +91,34 @@ async function handleCreate() {
       threshold: formThreshold.value,
       email: formEmail.value,
       cooldown_minutes: formCooldown.value,
-    })
-    queryClient.invalidateQueries({ queryKey: ['alert-rules'] })
-    toast.success('Alert created')
-    resetForm()
+    });
+    queryClient.invalidateQueries({ queryKey: ["alert-rules"] });
+    toast.success("Alert created");
+    window.posthog?.capture("alert_created", { metric: formMetric.value });
+    resetForm();
   } catch (err) {
-    toast.error(err instanceof Error ? err.message : 'Failed to create alert')
+    toast.error(err instanceof Error ? err.message : "Failed to create alert");
   } finally {
-    isSubmitting.value = false
+    isSubmitting.value = false;
   }
 }
 
 async function handleToggle(rule: AlertRule) {
   try {
-    await updateAlertRule(rule.id, { enabled: !rule.enabled })
-    queryClient.invalidateQueries({ queryKey: ['alert-rules'] })
+    await updateAlertRule(rule.id, { enabled: !rule.enabled });
+    queryClient.invalidateQueries({ queryKey: ["alert-rules"] });
   } catch (err) {
-    toast.error('Failed to update alert')
+    toast.error("Failed to update alert");
   }
 }
 
 async function handleDelete(id: number) {
   try {
-    await deleteAlertRule(id)
-    queryClient.invalidateQueries({ queryKey: ['alert-rules'] })
-    toast.success('Alert deleted')
+    await deleteAlertRule(id);
+    queryClient.invalidateQueries({ queryKey: ["alert-rules"] });
+    toast.success("Alert deleted");
   } catch (err) {
-    toast.error('Failed to delete alert')
+    toast.error("Failed to delete alert");
   }
 }
 </script>
@@ -115,7 +128,9 @@ async function handleDelete(id: number) {
     <div class="flex items-center justify-between">
       <div>
         <h1 class="text-2xl font-semibold tracking-tight">Cost Alerts</h1>
-        <p class="text-muted-foreground text-sm">Get emailed when costs spike or margins drop</p>
+        <p class="text-muted-foreground text-sm">
+          Get emailed when costs spike or margins drop
+        </p>
       </div>
       <Button v-if="!showForm && !isGated" @click="showForm = true">
         <Plus class="h-4 w-4 mr-2" />
@@ -132,7 +147,10 @@ async function handleDelete(id: number) {
           </div>
           <div>
             <p class="text-sm font-medium">Cost alerts are a Growth feature</p>
-            <p class="text-xs text-muted-foreground">Get emailed when costs spike or margins drop below your thresholds.</p>
+            <p class="text-xs text-muted-foreground">
+              Get emailed when costs spike or margins drop below your
+              thresholds.
+            </p>
           </div>
         </div>
         <Button size="sm" @click="router.push('/plans')">
@@ -149,7 +167,11 @@ async function handleDelete(id: number) {
       </CardHeader>
       <CardContent class="space-y-4">
         <div>
-          <label for="alert-name" class="text-xs font-medium text-muted-foreground block mb-1">Name</label>
+          <label
+            for="alert-name"
+            class="text-xs font-medium text-muted-foreground block mb-1"
+            >Name</label
+          >
           <input
             id="alert-name"
             v-model="formName"
@@ -161,19 +183,43 @@ async function handleDelete(id: number) {
 
         <div class="grid grid-cols-3 gap-3">
           <div>
-            <label for="alert-metric" class="text-xs font-medium text-muted-foreground block mb-1">Metric</label>
-            <select id="alert-metric" v-model="formMetric" class="w-full h-9 rounded-md border bg-background px-3 text-sm">
-              <option v-for="m in METRICS" :key="m.value" :value="m.value">{{ m.label }}</option>
+            <label
+              for="alert-metric"
+              class="text-xs font-medium text-muted-foreground block mb-1"
+              >Metric</label
+            >
+            <select
+              id="alert-metric"
+              v-model="formMetric"
+              class="w-full h-9 rounded-md border bg-background px-3 text-sm"
+            >
+              <option v-for="m in METRICS" :key="m.value" :value="m.value">
+                {{ m.label }}
+              </option>
             </select>
           </div>
           <div>
-            <label for="alert-operator" class="text-xs font-medium text-muted-foreground block mb-1">Condition</label>
-            <select id="alert-operator" v-model="formOperator" class="w-full h-9 rounded-md border bg-background px-3 text-sm">
-              <option v-for="op in OPERATORS" :key="op.value" :value="op.value">{{ op.label }}</option>
+            <label
+              for="alert-operator"
+              class="text-xs font-medium text-muted-foreground block mb-1"
+              >Condition</label
+            >
+            <select
+              id="alert-operator"
+              v-model="formOperator"
+              class="w-full h-9 rounded-md border bg-background px-3 text-sm"
+            >
+              <option v-for="op in OPERATORS" :key="op.value" :value="op.value">
+                {{ op.label }}
+              </option>
             </select>
           </div>
           <div>
-            <label for="alert-threshold" class="text-xs font-medium text-muted-foreground block mb-1">Threshold</label>
+            <label
+              for="alert-threshold"
+              class="text-xs font-medium text-muted-foreground block mb-1"
+              >Threshold</label
+            >
             <input
               id="alert-threshold"
               v-model.number="formThreshold"
@@ -186,7 +232,11 @@ async function handleDelete(id: number) {
 
         <div class="grid grid-cols-2 gap-3">
           <div>
-            <label for="alert-email" class="text-xs font-medium text-muted-foreground block mb-1">Send to</label>
+            <label
+              for="alert-email"
+              class="text-xs font-medium text-muted-foreground block mb-1"
+              >Send to</label
+            >
             <input
               id="alert-email"
               v-model="formEmail"
@@ -196,7 +246,11 @@ async function handleDelete(id: number) {
             />
           </div>
           <div>
-            <label for="alert-cooldown" class="text-xs font-medium text-muted-foreground block mb-1">Don't re-alert for</label>
+            <label
+              for="alert-cooldown"
+              class="text-xs font-medium text-muted-foreground block mb-1"
+              >Don't re-alert for</label
+            >
             <div class="flex items-center gap-2">
               <input
                 id="alert-cooldown"
@@ -205,14 +259,16 @@ async function handleDelete(id: number) {
                 min="1"
                 class="w-full h-9 rounded-md border bg-background px-3 text-sm"
               />
-              <span class="text-xs text-muted-foreground shrink-0">minutes</span>
+              <span class="text-xs text-muted-foreground shrink-0"
+                >minutes</span
+              >
             </div>
           </div>
         </div>
 
         <div class="flex gap-2 pt-2">
           <Button :disabled="isSubmitting" @click="handleCreate">
-            {{ isSubmitting ? 'Creating...' : 'Create Alert' }}
+            {{ isSubmitting ? "Creating..." : "Create Alert" }}
           </Button>
           <Button variant="ghost" @click="resetForm">Cancel</Button>
         </div>
@@ -235,17 +291,22 @@ async function handleDelete(id: number) {
                 <span
                   :class="[
                     'text-[10px] font-medium px-1.5 py-0.5 rounded-full',
-                    rule.enabled ? 'bg-success/10 text-success' : 'bg-muted text-muted-foreground'
+                    rule.enabled
+                      ? 'bg-success/10 text-success'
+                      : 'bg-muted text-muted-foreground',
                   ]"
                 >
-                  {{ rule.enabled ? 'Active' : 'Paused' }}
+                  {{ rule.enabled ? "Active" : "Paused" }}
                 </span>
               </div>
               <p class="text-xs text-muted-foreground">
-                {{ metricLabel(rule.metric) }} {{ operatorLabel(rule.operator) }} {{ formatThreshold(rule.metric, rule.threshold) }}
-                &middot; {{ rule.email }}
+                {{ metricLabel(rule.metric) }}
+                {{ operatorLabel(rule.operator) }}
+                {{ formatThreshold(rule.metric, rule.threshold) }} &middot;
+                {{ rule.email }}
                 <template v-if="rule.last_triggered_at">
-                  &middot; Last fired {{ new Date(rule.last_triggered_at).toLocaleDateString() }}
+                  &middot; Last fired
+                  {{ new Date(rule.last_triggered_at).toLocaleDateString() }}
                 </template>
               </p>
             </div>
@@ -256,7 +317,7 @@ async function handleDelete(id: number) {
                 class="h-7 text-xs"
                 @click="handleToggle(rule)"
               >
-                {{ rule.enabled ? 'Pause' : 'Enable' }}
+                {{ rule.enabled ? "Pause" : "Enable" }}
               </Button>
               <Button
                 variant="ghost"
@@ -279,7 +340,8 @@ async function handleDelete(id: number) {
         <Bell class="h-10 w-10 text-muted-foreground mx-auto mb-4" />
         <h2 class="text-lg font-semibold">No alerts configured</h2>
         <p class="text-sm text-muted-foreground mt-2 max-w-md mx-auto">
-          Set up alerts to get emailed when your daily AI costs exceed a threshold, margins drop, or per-event costs spike.
+          Set up alerts to get emailed when your daily AI costs exceed a
+          threshold, margins drop, or per-event costs spike.
         </p>
         <Button class="mt-4" @click="showForm = true">
           <Plus class="h-4 w-4 mr-2" />
