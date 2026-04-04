@@ -5,8 +5,9 @@ import { type AuthRequest } from "./auth.js";
 export function createA2ARoutes(pool: Pool, ensureVisitor: any) {
   const router = Router();
 
-  // GET /.well-known/agent.json — A2A Agent Card for discovery
-  router.get("/.well-known/agent.json", (_req, res: Response) => {
+  // GET /a2a/agent-card — A2A Agent Card for discovery
+  // Also accessible at /.well-known/agent.json via Vercel rewrite
+  router.get("/a2a/agent-card", (_req, res: Response) => {
     res.json({
       name: "Observe Cost Tracker",
       description:
@@ -44,12 +45,10 @@ export function createA2ARoutes(pool: Pool, ensureVisitor: any) {
         const { action, params } = req.body || {};
 
         if (!action || typeof action !== "string") {
-          return res
-            .status(400)
-            .json({
-              error:
-                "action is required (cost_query, usage_summary, margin_analysis)",
-            });
+          return res.status(400).json({
+            error:
+              "action is required (cost_query, usage_summary, margin_analysis)",
+          });
         }
 
         const userId = req.visitorId!;
