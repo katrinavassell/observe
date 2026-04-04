@@ -181,6 +181,32 @@ export function createEventsRoutes(
     },
   );
 
+  // GET /events/by-agent — aggregate events grouped by agent_id
+  router.get(
+    "/events/by-agent",
+    ensureVisitor,
+    async (req: AuthRequest, res: Response) => {
+      try {
+        const result = await pool.query(
+          `SELECT agent_id, COUNT(*) as event_count,
+           SUM(cost_amount) as total_cost, SUM(revenue_amount) as total_revenue,
+           SUM(usage_units) as total_usage,
+           CASE WHEN SUM(revenue_amount) > 0
+             THEN ROUND((1 - SUM(cost_amount)/SUM(revenue_amount)) * 100, 1)
+             ELSE NULL END as margin_pct,
+           MAX(timestamp) as last_seen
+           FROM observe_events WHERE user_id = $1 AND agent_id IS NOT NULL AND agent_id != ''
+           GROUP BY agent_id ORDER BY total_cost DESC`,
+          [req.visitorId],
+        );
+        res.json(result.rows);
+      } catch (error) {
+        console.error("Get events/by-agent error:", error);
+        res.status(500).json({ error: "Failed to get agent aggregations" });
+      }
+    },
+  );
+
   // GET /events/by-customer — aggregate events grouped by customer_id
   router.get(
     "/events/by-customer",
