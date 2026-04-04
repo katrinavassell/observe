@@ -33,8 +33,6 @@ const { myRole, isViewer, fetchTeamInfo } = useTeam();
 const { account, isLoggedIn, logout } = useAuth();
 const {
   isSampleMode,
-  clearSample,
-  isClearingSample,
   switchToSampleData,
   hasData,
   reset: resetDataMode,
@@ -60,14 +58,6 @@ const queryClient = useQueryClient();
 
 function handleFeedbackCredited() {
   queryClient.invalidateQueries({ queryKey: ["usage-limits"] });
-}
-
-async function handleClearSample() {
-  try {
-    await clearSample();
-  } catch {
-    toast.error("Failed to clear sample data");
-  }
 }
 
 onMounted(async () => {

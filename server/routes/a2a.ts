@@ -1,9 +1,43 @@
-import { Router, Response } from "express";
+import { Router, Request, Response, NextFunction } from "express";
 import type { Pool } from "pg";
+import crypto from "crypto";
 import { type AuthRequest } from "./auth.js";
 
 export function createA2ARoutes(pool: Pool, ensureVisitor: any) {
   const router = Router();
+
+  // Auth middleware that accepts either session cookie OR x-tanso-key header
+  async function ensureA2AAuth(
+    req: AuthRequest,
+    res: Response,
+    next: NextFunction,
+  ) {
+    // Try session auth first
+    if (req.visitorId) return next();
+
+    // Try SDK key auth via x-tanso-key header
+    const apiKey =
+      (req.headers["x-tanso-key"] as string) ||
+      (req.headers["authorization"] as string)?.replace("Bearer ", "");
+
+    if (!apiKey) {
+      return res.status(401).json({
+        error:
+          "Authentication required. Pass x-tanso-key header or session cookie.",
+      });
+    }
+
+    const keyHash = crypto.createHash("sha256").update(apiKey).digest("hex");
+    const result = await pool.query(
+      "SELECT user_id FROM sdk_api_keys WHERE key_hash = $1 AND revoked_at IS NULL",
+      [keyHash],
+    );
+    if (result.rows.length === 0) {
+      return res.status(401).json({ error: "Invalid API key" });
+    }
+    req.visitorId = result.rows[0].user_id;
+    next();
+  }
 
   // GET /a2a/agent-card — A2A Agent Card for discovery
   // Also accessible at /.well-known/agent.json via Vercel rewrite
@@ -39,7 +73,7 @@ export function createA2ARoutes(pool: Pool, ensureVisitor: any) {
   // POST /a2a/query — Respond to cost queries from other agents
   router.post(
     "/a2a/query",
-    ensureVisitor,
+    ensureA2AAuth,
     async (req: AuthRequest, res: Response) => {
       try {
         const { action, params } = req.body || {};
