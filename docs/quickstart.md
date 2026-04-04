@@ -124,11 +124,13 @@ npm install @tanso/observe
 ```
 
 ```typescript
-import { TansoObserve } from '@tanso/observe'
-import { wrapOpenAI } from '@tanso/observe/openai'
+import { Observe } from "@tanso/observe"
+import OpenAI from "openai"
 
-const observe = new TansoObserve({ apiKey: 'sk_live_...' })
-const openai = wrapOpenAI(new OpenAI(), observe)
+Observe.configure({ apiKey: "obs_your_key" })
+Observe.identify({ customerId: "cus_123" })
+
+const openai = Observe.wrap(new OpenAI())
 
 // Every call is automatically tracked
 const response = await openai.chat.completions.create({

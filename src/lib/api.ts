@@ -462,6 +462,20 @@ export async function getEventsByCustomer(): Promise<EventsByCustomer[]> {
   return request("/events/by-customer");
 }
 
+export interface EventsByAgent {
+  agent_id: string;
+  event_count: number;
+  total_cost: number;
+  total_revenue: number;
+  total_usage: number;
+  margin_pct: number | null;
+  last_seen: string;
+}
+
+export async function getEventsByAgent(): Promise<EventsByAgent[]> {
+  return request("/events/by-agent");
+}
+
 export interface EventsByModel {
   model: string;
   model_provider: string | null;

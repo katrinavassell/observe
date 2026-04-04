@@ -42,6 +42,7 @@ const response = await openai.chat.completions.create({
 | `Observe.identify({ customerId, name?, email? })` | Set customer context globally. Call once on login |
 | `Observe.feature(featureKey)` | Set default feature attribution |
 | `Observe.wrap(client, overrides?)` | Wrap an OpenAI or Anthropic client. Returns the same instance |
+| `Observe.agent(agentId)` | Set the current agent context for multi-agent tracking. Attaches `agentId` to all subsequent events |
 
 Per-call overrides use the client's native options:
 
@@ -59,6 +60,37 @@ Observe.configure({
   apiKey: 'obs_your_api_key',
   baseUrl: 'https://your-instance.example.com',
 })
+```
+
+### Multi-agent tracking (A2A)
+
+Use `Observe.agent()` to attribute costs to individual agents in a multi-agent system:
+
+```ts
+import { Observe } from '@tanso/observe'
+import OpenAI from 'openai'
+
+Observe.configure({ apiKey: 'obs_your_api_key' })
+Observe.identify({ customerId: 'cus_123' })
+
+// Research agent
+Observe.agent('research-agent')
+const researchClient = Observe.wrap(new OpenAI())
+await researchClient.chat.completions.create({
+  model: 'gpt-4o',
+  messages: [{ role: 'user', content: 'Find recent papers on X' }],
+})
+
+// Summarization agent
+Observe.agent('summarization-agent')
+const summaryClient = Observe.wrap(new OpenAI())
+await summaryClient.chat.completions.create({
+  model: 'gpt-4o-mini',
+  messages: [{ role: 'user', content: 'Summarize these findings' }],
+})
+
+// Each call is tagged with its agentId, so you can see cost per agent
+// in the AI model breakdown dashboard.
 ```
 
 ---

@@ -2,24 +2,29 @@
 
 Observe needs two types of data to show margins: **revenue** (what you charge) and **costs** (what you spend). Usage data is optional but enriches the picture.
 
-## AI Provider Integration (OpenAI / Anthropic)
+The Data Sources page is organized into three sections:
 
-### What it imports
-- Usage data (API calls, tokens consumed)
-- Cost data (calculated from token usage and model pricing)
+1. **Live Tracking** -- proxy and SDK for real-time cost capture
+2. **Revenue** -- Stripe integration for subscription and payment data
+3. **Import Historical Data** -- CSV upload and AI provider sync (collapsed by default)
 
-### How to connect
-1. Go to **Data Sources**
-2. Click **Connect** on OpenAI or Anthropic
-3. Enter your API key
-4. Click **Sync** to pull usage data
-
-### What you get
-Cost and usage events with `source: integration`. Model, token counts, and costs are automatically calculated.
+Every data point in Observe carries a **source badge** so you can see where it came from: `Proxy`, `SDK`, `CSV Import`, `Stripe`, `Integration`, or `Sample`.
 
 ---
 
-## Stripe
+## Live Tracking (Proxy + SDK)
+
+For real-time event ingestion from your application:
+
+- **Proxy mode** -- point your OpenAI/Anthropic client at Observe. Events logged automatically with `source: proxy`.
+- **SDK** -- use `@tanso/observe` with `Observe.configure()` + `identify()` + `wrap()`. Events logged with `source: sdk`.
+- **HTTP API** -- `POST /events/ingest` with an SDK key. Events logged with `source: sdk`.
+
+Generate SDK keys under **Data Sources > API Keys** in the dashboard.
+
+---
+
+## Revenue (Stripe)
 
 ### What it imports
 - Customers (name, email)
@@ -41,9 +46,29 @@ Revenue data for all your customers. Events are created with `source: stripe` an
 
 ---
 
-## CSV Upload
+## Import Historical Data (collapsed)
 
-### Revenue CSV
+This section is collapsed by default on the Data Sources page. Expand it to access CSV uploads and AI provider integrations.
+
+### AI Provider Integration (OpenAI / Anthropic)
+
+#### What it imports
+- Usage data (API calls, tokens consumed)
+- Cost data (calculated from token usage and model pricing)
+
+#### How to connect
+1. Go to **Data Sources**
+2. Expand **Import Historical Data**
+3. Click **Connect** on OpenAI or Anthropic
+4. Enter your API key
+5. Click **Sync** to pull usage data
+
+#### What you get
+Cost and usage events with `source: integration`. Model, token counts, and costs are automatically calculated.
+
+### CSV Upload
+
+#### Revenue CSV
 
 Upload customers, plans, and subscriptions from any billing system.
 
@@ -56,7 +81,7 @@ cus_002,StartupCo,admin@startup.io,starter,Starter,29,true
 
 The column mapper lets you map your headers to Observe's fields. At minimum you need: `customer_id`, `plan_id`, `price_amount`.
 
-### Cost CSV
+#### Cost CSV
 
 Upload infrastructure or AI model costs.
 
@@ -80,7 +105,7 @@ month,customer_id,provider,model,cost,requests
 2026-01,cus_001,anthropic,claude-sonnet-4,120.00,8000
 ```
 
-### Usage CSV
+#### Usage CSV
 
 Upload per-feature usage volumes.
 
@@ -90,18 +115,6 @@ month,customer_id,metric_key,metric_value,metric_limit
 2026-01,cus_001,api_requests,45000,100000
 2026-01,cus_001,pdf_generation,1200,5000
 ```
-
----
-
-## SDK / Proxy
-
-For real-time event ingestion from your application:
-
-- **Proxy mode** -- point your OpenAI/Anthropic client at Observe. Events logged automatically with `source: proxy`.
-- **SDK** -- use `@tanso/observe` to call `tanso.track()`. Events logged with `source: sdk`.
-- **HTTP API** -- `POST /events/ingest` with an SDK key. Events logged with `source: sdk`.
-
-Generate SDK keys under **Data Sources > API Keys** in the dashboard.
 
 ---
 

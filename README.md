@@ -37,6 +37,8 @@ If you're running an AI product and you're losing money on a subset of customers
 | **CSV upload** | Upload cost, usage, and revenue data without any API integration |
 | **Team collaboration** | Invite team members with admin/viewer roles |
 | **Sample data** | Guests see a pre-populated dashboard automatically |
+| **Source badges** | See where each data point came from (Proxy, CSV Import, Stripe) |
+| **RevenueCat-style SDK** | `Observe.configure()` + `identify()` + `wrap()` — three calls, zero headers |
 
 ---
 

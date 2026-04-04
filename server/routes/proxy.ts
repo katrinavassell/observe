@@ -12,6 +12,7 @@ function parseProxyHeaders(req: Request): {
   customerId: string;
   featureKey: string;
   properties: Record<string, string>;
+  agentId: string;
 } {
   // Auth: x-tanso-key > x-observe-key > Helicone-Auth
   let observeKey =
@@ -44,7 +45,9 @@ function parseProxyHeaders(req: Request): {
     }
   }
 
-  return { observeKey, customerId, featureKey, properties };
+  const agentId = (req.headers["x-tanso-agent"] as string) || "";
+
+  return { observeKey, customerId, featureKey, properties, agentId };
 }
 
 function parseCacheHeaders(req: Request): {
@@ -169,6 +172,7 @@ export function createProxyRoutes(
     properties: Record<string, string> = {},
     requestBody?: Record<string, unknown> | null,
     responseBody?: Record<string, unknown> | null,
+    agentId: string = "",
   ): Promise<void> {
     const propsJson = JSON.stringify(properties);
     const reqJson = requestBody ? JSON.stringify(requestBody) : null;
@@ -207,8 +211,8 @@ export function createProxyRoutes(
         user_id, customer_id, feature_key, event_name, timestamp,
         cost_amount, cost_unit, revenue_amount, usage_units,
         model, model_provider, source, granularity, is_inferred, properties,
-        request_body, response_body, revenue_source
-      ) VALUES ($1, $2, $3, 'cost', NOW(), $4, 'usd', $5, $6, $7, $8, 'proxy', 'event', false, $9, $10, $11, $12)`,
+        request_body, response_body, revenue_source, agent_id
+      ) VALUES ($1, $2, $3, 'cost', NOW(), $4, 'usd', $5, $6, $7, $8, 'proxy', 'event', false, $9, $10, $11, $12, $13)`,
       [
         userId,
         customerId,
@@ -222,6 +226,7 @@ export function createProxyRoutes(
         reqJson,
         resJson,
         revenueSource,
+        agentId || null,
       ],
     );
     checkAlerts(pool, userId).catch((err) =>
@@ -239,8 +244,8 @@ export function createProxyRoutes(
           user_id, customer_id, feature_key, event_name, timestamp,
           cost_amount, cost_unit, revenue_amount, usage_units,
           model, model_provider, source, granularity, is_inferred, properties,
-          request_body, response_body, revenue_source
-        ) VALUES ($1, $2, $3, 'cost', NOW(), $4, 'usd', $5, $6, $7, $8, 'proxy', 'event', false, $9, $10, $11, $12)`,
+          request_body, response_body, revenue_source, agent_id
+        ) VALUES ($1, $2, $3, 'cost', NOW(), $4, 'usd', $5, $6, $7, $8, 'proxy', 'event', false, $9, $10, $11, $12, $13)`,
             [
               adminId,
               customerId,
@@ -254,6 +259,7 @@ export function createProxyRoutes(
               reqJson,
               resJson,
               revenueSource,
+              agentId || null,
             ],
           )
           .catch((err) =>
@@ -306,6 +312,7 @@ export function createProxyRoutes(
         customerId,
         featureKey: feat,
         properties,
+        agentId,
       } = parseProxyHeaders(req);
       if (!observeKey) {
         return res.status(401).json({
@@ -356,6 +363,7 @@ export function createProxyRoutes(
             { ...properties, cache_hit: "true" },
             req.body,
             cached as Record<string, unknown>,
+            agentId,
           ).catch((err) =>
             console.error("logProxyEvent error (openai cache hit):", err),
           );
@@ -402,6 +410,7 @@ export function createProxyRoutes(
           properties,
           req.body,
           data,
+          agentId,
         ).catch((err) => console.error("Proxy event logging failed:", err));
         if (isCacheable) {
           const cacheKey = generateCacheKey(userId, model, {
@@ -446,6 +455,7 @@ export function createProxyRoutes(
         customerId,
         featureKey: feat,
         properties,
+        agentId,
       } = parseProxyHeaders(req);
       if (!observeKey) {
         return res.status(401).json({
@@ -491,6 +501,7 @@ export function createProxyRoutes(
             { ...properties, cache_hit: "true" },
             req.body,
             cached as Record<string, unknown>,
+            agentId,
           ).catch((err) =>
             console.error("logProxyEvent error (openai cache hit):", err),
           );
@@ -535,6 +546,7 @@ export function createProxyRoutes(
           properties,
           req.body,
           data,
+          agentId,
         ).catch((err) => console.error("Proxy event logging failed:", err));
         if (isCacheable) {
           const cacheKey = generateCacheKey(userId, model, {
@@ -578,6 +590,7 @@ export function createProxyRoutes(
         customerId,
         featureKey: feat,
         properties,
+        agentId,
       } = parseProxyHeaders(req);
       if (!observeKey) {
         return res.status(401).json({
@@ -630,6 +643,7 @@ export function createProxyRoutes(
             { ...properties, cache_hit: "true" },
             req.body,
             cached as Record<string, unknown>,
+            agentId,
           ).catch((err) =>
             console.error("logProxyEvent error (anthropic cache hit):", err),
           );
@@ -683,6 +697,7 @@ export function createProxyRoutes(
           properties,
           req.body,
           data,
+          agentId,
         ).catch((err) =>
           console.error("Anthropic proxy event logging failed:", err),
         );

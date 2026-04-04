@@ -6,6 +6,7 @@ import {
   getEventsByFeature,
   getEventsByModel,
   getEventsByCustomer,
+  getEventsByAgent,
   getMrrMovements,
   listInsights,
   generateInsights,
@@ -34,7 +35,7 @@ const router = useRouter();
 const queryClient = useQueryClient();
 const { isSampleMode } = useDataMode();
 
-type Tab = "feature" | "model" | "customer" | "mrr";
+type Tab = "feature" | "model" | "customer" | "agent" | "mrr";
 const activeTab = ref<Tab>("feature");
 
 // Insights drawer state
@@ -173,6 +174,17 @@ const {
 } = useQuery({
   queryKey: ["events-by-customer"],
   queryFn: getEventsByCustomer,
+});
+
+const { data: agentData } = useQuery({
+  queryKey: ["events-by-agent"],
+  queryFn: getEventsByAgent,
+  enabled: computed(() => activeTab.value === "agent"),
+});
+
+const sortedAgents = computed(() => {
+  if (!agentData.value) return [];
+  return [...agentData.value].sort((a, b) => b.total_cost - a.total_cost);
 });
 
 const {
@@ -681,6 +693,11 @@ const insightCategories = [
               count: sortedCustomers.length,
             },
             {
+              key: 'agent',
+              label: 'By Agent',
+              count: sortedAgents.length,
+            },
+            {
               key: 'mrr',
               label: 'MRR Movement',
               count: mrrMovements.filter((m) => m.category !== 'stable').length,
@@ -851,6 +868,67 @@ const insightCategories = [
       </div>
 
       <!-- MRR Movement tab -->
+      <!-- By Agent tab -->
+      <div v-if="activeTab === 'agent'" class="space-y-1">
+        <div
+          class="flex items-center gap-3 text-xs text-muted-foreground px-3 py-2 border-b"
+        >
+          <span class="w-36">Agent</span>
+          <span class="flex-1"></span>
+          <span class="w-20 text-right">Cost</span>
+          <span class="w-20 text-right">Revenue</span>
+          <span class="w-16 text-right">Margin</span>
+        </div>
+        <div
+          v-if="!sortedAgents.length"
+          class="py-8 text-center text-sm text-muted-foreground"
+        >
+          No agent data yet. Use
+          <code class="bg-muted px-1 rounded">x-tanso-agent</code> header or
+          <code class="bg-muted px-1 rounded">Observe.agent()</code> to tag
+          calls.
+        </div>
+        <div
+          v-for="a in sortedAgents"
+          :key="a.agent_id"
+          class="flex items-center gap-3 rounded-md px-3 py-2.5 hover:bg-muted/50 transition-colors"
+        >
+          <span class="w-36 text-sm font-medium truncate">{{
+            a.agent_id
+          }}</span>
+          <div class="flex-1 h-3 bg-muted rounded-full overflow-hidden">
+            <div
+              class="h-full rounded-full"
+              :class="
+                a.margin_pct != null && a.margin_pct < 0
+                  ? 'bg-destructive'
+                  : 'bg-foreground'
+              "
+              :style="{
+                width: `${sortedAgents.length ? (a.total_cost / sortedAgents[0].total_cost) * 100 : 0}%`,
+              }"
+            />
+          </div>
+          <span class="w-20 text-right text-sm tabular-nums">{{
+            fmt(a.total_cost)
+          }}</span>
+          <span
+            class="w-20 text-right text-sm tabular-nums text-muted-foreground"
+            >{{ fmt(a.total_revenue) }}</span
+          >
+          <span
+            class="w-16 text-right text-sm tabular-nums font-medium"
+            :class="
+              a.margin_pct != null && a.margin_pct < 0
+                ? 'text-destructive'
+                : 'text-success'
+            "
+          >
+            {{ a.margin_pct != null ? fmtPct(a.margin_pct) : "—" }}
+          </span>
+        </div>
+      </div>
+
       <div v-if="activeTab === 'mrr'">
         <div
           v-if="mrrLoading"

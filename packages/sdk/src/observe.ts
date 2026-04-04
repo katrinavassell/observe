@@ -21,11 +21,13 @@ interface CustomerContext {
 interface WrapOverrides {
   customerId?: string;
   featureKey?: string;
+  agentId?: string;
 }
 
 let _config: { apiKey: string; baseUrl: string } | null = null;
 let _customer: CustomerContext | null = null;
 let _featureKey: string | null = null;
+let _agentId: string | null = null;
 
 const DEFAULT_BASE_URL = "https://app.tanso.io";
 
@@ -39,11 +41,13 @@ function resolveHeaders(overrides?: WrapOverrides): Record<string, string> {
   const config = assertConfigured();
   const customerId = overrides?.customerId ?? _customer?.customerId;
   const featureKey = overrides?.featureKey ?? _featureKey;
+  const agentId = overrides?.agentId ?? _agentId;
   const headers: Record<string, string> = {
     "x-tanso-key": config.apiKey,
   };
   if (customerId) headers["x-tanso-customer"] = customerId;
   if (featureKey) headers["x-tanso-feature"] = featureKey;
+  if (agentId) headers["x-tanso-agent"] = agentId;
   return headers;
 }
 
@@ -81,6 +85,10 @@ export const Observe = {
     _featureKey = featureKey;
   },
 
+  agent(agentId: string): void {
+    _agentId = agentId;
+  },
+
   wrap<T>(client: T, overrides?: WrapOverrides): T {
     const config = assertConfigured();
     const headers = resolveHeaders(overrides);
@@ -110,5 +118,6 @@ export const Observe = {
     _config = null;
     _customer = null;
     _featureKey = null;
+    _agentId = null;
   },
 } as const;

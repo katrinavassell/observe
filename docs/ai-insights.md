@@ -27,9 +27,13 @@ Each insight has:
 
 **Your raw data is never sent to OpenAI.** Only aggregated summaries (e.g., "feature X has $4,200 revenue and $890 cost") are included in the prompt.
 
+## AI Credits
+
+Each AI Insights generation costs one AI credit. Free plans get 5 AI credits per month; Growth plans get 100. You can earn bonus credits by giving feedback (+5) or inviting teammates (+10).
+
 ## Cost Transparency
 
-Every AI Insights call is tracked as an `observe_event`:
+Every AI Insights call is tracked as an `observe_event` and costs one AI credit:
 
 ```
 feature_key: 'ai_insights'

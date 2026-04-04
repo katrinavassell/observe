@@ -27,6 +27,7 @@ import { createModelsApiRoutes } from "./routes/models-api.js";
 import { createTeamRoutes } from "./routes/team.js";
 import { createAnalyticsRoutes } from "./routes/analytics.js";
 import { createCohortsRoutes } from "./routes/cohorts.js";
+import { createA2ARoutes } from "./routes/a2a.js";
 import { createBillingApiRoutes } from "./routes/billing-api.js";
 import {
   createInferenceRoutes,
@@ -227,6 +228,7 @@ app.use(createTeamRoutes(pool, ensureVisitor));
 app.use(createAnalyticsRoutes(pool, ensureVisitor));
 app.use(createCohortsRoutes(pool, ensureVisitor));
 app.use(createInferenceRoutes(pool, ensureVisitor));
+app.use(createA2ARoutes(pool, ensureVisitor));
 
 // ─── Database initialization ────────────────────────────────────────────────
 
@@ -451,6 +453,10 @@ async function _doDbInit() {
     // Add revenue_source column to observe_events if missing
     await pool.query(`
       ALTER TABLE observe_events ADD COLUMN IF NOT EXISTS revenue_source TEXT DEFAULT 'none'
+    `);
+
+    await pool.query(`
+      ALTER TABLE observe_events ADD COLUMN IF NOT EXISTS agent_id TEXT
     `);
 
     await pool.query(`
