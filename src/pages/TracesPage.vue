@@ -246,7 +246,7 @@ const maxDuration = computed(() => {
               {{
                 formatCost(
                   traceDetail.spans.reduce(
-                    (s, sp) => s + (sp.cost_amount || 0),
+                    (s, sp) => s + parseFloat(String(sp.cost_amount || 0)),
                     0,
                   ),
                 )
@@ -261,7 +261,7 @@ const maxDuration = computed(() => {
               {{
                 formatCost(
                   traceDetail.spans.reduce(
-                    (s, sp) => s + (sp.revenue_amount || 0),
+                    (s, sp) => s + parseFloat(String(sp.revenue_amount || 0)),
                     0,
                   ),
                 )
@@ -332,7 +332,7 @@ const maxDuration = computed(() => {
               >
             </div>
             <span class="w-20 text-right tabular-nums">{{
-              formatCost(span.cost_amount || 0)
+              formatCost(parseFloat(String(span.cost_amount || 0)))
             }}</span>
             <span
               class="w-16 text-right text-xs text-muted-foreground truncate"
