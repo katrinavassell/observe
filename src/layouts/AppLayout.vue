@@ -286,11 +286,6 @@ function isActive(path: string) {
                   ]"
                 />
                 <span>{{ item.label }}</span>
-                <span
-                  v-if="item.path === '/alerts'"
-                  class="ml-auto rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-700"
-                  >Free</span
-                >
               </router-link>
             </template>
           </div>
@@ -331,7 +326,6 @@ function isActive(path: string) {
               <LogOut class="h-4 w-4" />
             </button>
           </div>
-          <div v-else class="px-3 py-1" />
           <!-- Feedback & Discord -->
           <div class="flex items-center gap-1 px-2 pt-1">
             <button

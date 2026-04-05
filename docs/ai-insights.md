@@ -29,7 +29,7 @@ Each insight has:
 
 ## AI Credits
 
-Each AI Insights generation costs one AI credit. Free plans get 5 AI credits per month; Growth plans get 100. You can earn bonus credits by giving feedback (+5) or inviting teammates (+10).
+Each AI Insights generation costs one AI credit. Free plans get 5 AI credits per month. You can earn bonus credits by giving feedback (+5) or inviting teammates (+10).
 
 ## Cost Transparency
 

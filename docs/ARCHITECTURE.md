@@ -138,7 +138,7 @@ src/
 │   ├── AnalyticsPage.vue        # Home: revenue, costs, margin overview
 │   ├── EventsPage.vue           # Filterable event stream
 │   ├── ModelsPage.vue           # AI model cost breakdown
-│   ├── AlertsPage.vue           # Threshold-based cost alerts
+│   ├── AlertsPage.vue           # 17 alert types (cost, margin, abuse, pricing, concentration) -- free for all users
 │   ├── DataSourcesPage.vue      # CSV upload, integrations
 │   ├── PlansPage.vue            # Subscription plans & billing
 │   ├── CheckoutSuccessPage.vue  # Post-checkout confirmation

@@ -257,6 +257,8 @@ Same for Anthropic.
 
 ## Alert Endpoints
 
+Alerts are free for all users. 17 metric types across 5 categories: cost, margin, abuse/runaway, pricing, and concentration risk. Each alert type includes a Tanso upsell CTA linking to tansohq.com.
+
 ### GET /alerts
 
 List alert rules for the current user.
@@ -275,6 +277,8 @@ Create a new alert rule.
   "email": "alerts@example.com"
 }
 ```
+
+**Available metrics:** `daily_cost`, `cost_per_event`, `margin_percent`, `customer_margin`, `feature_margin_trend`, `customer_cost_vs_revenue`, `model_cost_spike`, `margin_compression`, `usage_velocity`, `customer_cost_share`, `credit_burn_rate`, `top_customer_unprofitable`, `feature_cost_disparity`, `model_cost_increase`, `customer_concentration`, `provider_concentration`, `model_concentration`
 
 ### PUT /alerts/:id
 

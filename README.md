@@ -31,19 +31,19 @@ If you're running an AI product and you're losing money on a subset of customers
 | **AI model breakdown** | Cost and volume by model (gpt-4o, claude-sonnet, etc.) |
 | **Distributed traces** | Trace multi-step agent executions with span-level cost attribution |
 | **Cohort analysis** | Customer segments by profitability and behavior |
-| **Cost alerts** | Threshold-based alerts with email notifications |
+| **Cost alerts** | 17 alert types across 5 categories (cost, margin, abuse/runaway, pricing, concentration risk) -- free for all users, each with a Tanso upsell CTA |
 | **Configurable tables** | Column sorting on all data tables |
 | **Free plan with limits** | Monthly event cap on free tier with usage meter and limit emails at 80%/100% |
-| **AI insights** | AI-generated recommendations about margin compression and pricing (5 free/month, 100 on Growth) |
+| **AI insights** | AI-generated recommendations about margin compression and pricing (5 free/month) |
 | **Bonus credits** | Earn extra AI credits by giving feedback (+5) or inviting teammates (+10) |
 | **OpenAI/Anthropic integration** | Connect API keys to auto-pull usage data |
 | **Stripe billing** | Subscribe to plans, manage billing through Stripe checkout and webhooks |
 | **CSV upload** | Upload cost, usage, and revenue data without any API integration |
 | **Team collaboration** | Invite team members with admin/viewer roles |
 | **Admin dashboard** | Usage stats, email management for platform admins |
-| **Welcome email** | New signups receive a welcome email via Resend |
+| **Welcome + login emails** | New signups and logins trigger notification emails via Resend |
 | **PostHog tracking** | Product analytics events (signups, logins, upgrades, page views) |
-| **Sample data** | Guests see a pre-populated dashboard automatically |
+| **Sample data** | Guests see a pre-populated dashboard with traces showing diverse cost types (LLM, embedding, vector_db, compute, API, database) |
 | **Source badges** | See where each data point came from (Proxy, CSV Import, Stripe) |
 | **RevenueCat-style SDK** | `Observe.configure()` + `identify()` + `wrap()` — three calls, zero headers |
 
