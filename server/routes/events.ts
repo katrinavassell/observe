@@ -82,6 +82,25 @@ export function createEventsRoutes(
         const dateFrom = req.query.date_from as string | undefined;
         const dateTo = req.query.date_to as string | undefined;
 
+        const SORTABLE_COLUMNS: Record<string, string> = {
+          timestamp: "oe.timestamp",
+          event_name: "oe.event_name",
+          feature_key: "oe.feature_key",
+          customer_id: "oe.customer_id",
+          model: "oe.model",
+          source: "oe.source",
+          usage_units: "oe.usage_units",
+          cost_amount: "oe.cost_amount",
+          revenue_amount: "oe.revenue_amount",
+          duration_ms: "oe.duration_ms",
+        };
+        const sortBy =
+          SORTABLE_COLUMNS[req.query.sort_by as string] || "oe.timestamp";
+        const sortDir =
+          (req.query.sort_dir as string)?.toUpperCase() === "ASC"
+            ? "ASC"
+            : "DESC";
+
         let where = "WHERE oe.user_id = $1";
         const params: unknown[] = [req.visitorId];
         let paramIdx = 2;
@@ -116,7 +135,7 @@ export function createEventsRoutes(
          FROM observe_events oe
          LEFT JOIN customers c ON oe.user_id = c.user_id AND oe.customer_id = c.customer_id
          ${where}
-         ORDER BY oe.timestamp DESC
+         ORDER BY ${sortBy} ${sortDir}
          LIMIT $${paramIdx++} OFFSET $${paramIdx}`,
           [...params, limit, offset],
         );

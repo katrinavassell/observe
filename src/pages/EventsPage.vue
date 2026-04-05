@@ -17,6 +17,9 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronUp,
+  ArrowUp,
+  ArrowDown,
+  ArrowUpDown,
   X,
   Plug,
   Settings2,
@@ -120,6 +123,36 @@ const visibleColumns = computed(() => columns.value.filter((c) => c.visible));
 const colCount = computed(() => visibleColumns.value.length + 1); // +1 for expand chevron
 const showColumnSettings = ref(false);
 
+// ── Column sorting ───────────────────────────────────────────────────────────
+
+const SORT_FIELD_MAP: Record<string, string> = {
+  timestamp: "timestamp",
+  event: "event_name",
+  feature: "feature_key",
+  customer: "customer_id",
+  model: "model",
+  source: "source",
+  usage: "usage_units",
+  cost: "cost_amount",
+  revenue: "revenue_amount",
+  duration: "duration_ms",
+};
+
+const sortBy = ref<string | undefined>();
+const sortDir = ref<"asc" | "desc">("desc");
+
+function toggleSort(colId: string) {
+  const field = SORT_FIELD_MAP[colId];
+  if (!field) return;
+  if (sortBy.value === field) {
+    sortDir.value = sortDir.value === "asc" ? "desc" : "asc";
+  } else {
+    sortBy.value = field;
+    sortDir.value = colId === "timestamp" ? "desc" : "asc";
+  }
+  resetPage();
+}
+
 function toggleColumn(id: string) {
   const col = columns.value.find((c) => c.id === id);
   if (col) {
@@ -210,6 +243,8 @@ const query = computed(() => ({
   source: selectedSource.value || undefined,
   date_from: dateFrom.value || undefined,
   date_to: dateTo.value || undefined,
+  sort_by: sortBy.value || undefined,
+  sort_dir: sortBy.value ? sortDir.value : undefined,
 }));
 
 const {
@@ -488,9 +523,35 @@ function isColumnVisible(id: string): boolean {
                 v-for="col in visibleColumns"
                 :key="col.id"
                 class="px-4 py-3 font-medium"
-                :class="col.align === 'right' && 'text-right'"
+                :class="[
+                  col.align === 'right' && 'text-right',
+                  SORT_FIELD_MAP[col.id] &&
+                    'cursor-pointer select-none hover:text-foreground transition-colors',
+                ]"
+                @click="toggleSort(col.id)"
               >
-                {{ col.label }}
+                <span
+                  class="inline-flex items-center gap-1"
+                  :class="col.align === 'right' && 'justify-end'"
+                >
+                  {{ col.label }}
+                  <ArrowUp
+                    v-if="
+                      sortBy === SORT_FIELD_MAP[col.id] && sortDir === 'asc'
+                    "
+                    class="h-3 w-3"
+                  />
+                  <ArrowDown
+                    v-else-if="
+                      sortBy === SORT_FIELD_MAP[col.id] && sortDir === 'desc'
+                    "
+                    class="h-3 w-3"
+                  />
+                  <ArrowUpDown
+                    v-else-if="SORT_FIELD_MAP[col.id]"
+                    class="h-3 w-3 opacity-30"
+                  />
+                </span>
               </th>
             </tr>
           </thead>
