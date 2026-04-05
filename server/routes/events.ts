@@ -731,7 +731,7 @@ export function createEventsRoutes(
               mrrByCustomer.set(row.customer_id, parseFloat(row.mrr) / 30);
             }
           } catch (err) {
-            console.error("MRR enrichment lookup failed:", err);
+            throw new Error(`MRR enrichment lookup failed: ${err}`);
           }
         }
 

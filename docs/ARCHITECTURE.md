@@ -142,7 +142,12 @@ src/
 │   ├── DataSourcesPage.vue      # CSV upload, integrations
 │   ├── PlansPage.vue            # Subscription plans & billing
 │   ├── CheckoutSuccessPage.vue  # Post-checkout confirmation
+│   ├── CohortsPage.vue          # Cohort retention analysis
+│   ├── TracesPage.vue           # Distributed trace viewer
 │   ├── LoginPage.vue            # Login / signup (also used for /signup)
+│   ├── ForgotPasswordPage.vue   # Request password reset
+│   ├── ResetPasswordPage.vue    # Reset password with token
+│   ├── OnboardingPage.vue       # First-run onboarding flow
 │   ├── TeamSettingsPage.vue     # Team management, invites
 │   └── JoinTeamPage.vue         # Accept team invite
 ├── components/
@@ -150,11 +155,11 @@ src/
 │   ├── charts/             # Data visualization
 │   ├── dashboard/          # Metric cards, quick actions
 │   ├── data-sources/       # Import workflows
-│   ├── integrations/       # OpenAI/Anthropic API key modals
-│   ├── onboarding/         # Upload wizard, column mapper
+│   ├── integrations/       # OpenAI/Anthropic/Stripe API key modals
+│   ├── onboarding/         # Upload wizard, column mapper, checklist
 │   ├── pricing/            # Margin overview card
 │   ├── accounts/           # Account detail panel
-│   └── shared/             # ErrorBoundary, MarginBadge, TrendIndicator
+│   └── shared/             # ErrorBoundary, MarginBadge, TrendIndicator, FeedbackModal
 ├── composables/            # Shared reactive state
 │   ├── useAuth.ts          # Login, signup, session management
 │   ├── useDataMode.ts      # Data mode tracking (none/sample/user)
@@ -185,13 +190,15 @@ The sidebar shows these items in order:
 | Analytics | `/` | AnalyticsPage (home) |
 | Events | `/events` | EventsPage |
 | Models | `/models` | ModelsPage |
+| Cohorts | `/cohorts` | CohortsPage |
 | Alerts | `/alerts` | AlertsPage |
+| Traces | `/traces` | TracesPage |
 | Data Sources | `/data-sources` | DataSourcesPage |
 | Plans & Billing | `/plans` | PlansPage |
 
-Additional routes (not in sidebar): `/login`, `/signup`, `/checkout/success`, `/team`, `/join/:token`.
+Additional routes (not in sidebar): `/login`, `/signup`, `/forgot-password`, `/reset-password`, `/checkout/success`, `/team`, `/join/:token`.
 
-Several legacy routes (`/features`, `/customers`, `/insights`, `/pricing`) redirect to `/`.
+Several legacy routes (`/features`, `/customers`, `/insights`, `/pricing`, `/referrals`, `/onboarding`) redirect to `/` or `/data-sources`.
 
 ### Key Composables
 
@@ -228,13 +235,15 @@ Single Express app on port 3001, proxied by Vite at `/api/*`. The `/api` prefix 
 | `customers.ts` | Customer CRUD |
 | `cohorts.ts` | Cohort analysis |
 | `inference.ts` | Inference profile computation |
+| `a2a.ts` | Agent-to-agent protocol endpoints |
+| `cloud-costs.ts` | Cloud cost data import |
 
 ### Supporting Modules
 
 | Module | Purpose |
 |--------|---------|
 | `stripe-client.ts` | Stripe SDK wrapper for checkout and customer portal |
-| `tanso-client.ts` | Tanso billing SDK wrapper |
+| `billing.ts` | Plan definitions, feature limits, and billing helpers |
 | `model-pricing.ts` | Model pricing database and cost calculation |
 
 ### Middleware
@@ -285,7 +294,7 @@ PostgreSQL with support for both standard `pg` driver and `@neondatabase/serverl
 - `accounts` -- user accounts with hashed passwords
 - `organizations` / `organization_members` / `visitor_org_map` -- team structure
 - `sdk_api_keys` -- API keys for programmatic event ingestion
-- `integrations` -- connected API key providers (OpenAI, Anthropic)
+- `integrations` -- connected API key providers (OpenAI, Anthropic, Stripe)
 - `alert_rules` -- threshold-based cost alert definitions
 
 ### Legacy Tables (kept for pricing analyzer)

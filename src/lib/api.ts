@@ -1048,12 +1048,7 @@ export interface UsageLimits {
 }
 
 export async function getUsageLimits(): Promise<UsageLimits> {
-  try {
-    return await request("/usage/limits");
-  } catch (err) {
-    console.error("Usage limits fetch failed:", err);
-    return { configured: false };
-  }
+  return request("/usage/limits");
 }
 
 // ======================================================================// BILLING

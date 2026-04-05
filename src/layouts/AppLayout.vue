@@ -99,16 +99,16 @@ const navItems = computed(() => [
     description: "AI model cost breakdown",
   },
   {
-    path: "/alerts",
-    label: "Alerts",
-    icon: Bell,
-    description: "Cost spike and margin alerts",
-  },
-  {
     path: "/cohorts",
     label: "Cohorts",
     icon: Users,
     description: "Customer segments by profitability and behavior",
+  },
+  {
+    path: "/alerts",
+    label: "Alerts",
+    icon: Bell,
+    description: "Cost spike and margin alerts",
   },
   {
     path: "/data-sources",
@@ -181,58 +181,77 @@ function isActive(path: string) {
       <div class="flex h-full flex-col">
         <!-- Logo -->
         <div
-          class="flex h-14 items-center gap-3 border-b border-sidebar-border px-4"
+          class="flex h-16 items-center gap-3 border-b border-sidebar-border px-5"
         >
           <div
             class="flex h-8 w-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground font-semibold text-sm"
           >
             O
           </div>
-          <span class="text-base font-semibold">Observe</span>
+          <div class="flex flex-col">
+            <span class="text-base font-semibold leading-tight">Observe</span>
+            <span class="text-[10px] text-sidebar-foreground/40 leading-tight"
+              >AI cost intelligence</span
+            >
+          </div>
         </div>
 
         <!-- Sign in CTA for anonymous users -->
-        <div v-if="!isLoggedIn" class="px-3 pt-3 pb-1">
+        <div v-if="!isLoggedIn" class="px-3 pt-4 pb-1">
           <router-link
             to="/signup"
-            class="flex items-center justify-center gap-2 rounded-md bg-sidebar-primary text-sidebar-primary-foreground px-3 py-2 text-sm font-medium transition-colors hover:opacity-90"
+            class="flex items-center justify-center gap-2 rounded-lg bg-sidebar-primary text-sidebar-primary-foreground px-3 py-2 text-sm font-medium transition-all duration-150 hover:opacity-90"
           >
             <LogIn class="h-4 w-4 shrink-0" />
             Sign Up Free
           </router-link>
           <router-link
             to="/login"
-            class="flex items-center justify-center gap-2 rounded-md px-3 py-1.5 mt-1 text-xs text-sidebar-foreground/60 hover:text-sidebar-foreground transition-colors"
+            class="flex items-center justify-center gap-2 rounded-md px-3 py-1.5 mt-1.5 text-xs text-sidebar-foreground/40 hover:text-sidebar-foreground transition-all duration-150"
           >
             Already have an account? Sign in
           </router-link>
         </div>
 
         <!-- Navigation -->
-        <nav class="flex-1 overflow-y-auto px-3 py-3">
-          <!-- Main section -->
-          <div class="space-y-0.5">
+        <nav class="flex-1 overflow-y-auto px-3 py-4">
+          <div class="space-y-1">
             <template v-for="(item, idx) in navItems" :key="item.path">
-              <!-- Section dividers -->
-              <div
-                v-if="item.dividerBefore"
-                class="h-px bg-sidebar-border mx-2 my-2"
-              />
+              <!-- Section divider with label -->
+              <div v-if="item.dividerBefore" class="pt-4 pb-1">
+                <div class="h-px bg-sidebar-border mb-3" />
+                <span
+                  class="px-3 text-[10px] font-semibold uppercase tracking-wider text-sidebar-foreground/40"
+                  >Account</span
+                >
+              </div>
               <router-link
                 :to="item.path"
                 :title="item.description"
                 :class="[
-                  'flex items-center gap-2 rounded-md px-2.5 py-2 text-sm transition-colors',
+                  'group relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-all duration-150',
                   isActive(item.path)
                     ? 'bg-sidebar-accent text-sidebar-accent-foreground font-medium'
-                    : 'text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
+                    : 'text-sidebar-foreground/60 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground',
                 ]"
               >
-                <component :is="item.icon" class="h-4 w-4 shrink-0" />
+                <div
+                  v-if="isActive(item.path)"
+                  class="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-[3px] rounded-full bg-sidebar-primary"
+                />
+                <component
+                  :is="item.icon"
+                  :class="[
+                    'h-4 w-4 shrink-0 transition-colors duration-150',
+                    isActive(item.path)
+                      ? 'text-sidebar-accent-foreground'
+                      : 'text-sidebar-foreground/40 group-hover:text-sidebar-foreground/70',
+                  ]"
+                />
                 <span>{{ item.label }}</span>
                 <span
                   v-if="item.path === '/alerts'"
-                  class="ml-auto text-[10px] font-medium text-muted-foreground"
+                  class="ml-auto rounded-full bg-sidebar-accent px-2 py-0.5 text-[10px] font-medium text-muted-foreground"
                   >Growth</span
                 >
               </router-link>
@@ -241,11 +260,11 @@ function isActive(path: string) {
         </nav>
 
         <!-- Bottom section: Account & Team Settings -->
-        <div class="border-t p-4 space-y-1">
+        <div class="border-t border-sidebar-border px-3 py-4 space-y-1">
           <!-- Role badge for viewers -->
           <div
             v-if="isViewer"
-            class="flex items-center gap-2 px-3 py-1.5 text-xs text-warning bg-warning/10 rounded-lg mb-1"
+            class="flex items-center gap-2 px-3 py-1.5 text-xs text-warning bg-warning/10 rounded-lg mb-2"
           >
             <Eye class="h-3 w-3 shrink-0" />
             <span>Viewer access</span>
@@ -253,16 +272,27 @@ function isActive(path: string) {
           <router-link
             :to="isLoggedIn ? '/team' : '/signup'"
             :class="[
-              'flex items-center gap-3 rounded-lg px-3 py-2.5 transition-colors',
+              'group relative flex items-center gap-3 rounded-lg px-3 py-2.5 transition-all duration-150',
               isActive('/team')
-                ? 'bg-accent text-accent-foreground'
-                : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
+                ? 'bg-sidebar-accent text-sidebar-accent-foreground'
+                : 'text-sidebar-foreground/60 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground',
             ]"
           >
-            <Settings class="h-4 w-4 shrink-0" />
+            <div
+              v-if="isActive('/team')"
+              class="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-[3px] rounded-full bg-sidebar-primary"
+            />
+            <Settings
+              :class="[
+                'h-4 w-4 shrink-0 transition-colors duration-150',
+                isActive('/team')
+                  ? 'text-sidebar-accent-foreground'
+                  : 'text-sidebar-foreground/40 group-hover:text-sidebar-foreground/70',
+              ]"
+            />
             <div class="min-w-0">
               <div class="text-sm font-medium">Team Settings</div>
-              <div class="text-[10px] opacity-60">
+              <div class="text-[10px] text-sidebar-foreground/40">
                 {{
                   myRole === "admin"
                     ? "Manage team & invites"
@@ -275,33 +305,36 @@ function isActive(path: string) {
           <!-- Account section -->
           <div
             v-if="isLoggedIn && account"
-            class="flex items-center justify-between rounded-lg px-3 py-2.5"
+            class="flex items-center justify-between rounded-lg px-3 py-2.5 mt-2"
           >
             <div class="min-w-0 flex-1">
               <div class="text-sm font-medium truncate">
                 {{ account.name || account.email }}
               </div>
-              <div v-if="account.name" class="text-[10px] opacity-60 truncate">
+              <div
+                v-if="account.name"
+                class="text-[10px] text-sidebar-foreground/40 truncate"
+              >
                 {{ account.email }}
               </div>
             </div>
             <button
               @click="logout"
               aria-label="Sign out"
-              class="ml-2 p-1.5 rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
+              class="ml-2 p-1.5 rounded-md text-sidebar-foreground/40 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-all duration-150"
               title="Sign out"
             >
               <LogOut class="h-4 w-4" />
             </button>
           </div>
-          <div v-else class="px-3 py-2.5 text-xs text-muted-foreground">
+          <div v-else class="px-3 py-2.5 text-xs text-sidebar-foreground/40">
             Browsing as guest
           </div>
           <!-- Feedback & Discord -->
           <div class="flex items-center gap-1 px-2 pt-1">
             <button
               v-if="isLoggedIn"
-              class="flex items-center gap-1.5 px-1.5 py-1 text-xs text-muted-foreground hover:text-foreground transition-colors rounded-md hover:bg-accent"
+              class="flex items-center gap-1.5 px-2 py-1 text-xs text-sidebar-foreground/40 hover:text-sidebar-foreground hover:bg-sidebar-accent/50 transition-all duration-150 rounded-md"
               @click="feedbackOpen = true"
             >
               <MessageSquare class="h-3 w-3" />
@@ -311,7 +344,7 @@ function isActive(path: string) {
               href="https://discord.gg/zSVwxgvxCj"
               target="_blank"
               rel="noopener noreferrer"
-              class="flex items-center gap-1.5 px-1.5 py-1 text-xs text-muted-foreground hover:text-foreground transition-colors rounded-md hover:bg-accent"
+              class="flex items-center gap-1.5 px-2 py-1 text-xs text-sidebar-foreground/40 hover:text-sidebar-foreground hover:bg-sidebar-accent/50 transition-all duration-150 rounded-md"
             >
               Discord
             </a>
@@ -320,7 +353,7 @@ function isActive(path: string) {
           <router-link
             v-if="aiCredits"
             to="/plans"
-            class="flex items-center gap-1.5 px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+            class="flex items-center gap-1.5 px-3 py-1.5 text-xs text-sidebar-foreground/40 hover:text-sidebar-foreground transition-all duration-150"
             :title="`${aiCredits.remaining} of ${aiCredits.limit} AI credits remaining this month`"
           >
             <Sparkles class="h-3 w-3" />

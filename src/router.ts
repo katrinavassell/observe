@@ -139,10 +139,14 @@ const router = createRouter({
   ],
 });
 
-// Initialize session on app load — no auth guard, anonymous browsing is allowed
+// Initialize session once on app load — no auth guard, anonymous browsing is allowed
 import { initialize } from "@/composables/useAuth";
+let initialized = false;
 router.beforeEach(async () => {
-  await initialize();
+  if (!initialized) {
+    await initialize();
+    initialized = true;
+  }
 });
 
 export default router;

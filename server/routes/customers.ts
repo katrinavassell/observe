@@ -932,6 +932,7 @@ export function createCustomersRoutes(
         res.json({ success: true });
       } catch (error) {
         await client.query("ROLLBACK");
+        console.error("DELETE /data/clear/revenue error:", error);
         res.status(500).json({ error: "Failed to clear revenue data" });
       } finally {
         client.release();
@@ -957,6 +958,7 @@ export function createCustomersRoutes(
         res.json({ success: true });
       } catch (error) {
         await client.query("ROLLBACK");
+        console.error("DELETE /data/clear/costs error:", error);
         res.status(500).json({ error: "Failed to clear cost data" });
       } finally {
         client.release();
@@ -982,6 +984,7 @@ export function createCustomersRoutes(
         res.json({ success: true });
       } catch (error) {
         await client.query("ROLLBACK");
+        console.error("DELETE /data/clear/usage error:", error);
         res.status(500).json({ error: "Failed to clear usage data" });
       } finally {
         client.release();
