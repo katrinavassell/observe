@@ -172,9 +172,10 @@ function isActive(path: string) {
     <!-- Sidebar -->
     <aside
       :class="[
-        'fixed left-0 top-0 z-40 h-screen w-64 border-r bg-sidebar text-sidebar-foreground transition-transform duration-200 ease-in-out',
-        sidebarOpen ? 'translate-x-0' : '-translate-x-full',
-        'md:translate-x-0',
+        'fixed left-0 top-0 z-40 h-screen w-64 border-r bg-sidebar text-sidebar-foreground transition-transform duration-200 ease-in-out md:translate-x-0',
+        sidebarOpen
+          ? 'translate-x-0 visible'
+          : '-translate-x-full max-md:invisible',
       ]"
     >
       <div class="flex h-full flex-col">
