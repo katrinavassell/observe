@@ -64,7 +64,7 @@ function costTypeBadgeClass(type: string) {
     case "database":
       return "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300";
     default:
-      return "bg-muted text-muted-foreground";
+      return "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300";
   }
 }
 
