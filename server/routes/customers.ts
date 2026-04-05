@@ -1277,7 +1277,7 @@ export function createCustomersRoutes(
         ];
 
         // Enrich sample events with cost_type and agent_id
-        for (const ev of sampleEvents) {
+        for (const ev of sampleEvents as Array<Record<string, unknown>>) {
           if (!ev.cost_type) {
             if (ev.feature_key === "search") ev.cost_type = "embedding";
             else if (ev.feature_key === "document_qa")
@@ -1290,7 +1290,7 @@ export function createCustomersRoutes(
           }
         }
 
-        for (const ev of sampleEvents) {
+        for (const ev of sampleEvents as Array<Record<string, unknown>>) {
           await client.query(
             `INSERT INTO observe_events (user_id, customer_id, feature_key, event_name, timestamp, cost_amount, cost_unit, revenue_amount, usage_units, model, model_provider, source, granularity, properties, request_body, response_body, agent_id, cost_type)
            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'event', $13, $14, $15, $16, $17)`,
