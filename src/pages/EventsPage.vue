@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, reactive, watch, onMounted } from "vue";
+import { ref, computed, reactive } from "vue";
 import { useQuery } from "@tanstack/vue-query";
 import { useRouter, useRoute } from "vue-router";
 import {
@@ -81,7 +81,7 @@ const DEFAULT_COLUMNS: TableColumn[] = [
 const STORAGE_KEY = "observe:events-columns";
 
 function loadColumns(): TableColumn[] {
-  const saved = localStorage.getItem(STORAGE_KEY);
+  const saved = window.localStorage.getItem(STORAGE_KEY);
   if (!saved) return DEFAULT_COLUMNS.map((c) => ({ ...c }));
   try {
     const { order, hidden } = JSON.parse(saved) as {
@@ -109,7 +109,7 @@ function loadColumns(): TableColumn[] {
 }
 
 function saveColumns(cols: TableColumn[]) {
-  localStorage.setItem(
+  window.localStorage.setItem(
     STORAGE_KEY,
     JSON.stringify({
       order: cols.map((c) => c.id),
@@ -180,7 +180,7 @@ function moveColumn(index: number, direction: -1 | 1) {
 
 function resetColumns() {
   columns.value = DEFAULT_COLUMNS.map((c) => ({ ...c }));
-  localStorage.removeItem(STORAGE_KEY);
+  window.localStorage.removeItem(STORAGE_KEY);
 }
 
 // ── Expandable event detail ──────────────────────────────────────────────────
@@ -362,10 +362,6 @@ function marginForEvent(event: ObserveEvent): number | null {
   return Math.round(
     ((event.revenue_amount - event.cost_amount) / event.revenue_amount) * 100,
   );
-}
-
-function isColumnVisible(id: string): boolean {
-  return visibleColumns.value.some((c) => c.id === id);
 }
 </script>
 

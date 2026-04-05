@@ -100,7 +100,7 @@ async function handleInvite() {
 }
 
 async function copyInviteLink() {
-  await navigator.clipboard.writeText(inviteLink.value);
+  await window.navigator.clipboard.writeText(inviteLink.value);
   copiedLink.value = true;
   toast.success("Link copied to clipboard");
   setTimeout(() => {
@@ -119,7 +119,9 @@ async function handleRoleChange(member: OrgMember, role: string) {
 
 async function handleRemove(member: OrgMember) {
   if (
-    !confirm(`Remove ${member.invited_email || "this member"} from the team?`)
+    !window.confirm(
+      `Remove ${member.invited_email || "this member"} from the team?`,
+    )
   )
     return;
   try {

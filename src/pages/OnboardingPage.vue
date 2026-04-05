@@ -92,7 +92,7 @@ const openai = wrapOpenAI(new OpenAI(), observe)
 });
 
 function copyToClipboard(text: string, which: "proxy" | "snippet") {
-  navigator.clipboard.writeText(text);
+  window.navigator.clipboard.writeText(text);
   if (which === "proxy") {
     copiedProxy.value = true;
     setTimeout(() => (copiedProxy.value = false), 2000);
@@ -224,7 +224,7 @@ async function generateKey() {
 }
 
 function copyFullClipboard(text: string, which: "proxy" | "snippet") {
-  navigator.clipboard.writeText(text);
+  window.window.navigator.clipboard.writeText(text);
   if (which === "proxy") {
     fullCopiedProxy.value = true;
     setTimeout(() => (fullCopiedProxy.value = false), 2000);

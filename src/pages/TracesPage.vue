@@ -2,17 +2,11 @@
 import { ref, computed } from "vue";
 import { useQuery } from "@tanstack/vue-query";
 import { useRouter } from "vue-router";
-import {
-  getTraces,
-  getTrace,
-  type TraceListItem,
-  type TraceDetail,
-  type EventDetail,
-} from "@/lib/api";
+import { getTraces, getTrace } from "@/lib/api";
 import { Activity, ChevronLeft, Layers } from "lucide-vue-next";
 import { Card, Button, Skeleton } from "@/components/ui";
 
-const router = useRouter();
+const _router = useRouter();
 const selectedTraceId = ref<string | null>(null);
 
 const { data: tracesData, isLoading: tracesLoading } = useQuery({

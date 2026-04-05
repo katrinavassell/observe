@@ -49,7 +49,7 @@ const DEFAULT_COLUMNS: TableColumn[] = [
 const STORAGE_KEY = "observe:models-columns";
 
 function loadColumns(): TableColumn[] {
-  const saved = localStorage.getItem(STORAGE_KEY);
+  const saved = window.localStorage.getItem(STORAGE_KEY);
   if (!saved) return DEFAULT_COLUMNS.map((c) => ({ ...c }));
   try {
     const { order, hidden } = JSON.parse(saved) as {
@@ -76,7 +76,7 @@ function loadColumns(): TableColumn[] {
 }
 
 function saveColumns(cols: TableColumn[]) {
-  localStorage.setItem(
+  window.localStorage.setItem(
     STORAGE_KEY,
     JSON.stringify({
       order: cols.map((c) => c.id),
@@ -87,7 +87,7 @@ function saveColumns(cols: TableColumn[]) {
 
 const columns = ref<TableColumn[]>(loadColumns());
 const visibleColumns = computed(() => columns.value.filter((c) => c.visible));
-const colCount = computed(() => visibleColumns.value.length);
+const _colCount = computed(() => visibleColumns.value.length);
 const showColumnSettings = ref(false);
 
 function toggleColumn(id: string) {
@@ -113,7 +113,7 @@ function moveColumn(index: number, direction: -1 | 1) {
 
 function resetColumns() {
   columns.value = DEFAULT_COLUMNS.map((c) => ({ ...c }));
-  localStorage.removeItem(STORAGE_KEY);
+  window.localStorage.removeItem(STORAGE_KEY);
 }
 
 const {

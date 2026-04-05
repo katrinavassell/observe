@@ -15,15 +15,8 @@ import {
   listFeaturePricing,
   getSourceBreakdown,
 } from "@/lib/api";
-import type { AiInsight, MrrMovement, MrrSummary } from "@/lib/api";
-import {
-  AlertCircle,
-  AlertTriangle,
-  Database,
-  Plug,
-  Sparkles,
-  Zap,
-} from "lucide-vue-next";
+import type {} from "@/lib/api";
+import { AlertCircle, AlertTriangle, Plug, Sparkles } from "lucide-vue-next";
 import { useDataMode } from "@/composables/useDataMode";
 import { useAuth } from "@/composables/useAuth";
 import Sheet from "@/components/ui/sheet.vue";
@@ -75,10 +68,10 @@ const insightsUsage = computed(
 
 const { isLoggedIn } = useAuth();
 const onboardingDismissed = ref(
-  localStorage.getItem("observe:onboarding_dismissed") === "true",
+  window.localStorage.getItem("observe:onboarding_dismissed") === "true",
 );
 function dismissOnboarding() {
-  localStorage.setItem("observe:onboarding_dismissed", "true");
+  window.localStorage.setItem("observe:onboarding_dismissed", "true");
   onboardingDismissed.value = true;
 }
 
@@ -88,7 +81,7 @@ async function handleGenerate() {
   try {
     await generateInsights();
     window.posthog?.capture("ai_insights_generated");
-    localStorage.setItem("observe:insights_generated", "true");
+    window.localStorage.setItem("observe:insights_generated", "true");
     await refetchInsights();
     // Refresh usage limits
     queryClient.invalidateQueries({ queryKey: ["usage-limits"] });
@@ -317,7 +310,7 @@ const totalEvents = computed(() => {
   if (!featureData.value) return 0;
   return featureData.value.reduce((s, f) => s + (f.event_count || 0), 0);
 });
-const dataConfidence = computed(() => {
+const _dataConfidence = computed(() => {
   const n = totalEvents.value;
   if (n === 0)
     return { label: "No data", color: "text-muted-foreground", pct: 0 };

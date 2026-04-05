@@ -5,7 +5,6 @@ import {
   Users,
   Activity,
   DollarSign,
-  Lightbulb,
   ShieldAlert,
   Mail,
 } from "lucide-vue-next";

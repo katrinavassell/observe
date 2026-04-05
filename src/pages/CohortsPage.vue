@@ -2,20 +2,10 @@
 import { ref, computed } from "vue";
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
 import { getCohorts, discoverCohorts } from "@/lib/api";
-import type {
-  CohortCustomer,
-  CohortLabel,
-  CohortSummary,
-  CohortTotals,
-  DiscoveredCluster,
-  ModelSwapSuggestion,
-} from "@/lib/api";
+import type { CohortLabel, CohortSummary, DiscoveredCluster } from "@/lib/api";
 import {
   AlertCircle,
   Database,
-  TrendingUp,
-  TrendingDown,
-  Minus,
   ChevronDown,
   ChevronRight,
   ChevronUp,
@@ -28,7 +18,7 @@ import { Card, Skeleton, Button } from "@/components/ui";
 import { formatCurrency as fmt, formatPct as fmtPct } from "@/lib/format";
 import { toast } from "vue-sonner";
 
-const queryClient = useQueryClient();
+const _queryClient = useQueryClient();
 
 // ── Column configuration ─────────────────────────────────────────────────────
 
@@ -52,7 +42,7 @@ const DEFAULT_COLUMNS: TableColumn[] = [
 const STORAGE_KEY = "observe:cohorts-columns";
 
 function loadColumns(): TableColumn[] {
-  const saved = localStorage.getItem(STORAGE_KEY);
+  const saved = window.localStorage.getItem(STORAGE_KEY);
   if (!saved) return DEFAULT_COLUMNS.map((c) => ({ ...c }));
   try {
     const { order, hidden } = JSON.parse(saved) as {
@@ -80,7 +70,7 @@ function loadColumns(): TableColumn[] {
 }
 
 function saveColumns(cols: TableColumn[]) {
-  localStorage.setItem(
+  window.localStorage.setItem(
     STORAGE_KEY,
     JSON.stringify({
       order: cols.map((c) => c.id),
@@ -113,7 +103,7 @@ function moveColumn(index: number, direction: -1 | 1) {
 
 function resetColumns() {
   columns.value = DEFAULT_COLUMNS.map((c) => ({ ...c }));
-  localStorage.removeItem(STORAGE_KEY);
+  window.localStorage.removeItem(STORAGE_KEY);
 }
 
 const {

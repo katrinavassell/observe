@@ -59,7 +59,7 @@ async function handleManage() {
   }
 }
 
-const currentPlan = ref<string>("free");
+const _currentPlan = ref<string>("free");
 
 const plans = [
   {

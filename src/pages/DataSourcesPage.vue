@@ -9,12 +9,11 @@
  * - Unsaved changes confirmation
  */
 
-import { ref, computed, watch, onMounted, onUnmounted } from "vue";
+import { ref, computed, watch, onMounted } from "vue";
 import { useRouter } from "vue-router";
 import { useQueryClient } from "@tanstack/vue-query";
 import { toast } from "vue-sonner";
 import {
-  TrendingUp,
   Eye,
   Key,
   Copy,
@@ -78,10 +77,8 @@ const canEdit = computed(() => isLoggedIn.value && !isViewer.value);
 const {
   dataMode,
   refetch: refetchDataMode,
-  hasRevenue,
   hasCosts,
   hasUsage,
-  lastSyncAt,
 } = useDataMode();
 
 /** Track file state for each section */
@@ -96,7 +93,6 @@ const proxyBaseUrl =
   typeof window !== "undefined" ? `${window.location.origin}/v1` : "/v1";
 
 /** Integration mode toggle */
-const integrationTab = ref<"proxy" | "wrapper" | "api">("proxy");
 
 /** SDK API Key state */
 const sdkKeys = ref<SdkKey[]>([]);
@@ -146,7 +142,7 @@ async function handleRevokeKey(id: number) {
 
 function copyKeyToClipboard() {
   if (!generatedKey.value) return;
-  navigator.clipboard.writeText(generatedKey.value);
+  window.navigator.clipboard.writeText(generatedKey.value);
   keyCopied.value = true;
   setTimeout(() => {
     keyCopied.value = false;
@@ -160,9 +156,11 @@ const apiKeyForSnippet = computed(() => {
   return "YOUR_API_KEY";
 });
 
-async function handleResetKey(id: number) {
+async function _handleResetKey(id: number) {
   if (
-    !confirm("Reset this API key? The old key will stop working immediately.")
+    !window.confirm(
+      "Reset this API key? The old key will stop working immediately.",
+    )
   )
     return;
   try {
@@ -180,7 +178,7 @@ const keyCopiedId = ref<number | null>(null);
 const revealedKeyId = ref<number | null>(null);
 function copyFullKey(key: SdkKey) {
   const text = key.full_key || key.key_prefix + "...";
-  navigator.clipboard.writeText(text);
+  window.navigator.clipboard.writeText(text);
   keyCopiedId.value = key.id;
   toast.success("API key copied");
   setTimeout(() => {
@@ -190,19 +188,19 @@ function copyFullKey(key: SdkKey) {
 
 const snippetCopied = ref(false);
 const curlCopied = ref(false);
-function copyCurl() {
+function _copyCurl() {
   const apiKey = apiKeyForSnippet.value;
   const curl = `curl -X POST '${ingestUrl}' \\
   -H 'Content-Type: application/json' \\
   -H 'Authorization: Bearer ${apiKey}' \\
   -d '{"events":[{"eventName":"chat_completion","customerReferenceId":"cus_test_123","featureKey":"ai_summarization","model":"gpt-4o","inputTokens":500,"outputTokens":100}]}'`;
-  navigator.clipboard.writeText(curl);
+  window.navigator.clipboard.writeText(curl);
   curlCopied.value = true;
   setTimeout(() => {
     curlCopied.value = false;
   }, 2000);
 }
-function copySnippet() {
+function _copySnippet() {
   const apiKey = apiKeyForSnippet.value;
   const snippet = `await fetch('${ingestUrl}', {
   method: 'POST',
@@ -217,7 +215,7 @@ function copySnippet() {
     outputTokens: response.usage.completion_tokens,
   }]})
 })`;
-  navigator.clipboard.writeText(snippet);
+  window.navigator.clipboard.writeText(snippet);
   snippetCopied.value = true;
   setTimeout(() => {
     snippetCopied.value = false;
@@ -229,7 +227,7 @@ function dismissGeneratedKey() {
   showKeyGenerator.value = false;
 }
 
-function scrollToStripe() {
+function _scrollToStripe() {
   document
     .getElementById("stripe-section")
     ?.scrollIntoView({ behavior: "smooth" });
@@ -279,7 +277,7 @@ async function handleStripeSync() {
   }
 }
 
-async function handleInvoiceSync() {
+async function _handleInvoiceSync() {
   isSyncingInvoices.value = true;
   try {
     const result = await syncStripeInvoices();
