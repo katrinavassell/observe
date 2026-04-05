@@ -58,8 +58,9 @@ function wrapStream(
   observe: TansoObserve,
   defaults?: WrapDefaults,
 ): any {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let finalChunk: any = null;
+  let model = "";
+  let inputTokens = 0;
+  let outputTokens = 0;
 
   const originalIterator = stream[Symbol.asyncIterator].bind(stream);
 
@@ -70,10 +71,30 @@ function wrapStream(
       async next(): Promise<IteratorResult<any>> {
         const result = await iterator.next();
         if (!result.done) {
-          finalChunk = result.value;
-        } else if (finalChunk?.usage) {
+          const event = result.value;
+          if (event.type === "message_start" && event.message) {
+            model = event.message.model ?? model;
+            inputTokens = event.message.usage?.input_tokens ?? inputTokens;
+          } else if (event.type === "message_delta" && event.usage) {
+            outputTokens = event.usage.output_tokens ?? outputTokens;
+          }
+        } else if (inputTokens > 0 || outputTokens > 0) {
           try {
-            trackMessage(observe, finalChunk, defaults);
+            const cost = estimateCost(model, inputTokens, outputTokens);
+            observe.track({
+              eventName: "llm.messages.create",
+              customerReferenceId: defaults?.customerReferenceId ?? "unknown",
+              featureKey: defaults?.featureKey ?? "anthropic-messages",
+              model,
+              modelProvider: "anthropic",
+              usageUnits: inputTokens + outputTokens,
+              costAmount: cost,
+              costUnit: "usd",
+              properties: {
+                inputTokens,
+                outputTokens,
+              },
+            });
           } catch (_) {
             // tracking failure should not break the caller's stream
           }

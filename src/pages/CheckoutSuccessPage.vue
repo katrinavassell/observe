@@ -1,15 +1,22 @@
 <script setup lang="ts">
 import { ref, onMounted } from "vue";
-import { useRouter } from "vue-router";
-import { CheckCircle, Loader2 } from "lucide-vue-next";
+import { useRoute, useRouter } from "vue-router";
+import { CheckCircle, Loader2, XCircle } from "lucide-vue-next";
 import { getBillingStatus } from "@/lib/api";
+import { logger } from "@/lib/logger";
 
+const route = useRoute();
 const router = useRouter();
 const planConfirmed = ref(false);
 const timedOut = ref(false);
+const noSession = ref(false);
 
 onMounted(async () => {
-  // Poll billing status until plan updates to growth (webhook may be slow)
+  if (!route.query.session_id) {
+    noSession.value = true;
+    return;
+  }
+
   for (let i = 0; i < 10; i++) {
     try {
       const status = await getBillingStatus();
@@ -17,8 +24,8 @@ onMounted(async () => {
         planConfirmed.value = true;
         break;
       }
-    } catch {
-      // ignore
+    } catch (err) {
+      logger.error("Failed to check billing status", err);
     }
     await new Promise((r) => setTimeout(r, 2000));
   }
@@ -33,8 +40,9 @@ onMounted(async () => {
 <template>
   <div class="flex items-center justify-center min-h-[60vh]">
     <div class="text-center space-y-4">
+      <XCircle v-if="noSession" class="h-12 w-12 text-destructive mx-auto" />
       <CheckCircle
-        v-if="planConfirmed"
+        v-else-if="planConfirmed"
         class="h-12 w-12 text-success mx-auto"
       />
       <Loader2
@@ -43,20 +51,24 @@ onMounted(async () => {
       />
       <h1 class="text-2xl font-semibold">
         {{
-          planConfirmed
-            ? "Welcome to Growth!"
-            : timedOut
-              ? "Still confirming your plan"
-              : "Confirming your subscription..."
+          noSession
+            ? "Invalid checkout session"
+            : planConfirmed
+              ? "Welcome to Growth!"
+              : timedOut
+                ? "Still confirming your plan"
+                : "Confirming your subscription..."
         }}
       </h1>
       <p class="text-muted-foreground">
         {{
-          planConfirmed
-            ? "Redirecting to your dashboard..."
-            : timedOut
-              ? "This may take a moment. Check back shortly."
-              : "This may take a few seconds."
+          noSession
+            ? "This page requires a valid checkout session."
+            : planConfirmed
+              ? "Redirecting to your dashboard..."
+              : timedOut
+                ? "This may take a moment. Check back shortly."
+                : "This may take a few seconds."
         }}
       </p>
     </div>

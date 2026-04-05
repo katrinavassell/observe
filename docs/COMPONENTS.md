@@ -13,7 +13,12 @@ Vue components and composables in Observe.
 | `DataSourcesPage.vue` | `/data-sources` | CSV upload, integrations, sample data |
 | `PlansPage.vue` | `/plans` | Subscription plans and billing management |
 | `CheckoutSuccessPage.vue` | `/checkout/success` | Post-checkout confirmation |
+| `CohortsPage.vue` | `/cohorts` | Cohort retention analysis |
+| `TracesPage.vue` | `/traces` | Distributed trace viewer |
 | `LoginPage.vue` | `/login`, `/signup` | Authentication (login and signup) |
+| `ForgotPasswordPage.vue` | `/forgot-password` | Request password reset |
+| `ResetPasswordPage.vue` | `/reset-password` | Reset password with token |
+| `OnboardingPage.vue` | `/onboarding` (redirects to `/data-sources`) | First-run onboarding flow |
 | `TeamSettingsPage.vue` | `/team` | Team management and member invites |
 | `JoinTeamPage.vue` | `/join/:token` | Accept a team invite link |
 
@@ -60,6 +65,7 @@ Vue components and composables in Observe.
 | `IntegrationCard.vue` | Integration status card (connected/available) |
 | `OpenAIApiKeyModal.vue` | Connect OpenAI API key |
 | `AnthropicApiKeyModal.vue` | Connect Anthropic API key |
+| `StripeApiKeyModal.vue` | Connect Stripe API key |
 | `IntegrationRequestModal.vue` | Request a new integration |
 | `InterestCaptureModal.vue` | Capture interest for upcoming features |
 
@@ -72,7 +78,7 @@ Vue components and composables in Observe.
 | `UploadWizard.vue` | Step-by-step data upload flow |
 | `ColumnMapper.vue` | Map CSV columns to Observe schema |
 | `ImportGuide.vue` | Import instructions and tips |
-| `GettingStartedCard.vue` | First-run getting started card |
+| `OnboardingChecklist.vue` | First-run onboarding checklist |
 
 ---
 
@@ -97,6 +103,7 @@ Vue components and composables in Observe.
 | Component | Purpose |
 |-----------|---------|
 | `ErrorBoundary.vue` | Catch and display component errors |
+| `FeedbackModal.vue` | User feedback submission modal |
 | `MarginBadge.vue` | Color-coded margin status badge |
 | `SourceBadge.vue` | Data source indicator (CSV, SDK, proxy, etc.) |
 | `TrendIndicator.vue` | Up/down/stable trend arrow |

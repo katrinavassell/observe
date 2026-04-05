@@ -34,6 +34,7 @@ export async function initialize(retries = 10, delay = 1000) {
           await sleep(delay);
         } else {
           logger.error("Failed to initialize session after all retries", error);
+          initPromise = null;
         }
       }
     }

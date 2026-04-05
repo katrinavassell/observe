@@ -638,12 +638,7 @@ export interface StripeStatus {
  * Check if Stripe is connected for the current user.
  */
 export async function getStripeStatus(): Promise<StripeStatus> {
-  try {
-    return await request("/integrations/stripe/status");
-  } catch (err) {
-    console.warn("Failed to fetch getStripeStatus:", err);
-    return { connected: false, account_id: null, account_name: null };
-  }
+  return request("/integrations/stripe/status");
 }
 
 /**
@@ -990,15 +985,10 @@ export interface CustomerInsight {
 export async function getCustomerInsights(): Promise<CustomerInsight[]> {
   // For now, calculate insights from Stripe data
   // This will be replaced with a dedicated backend endpoint later
-  try {
-    const result = await request<{ customers: CustomerInsight[] }>(
-      "/analytics/customer-insights",
-    );
-    return result.customers;
-  } catch (err) {
-    console.warn("Failed to fetch getCustomerInsights:", err);
-    return [];
-  }
+  const result = await request<{ customers: CustomerInsight[] }>(
+    "/analytics/customer-insights",
+  );
+  return result.customers;
 }
 
 // Integration request types
@@ -1124,12 +1114,7 @@ export interface OpenAIStatus {
  * Uses Supabase Edge Function directly.
  */
 export async function getOpenAIStatus(): Promise<OpenAIStatus> {
-  try {
-    return await request("/integrations/openai/status");
-  } catch (err) {
-    console.warn("Failed to fetch getOpenAIStatus:", err);
-    return { connected: false, has_usage_access: false };
-  }
+  return request("/integrations/openai/status");
 }
 
 export interface AnthropicStatus {
@@ -1145,10 +1130,5 @@ export interface AnthropicStatus {
  * Uses Supabase Edge Function directly.
  */
 export async function getAnthropicStatus(): Promise<AnthropicStatus> {
-  try {
-    return await request("/integrations/anthropic/status");
-  } catch (err) {
-    console.warn("Failed to fetch getAnthropicStatus:", err);
-    return { connected: false, has_usage_access: false };
-  }
+  return request("/integrations/anthropic/status");
 }

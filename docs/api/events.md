@@ -27,7 +27,7 @@ Returns paginated list of events for the current session.
 {
   "events": [
     {
-      "id": "550e8400-e29b-41d4-a716-446655440000",
+      "id": 1,
       "customer_id": "cus_001",
       "customer_name": "Acme Corp",
       "feature_key": "api_requests",
@@ -40,7 +40,15 @@ Returns paginated list of events for the current session.
       "model": null,
       "model_provider": null,
       "source": "csv",
-      "granularity": "monthly_aggregate"
+      "granularity": "monthly_aggregate",
+      "properties": null,
+      "agent_id": null,
+      "trace_id": null,
+      "span_id": null,
+      "parent_span_id": null,
+      "duration_ms": null,
+      "cost_type": null,
+      "revenue_source": "none"
     }
   ],
   "total": 342,
@@ -82,6 +90,8 @@ Returns cost, revenue, usage, and margin grouped by feature.
     "last_seen": "2026-03-18T09:15:00Z"
   }
 ]
+
+Note: `margin_pct` is `null` when `total_revenue` is 0.
 ```
 
 ---
@@ -109,6 +119,8 @@ Returns cost, revenue, and margin grouped by customer.
   }
 ]
 ```
+
+Note: `margin_pct` is `null` when `total_revenue` is 0. Does not include `total_usage`.
 
 ---
 
@@ -147,6 +159,8 @@ Returns cost, revenue, usage, and margin grouped by AI model. Only includes even
 ]
 ```
 
+Note: `margin_pct` is `null` when `total_revenue` is 0.
+
 ---
 
 ## Ingest Events
@@ -173,8 +187,34 @@ Accepts single events or batches for real-time SDK ingestion. Requires a valid S
       "usageUnits": 1,
       "model": "gpt-4o-mini",
       "modelProvider": "openai",
-      "idempotencyKey": "evt_abc123"
+      "inputTokens": 500,
+      "outputTokens": 100,
+      "idempotencyKey": "evt_abc123",
+      "traceId": "trace_abc",
+      "spanId": "span_001",
+      "parentSpanId": null,
+      "durationMs": 1200,
+      "costType": "llm",
+      "properties": { "region": "us-east-1" }
     }
   ]
 }
 ```
+
+Required fields: `eventName`, `customerReferenceId`, `featureKey`. All others are optional.
+
+If `costAmount` is not provided but `model`, `inputTokens`, and `outputTokens` are, cost is auto-calculated from the built-in model pricing table. If `revenueAmount` is not provided, revenue is enriched from feature pricing rules or MRR allocation.
+
+Maximum batch size: 1000 events.
+
+### Response
+
+```json
+{
+  "accepted": 1,
+  "rejected": 0,
+  "errors": []
+}
+```
+
+`rejected` includes both validation failures and deduplicated events (matched by `idempotencyKey`). `errors` contains `{ "index": 0, "error": "..." }` entries for events that failed validation.
