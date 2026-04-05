@@ -18,8 +18,46 @@ import {
 import { Card, Skeleton, Button } from "@/components/ui";
 import { formatCurrency as fmt, formatPct as fmtPct } from "@/lib/format";
 import { toast } from "vue-sonner";
+import { useAuth } from "@/composables/useAuth";
 
 const _queryClient = useQueryClient();
+const { isLoggedIn } = useAuth();
+
+const SAMPLE_DISCOVERY: {
+  clusters: DiscoveredCluster[];
+  source: "deterministic";
+} = {
+  source: "deterministic",
+  clusters: [
+    {
+      name: "High-cost GPT-4o users",
+      description:
+        "3 customers spending 68% of total GPT-4o cost. Output tokens are 4x longer than average — consider routing summarization to a cheaper model.",
+      customer_ids: ["acme-saas", "circleops", "neondata"],
+      severity: "warning",
+      recommended_action:
+        "Route summarization calls to GPT-4o mini to cut cost by ~60%",
+    },
+    {
+      name: "Embedding-heavy with low revenue",
+      description:
+        "2 customers generating high embedding volume but minimal revenue. Cost-to-serve exceeds what they pay.",
+      customer_ids: ["tidewater-ai", "blazeml"],
+      severity: "critical",
+      recommended_action:
+        "Add embedding usage limits or move to a tiered pricing model",
+    },
+    {
+      name: "Healthy margin champions",
+      description:
+        "CircleOps and Acme SaaS maintain 65%+ margin consistently. Their usage patterns are the benchmark for profitable customers.",
+      customer_ids: ["circleops", "acme-saas"],
+      severity: "positive",
+      recommended_action:
+        "Use these customers as the template for your ideal pricing tier",
+    },
+  ],
+};
 
 // ── Column configuration ─────────────────────────────────────────────────────
 
@@ -154,6 +192,13 @@ const activeClusterName = ref<string | null>(null);
 async function loadDiscovery() {
   discoveryLoading.value = true;
   try {
+    if (!isLoggedIn.value) {
+      discoveryClusters.value = SAMPLE_DISCOVERY.clusters;
+      discoverySource.value = SAMPLE_DISCOVERY.source;
+      discoveryLoaded.value = true;
+      discoveryExpanded.value = true;
+      return;
+    }
     const res = await discoverCohorts();
     discoveryClusters.value = res.clusters;
     discoverySource.value = res.source;
