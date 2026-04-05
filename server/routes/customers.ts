@@ -1303,7 +1303,8 @@ export function createCustomersRoutes(
             else if (ev.feature_key === "summarization") ev.cost_type = "api";
             else ev.cost_type = "llm";
           }
-          if (!ev.agent_id && ev.properties?.trace_id) {
+          const props = ev.properties as Record<string, unknown> | undefined;
+          if (!ev.agent_id && props?.trace_id) {
             ev.agent_id = `agent_${ev.feature_key}`;
           }
         }
