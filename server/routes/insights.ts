@@ -715,19 +715,34 @@ Return ONLY the JSON array, no markdown or explanation.`;
     async (req: AuthRequest, res: Response) => {
       const visitorId = req.visitorId!;
       try {
-        const access = await deps.checkBillingFeatureAccess(
-          visitorId,
-          "ai_insights",
-          req.accountEmail,
-        );
+        const [aiAccess, eventAccess] = await Promise.all([
+          deps.checkBillingFeatureAccess(
+            visitorId,
+            "ai_insights",
+            req.accountEmail,
+          ),
+          deps.checkBillingFeatureAccess(
+            visitorId,
+            "event_ingest",
+            req.accountEmail,
+          ),
+        ]);
         res.json({
           configured: true,
           ai_insights: {
-            allowed: access.allowed,
+            allowed: aiAccess.allowed,
             usage: {
-              used: access.usage ?? 0,
-              limit: access.limit ?? 0,
-              remaining: access.remaining ?? 0,
+              used: aiAccess.usage ?? 0,
+              limit: aiAccess.limit ?? 0,
+              remaining: aiAccess.remaining ?? 0,
+            },
+          },
+          event_ingest: {
+            allowed: eventAccess.allowed,
+            usage: {
+              used: eventAccess.usage ?? 0,
+              limit: eventAccess.limit ?? 0,
+              remaining: eventAccess.remaining ?? 0,
             },
           },
         });
@@ -737,6 +752,55 @@ Return ONLY the JSON array, no markdown or explanation.`;
           configured: true,
           error: "Usage data temporarily unavailable",
         });
+      }
+    },
+  );
+
+  // GET /admin/usage — all users' event usage (admin only)
+  router.get(
+    "/admin/usage",
+    ensureVisitor,
+    async (req: AuthRequest, res: Response) => {
+      try {
+        if (
+          !req.accountEmail ||
+          req.accountEmail.toLowerCase() !==
+            (process.env.ADMIN_EMAIL || "").toLowerCase()
+        ) {
+          return res.status(403).json({ error: "Admin access required" });
+        }
+        const result = await pool.query(`
+          SELECT
+            a.email,
+            a.name,
+            a.stripe_plan,
+            a.created_at,
+            COALESCE(e.event_count, 0) as events_this_month,
+            COALESCE(e.total_cost, 0) as total_cost_this_month,
+            COALESCE(e.total_revenue, 0) as total_revenue_this_month,
+            COALESCE(i.insight_count, 0) as insights_this_month
+          FROM accounts a
+          LEFT JOIN (
+            SELECT user_id,
+              COUNT(*) as event_count,
+              SUM(cost_amount) as total_cost,
+              SUM(revenue_amount) as total_revenue
+            FROM observe_events
+            WHERE timestamp >= date_trunc('month', NOW()) AND source != 'sample'
+            GROUP BY user_id
+          ) e ON e.user_id = a.visitor_id
+          LEFT JOIN (
+            SELECT user_id, COUNT(*) as insight_count
+            FROM ai_insights
+            WHERE created_at >= date_trunc('month', NOW())
+            GROUP BY user_id
+          ) i ON i.user_id = a.visitor_id
+          ORDER BY e.event_count DESC NULLS LAST
+        `);
+        res.json({ users: result.rows });
+      } catch (err) {
+        console.error("GET /admin/usage error:", err);
+        res.status(500).json({ error: "Failed to fetch admin usage" });
       }
     },
   );

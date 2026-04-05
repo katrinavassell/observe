@@ -53,7 +53,17 @@ const { data: insightsData, refetch: refetchInsights } = useQuery({
 const { data: usageLimits } = useQuery({
   queryKey: ["usage-limits"],
   queryFn: getUsageLimits,
-  enabled: computed(() => insightsOpen.value),
+});
+
+const eventUsage = computed(
+  () => usageLimits.value?.event_ingest?.usage ?? null,
+);
+const eventUsagePct = computed(() => {
+  if (!eventUsage.value || !eventUsage.value.limit) return 0;
+  return Math.min(
+    100,
+    Math.round((eventUsage.value.used / eventUsage.value.limit) * 100),
+  );
 });
 
 const insightsAllowed = computed(
@@ -696,6 +706,53 @@ const insightCategories = [
             from MRR allocation
           </div>
         </Card>
+      </div>
+
+      <!-- Event usage bar (free plan) -->
+      <div
+        v-if="eventUsage && eventUsage.limit"
+        class="flex items-center gap-3 rounded-lg border px-4 py-2.5"
+        :class="
+          eventUsagePct >= 90
+            ? 'border-destructive/30 bg-destructive/5'
+            : 'border-border bg-muted/30'
+        "
+      >
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center justify-between text-xs mb-1">
+            <span class="text-muted-foreground">
+              {{ eventUsage.used.toLocaleString() }} /
+              {{ eventUsage.limit.toLocaleString() }} events this month
+            </span>
+            <span
+              v-if="eventUsagePct >= 80"
+              class="font-medium"
+              :class="eventUsagePct >= 90 ? 'text-destructive' : 'text-warning'"
+            >
+              {{ eventUsage.remaining.toLocaleString() }} remaining
+            </span>
+          </div>
+          <div class="h-1.5 bg-muted rounded-full overflow-hidden">
+            <div
+              class="h-full rounded-full transition-all"
+              :class="
+                eventUsagePct >= 90
+                  ? 'bg-destructive'
+                  : eventUsagePct >= 80
+                    ? 'bg-warning'
+                    : 'bg-primary'
+              "
+              :style="{ width: eventUsagePct + '%' }"
+            />
+          </div>
+        </div>
+        <router-link
+          v-if="eventUsagePct >= 50"
+          to="/plans"
+          class="text-xs font-medium text-primary hover:underline shrink-0"
+        >
+          Upgrade
+        </router-link>
       </div>
 
       <!-- Tab bar -->

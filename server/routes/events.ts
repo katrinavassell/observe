@@ -6,6 +6,7 @@ import { type AuthRequest } from "./auth.js";
 import { encryptApiKey, decryptApiKey } from "../stripe-client.js";
 import { calculateCostFromTokens as calcCostFromDb } from "../model-pricing.js";
 import { checkAlerts } from "./alerts.js";
+import { checkFeatureAccess } from "../billing.js";
 
 type ComputeInferenceProfilesFn = (userId: string) => Promise<number>;
 
@@ -654,6 +655,21 @@ export function createEventsRoutes(
           return res
             .status(400)
             .json({ error: "Batch size exceeds maximum of 1000 events." });
+        }
+
+        // Check event ingest limit for free plans
+        const ingestAccess = await checkFeatureAccess(
+          pool,
+          userId,
+          "event_ingest",
+        );
+        if (!ingestAccess.allowed) {
+          return res.status(429).json({
+            error:
+              "Monthly event limit reached. Upgrade to Growth for unlimited events.",
+            usage: ingestAccess.usage,
+            limit: ingestAccess.limit,
+          });
         }
 
         const errors: Array<{ index: number; error: string }> = [];
