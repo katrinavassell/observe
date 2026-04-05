@@ -1310,8 +1310,12 @@ export async function getEventsByCostType(
   days = 30,
 ): Promise<{ breakdown: CostTypeBreakdown[] }> {
   return request(`/events/by-cost-type?days=${days}`);
-// ======================================================================// CLOUD COST IMPORTS (AWS / GCP)
-// ======================================================================
+}
+
+// =============================================================================
+// CLOUD COST IMPORTS (AWS / GCP)
+// =============================================================================
+
 export interface CloudIntegrationStatus {
   provider: string;
   connected: boolean;
