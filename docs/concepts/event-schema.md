@@ -18,6 +18,11 @@ Every piece of data in Observe flows through a single table: `observe_events`. W
 | `usage_units` | decimal | no | Quantity consumed |
 | `model` | text | no | AI model name (e.g., `gpt-4o`, `claude-sonnet-4`) |
 | `model_provider` | text | no | AI provider (e.g., `openai`, `anthropic`) |
+| `trace_id` | text | no | Groups events into a single trace/execution |
+| `span_id` | text | no | Unique identifier for this span within the trace |
+| `parent_span_id` | text | no | Links to parent span for tree structure |
+| `duration_ms` | integer | no | Execution time in milliseconds |
+| `cost_type` | text | no | Cost category: `llm`, `embedding`, `vector_db`, `compute`, `api`, `database`, `generic` (default: `llm`) |
 | `source` | text | yes | Where this data came from |
 | `granularity` | text | yes | Time granularity of this record |
 | `properties` | jsonb | no | Arbitrary metadata |

@@ -126,6 +126,12 @@ Sample data is tagged with `source: sample` so you can distinguish it from real 
 
 ---
 
+## Non-LLM Cost Tracking
+
+Observe tracks costs beyond LLM inference. Use the SDK's `wrapTool` function to instrument any async operation -- vector database queries, external API calls, compute jobs -- and assign a `cost_type` (`embedding`, `vector_db`, `compute`, `api`, `database`, or `generic`). Each wrapped call is logged as an event with its cost, duration, and type, giving you a full cost breakdown across your entire agent pipeline.
+
+---
+
 ## How Data Flows
 
 All imported data is written to the `observe_events` table regardless of source:

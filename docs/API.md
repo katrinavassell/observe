@@ -152,6 +152,59 @@ Events aggregated by customer.
 
 Events aggregated by model.
 
+### GET /events/traces
+
+Returns paginated list of traces with aggregated metrics.
+
+**Query params:** `limit` (default 50, max 200), `offset` (default 0)
+
+**Response:**
+```json
+{
+  "traces": [{
+    "trace_id": "abc123",
+    "start_time": "2024-01-01T00:00:00Z",
+    "span_count": 5,
+    "total_cost": 0.0234,
+    "total_revenue": 0.05,
+    "total_duration_ms": 3400,
+    "root_event": "agent.research",
+    "cost_types": ["llm", "vector_db"]
+  }]
+}
+```
+
+### GET /events/trace/:traceId
+
+Returns all spans for a specific trace.
+
+**Response:**
+```json
+{
+  "trace_id": "abc123",
+  "spans": [{ "...EventDetail with trace_id, span_id, parent_span_id, duration_ms, cost_type" }]
+}
+```
+
+### GET /events/by-cost-type
+
+Returns cost breakdown by type.
+
+**Query params:** `days` (default 30)
+
+**Response:**
+```json
+{
+  "breakdown": [{
+    "cost_type": "llm",
+    "event_count": 1234,
+    "total_cost": 45.67,
+    "total_revenue": 89.00,
+    "total_usage": 5000000
+  }]
+}
+```
+
 ---
 
 ## Analytics Endpoints

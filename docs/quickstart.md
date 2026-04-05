@@ -143,6 +143,44 @@ See the [SDK README](../packages/sdk/README.md) for full options.
 
 ---
 
+## Tracing agent flows
+
+Track multi-step agent executions with cost attribution per step:
+
+```typescript
+import { TansoObserve, wrapTool } from "@tanso/observe"
+
+const observe = new TansoObserve({ apiKey: "sk_live_..." })
+const trace = observe.startTrace()
+
+// LLM call as a traced span
+const answer = await observe.span(trace, {
+  eventName: "llm.plan",
+  featureKey: "research-agent",
+  customerReferenceId: "cus_acme",
+  costType: "llm",
+}, async () => {
+  return await openai.chat.completions.create({
+    model: "gpt-4o",
+    messages: [{ role: "user", content: "Plan a research strategy" }],
+  })
+})
+
+// Non-LLM tool call (e.g., vector search)
+const search = wrapTool(observe, pineconeQuery, {
+  eventName: "tool.vector_search",
+  featureKey: "research-agent",
+  costType: "vector_db",
+  costAmount: 0.002,
+  traceContext: trace,
+})
+const results = await search({ query: "embeddings" })
+```
+
+View traces at `/traces` in the dashboard -- each shows a waterfall of spans with cost, duration, and type.
+
+---
+
 ## Next steps
 
 - [Configuration](./configuration.md) -- environment variable reference
