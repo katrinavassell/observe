@@ -28,6 +28,7 @@ import { createTeamRoutes } from "./routes/team.js";
 import { createAnalyticsRoutes } from "./routes/analytics.js";
 import { createCohortsRoutes } from "./routes/cohorts.js";
 import { createA2ARoutes } from "./routes/a2a.js";
+import { createCloudCostRoutes } from "./routes/cloud-costs.js";
 import { createBillingApiRoutes } from "./routes/billing-api.js";
 import {
   createInferenceRoutes,
@@ -229,6 +230,7 @@ app.use(createAnalyticsRoutes(pool, ensureVisitor));
 app.use(createCohortsRoutes(pool, ensureVisitor));
 app.use(createInferenceRoutes(pool, ensureVisitor));
 app.use(createA2ARoutes(pool, ensureVisitor));
+app.use(createCloudCostRoutes(pool, ensureVisitor));
 
 // ─── Database initialization ────────────────────────────────────────────────
 
@@ -786,6 +788,19 @@ async function _doDbInit() {
         cooldown_minutes INTEGER DEFAULT 60,
         last_triggered_at TIMESTAMPTZ,
         created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    // Cloud provider integrations (AWS Cost Explorer, GCP Billing)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS cloud_integrations (
+        id SERIAL PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        provider TEXT NOT NULL,
+        encrypted_credentials TEXT NOT NULL,
+        last_sync_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(user_id, provider)
       )
     `);
 

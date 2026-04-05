@@ -25,6 +25,8 @@ import {
   Loader2,
   Unplug,
   Upload,
+  Cloud,
+  Database,
 } from "lucide-vue-next";
 import { Card, CardContent, Button } from "@/components/ui";
 import { CostsSection, UsageSection } from "@/components/data-sources";
@@ -47,7 +49,12 @@ import {
   listFeatureKeys,
   syncStripeInvoices,
   uploadProviderCsv,
+  getCloudCostStatus,
+  connectCloudProvider,
+  syncCloudCosts,
+  disconnectCloudProvider,
 } from "@/lib/api";
+import type { CloudIntegrationStatus } from "@/lib/api";
 import {
   getStripeStatus,
   syncStripeData,
@@ -376,6 +383,125 @@ async function _handleDeleteFeaturePricing(featureKey: string) {
   }
 }
 
+// =============================================================================
+// CLOUD COST PROVIDERS (AWS / GCP)
+// =============================================================================
+
+const cloudStatus = ref<CloudIntegrationStatus[]>([]);
+const showAwsForm = ref(false);
+const showGcpForm = ref(false);
+const awsAccessKeyId = ref("");
+const awsSecretAccessKey = ref("");
+const awsRegion = ref("us-east-1");
+const gcpServiceAccountJson = ref("");
+const isConnectingCloud = ref(false);
+const isSyncingCloud = ref<string | null>(null);
+const isDisconnectingCloud = ref<string | null>(null);
+
+function cloudProviderStatus(
+  provider: string,
+): CloudIntegrationStatus | undefined {
+  return cloudStatus.value.find((s) => s.provider === provider);
+}
+
+async function loadCloudStatus() {
+  try {
+    cloudStatus.value = await getCloudCostStatus();
+  } catch {
+    // Non-critical
+  }
+}
+
+async function handleConnectAws() {
+  if (!awsAccessKeyId.value || !awsSecretAccessKey.value || !awsRegion.value) {
+    toast.error("All AWS fields are required");
+    return;
+  }
+  isConnectingCloud.value = true;
+  try {
+    await connectCloudProvider("aws", {
+      accessKeyId: awsAccessKeyId.value,
+      secretAccessKey: awsSecretAccessKey.value,
+      region: awsRegion.value,
+    });
+    awsAccessKeyId.value = "";
+    awsSecretAccessKey.value = "";
+    awsRegion.value = "us-east-1";
+    showAwsForm.value = false;
+    await loadCloudStatus();
+    toast.success("AWS connected");
+  } catch (error) {
+    toast.error("Failed to connect AWS", {
+      description: error instanceof Error ? error.message : "Please try again.",
+    });
+  } finally {
+    isConnectingCloud.value = false;
+  }
+}
+
+async function handleConnectGcp() {
+  if (!gcpServiceAccountJson.value) {
+    toast.error("Service account JSON is required");
+    return;
+  }
+  try {
+    JSON.parse(gcpServiceAccountJson.value);
+  } catch {
+    toast.error(
+      "Invalid JSON — paste the full service account key file contents",
+    );
+    return;
+  }
+  isConnectingCloud.value = true;
+  try {
+    await connectCloudProvider("gcp", {
+      serviceAccountJson: gcpServiceAccountJson.value,
+    });
+    gcpServiceAccountJson.value = "";
+    showGcpForm.value = false;
+    await loadCloudStatus();
+    toast.success("GCP connected");
+  } catch (error) {
+    toast.error("Failed to connect GCP", {
+      description: error instanceof Error ? error.message : "Please try again.",
+    });
+  } finally {
+    isConnectingCloud.value = false;
+  }
+}
+
+async function handleSyncCloud(provider: string) {
+  isSyncingCloud.value = provider;
+  try {
+    const result = await syncCloudCosts(provider);
+    toast.success(result.message);
+    await loadCloudStatus();
+    await refetchDataMode();
+    queryClient.invalidateQueries({ queryKey: ["events"] });
+  } catch (error) {
+    toast.error(`Failed to sync ${provider.toUpperCase()} costs`, {
+      description: error instanceof Error ? error.message : "Please try again.",
+    });
+  } finally {
+    isSyncingCloud.value = null;
+  }
+}
+
+async function handleDisconnectCloud(provider: string) {
+  isDisconnectingCloud.value = provider;
+  try {
+    await disconnectCloudProvider(provider);
+    await loadCloudStatus();
+    toast.success(`${provider.toUpperCase()} disconnected`);
+  } catch (error) {
+    toast.error(`Failed to disconnect ${provider.toUpperCase()}`, {
+      description: error instanceof Error ? error.message : "Please try again.",
+    });
+  } finally {
+    isDisconnectingCloud.value = null;
+  }
+}
+
 onMounted(async () => {
   if (!isLoggedIn.value) return;
   await Promise.all([
@@ -383,6 +509,7 @@ onMounted(async () => {
     loadStripeStatus(),
     loadFeaturePricing(),
     loadFeatureKeys(),
+    loadCloudStatus(),
   ]);
 });
 
@@ -967,6 +1094,237 @@ Observe.identify({ <span class="text-sky-300">customerId</span>: user.stripeId }
         </template>
       </CardContent>
     </Card>
+
+    <!-- ================================================================== -->
+    <!-- CLOUD COST PROVIDERS (AWS / GCP)                                   -->
+    <!-- ================================================================== -->
+    <div class="space-y-3">
+      <h2
+        class="text-sm font-semibold text-muted-foreground uppercase tracking-wider"
+      >
+        Cloud Compute Costs
+      </h2>
+
+      <!-- AWS Card -->
+      <Card>
+        <CardContent class="p-4">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <div
+                class="flex items-center justify-center w-10 h-10 rounded-lg bg-orange-500/10"
+              >
+                <Cloud class="h-5 w-5 text-orange-500" />
+              </div>
+              <div>
+                <div class="flex items-center gap-2">
+                  <p class="font-medium">AWS Cost Explorer</p>
+                  <span
+                    v-if="cloudProviderStatus('aws')?.connected"
+                    class="text-[10px] font-medium bg-success/10 text-success px-2 py-0.5 rounded-full"
+                    >Connected</span
+                  >
+                </div>
+                <p class="text-xs text-muted-foreground">
+                  Import compute costs grouped by service
+                  <span v-if="cloudProviderStatus('aws')?.last_sync_at">
+                    · Last synced
+                    {{
+                      new Date(
+                        cloudProviderStatus("aws")!.last_sync_at!,
+                      ).toLocaleDateString()
+                    }}
+                  </span>
+                </p>
+              </div>
+            </div>
+            <div v-if="canEdit" class="flex items-center gap-1">
+              <template v-if="cloudProviderStatus('aws')?.connected">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  class="h-7 w-7 p-0 text-muted-foreground"
+                  :disabled="isSyncingCloud === 'aws'"
+                  title="Sync AWS costs"
+                  @click="handleSyncCloud('aws')"
+                >
+                  <Loader2
+                    v-if="isSyncingCloud === 'aws'"
+                    class="h-3 w-3 animate-spin"
+                  />
+                  <RefreshCw v-else class="h-3 w-3" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  class="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                  :disabled="isDisconnectingCloud === 'aws'"
+                  title="Disconnect AWS"
+                  @click="handleDisconnectCloud('aws')"
+                >
+                  <Unplug class="h-3 w-3" />
+                </Button>
+              </template>
+              <Button
+                v-else
+                variant="outline"
+                size="sm"
+                @click="showAwsForm = !showAwsForm"
+              >
+                Connect
+              </Button>
+            </div>
+          </div>
+
+          <!-- AWS credentials form (inline) -->
+          <div v-if="showAwsForm" class="mt-4 space-y-3 border-t pt-4">
+            <div class="space-y-2">
+              <label class="text-xs font-medium">Access Key ID</label>
+              <input
+                v-model="awsAccessKeyId"
+                type="text"
+                placeholder="AKIA..."
+                class="w-full h-8 rounded-md border bg-background px-3 text-sm font-mono"
+              />
+            </div>
+            <div class="space-y-2">
+              <label class="text-xs font-medium">Secret Access Key</label>
+              <input
+                v-model="awsSecretAccessKey"
+                type="password"
+                placeholder="Secret access key"
+                class="w-full h-8 rounded-md border bg-background px-3 text-sm font-mono"
+              />
+            </div>
+            <div class="space-y-2">
+              <label class="text-xs font-medium">Region</label>
+              <input
+                v-model="awsRegion"
+                type="text"
+                placeholder="us-east-1"
+                class="w-full h-8 rounded-md border bg-background px-3 text-sm"
+              />
+            </div>
+            <p class="text-[11px] text-muted-foreground">
+              Needs <code class="text-xs">ce:GetCostAndUsage</code> permission.
+              Credentials are encrypted at rest.
+            </p>
+            <div class="flex gap-2">
+              <Button
+                size="sm"
+                :disabled="isConnectingCloud"
+                @click="handleConnectAws"
+              >
+                {{ isConnectingCloud ? "Connecting..." : "Save & Connect" }}
+              </Button>
+              <Button variant="ghost" size="sm" @click="showAwsForm = false">
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <!-- GCP Card -->
+      <Card>
+        <CardContent class="p-4">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <div
+                class="flex items-center justify-center w-10 h-10 rounded-lg bg-blue-500/10"
+              >
+                <Database class="h-5 w-5 text-blue-500" />
+              </div>
+              <div>
+                <div class="flex items-center gap-2">
+                  <p class="font-medium">GCP Billing</p>
+                  <span
+                    v-if="cloudProviderStatus('gcp')?.connected"
+                    class="text-[10px] font-medium bg-success/10 text-success px-2 py-0.5 rounded-full"
+                    >Connected</span
+                  >
+                </div>
+                <p class="text-xs text-muted-foreground">
+                  Import compute costs from BigQuery billing export
+                  <span v-if="cloudProviderStatus('gcp')?.last_sync_at">
+                    · Last synced
+                    {{
+                      new Date(
+                        cloudProviderStatus("gcp")!.last_sync_at!,
+                      ).toLocaleDateString()
+                    }}
+                  </span>
+                </p>
+              </div>
+            </div>
+            <div v-if="canEdit" class="flex items-center gap-1">
+              <template v-if="cloudProviderStatus('gcp')?.connected">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  class="h-7 w-7 p-0 text-muted-foreground"
+                  :disabled="isSyncingCloud === 'gcp'"
+                  title="Sync GCP costs"
+                  @click="handleSyncCloud('gcp')"
+                >
+                  <Loader2
+                    v-if="isSyncingCloud === 'gcp'"
+                    class="h-3 w-3 animate-spin"
+                  />
+                  <RefreshCw v-else class="h-3 w-3" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  class="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                  :disabled="isDisconnectingCloud === 'gcp'"
+                  title="Disconnect GCP"
+                  @click="handleDisconnectCloud('gcp')"
+                >
+                  <Unplug class="h-3 w-3" />
+                </Button>
+              </template>
+              <Button
+                v-else
+                variant="outline"
+                size="sm"
+                @click="showGcpForm = !showGcpForm"
+              >
+                Connect
+              </Button>
+            </div>
+          </div>
+
+          <!-- GCP credentials form (inline) -->
+          <div v-if="showGcpForm" class="mt-4 space-y-3 border-t pt-4">
+            <div class="space-y-2">
+              <label class="text-xs font-medium">Service Account JSON</label>
+              <textarea
+                v-model="gcpServiceAccountJson"
+                rows="6"
+                placeholder='Paste the full JSON key file contents ({"type": "service_account", ...})'
+                class="w-full rounded-md border bg-background px-3 py-2 text-sm font-mono"
+              />
+            </div>
+            <p class="text-[11px] text-muted-foreground">
+              Needs BigQuery read access to your billing export table.
+              Credentials are encrypted at rest.
+            </p>
+            <div class="flex gap-2">
+              <Button
+                size="sm"
+                :disabled="isConnectingCloud"
+                @click="handleConnectGcp"
+              >
+                {{ isConnectingCloud ? "Connecting..." : "Save & Connect" }}
+              </Button>
+              <Button variant="ghost" size="sm" @click="showGcpForm = false">
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
 
     <!-- ================================================================== -->
     <!-- IMPORT HISTORICAL DATA (collapsed)                                 -->
