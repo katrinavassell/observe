@@ -294,10 +294,8 @@ export async function fetchAnalyzerData(): Promise<AnalyzerData | null> {
   return request("/data/analyzer");
 }
 
-// =============================================================================
-// FEATURE ECONOMICS
-// =============================================================================
-
+// ======================================================================// FEATURE ECONOMICS
+// ======================================================================
 export interface ObserveEvent {
   id: number;
   user_id: string;
@@ -512,10 +510,8 @@ export async function getCustomerDetail(id: string): Promise<CustomerDetail> {
   return request(`/customers/${encodeURIComponent(id)}`);
 }
 
-// =============================================================================
-// SDK EVENT INGESTION
-// =============================================================================
-
+// ======================================================================// SDK EVENT INGESTION
+// ======================================================================
 export interface IngestEvent {
   eventName: string;
   customerReferenceId: string;
@@ -554,10 +550,8 @@ export async function ingestEvents(
   });
 }
 
-// =============================================================================
-// SDK API KEY MANAGEMENT
-// =============================================================================
-
+// ======================================================================// SDK API KEY MANAGEMENT
+// ======================================================================
 export interface SdkKey {
   id: number;
   key_prefix: string;
@@ -596,10 +590,8 @@ export async function resetSdkKey(
   return request(`/sdk-keys/${id}/reset`, { method: "POST" });
 }
 
-// =============================================================================
-// FEATURE PRICING
-// =============================================================================
-
+// ======================================================================// FEATURE PRICING
+// ======================================================================
 export interface FeaturePricingRule {
   feature_key: string;
   revenue_per_unit: number;
@@ -641,10 +633,8 @@ export async function listFeatureKeys(): Promise<string[]> {
   return data.features;
 }
 
-// =============================================================================
-// TEAM / ORGANIZATION
-// =============================================================================
-
+// ======================================================================// TEAM / ORGANIZATION
+// ======================================================================
 export interface OrgMember {
   id: string;
   visitor_id: string | null;
@@ -734,8 +724,7 @@ export async function getMyRole(): Promise<{
 }
 
 // REFERRAL SYSTEM
-// =============================================================================
-
+// ======================================================================
 export interface ReferralCodeResponse {
   code: string;
 }
@@ -771,10 +760,8 @@ export async function getReferralStats(): Promise<ReferralStats> {
   return request("/referral/stats");
 }
 
-// =============================================================================
-// ANALYTICS — CUSTOMER P&L & MARGIN ALERTS
-// =============================================================================
-
+// ======================================================================// ANALYTICS — CUSTOMER P&L & MARGIN ALERTS
+// ======================================================================
 export interface CustomerPnl {
   customer_id: string;
   customer_name: string;
@@ -854,10 +841,8 @@ export async function getRevenueConfidence(): Promise<RevenueConfidence> {
   return request("/analytics/revenue-confidence");
 }
 
-// =============================================================================
-// MRR MOVEMENTS
-// =============================================================================
-
+// ======================================================================// MRR MOVEMENTS
+// ======================================================================
 export interface MrrMovement {
   customer_id: string;
   customer_name: string;
@@ -882,10 +867,8 @@ export async function getMrrMovements(): Promise<{
   return request("/analytics/mrr-movements");
 }
 
-// =============================================================================
-// COHORTS
-// =============================================================================
-
+// ======================================================================// COHORTS
+// ======================================================================
 export type CohortLabel =
   | "unprofitable"
   | "at_risk"
@@ -982,10 +965,8 @@ export async function getCohorts(): Promise<{
   return request("/cohorts");
 }
 
-// =============================================================================
-// STRIPE INVOICES
-// =============================================================================
-
+// ======================================================================// STRIPE INVOICES
+// ======================================================================
 export async function syncStripeInvoices(): Promise<{
   success: boolean;
   invoices: number;
@@ -994,10 +975,8 @@ export async function syncStripeInvoices(): Promise<{
   return request("/stripe/sync-invoices", { method: "POST" });
 }
 
-// =============================================================================
-// AI PRICING SUGGESTIONS
-// =============================================================================
-
+// ======================================================================// AI PRICING SUGGESTIONS
+// ======================================================================
 export interface PricingSuggestion {
   feature_key: string;
   suggested_price: number;
@@ -1013,10 +992,8 @@ export async function suggestPricing(): Promise<{
   return request("/analytics/suggest-pricing", { method: "POST" });
 }
 
-// =============================================================================
-// PROVIDER CSV IMPORT
-// =============================================================================
-
+// ======================================================================// PROVIDER CSV IMPORT
+// ======================================================================
 export async function uploadProviderCsv(rawCsv: string): Promise<{
   success: boolean;
   provider: string;
@@ -1060,10 +1037,8 @@ export async function clearInsights(): Promise<{ success: boolean }> {
   return request("/insights", { method: "DELETE" });
 }
 
-// =============================================================================
-// USAGE LIMITS
-// =============================================================================
-
+// ======================================================================// USAGE LIMITS
+// ======================================================================
 export interface UsageLimits {
   configured: boolean;
   ai_insights?: {
@@ -1081,10 +1056,8 @@ export async function getUsageLimits(): Promise<UsageLimits> {
   }
 }
 
-// =============================================================================
-// BILLING
-// =============================================================================
-
+// ======================================================================// BILLING
+// ======================================================================
 export interface BillingStatus {
   plan: "free" | "growth";
   hasStripeCustomer: boolean;
@@ -1102,10 +1075,8 @@ export async function createPortalSession(): Promise<{ url: string }> {
   return request("/billing/portal", { method: "POST" });
 }
 
-// =============================================================================
-// BONUS CREDITS
-// =============================================================================
-
+// ======================================================================// BONUS CREDITS
+// ======================================================================
 export interface CreditsInfo {
   bonus_credits: number;
   rewards: { feedback: number; invite_accepted: number };
@@ -1339,4 +1310,37 @@ export async function getEventsByCostType(
   days = 30,
 ): Promise<{ breakdown: CostTypeBreakdown[] }> {
   return request(`/events/by-cost-type?days=${days}`);
+// ======================================================================// CLOUD COST IMPORTS (AWS / GCP)
+// ======================================================================
+export interface CloudIntegrationStatus {
+  provider: string;
+  connected: boolean;
+  last_sync_at: string | null;
+  connected_at: string | null;
+}
+
+export async function getCloudCostStatus(): Promise<CloudIntegrationStatus[]> {
+  return request("/cloud-costs/status");
+}
+
+export async function connectCloudProvider(
+  provider: string,
+  credentials: Record<string, string>,
+): Promise<{ success: boolean }> {
+  return request("/cloud-costs/connect", {
+    method: "POST",
+    body: JSON.stringify({ provider, credentials }),
+  });
+}
+
+export async function syncCloudCosts(
+  provider: string,
+): Promise<{ message: string }> {
+  return request(`/cloud-costs/sync/${provider}`, { method: "POST" });
+}
+
+export async function disconnectCloudProvider(
+  provider: string,
+): Promise<{ success: boolean }> {
+  return request(`/cloud-costs/disconnect/${provider}`, { method: "DELETE" });
 }
