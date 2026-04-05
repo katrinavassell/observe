@@ -48,17 +48,6 @@ const { data: usageLimits } = useQuery({
   queryFn: getUsageLimits,
 });
 
-const eventUsage = computed(
-  () => usageLimits.value?.event_ingest?.usage ?? null,
-);
-const eventUsagePct = computed(() => {
-  if (!eventUsage.value || !eventUsage.value.limit) return 0;
-  return Math.min(
-    100,
-    Math.round((eventUsage.value.used / eventUsage.value.limit) * 100),
-  );
-});
-
 const insightsAllowed = computed(
   () => usageLimits.value?.ai_insights?.allowed !== false,
 );
