@@ -419,6 +419,8 @@ export interface EventsQuery {
   source?: string;
   date_from?: string;
   date_to?: string;
+  sort_by?: string;
+  sort_dir?: "asc" | "desc";
 }
 
 export async function getEvents(
@@ -431,6 +433,8 @@ export async function getEvents(
   if (query.customer_id) params.set("customer_id", query.customer_id);
   if (query.model) params.set("model", query.model);
   if (query.source) params.set("source", query.source);
+  if (query.sort_by) params.set("sort_by", query.sort_by);
+  if (query.sort_dir) params.set("sort_dir", query.sort_dir);
   if (query.date_from) params.set("date_from", query.date_from);
   if (query.date_to) params.set("date_to", query.date_to);
   const qs = params.toString();

@@ -534,15 +534,22 @@ const insightCategories = [
 
           <!-- Generate button -->
           <div class="space-y-3 border-t pt-4">
-            <Button
-              v-if="totalEvents >= 10"
-              class="w-full"
-              :disabled="isGenerating || !insightsAllowed"
-              @click="handleGenerate"
-            >
-              <Sparkles class="h-4 w-4 mr-2" />
-              {{ isGenerating ? "Analyzing..." : "Generate Insights" }}
-            </Button>
+            <div v-if="totalEvents >= 10">
+              <Button
+                class="w-full"
+                :disabled="isGenerating || !insightsAllowed"
+                @click="handleGenerate"
+              >
+                <Sparkles class="h-4 w-4 mr-2" />
+                {{ isGenerating ? "Analyzing..." : "Generate Insights" }}
+              </Button>
+              <p
+                v-if="!isGenerating && insightsAllowed"
+                class="text-xs text-muted-foreground text-center mt-1.5"
+              >
+                Uses 1 AI credit
+              </p>
+            </div>
             <div v-else class="rounded-lg border bg-muted/30 p-3 text-center">
               <p class="text-sm font-medium mb-1">Upload more data to unlock</p>
               <p class="text-xs text-muted-foreground">
