@@ -195,7 +195,7 @@ const maxDuration = computed(() => {
                   <span
                     v-for="ct in (t.cost_types || []).filter(Boolean)"
                     :key="ct"
-                    class="text-[10px] font-medium px-1.5 py-0.5 rounded-full"
+                    class="text-xs font-medium px-2 py-0.5 rounded-full"
                     :class="costTypeBadgeClass(ct)"
                     >{{ ct }}</span
                   >
@@ -310,9 +310,9 @@ const maxDuration = computed(() => {
               />
               <span class="truncate font-medium">{{ span.event_name }}</span>
             </div>
-            <div class="w-20">
+            <div class="w-24">
               <span
-                class="text-[10px] font-medium px-1.5 py-0.5 rounded-full"
+                class="text-xs font-medium px-2 py-0.5 rounded-full"
                 :class="costTypeBadgeClass(span.cost_type ?? 'generic')"
                 >{{ span.cost_type ?? "generic" }}</span
               >
@@ -334,10 +334,9 @@ const maxDuration = computed(() => {
             <span class="w-20 text-right tabular-nums">{{
               formatCost(parseFloat(String(span.cost_amount || 0)))
             }}</span>
-            <span
-              class="w-16 text-right text-xs text-muted-foreground truncate"
-              >{{ span.model || "—" }}</span
-            >
+            <span class="w-32 text-right text-xs text-muted-foreground">{{
+              span.model || "—"
+            }}</span>
           </div>
         </Card>
       </template>

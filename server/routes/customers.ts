@@ -1279,7 +1279,11 @@ export function createCustomersRoutes(
         // Enrich sample events with cost_type and agent_id
         for (const ev of sampleEvents) {
           if (!ev.cost_type) {
-            ev.cost_type = ev.feature_key === "search" ? "embedding" : "llm";
+            if (ev.feature_key === "search") ev.cost_type = "embedding";
+            else if (ev.feature_key === "document_qa")
+              ev.cost_type = "vector_db";
+            else if (ev.feature_key === "summarization") ev.cost_type = "api";
+            else ev.cost_type = "llm";
           }
           if (!ev.agent_id && ev.properties?.trace_id) {
             ev.agent_id = `agent_${ev.feature_key}`;
