@@ -21,9 +21,13 @@ export const OBSERVE_PLANS: Record<string, PlanConfig> = {
     name: "Free",
     features: {
       ai_insights: { limit: 5, reset: "monthly" },
+      event_ingest: { limit: 10000, reset: "monthly" },
+      cost_alerts: { limit: 1 },
       csv_upload: { limit: null },
       stripe_connection: { limit: null },
       ai_provider_connection: { limit: null },
+      team_members: { limit: 1 },
+      data_retention_days: { limit: 30 },
     },
   },
   growth: {
@@ -31,10 +35,13 @@ export const OBSERVE_PLANS: Record<string, PlanConfig> = {
     stripePriceId: process.env.STRIPE_GROWTH_PRICE_ID || "",
     features: {
       ai_insights: { limit: 100, reset: "monthly" },
+      event_ingest: { limit: null },
+      cost_alerts: { limit: null },
       csv_upload: { limit: null },
       stripe_connection: { limit: null },
       ai_provider_connection: { limit: null },
-      cost_alerts: { limit: null },
+      team_members: { limit: null },
+      data_retention_days: { limit: null },
     },
   },
 };
@@ -83,6 +90,19 @@ export async function checkFeatureAccess(
     const countResult = await pool.query(
       `SELECT COUNT(*) as count FROM ai_insights
        WHERE user_id = $1 AND created_at >= date_trunc('month', NOW())`,
+      [visitorId],
+    );
+    used = parseInt(countResult.rows[0]?.count || "0", 10);
+  } else if (featureKey === "event_ingest") {
+    const countResult = await pool.query(
+      `SELECT COUNT(*) as count FROM observe_events
+       WHERE user_id = $1 AND timestamp >= date_trunc('month', NOW()) AND source != 'sample'`,
+      [visitorId],
+    );
+    used = parseInt(countResult.rows[0]?.count || "0", 10);
+  } else if (featureKey === "cost_alerts") {
+    const countResult = await pool.query(
+      `SELECT COUNT(*) as count FROM alerts WHERE user_id = $1`,
       [visitorId],
     );
     used = parseInt(countResult.rows[0]?.count || "0", 10);
