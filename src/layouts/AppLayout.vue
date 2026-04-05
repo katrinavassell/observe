@@ -123,6 +123,12 @@ const navItems = computed(() => [
     description: "Manage your subscription",
     dividerBefore: true,
   },
+  {
+    path: "/team",
+    label: "Team Settings",
+    icon: Users,
+    description: "Manage team & invites",
+  },
 ]);
 
 const sidebarOpen = ref(false);
@@ -269,39 +275,6 @@ function isActive(path: string) {
             <Eye class="h-3 w-3 shrink-0" />
             <span>Viewer access</span>
           </div>
-          <router-link
-            :to="isLoggedIn ? '/team' : '/signup'"
-            :class="[
-              'group relative flex items-center gap-3 rounded-lg px-3 py-2.5 transition-all duration-150',
-              isActive('/team')
-                ? 'bg-sidebar-accent text-sidebar-accent-foreground'
-                : 'text-sidebar-foreground/60 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground',
-            ]"
-          >
-            <div
-              v-if="isActive('/team')"
-              class="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-[3px] rounded-full bg-sidebar-primary"
-            />
-            <Settings
-              :class="[
-                'h-4 w-4 shrink-0 transition-colors duration-150',
-                isActive('/team')
-                  ? 'text-sidebar-accent-foreground'
-                  : 'text-sidebar-foreground/40 group-hover:text-sidebar-foreground/70',
-              ]"
-            />
-            <div class="min-w-0">
-              <div class="text-sm font-medium">Team Settings</div>
-              <div class="text-[10px] text-sidebar-foreground/40">
-                {{
-                  myRole === "admin"
-                    ? "Manage team & invites"
-                    : "View team members"
-                }}
-              </div>
-            </div>
-          </router-link>
-
           <!-- Account section -->
           <div
             v-if="isLoggedIn && account"
