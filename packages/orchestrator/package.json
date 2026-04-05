@@ -1,0 +1,32 @@
+{
+  "name": "@observe/orchestrator",
+  "version": "0.1.0",
+  "description": "Multi-agent orchestrator framework",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "license": "Apache-2.0",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0",
+    "openai": "^4.78.0"
+  },
+  "devDependencies": {
+    "typescript": "~5.9.3"
+  }
+}
