@@ -805,5 +805,46 @@ Return ONLY the JSON array, no markdown or explanation.`;
     },
   );
 
+  // POST /admin/cleanup — delete events older than 30 days for free-plan users
+  router.post(
+    "/admin/cleanup",
+    ensureVisitor,
+    async (req: AuthRequest, res: Response) => {
+      try {
+        if (
+          !req.accountEmail ||
+          req.accountEmail.toLowerCase() !==
+            (process.env.ADMIN_EMAIL || "").toLowerCase()
+        ) {
+          return res.status(403).json({ error: "Admin access required" });
+        }
+
+        const freeUsers = await pool.query(
+          `SELECT visitor_id FROM accounts WHERE stripe_plan = 'free' OR stripe_plan IS NULL`,
+        );
+
+        let cleaned = 0;
+        let deletedEvents = 0;
+
+        for (const row of freeUsers.rows) {
+          const result = await pool.query(
+            `DELETE FROM observe_events WHERE user_id = $1 AND timestamp < NOW() - INTERVAL '30 days' AND source != 'sample'`,
+            [row.visitor_id],
+          );
+          const count = result.rowCount ?? 0;
+          if (count > 0) {
+            cleaned++;
+            deletedEvents += count;
+          }
+        }
+
+        res.json({ cleaned, deleted_events: deletedEvents });
+      } catch (err) {
+        console.error("POST /admin/cleanup error:", err);
+        res.status(500).json({ error: "Failed to run data cleanup" });
+      }
+    },
+  );
+
   return router;
 }

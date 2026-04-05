@@ -2,7 +2,7 @@ import { Router, Request, Response } from "express";
 import type { Pool } from "pg";
 import crypto from "crypto";
 import { type AuthRequest } from "./auth.js";
-import { grantBonusCredits } from "../billing.js";
+import { grantBonusCredits, checkFeatureAccess } from "../billing.js";
 
 export function createTeamRoutes(pool: Pool, ensureVisitor: any) {
   const router = Router();
@@ -147,6 +147,19 @@ export function createTeamRoutes(pool: Pool, ensureVisitor: any) {
           return res
             .status(403)
             .json({ error: "Only admins can invite members" });
+        }
+
+        // Check team member limit before allowing invite
+        const access = await checkFeatureAccess(
+          pool,
+          visitorId,
+          "team_members",
+        );
+        if (!access.allowed) {
+          return res.status(403).json({
+            error:
+              "Free plan allows 1 team member. Upgrade to Growth for unlimited.",
+          });
         }
 
         const validRole = role === "admin" ? "admin" : "viewer";

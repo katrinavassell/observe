@@ -106,6 +106,19 @@ export async function checkFeatureAccess(
       [visitorId],
     );
     used = parseInt(countResult.rows[0]?.count || "0", 10);
+  } else if (featureKey === "team_members") {
+    const orgResult = await pool.query(
+      `SELECT org_id FROM visitor_org_map WHERE visitor_id = $1`,
+      [visitorId],
+    );
+    if (orgResult.rows.length > 0) {
+      const orgId = orgResult.rows[0].org_id;
+      const countResult = await pool.query(
+        `SELECT COUNT(*) as count FROM organization_members WHERE org_id = $1 AND status IN ('active', 'pending')`,
+        [orgId],
+      );
+      used = parseInt(countResult.rows[0]?.count || "0", 10);
+    }
   }
 
   // Add bonus credits to the effective limit

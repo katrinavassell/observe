@@ -1347,3 +1347,12 @@ export async function disconnectCloudProvider(
 ): Promise<{ success: boolean }> {
   return request(`/cloud-costs/disconnect/${provider}`, { method: "DELETE" });
 }
+
+// ======================================================================// ADMIN
+// ======================================================================
+export async function runDataCleanup(): Promise<{
+  cleaned: number;
+  deleted_events: number;
+}> {
+  return request("/admin/cleanup", { method: "POST" });
+}
