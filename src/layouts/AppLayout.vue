@@ -13,6 +13,8 @@ import {
   Settings,
   Eye,
   LogIn,
+  Star,
+  Github,
   LogOut,
   Database,
   CreditCard,
@@ -203,8 +205,18 @@ function isActive(path: string) {
           </div>
         </div>
 
-        <!-- Sign in CTA for anonymous users -->
-        <div v-if="!isLoggedIn" class="px-3 pt-4 pb-1">
+        <!-- Open source CTA + Sign in for anonymous users -->
+        <div v-if="!isLoggedIn" class="px-3 pt-4 pb-1 space-y-2">
+          <a
+            href="https://github.com/katrinalaszlo/observe"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="flex items-center justify-center gap-2 rounded-lg border border-sidebar-border px-3 py-2 text-sm font-medium text-sidebar-foreground transition-all duration-150 hover:bg-sidebar-accent/50"
+            @click="window.posthog?.capture('github_star_clicked')"
+          >
+            <Star class="h-4 w-4 shrink-0 text-amber-500" />
+            Star on GitHub
+          </a>
           <router-link
             to="/signup"
             class="flex items-center justify-center gap-2 rounded-lg bg-sidebar-primary text-sidebar-primary-foreground px-3 py-2 text-sm font-medium transition-all duration-150 hover:opacity-90"
@@ -214,7 +226,7 @@ function isActive(path: string) {
           </router-link>
           <router-link
             to="/login"
-            class="flex items-center justify-center gap-2 rounded-md px-3 py-1.5 mt-1.5 text-xs text-sidebar-foreground/40 hover:text-sidebar-foreground transition-all duration-150"
+            class="flex items-center justify-center gap-2 rounded-md px-3 py-1.5 text-xs text-sidebar-foreground/40 hover:text-sidebar-foreground transition-all duration-150"
           >
             Already have an account? Sign in
           </router-link>
