@@ -13,6 +13,9 @@ function parseProxyHeaders(req: Request): {
   featureKey: string;
   properties: Record<string, string>;
   agentId: string;
+  traceId: string;
+  spanId: string;
+  parentSpanId: string;
 } {
   // Auth: x-tanso-key > x-observe-key > Helicone-Auth
   let observeKey =
@@ -47,7 +50,20 @@ function parseProxyHeaders(req: Request): {
 
   const agentId = (req.headers["x-tanso-agent"] as string) || "";
 
-  return { observeKey, customerId, featureKey, properties, agentId };
+  const traceId = (req.headers["x-tanso-trace-id"] as string) || "";
+  const spanId = (req.headers["x-tanso-span-id"] as string) || "";
+  const parentSpanId = (req.headers["x-tanso-parent-span-id"] as string) || "";
+
+  return {
+    observeKey,
+    customerId,
+    featureKey,
+    properties,
+    agentId,
+    traceId,
+    spanId,
+    parentSpanId,
+  };
 }
 
 function parseCacheHeaders(req: Request): {
@@ -173,6 +189,11 @@ export function createProxyRoutes(
     requestBody?: Record<string, unknown> | null,
     responseBody?: Record<string, unknown> | null,
     agentId: string = "",
+    traceId: string = "",
+    spanId: string = "",
+    parentSpanId: string = "",
+    durationMs: number | null = null,
+    costType: string = "llm",
   ): Promise<void> {
     const propsJson = JSON.stringify(properties);
     const reqJson = requestBody ? JSON.stringify(requestBody) : null;
@@ -211,8 +232,9 @@ export function createProxyRoutes(
         user_id, customer_id, feature_key, event_name, timestamp,
         cost_amount, cost_unit, revenue_amount, usage_units,
         model, model_provider, source, granularity, is_inferred, properties,
-        request_body, response_body, revenue_source, agent_id
-      ) VALUES ($1, $2, $3, 'cost', NOW(), $4, 'usd', $5, $6, $7, $8, 'proxy', 'event', false, $9, $10, $11, $12, $13)`,
+        request_body, response_body, revenue_source, agent_id,
+        trace_id, span_id, parent_span_id, duration_ms, cost_type
+      ) VALUES ($1, $2, $3, 'cost', NOW(), $4, 'usd', $5, $6, $7, $8, 'proxy', 'event', false, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)`,
       [
         userId,
         customerId,
@@ -227,6 +249,11 @@ export function createProxyRoutes(
         resJson,
         revenueSource,
         agentId || null,
+        traceId || null,
+        spanId || null,
+        parentSpanId || null,
+        durationMs,
+        costType,
       ],
     );
     checkAlerts(pool, userId).catch((err) =>
@@ -244,8 +271,9 @@ export function createProxyRoutes(
           user_id, customer_id, feature_key, event_name, timestamp,
           cost_amount, cost_unit, revenue_amount, usage_units,
           model, model_provider, source, granularity, is_inferred, properties,
-          request_body, response_body, revenue_source, agent_id
-        ) VALUES ($1, $2, $3, 'cost', NOW(), $4, 'usd', $5, $6, $7, $8, 'proxy', 'event', false, $9, $10, $11, $12, $13)`,
+          request_body, response_body, revenue_source, agent_id,
+          trace_id, span_id, parent_span_id, duration_ms, cost_type
+        ) VALUES ($1, $2, $3, 'cost', NOW(), $4, 'usd', $5, $6, $7, $8, 'proxy', 'event', false, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)`,
             [
               adminId,
               customerId,
@@ -260,6 +288,11 @@ export function createProxyRoutes(
               resJson,
               revenueSource,
               agentId || null,
+              traceId || null,
+              spanId || null,
+              parentSpanId || null,
+              durationMs,
+              costType,
             ],
           )
           .catch((err) =>
@@ -313,6 +346,9 @@ export function createProxyRoutes(
         featureKey: feat,
         properties,
         agentId,
+        traceId,
+        spanId,
+        parentSpanId,
       } = parseProxyHeaders(req);
       if (!observeKey) {
         return res.status(401).json({
@@ -364,6 +400,11 @@ export function createProxyRoutes(
             req.body,
             cached as Record<string, unknown>,
             agentId,
+            traceId,
+            spanId,
+            parentSpanId,
+            null,
+            "llm",
           ).catch((err) =>
             console.error("logProxyEvent error (openai cache hit):", err),
           );
@@ -372,6 +413,7 @@ export function createProxyRoutes(
       }
 
       // Forward to OpenAI
+      const proxyStart = Date.now();
       const openaiResponse = await fetch(
         "https://api.openai.com/v1/chat/completions",
         {
@@ -385,6 +427,7 @@ export function createProxyRoutes(
       );
 
       const data = (await openaiResponse.json()) as Record<string, unknown>;
+      const durationMs = Date.now() - proxyStart;
       if (isCacheable) res.set("X-Observe-Cache", "MISS");
       res.status(openaiResponse.status).json(data);
 
@@ -411,6 +454,11 @@ export function createProxyRoutes(
           req.body,
           data,
           agentId,
+          traceId,
+          spanId,
+          parentSpanId,
+          durationMs,
+          "llm",
         ).catch((err) => console.error("Proxy event logging failed:", err));
         if (isCacheable) {
           const cacheKey = generateCacheKey(userId, model, {
@@ -456,6 +504,9 @@ export function createProxyRoutes(
         featureKey: feat,
         properties,
         agentId,
+        traceId,
+        spanId,
+        parentSpanId,
       } = parseProxyHeaders(req);
       if (!observeKey) {
         return res.status(401).json({
@@ -502,6 +553,11 @@ export function createProxyRoutes(
             req.body,
             cached as Record<string, unknown>,
             agentId,
+            traceId,
+            spanId,
+            parentSpanId,
+            null,
+            "embedding",
           ).catch((err) =>
             console.error("logProxyEvent error (openai cache hit):", err),
           );
@@ -509,6 +565,7 @@ export function createProxyRoutes(
         }
       }
 
+      const proxyStart = Date.now();
       const openaiResponse = await fetch(
         "https://api.openai.com/v1/embeddings",
         {
@@ -522,6 +579,7 @@ export function createProxyRoutes(
       );
 
       const data = (await openaiResponse.json()) as Record<string, unknown>;
+      const durationMs = Date.now() - proxyStart;
       if (isCacheable) res.set("X-Observe-Cache", "MISS");
       res.status(openaiResponse.status).json(data);
 
@@ -547,6 +605,11 @@ export function createProxyRoutes(
           req.body,
           data,
           agentId,
+          traceId,
+          spanId,
+          parentSpanId,
+          durationMs,
+          "embedding",
         ).catch((err) => console.error("Proxy event logging failed:", err));
         if (isCacheable) {
           const cacheKey = generateCacheKey(userId, model, {
@@ -591,6 +654,9 @@ export function createProxyRoutes(
         featureKey: feat,
         properties,
         agentId,
+        traceId,
+        spanId,
+        parentSpanId,
       } = parseProxyHeaders(req);
       if (!observeKey) {
         return res.status(401).json({
@@ -644,6 +710,11 @@ export function createProxyRoutes(
             req.body,
             cached as Record<string, unknown>,
             agentId,
+            traceId,
+            spanId,
+            parentSpanId,
+            null,
+            "llm",
           ).catch((err) =>
             console.error("logProxyEvent error (anthropic cache hit):", err),
           );
@@ -652,6 +723,7 @@ export function createProxyRoutes(
       }
 
       // Forward to Anthropic
+      const proxyStart = Date.now();
       const anthropicResponse = await fetch(
         "https://api.anthropic.com/v1/messages",
         {
@@ -667,6 +739,7 @@ export function createProxyRoutes(
       );
 
       const data = (await anthropicResponse.json()) as Record<string, unknown>;
+      const durationMs = Date.now() - proxyStart;
       if (isCacheable) res.set("X-Observe-Cache", "MISS");
       res.status(anthropicResponse.status).json(data);
 
@@ -698,6 +771,11 @@ export function createProxyRoutes(
           req.body,
           data,
           agentId,
+          traceId,
+          spanId,
+          parentSpanId,
+          durationMs,
+          "llm",
         ).catch((err) =>
           console.error("Anthropic proxy event logging failed:", err),
         );

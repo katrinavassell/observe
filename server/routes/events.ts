@@ -542,6 +542,11 @@ export function createEventsRoutes(
           outputTokens?: number;
           properties?: Record<string, unknown>;
           idempotencyKey?: string;
+          traceId?: string;
+          spanId?: string;
+          parentSpanId?: string;
+          durationMs?: number;
+          costType?: string;
         }> = [];
 
         for (let i = 0; i < events.length; i++) {
@@ -638,7 +643,7 @@ export function createEventsRoutes(
           }
 
           placeholders.push(
-            `($${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, 'sdk', 'event', false, $${paramIdx++}, $${paramIdx++})`,
+            `($${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, 'sdk', 'event', false, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++})`,
           );
           values.push(
             userId,
@@ -654,6 +659,11 @@ export function createEventsRoutes(
             provider,
             evt.idempotencyKey ?? null,
             revenueSource,
+            evt.traceId ?? null,
+            evt.spanId ?? null,
+            evt.parentSpanId ?? null,
+            evt.durationMs ?? null,
+            evt.costType ?? (evt.model ? "llm" : "generic"),
           );
         }
 
@@ -661,7 +671,8 @@ export function createEventsRoutes(
         INSERT INTO observe_events (
           user_id, customer_id, feature_key, event_name, timestamp,
           cost_amount, cost_unit, revenue_amount, usage_units,
-          model, model_provider, source, granularity, is_inferred, idempotency_key, revenue_source
+          model, model_provider, source, granularity, is_inferred, idempotency_key, revenue_source,
+          trace_id, span_id, parent_span_id, duration_ms, cost_type
         ) VALUES ${placeholders.join(", ")}
         ON CONFLICT (user_id, idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING
       `;
@@ -694,6 +705,117 @@ export function createEventsRoutes(
       }
     },
   );
+
+  // GET /events/trace/:traceId — all events for a trace
+  router.get("/events/trace/:traceId", async (req: Request, res: Response) => {
+    try {
+      const authReq = req as AuthRequest;
+      const userId = authReq.session?.visitorId || authReq.visitorId;
+      if (!userId) {
+        return res.status(401).json({ error: "Authentication required" });
+      }
+      const { traceId } = req.params;
+      if (!traceId) {
+        return res.status(400).json({ error: "traceId is required" });
+      }
+      const result = await pool.query(
+        `SELECT id, customer_id, feature_key, event_name, timestamp,
+           cost_amount, cost_unit, revenue_amount, usage_units,
+           model, model_provider, source, properties, agent_id,
+           trace_id, span_id, parent_span_id, duration_ms, cost_type
+           FROM observe_events
+           WHERE user_id = $1 AND trace_id = $2
+           ORDER BY timestamp ASC`,
+        [userId, traceId],
+      );
+      res.json({ trace_id: traceId, spans: result.rows });
+    } catch (error) {
+      console.error("GET /events/trace/:traceId error:", error);
+      res.status(500).json({ error: "Failed to fetch trace" });
+    }
+  });
+
+  // GET /events/traces — paginated list of traces
+  router.get("/events/traces", async (req: Request, res: Response) => {
+    try {
+      const authReq = req as AuthRequest;
+      const userId = authReq.session?.visitorId || authReq.visitorId;
+      if (!userId) {
+        return res.status(401).json({ error: "Authentication required" });
+      }
+      const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
+      const offset = parseInt(req.query.offset as string) || 0;
+      const result = await pool.query(
+        `SELECT trace_id,
+           MIN(timestamp) as start_time,
+           COUNT(*) as span_count,
+           COALESCE(SUM(cost_amount), 0) as total_cost,
+           COALESCE(SUM(revenue_amount), 0) as total_revenue,
+           MAX(duration_ms) as total_duration_ms,
+           (array_agg(event_name ORDER BY timestamp ASC))[1] as root_event,
+           (array_agg(DISTINCT cost_type))[1:5] as cost_types
+           FROM observe_events
+           WHERE user_id = $1 AND trace_id IS NOT NULL
+           GROUP BY trace_id
+           ORDER BY start_time DESC
+           LIMIT $2 OFFSET $3`,
+        [userId, limit, offset],
+      );
+      res.json({
+        traces: result.rows.map((r) => ({
+          trace_id: r.trace_id,
+          start_time: r.start_time,
+          span_count: parseInt(r.span_count),
+          total_cost: parseFloat(r.total_cost),
+          total_revenue: parseFloat(r.total_revenue),
+          total_duration_ms: r.total_duration_ms
+            ? parseInt(r.total_duration_ms)
+            : null,
+          root_event: r.root_event,
+          cost_types: r.cost_types,
+        })),
+      });
+    } catch (error) {
+      console.error("GET /events/traces error:", error);
+      res.status(500).json({ error: "Failed to fetch traces" });
+    }
+  });
+
+  // GET /events/by-cost-type — cost breakdown by type
+  router.get("/events/by-cost-type", async (req: Request, res: Response) => {
+    try {
+      const authReq = req as AuthRequest;
+      const userId = authReq.session?.visitorId || authReq.visitorId;
+      if (!userId) {
+        return res.status(401).json({ error: "Authentication required" });
+      }
+      const days = parseInt(req.query.days as string) || 30;
+      const result = await pool.query(
+        `SELECT COALESCE(cost_type, 'llm') as cost_type,
+           COUNT(*) as event_count,
+           COALESCE(SUM(cost_amount), 0) as total_cost,
+           COALESCE(SUM(revenue_amount), 0) as total_revenue,
+           COALESCE(SUM(usage_units), 0) as total_usage
+           FROM observe_events
+           WHERE user_id = $1 AND timestamp >= NOW() - make_interval(days => $2)
+           GROUP BY COALESCE(cost_type, 'llm')
+           ORDER BY total_cost DESC`,
+        [userId, days],
+      );
+      res.json({
+        breakdown: result.rows.map((r) => ({
+          cost_type: r.cost_type,
+          event_count: parseInt(r.event_count),
+          total_cost: parseFloat(r.total_cost),
+          total_revenue: parseFloat(r.total_revenue),
+          total_usage: parseFloat(r.total_usage),
+        })),
+      });
+    } catch (error) {
+      console.error("GET /events/by-cost-type error:", error);
+      res.status(500).json({ error: "Failed to fetch cost type breakdown" });
+    }
+  });
 
   return router;
 }

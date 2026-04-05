@@ -8,6 +8,7 @@ import {
   Activity,
   Cpu,
   Bell,
+  Layers,
   Users,
   Settings,
   Eye,
@@ -84,6 +85,12 @@ const navItems = computed(() => [
     label: "Events",
     icon: Activity,
     description: "Observed feature usage events",
+  },
+  {
+    path: "/traces",
+    label: "Traces",
+    icon: Layers,
+    description: "Multi-step agent execution traces",
   },
   {
     path: "/models",

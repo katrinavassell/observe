@@ -317,6 +317,11 @@ export interface ObserveEvent {
   is_inferred: boolean;
   properties: Record<string, unknown> | null;
   created_at: string;
+  trace_id?: string | null;
+  span_id?: string | null;
+  parent_span_id?: string | null;
+  duration_ms?: number | null;
+  cost_type?: string | null;
 }
 
 export interface EventsResponse {
@@ -1284,8 +1289,54 @@ export interface EventDetail {
   properties?: Record<string, string>;
   request_body?: Record<string, unknown> | null;
   response_body?: Record<string, unknown> | null;
+  trace_id?: string | null;
+  span_id?: string | null;
+  parent_span_id?: string | null;
+  duration_ms?: number | null;
+  cost_type?: string | null;
 }
 
 export async function getEventDetail(id: number): Promise<EventDetail> {
   return request(`/events/${id}`);
+}
+
+export interface TraceListItem {
+  trace_id: string;
+  start_time: string;
+  span_count: number;
+  total_cost: number;
+  total_revenue: number;
+  total_duration_ms: number | null;
+  root_event: string;
+  cost_types: string[];
+}
+
+export interface TraceDetail {
+  trace_id: string;
+  spans: EventDetail[];
+}
+
+export interface CostTypeBreakdown {
+  cost_type: string;
+  event_count: number;
+  total_cost: number;
+  total_revenue: number;
+  total_usage: number;
+}
+
+export async function getTraces(
+  limit = 50,
+  offset = 0,
+): Promise<{ traces: TraceListItem[] }> {
+  return request(`/events/traces?limit=${limit}&offset=${offset}`);
+}
+
+export async function getTrace(traceId: string): Promise<TraceDetail> {
+  return request(`/events/trace/${traceId}`);
+}
+
+export async function getEventsByCostType(
+  days = 30,
+): Promise<{ breakdown: CostTypeBreakdown[] }> {
+  return request(`/events/by-cost-type?days=${days}`);
 }

@@ -7,3 +7,6 @@ export type {
   IngestResponse,
   ObserveEvent,
 } from "./types.js";
+export { startTrace, startSpan, generateId } from "./tracing.js";
+export type { TraceContext } from "./tracing.js";
+export { wrapTool } from "./wrappers/tool.js";

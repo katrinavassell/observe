@@ -54,6 +54,8 @@ export function createA2ARoutes(pool: Pool, ensureVisitor: any) {
         "margin_analysis",
         "model_breakdown",
         "agent_breakdown",
+        "trace_query",
+        "cost_type_filter",
       ],
       authentication: {
         type: "bearer",
@@ -66,6 +68,7 @@ export function createA2ARoutes(pool: Pool, ensureVisitor: any) {
         models: "/api/events/by-model",
         features: "/api/events/by-feature",
         agents: "/api/events/by-agent",
+        traces: "/api/events/traces",
       },
     });
   });
@@ -115,6 +118,10 @@ export function createA2ARoutes(pool: Pool, ensureVisitor: any) {
         if (customer) {
           filters.push(`AND customer_id = $${paramIdx++}`);
           filterValues.push(customer);
+        }
+        if (params?.cost_type) {
+          filters.push(`AND COALESCE(cost_type, 'llm') = $${paramIdx++}`);
+          filterValues.push(params.cost_type);
         }
 
         const whereClause = `WHERE user_id = $1 ${dateFilter} ${filters.join(" ")}`;
@@ -194,6 +201,34 @@ export function createA2ARoutes(pool: Pool, ensureVisitor: any) {
               margin_pct: r.margin_pct ? parseFloat(r.margin_pct) : null,
             })),
           });
+        } else if (action === "trace_query") {
+          const traceId = params?.trace_id;
+          if (!traceId) {
+            return res
+              .status(400)
+              .json({ error: "params.trace_id is required for trace_query" });
+          }
+          const result = await pool.query(
+            `SELECT id, customer_id, feature_key, event_name, timestamp,
+             cost_amount, revenue_amount, usage_units, model, model_provider,
+             agent_id, trace_id, span_id, parent_span_id, duration_ms, cost_type
+             FROM observe_events
+             WHERE user_id = $1 AND trace_id = $2
+             ORDER BY timestamp ASC`,
+            [userId, traceId],
+          );
+          res.json({
+            action: "trace_query",
+            trace_id: traceId,
+            data: {
+              span_count: result.rows.length,
+              total_cost: result.rows.reduce(
+                (s, r) => s + parseFloat(r.cost_amount || 0),
+                0,
+              ),
+              spans: result.rows,
+            },
+          });
         } else {
           res.status(400).json({
             error: `Unknown action: ${action}`,
@@ -201,6 +236,7 @@ export function createA2ARoutes(pool: Pool, ensureVisitor: any) {
               "cost_query",
               "usage_summary",
               "margin_analysis",
+              "trace_query",
             ],
           });
         }
