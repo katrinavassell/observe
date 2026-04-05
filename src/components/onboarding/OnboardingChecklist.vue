@@ -54,7 +54,12 @@ const allDone = computed(() => completedCount.value === steps.value.length);
         </div>
         <button
           class="text-muted-foreground hover:text-foreground transition-colors"
-          @click="emit('dismiss')"
+          @click="
+            () => {
+              emit('dismiss');
+              window.posthog?.capture('onboarding_dismissed');
+            }
+          "
         >
           <X class="h-4 w-4" />
         </button>
@@ -77,7 +82,14 @@ const allDone = computed(() => completedCount.value === steps.value.length);
             variant="link"
             size="sm"
             class="ml-auto h-auto p-0 text-xs"
-            @click="step.action"
+            @click="
+              () => {
+                step.action();
+                window.posthog?.capture('onboarding_step_clicked', {
+                  step: step.label,
+                });
+              }
+            "
           >
             Go
           </Button>

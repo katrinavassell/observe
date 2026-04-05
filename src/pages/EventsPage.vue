@@ -150,12 +150,20 @@ function toggleSort(colId: string) {
     sortBy.value = field;
     sortDir.value = colId === "timestamp" ? "desc" : "asc";
   }
+  window.posthog?.capture("column_sort_changed", {
+    sort_by: sortBy.value,
+    sort_dir: sortDir.value,
+  });
   resetPage();
 }
 
 function toggleColumn(id: string) {
   const col = columns.value.find((c) => c.id === id);
   if (col) {
+    window.posthog?.capture("column_visibility_changed", {
+      column: id,
+      visible: !col.visible,
+    });
     col.visible = !col.visible;
     saveColumns(columns.value);
   }
@@ -187,6 +195,7 @@ async function toggleEvent(id: number) {
     return;
   }
   expandedIds.add(id);
+  window.posthog?.capture("event_expanded", { event_id: id });
   if (!eventDetails[id]) {
     loadingDetails.add(id);
     try {
@@ -306,6 +315,7 @@ const sourceItems = computed(() => [
 function onSelectUpdate(setter: (v: string | undefined) => void) {
   return (val: string) => {
     setter(val === ALL ? undefined : val);
+    window.posthog?.capture("events_filtered");
     resetPage();
   };
 }

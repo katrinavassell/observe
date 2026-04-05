@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { ref, onMounted, watch } from "vue";
 import { useRouter, useRoute } from "vue-router";
 import {
   LayoutDashboard,
@@ -30,6 +30,22 @@ const password = ref("");
 const name = ref("");
 const isLoading = ref(false);
 const isRegisterMode = ref(route.path === "/signup");
+
+onMounted(() => {
+  window.posthog?.capture(
+    isRegisterMode.value ? "signup_page_viewed" : "login_page_viewed",
+  );
+});
+
+watch(isRegisterMode, (registering) => {
+  window.posthog?.capture(
+    registering ? "signup_page_viewed" : "login_page_viewed",
+  );
+});
+
+function trackForgotPasswordClicked() {
+  window.posthog?.capture("forgot_password_clicked");
+}
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -272,6 +288,7 @@ const highlights = [
               <router-link
                 to="/forgot-password"
                 class="text-xs text-muted-foreground hover:text-foreground underline-offset-4 hover:underline"
+                @click="trackForgotPasswordClicked"
               >
                 Forgot password?
               </router-link>

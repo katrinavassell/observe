@@ -29,6 +29,7 @@ const { data: traceDetail, isLoading: detailLoading } = useQuery({
 
 function selectTrace(traceId: string) {
   selectedTraceId.value = traceId;
+  window.posthog?.capture("trace_expanded", { trace_id: traceId });
 }
 function backToList() {
   selectedTraceId.value = null;

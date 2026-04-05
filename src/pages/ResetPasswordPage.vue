@@ -41,6 +41,7 @@ async function handleSubmit() {
       throw new Error(data.error || "Reset failed");
     }
     success.value = true;
+    window.posthog?.capture("password_reset_completed");
     toast.success("Password reset successfully");
   } catch (err: any) {
     toast.error(err.message);

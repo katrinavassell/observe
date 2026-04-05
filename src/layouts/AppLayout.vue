@@ -135,8 +135,9 @@ const sidebarOpen = ref(false);
 
 watch(
   () => route.path,
-  () => {
+  (path) => {
     sidebarOpen.value = false;
+    window.posthog?.capture("$pageview", { path });
   },
 );
 

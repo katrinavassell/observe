@@ -93,6 +93,10 @@ const showColumnSettings = ref(false);
 function toggleColumn(id: string) {
   const col = columns.value.find((c) => c.id === id);
   if (col) {
+    window.posthog?.capture("column_visibility_changed", {
+      column: id,
+      visible: !col.visible,
+    });
     col.visible = !col.visible;
     saveColumns(columns.value);
   }

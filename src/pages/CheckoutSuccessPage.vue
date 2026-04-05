@@ -22,6 +22,7 @@ onMounted(async () => {
       const status = await getBillingStatus();
       if (status.plan === "growth") {
         planConfirmed.value = true;
+        window.posthog?.capture("checkout_completed");
         break;
       }
     } catch (err) {

@@ -135,6 +135,12 @@ const totals = computed(() => cohortsData.value?.totals ?? null);
 // Cohort filter
 const activeCohort = ref<CohortLabel | null>(null);
 
+function toggleCohortFilter(label: CohortLabel) {
+  const newValue = activeCohort.value === label ? null : label;
+  activeCohort.value = newValue;
+  window.posthog?.capture("cohort_filter_changed", { filter: newValue });
+}
+
 // Expanded rows (for model-swap details)
 const expandedRows = ref<Set<string>>(new Set());
 
@@ -329,7 +335,7 @@ const filteredCustomers = computed(() => {
               ? cohortMeta[label].color + ' ring-2 ring-offset-1 ring-current'
               : 'bg-muted text-muted-foreground hover:bg-muted/80',
           ]"
-          @click="activeCohort = activeCohort === label ? null : label"
+          @click="toggleCohortFilter(label)"
         >
           {{ cohortMeta[label].label }}
           <span v-if="summary[label]" class="ml-1 opacity-70"

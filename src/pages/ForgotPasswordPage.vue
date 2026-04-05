@@ -22,6 +22,7 @@ async function handleSubmit() {
       throw new Error(data.error || "Something went wrong");
     }
     submitted.value = true;
+    window.posthog?.capture("forgot_password_requested");
   } catch (err: any) {
     toast.error(err.message);
   } finally {

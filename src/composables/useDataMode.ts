@@ -118,6 +118,7 @@ export function useDataMode() {
     isClearingSample.value = true;
     try {
       await api.clearData();
+      window.posthog?.capture("sample_data_cleared");
       await refetch();
       for (const key of analyticsQueryKeys) {
         queryClient.invalidateQueries({ queryKey: key });
