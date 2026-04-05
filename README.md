@@ -29,13 +29,20 @@ If you're running an AI product and you're losing money on a subset of customers
 | **SDK event ingestion** | Send cost + revenue + usage events from your backend in a single HTTP call |
 | **Analytics dashboard** | Revenue, costs, and margin overview with trend charts |
 | **AI model breakdown** | Cost and volume by model (gpt-4o, claude-sonnet, etc.) |
+| **Distributed traces** | Trace multi-step agent executions with span-level cost attribution |
+| **Cohort analysis** | Customer segments by profitability and behavior |
 | **Cost alerts** | Threshold-based alerts with email notifications |
-| **AI credits** | AI-generated recommendations about margin compression and pricing (5 free/month, 100 on Growth) |
+| **Configurable tables** | Column sorting on all data tables |
+| **Free plan with limits** | Monthly event cap on free tier with usage meter and limit emails at 80%/100% |
+| **AI insights** | AI-generated recommendations about margin compression and pricing (5 free/month, 100 on Growth) |
 | **Bonus credits** | Earn extra AI credits by giving feedback (+5) or inviting teammates (+10) |
 | **OpenAI/Anthropic integration** | Connect API keys to auto-pull usage data |
-| **Stripe billing** | Subscribe to plans, manage billing through Stripe checkout |
+| **Stripe billing** | Subscribe to plans, manage billing through Stripe checkout and webhooks |
 | **CSV upload** | Upload cost, usage, and revenue data without any API integration |
 | **Team collaboration** | Invite team members with admin/viewer roles |
+| **Admin dashboard** | Usage stats, email management for platform admins |
+| **Welcome email** | New signups receive a welcome email via Resend |
+| **PostHog tracking** | Product analytics events (signups, logins, upgrades, page views) |
 | **Sample data** | Guests see a pre-populated dashboard automatically |
 | **Source badges** | See where each data point came from (Proxy, CSV Import, Stripe) |
 | **RevenueCat-style SDK** | `Observe.configure()` + `identify()` + `wrap()` — three calls, zero headers |
@@ -244,6 +251,8 @@ Express API  (port 3001)
   |-- /insights/*            AI-generated insights
   |-- /analytics/*           Customer P&L, margin alerts
   |-- /models/*              Model pricing data
+  |-- /cohorts/*             Cohort analysis
+  |-- /admin/*               Admin dashboard (restricted)
         |
         v
 PostgreSQL (observe_events + 20 supporting tables)

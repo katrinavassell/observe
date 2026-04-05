@@ -149,7 +149,8 @@ src/
 │   ├── ResetPasswordPage.vue    # Reset password with token
 │   ├── OnboardingPage.vue       # First-run onboarding flow
 │   ├── TeamSettingsPage.vue     # Team management, invites
-│   └── JoinTeamPage.vue         # Accept team invite
+│   ├── JoinTeamPage.vue         # Accept team invite
+│   └── AdminPage.vue            # Admin dashboard (tansohq.com emails only)
 ├── components/
 │   ├── ui/                 # Reusable UI (shadcn-vue)
 │   ├── charts/             # Data visualization
@@ -189,16 +190,18 @@ The sidebar shows these items in order:
 |----------|-------|------|
 | Analytics | `/` | AnalyticsPage (home) |
 | Events | `/events` | EventsPage |
+| Traces | `/traces` | TracesPage |
 | Models | `/models` | ModelsPage |
 | Cohorts | `/cohorts` | CohortsPage |
 | Alerts | `/alerts` | AlertsPage |
-| Traces | `/traces` | TracesPage |
 | Data Sources | `/data-sources` | DataSourcesPage |
-| Plans & Billing | `/plans` | PlansPage |
+| Plans | `/plans` | PlansPage |
+| Team Settings | `/team` | TeamSettingsPage |
+| Admin | `/admin` | AdminPage (visible to @tansohq.com emails only) |
 
-Additional routes (not in sidebar): `/login`, `/signup`, `/forgot-password`, `/reset-password`, `/checkout/success`, `/team`, `/join/:token`.
+Additional routes (not in sidebar): `/login`, `/signup`, `/forgot-password`, `/reset-password`, `/checkout/success`, `/join/:token`.
 
-Several legacy routes (`/features`, `/customers`, `/insights`, `/pricing`, `/referrals`, `/onboarding`) redirect to `/` or `/data-sources`.
+Several legacy routes (`/features`, `/features/:key`, `/customers`, `/customers/:id`, `/insights`, `/pricing`, `/referrals`, `/onboarding`, `/dashboard`, `/analytics`, `/admin/pricing`) redirect to `/` or `/data-sources` or `/models`.
 
 ### Key Composables
 
@@ -224,8 +227,9 @@ Single Express app on port 3001, proxied by Vite at `/api/*`. The `/api` prefix 
 | `auth.ts` | Signup, login, logout, password reset, session init |
 | `data.ts` | CSV upload, sample data, Stripe sync, data status |
 | `billing-api.ts` | Billing status, Stripe checkout/portal/webhook, feature pricing, integrations, referrals |
-| `events.ts` | Event CRUD, aggregations (by-feature/customer/model), SDK key management, batch ingestion |
+| `events.ts` | Event CRUD, aggregations (by-feature/customer/model/agent/cost-type), traces, SDK key management, batch ingestion with usage limit enforcement |
 | `alerts.ts` | Alert rule CRUD, threshold evaluation, email dispatch |
+| `integrations.ts` | Integration connections (OpenAI, Anthropic, Stripe API keys), referral conversion |
 | `analytics.ts` | Customer P&L, margin alerts |
 | `proxy.ts` | AI proxy (OpenAI/Anthropic forwarding with cost logging) |
 | `models-api.ts` | Model listing and pricing |
@@ -281,7 +285,7 @@ All queries are scoped by `user_id` (visitor ID). Team members share data throug
 Uses the Stripe SDK directly (`stripe` npm package):
 - Checkout sessions for subscription purchases
 - Customer portal for billing management
-- No Stripe webhook handler -- subscription state managed via Tanso
+- Webhook handler for Stripe events (checkout completion, subscription updates)
 
 ---
 

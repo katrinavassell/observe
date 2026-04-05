@@ -21,6 +21,7 @@ Vue components and composables in Observe.
 | `OnboardingPage.vue` | `/onboarding` (redirects to `/data-sources`) | First-run onboarding flow |
 | `TeamSettingsPage.vue` | `/team` | Team management and member invites |
 | `JoinTeamPage.vue` | `/join/:token` | Accept a team invite link |
+| `AdminPage.vue` | `/admin` | Admin dashboard: user stats, usage, emails (tansohq.com only) |
 
 ---
 
@@ -130,7 +131,8 @@ Reusable primitives built on Radix Vue (shadcn-vue):
 | `Tooltip` | Hover information |
 | `Separator` | Visual divider |
 | `Sheet` | Slide-out panel |
-| `Table` | TableHeader, TableBody, TableRow, TableHead, TableCell |
+| `Table` | Table, TableHeader, TableBody |
+| `DataSourceBadge` | Data source indicator in table rows |
 | `FileDropzone` | Drag-and-drop file upload |
 | `ConfirmDialog` | Confirmation modal |
 

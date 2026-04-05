@@ -20,6 +20,8 @@ Returns paginated list of events for the current session.
 | `date_to` | ISO 8601 | Events before this date |
 | `limit` | number | Page size (default: 50, max: 200) |
 | `offset` | number | Pagination offset |
+| `sort_by` | string | Column to sort by: `timestamp`, `event_name`, `feature_key`, `customer_id`, `model`, `source`, `usage_units`, `cost_amount`, `revenue_amount`, `duration_ms` (default: `timestamp`) |
+| `sort_dir` | string | Sort direction: `ASC` or `DESC` (default: `DESC`) |
 
 ### Response
 
@@ -163,6 +165,181 @@ Note: `margin_pct` is `null` when `total_revenue` is 0.
 
 ---
 
+## Aggregate by Agent
+
+```
+GET /api/events/by-agent
+```
+
+Returns cost, revenue, usage, and margin grouped by `agent_id`. Only includes events where `agent_id` is not null.
+
+### Response
+
+```json
+[
+  {
+    "agent_id": "agent_summarizer",
+    "event_count": 500,
+    "total_cost": 120.00,
+    "total_revenue": 450.00,
+    "total_usage": 80000,
+    "margin_pct": 73,
+    "last_seen": "2026-03-19T14:30:00Z"
+  }
+]
+```
+
+---
+
+## Aggregate by Cost Type
+
+```
+GET /api/events/by-cost-type
+```
+
+Returns cost breakdown grouped by `cost_type` (e.g., `llm`, `embedding`, `cloud`).
+
+### Query Parameters
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `days` | number | Lookback window in days (default: 30) |
+
+### Response
+
+```json
+{
+  "breakdown": [
+    {
+      "cost_type": "llm",
+      "event_count": 12000,
+      "total_cost": 1800.00,
+      "total_revenue": 3500.00,
+      "total_usage": 240000
+    }
+  ]
+}
+```
+
+---
+
+## List Traces
+
+```
+GET /api/events/traces
+```
+
+Returns paginated list of traces (grouped by `trace_id`).
+
+### Query Parameters
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `limit` | number | Page size (default: 50, max: 200) |
+| `offset` | number | Pagination offset |
+
+### Response
+
+```json
+{
+  "traces": [
+    {
+      "trace_id": "trace_abc",
+      "start_time": "2026-03-19T14:30:00Z",
+      "span_count": 5,
+      "total_cost": 0.042,
+      "total_revenue": 0.10,
+      "total_duration_ms": 3400,
+      "root_event": "chat_request",
+      "cost_types": ["llm", "embedding"]
+    }
+  ]
+}
+```
+
+---
+
+## Get Trace Detail
+
+```
+GET /api/events/trace/:traceId
+```
+
+Returns all spans (events) for a specific trace, ordered by timestamp.
+
+### Response
+
+```json
+{
+  "trace_id": "trace_abc",
+  "spans": [
+    {
+      "id": 1,
+      "customer_id": "cus_001",
+      "feature_key": "ai-assistant",
+      "event_name": "chat_request",
+      "timestamp": "2026-03-19T14:30:00Z",
+      "cost_amount": 0.03,
+      "model": "gpt-4o",
+      "trace_id": "trace_abc",
+      "span_id": "span_001",
+      "parent_span_id": null,
+      "duration_ms": 1200
+    }
+  ]
+}
+```
+
+---
+
+## Get Single Event
+
+```
+GET /api/events/:id
+```
+
+Returns a single event by ID.
+
+---
+
+## SDK API Keys
+
+### Create Key
+
+```
+POST /api/sdk-keys
+```
+
+Body: `{ "name": "my-key" }` (optional)
+
+Response: `{ "key": "sk_live_...", "prefix": "sk_live_xxxx", "name": "my-key" }`
+
+### List Keys
+
+```
+GET /api/sdk-keys
+```
+
+Returns all active keys (never returns full key, only prefix).
+
+### Reset Key
+
+```
+POST /api/sdk-keys/:id/reset
+```
+
+Revokes the old key and generates a new one with the same name.
+
+### Revoke Key
+
+```
+DELETE /api/sdk-keys/:id
+```
+
+Soft-deletes the key.
+
+---
+
 ## Ingest Events
 
 ```
@@ -218,3 +395,7 @@ Maximum batch size: 1000 events.
 ```
 
 `rejected` includes both validation failures and deduplicated events (matched by `idempotencyKey`). `errors` contains `{ "index": 0, "error": "..." }` entries for events that failed validation.
+
+### Usage Limits
+
+Free plan accounts have a monthly event limit. When the limit is reached, new events are rejected with a `429` status. Usage limit emails are sent at 80% and 100% thresholds via Resend (if `RESEND_API_KEY` is configured).

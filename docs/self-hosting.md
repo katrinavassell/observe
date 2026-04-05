@@ -255,6 +255,7 @@ Key production settings:
 | `SESSION_SECRET` | Strong random value (64+ hex chars) |
 | `NODE_ENV` | `production` |
 | `ALLOWED_ORIGINS` | Your domain(s), comma-separated |
+| `ADMIN_EMAILS` | Comma-separated emails with admin dashboard access |
 
 HTTPS should be handled by your reverse proxy (Caddy, nginx, or your hosting platform). Do not terminate TLS at the Express server.
 
