@@ -21,7 +21,6 @@ import {
   Sparkles,
   MessageSquare,
 } from "lucide-vue-next";
-import { toast } from "vue-sonner";
 import ErrorBoundary from "@/components/shared/ErrorBoundary.vue";
 import FeedbackModal from "@/components/shared/FeedbackModal.vue";
 import { useTeam } from "@/composables/useTeam";
@@ -212,7 +211,7 @@ function isActive(path: string) {
         <nav class="flex-1 overflow-y-auto px-3 py-3">
           <!-- Main section -->
           <div class="space-y-0.5">
-            <template v-for="(item, idx) in navItems" :key="item.path">
+            <template v-for="item in navItems" :key="item.path">
               <!-- Section dividers -->
               <div
                 v-if="item.dividerBefore"

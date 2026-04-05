@@ -1,21 +1,15 @@
 <script setup lang="ts">
 import { ref, computed } from "vue";
-import { useQuery, useQueryClient } from "@tanstack/vue-query";
+import { useQuery } from "@tanstack/vue-query";
 import { getCohorts, discoverCohorts } from "@/lib/api";
 import type {
-  CohortCustomer,
   CohortLabel,
   CohortSummary,
-  CohortTotals,
   DiscoveredCluster,
-  ModelSwapSuggestion,
 } from "@/lib/api";
 import {
   AlertCircle,
   Database,
-  TrendingUp,
-  TrendingDown,
-  Minus,
   ChevronDown,
   ChevronRight,
   Sparkles,
@@ -24,8 +18,6 @@ import {
 import { Card, Skeleton, Button } from "@/components/ui";
 import { formatCurrency as fmt, formatPct as fmtPct } from "@/lib/format";
 import { toast } from "vue-sonner";
-
-const queryClient = useQueryClient();
 
 const {
   data: cohortsData,

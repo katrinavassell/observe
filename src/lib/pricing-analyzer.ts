@@ -931,7 +931,7 @@ export function calculateMonthlyMetrics(
     let newMRR = 0
     let expansionMRR = 0
     let contractionMRR = 0
-    let churnedMRR = 0
+    const churnedMRR = 0
 
     // New customers this month
     activeCustomers.forEach(customerId => {

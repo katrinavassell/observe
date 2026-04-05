@@ -18,8 +18,6 @@ import {
   ChevronLeft,
   X,
   Plug,
-  FlaskConical,
-  MessageSquare,
   Bot,
   User,
 } from "lucide-vue-next";

@@ -9,7 +9,6 @@ import {
   CardContent,
   CardHeader,
   CardTitle,
-  CardDescription,
   Button,
 } from "@/components/ui";
 import {
@@ -107,7 +106,7 @@ async function handleToggle(rule: AlertRule) {
   try {
     await updateAlertRule(rule.id, { enabled: !rule.enabled });
     queryClient.invalidateQueries({ queryKey: ["alert-rules"] });
-  } catch (err) {
+  } catch {
     toast.error("Failed to update alert");
   }
 }
@@ -117,7 +116,7 @@ async function handleDelete(id: number) {
     await deleteAlertRule(id);
     queryClient.invalidateQueries({ queryKey: ["alert-rules"] });
     toast.success("Alert deleted");
-  } catch (err) {
+  } catch {
     toast.error("Failed to delete alert");
   }
 }

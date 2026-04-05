@@ -5,7 +5,7 @@ import { X, Sparkles, MessageSquare } from "lucide-vue-next";
 import { Button } from "@/components/ui";
 import { submitFeedback } from "@/lib/api";
 
-const props = defineProps<{ open: boolean }>();
+defineProps<{ open: boolean }>();
 const emit = defineEmits<{
   (e: "close"): void;
   (e: "credited", amount: number): void;
