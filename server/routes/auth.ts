@@ -278,6 +278,26 @@ export function createAuthRoutes(
         req.session.accountId = account.id;
         req.session.accountEmail = account.email;
 
+        // Notify Kat of login
+        const resendKey = process.env.RESEND_API_KEY;
+        if (resendKey) {
+          fetch("https://api.resend.com/emails", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${resendKey}`,
+            },
+            body: JSON.stringify({
+              from: "Observe <notifications@updates.tanso.io>",
+              to: "kat@tansohq.com",
+              subject: `Login: ${account.email}`,
+              html: `<p><strong>User logged in to Observe</strong></p><p>Email: ${account.email}</p><p>Name: ${account.name || "(not set)"}</p><p>Time: ${new Date().toISOString()}</p>`,
+            }),
+          }).catch((err: unknown) =>
+            console.error("Failed to send login notification:", err),
+          );
+        }
+
         res.json({
           account: { id: account.id, email: account.email, name: account.name },
         });

@@ -218,7 +218,7 @@ function isActive(path: string) {
           <div class="flex flex-col">
             <span class="text-base font-semibold leading-tight">Observe</span>
             <span class="text-[10px] text-sidebar-foreground/40 leading-tight"
-              >AI cost intelligence</span
+              >By Tanso</span
             >
           </div>
         </div>
@@ -288,8 +288,8 @@ function isActive(path: string) {
                 <span>{{ item.label }}</span>
                 <span
                   v-if="item.path === '/alerts'"
-                  class="ml-auto rounded-full bg-sidebar-accent px-2 py-0.5 text-[10px] font-medium text-muted-foreground"
-                  >Growth</span
+                  class="ml-auto rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-700"
+                  >Free</span
                 >
               </router-link>
             </template>

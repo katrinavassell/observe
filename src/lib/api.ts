@@ -1182,7 +1182,24 @@ export interface AlertRule {
   id: number;
   user_id: string;
   name: string;
-  metric: "daily_cost" | "margin_percent" | "cost_per_event";
+  metric:
+    | "daily_cost"
+    | "margin_percent"
+    | "cost_per_event"
+    | "customer_margin"
+    | "feature_margin_trend"
+    | "customer_cost_vs_revenue"
+    | "model_cost_spike"
+    | "usage_velocity"
+    | "customer_cost_share"
+    | "credit_burn_rate"
+    | "top_customer_unprofitable"
+    | "feature_cost_disparity"
+    | "model_cost_increase"
+    | "margin_compression"
+    | "customer_concentration"
+    | "provider_concentration"
+    | "model_concentration";
   operator: "gt" | "lt" | "gte" | "lte";
   threshold: number;
   email: string;

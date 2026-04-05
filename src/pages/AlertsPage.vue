@@ -1,9 +1,8 @@
 <script setup lang="ts">
 import { ref, computed } from "vue";
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
-import { useRouter } from "vue-router";
 import { toast } from "vue-sonner";
-import { Bell, Plus, Trash2, Loader2, Lock, Zap } from "lucide-vue-next";
+import { Bell, Plus, Trash2, Loader2, ExternalLink } from "lucide-vue-next";
 import { useAuth } from "@/composables/useAuth";
 import {
   Card,
@@ -20,7 +19,6 @@ import {
 } from "@/lib/api";
 import type { AlertRule } from "@/lib/api";
 
-const router = useRouter();
 const queryClient = useQueryClient();
 const { isLoggedIn } = useAuth();
 
@@ -30,10 +28,9 @@ const { data, isLoading, isError } = useQuery({
   enabled: isLoggedIn,
 });
 
-const isGated = computed(() => data.value?.gated === true);
-
 const showForm = ref(false);
 const isSubmitting = ref(false);
+const selectedCategory = ref<string>("all");
 
 // Form state
 const formName = ref("");
@@ -43,11 +40,197 @@ const formThreshold = ref<number>(0);
 const formEmail = ref("");
 const formCooldown = ref(60);
 
-const METRICS = [
-  { value: "daily_cost", label: "Daily cost ($)" },
-  { value: "margin_percent", label: "Margin (%)" },
-  { value: "cost_per_event", label: "Avg cost per event ($)" },
+const METRIC_CATEGORIES = [
+  { key: "all", label: "All" },
+  { key: "cost", label: "Cost" },
+  { key: "margin", label: "Margin" },
+  { key: "abuse", label: "Abuse" },
+  { key: "pricing", label: "Pricing" },
+  { key: "concentration", label: "Concentration" },
 ];
+
+const METRICS = [
+  // Cost
+  {
+    value: "daily_cost",
+    label: "Daily cost ($)",
+    category: "cost",
+    unit: "$",
+    defaultOp: "gt",
+    defaultThreshold: 100,
+    description: "Total cost in the last 24 hours",
+  },
+  {
+    value: "cost_per_event",
+    label: "Avg cost per event ($)",
+    category: "cost",
+    unit: "$",
+    defaultOp: "gt",
+    defaultThreshold: 0.5,
+    description: "Average cost per event in the last 24 hours",
+  },
+  // Margin
+  {
+    value: "margin_percent",
+    label: "Overall margin (%)",
+    category: "margin",
+    unit: "%",
+    defaultOp: "lt",
+    defaultThreshold: 40,
+    description: "Overall margin across all events (30 days)",
+  },
+  {
+    value: "customer_margin",
+    label: "Lowest customer margin (%)",
+    category: "margin",
+    unit: "%",
+    defaultOp: "lt",
+    defaultThreshold: 10,
+    description: "Worst-performing customer's margin drops below threshold",
+  },
+  {
+    value: "feature_margin_trend",
+    label: "Feature margin trend (WoW pp)",
+    category: "margin",
+    unit: "pp",
+    defaultOp: "lt",
+    defaultThreshold: -5,
+    description: "Week-over-week change in average feature margin",
+  },
+  {
+    value: "customer_cost_vs_revenue",
+    label: "Customer cost/revenue (%)",
+    category: "margin",
+    unit: "%",
+    defaultOp: "gt",
+    defaultThreshold: 100,
+    description: "Worst customer's cost as percentage of their revenue",
+  },
+  {
+    value: "model_cost_spike",
+    label: "Model cost per request ($)",
+    category: "margin",
+    unit: "$",
+    defaultOp: "gt",
+    defaultThreshold: 1,
+    description: "Highest cost-per-request across all models",
+  },
+  {
+    value: "margin_compression",
+    label: "Margin compression (30d pp)",
+    category: "margin",
+    unit: "pp",
+    defaultOp: "lt",
+    defaultThreshold: -3,
+    description: "Margin change over the last 30 days vs prior 30 days",
+  },
+  // Abuse / runaway
+  {
+    value: "usage_velocity",
+    label: "Usage velocity (x avg)",
+    category: "abuse",
+    unit: "x",
+    defaultOp: "gt",
+    defaultThreshold: 3,
+    description: "Customer's daily usage vs their historical average",
+  },
+  {
+    value: "customer_cost_share",
+    label: "Customer cost share (%)",
+    category: "abuse",
+    unit: "%",
+    defaultOp: "gt",
+    defaultThreshold: 50,
+    description: "Single customer's share of total infrastructure cost",
+  },
+  {
+    value: "credit_burn_rate",
+    label: "Credit burn rate (hrs left)",
+    category: "abuse",
+    unit: "hrs",
+    defaultOp: "lt",
+    defaultThreshold: 24,
+    description: "Hours until a customer exhausts their credit balance",
+  },
+  // Pricing
+  {
+    value: "top_customer_unprofitable",
+    label: "Unprofitable top-10 customers",
+    category: "pricing",
+    unit: "count",
+    defaultOp: "gt",
+    defaultThreshold: 0,
+    description: "Number of top-10 customers (by cost) who are unprofitable",
+  },
+  {
+    value: "feature_cost_disparity",
+    label: "Feature cost disparity (ratio)",
+    category: "pricing",
+    unit: "x",
+    defaultOp: "gt",
+    defaultThreshold: 5,
+    description: "Ratio between most and least expensive features",
+  },
+  {
+    value: "model_cost_increase",
+    label: "Model cost increase (WoW %)",
+    category: "pricing",
+    unit: "%",
+    defaultOp: "gt",
+    defaultThreshold: 20,
+    description: "Week-over-week increase in average model cost",
+  },
+  // Concentration
+  {
+    value: "customer_concentration",
+    label: "Customer concentration (%)",
+    category: "concentration",
+    unit: "%",
+    defaultOp: "gt",
+    defaultThreshold: 40,
+    description: "Top customer's share of total API cost",
+  },
+  {
+    value: "provider_concentration",
+    label: "Provider concentration (%)",
+    category: "concentration",
+    unit: "%",
+    defaultOp: "gt",
+    defaultThreshold: 80,
+    description: "Top provider's share of total COGS",
+  },
+  {
+    value: "model_concentration",
+    label: "Model concentration (%)",
+    category: "concentration",
+    unit: "%",
+    defaultOp: "gt",
+    defaultThreshold: 70,
+    description: "Top model's share of total spend",
+  },
+];
+
+const TANSO_UPSELLS: Record<string, string> = {
+  customer_margin: "Want to cap unprofitable customers automatically?",
+  feature_margin_trend: "Want to route to cheaper models or restrict usage?",
+  customer_cost_vs_revenue: "Want to enforce spend limits per customer?",
+  model_cost_spike: "Want to auto-route to cheaper models?",
+  usage_velocity: "Want to set velocity limits?",
+  customer_cost_share: "Want to set usage caps per customer?",
+  credit_burn_rate: "Want to enforce a hard stop on credit exhaustion?",
+  top_customer_unprofitable: "Want to reprice these customers automatically?",
+  feature_cost_disparity: "Want to adjust pricing per feature?",
+  model_cost_increase: "Want to auto-switch to cost-effective models?",
+  margin_compression: "Want to auto-adjust pricing as costs change?",
+  customer_concentration: "Want to set concentration risk limits?",
+  provider_concentration: "Want to diversify provider routing?",
+  model_concentration: "Want to balance model usage automatically?",
+};
+
+const filteredMetrics = computed(() => {
+  if (selectedCategory.value === "all") return METRICS;
+  return METRICS.filter((m) => m.category === selectedCategory.value);
+});
 
 const OPERATORS = [
   { value: "gt", label: ">" },
@@ -64,9 +247,44 @@ function metricLabel(m: string) {
   return METRICS.find((x) => x.value === m)?.label || m;
 }
 
+function metricCategory(m: string) {
+  return METRICS.find((x) => x.value === m)?.category || "cost";
+}
+
+function categoryColor(cat: string) {
+  switch (cat) {
+    case "margin":
+      return "bg-amber-100 text-amber-800";
+    case "abuse":
+      return "bg-red-100 text-red-800";
+    case "pricing":
+      return "bg-blue-100 text-blue-800";
+    case "concentration":
+      return "bg-purple-100 text-purple-800";
+    default:
+      return "bg-gray-100 text-gray-800";
+  }
+}
+
 function formatThreshold(metric: string, threshold: number) {
-  if (metric === "margin_percent") return `${threshold}%`;
-  return `$${threshold}`;
+  const m = METRICS.find((x) => x.value === metric);
+  if (!m) return String(threshold);
+  if (m.unit === "$") return `$${threshold}`;
+  if (m.unit === "%") return `${threshold}%`;
+  if (m.unit === "pp") return `${threshold}pp`;
+  if (m.unit === "x") return `${threshold}x`;
+  if (m.unit === "hrs") return `${threshold}h`;
+  return String(threshold);
+}
+
+function selectMetric(metricValue: string) {
+  const m = METRICS.find((x) => x.value === metricValue);
+  if (!m) return;
+  formMetric.value = metricValue as AlertRule["metric"];
+  formOperator.value = (m.defaultOp || "gt") as AlertRule["operator"];
+  formThreshold.value = m.defaultThreshold;
+  formName.value = m.label;
+  showForm.value = true;
 }
 
 function resetForm() {
@@ -131,36 +349,14 @@ async function handleDelete(id: number) {
       <div>
         <h1 class="text-2xl font-semibold tracking-tight">Cost Alerts</h1>
         <p class="text-muted-foreground text-sm">
-          Get emailed when costs spike or margins drop
+          Get emailed when costs spike, margins drop, or usage patterns change
         </p>
       </div>
-      <Button v-if="!showForm && !isGated" @click="showForm = true">
+      <Button v-if="!showForm" @click="showForm = true">
         <Plus class="h-4 w-4 mr-2" />
         New Alert
       </Button>
     </div>
-
-    <!-- Upgrade prompt -->
-    <Card v-if="isGated" class="border-primary/20 bg-primary/[0.02]">
-      <CardContent class="flex items-center justify-between py-5">
-        <div class="flex items-center gap-3">
-          <div class="rounded-lg bg-primary/10 p-2">
-            <Lock class="h-5 w-5 text-primary" />
-          </div>
-          <div>
-            <p class="text-sm font-medium">Cost alerts are a Growth feature</p>
-            <p class="text-xs text-muted-foreground">
-              Get emailed when costs spike or margins drop below your
-              thresholds.
-            </p>
-          </div>
-        </div>
-        <Button size="sm" @click="router.push('/plans')">
-          <Zap class="h-4 w-4 mr-1" />
-          Upgrade
-        </Button>
-      </CardContent>
-    </Card>
 
     <!-- Create form -->
     <Card v-if="showForm">
@@ -168,6 +364,50 @@ async function handleDelete(id: number) {
         <CardTitle class="text-base">New Alert Rule</CardTitle>
       </CardHeader>
       <CardContent class="space-y-4">
+        <!-- Category filter -->
+        <div class="flex gap-1.5 flex-wrap">
+          <button
+            v-for="cat in METRIC_CATEGORIES"
+            :key="cat.key"
+            class="text-xs font-medium px-3 py-1.5 rounded-full border transition-colors"
+            :class="
+              selectedCategory === cat.key
+                ? 'bg-foreground text-background border-foreground'
+                : 'bg-background text-muted-foreground hover:bg-muted'
+            "
+            @click="selectedCategory = cat.key"
+          >
+            {{ cat.label }}
+          </button>
+        </div>
+
+        <!-- Metric picker -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <button
+            v-for="m in filteredMetrics"
+            :key="m.value"
+            class="text-left p-3 rounded-lg border transition-colors"
+            :class="
+              formMetric === m.value
+                ? 'border-foreground bg-muted/50'
+                : 'hover:bg-muted/30'
+            "
+            @click="selectMetric(m.value)"
+          >
+            <div class="flex items-center gap-2">
+              <span
+                class="text-[10px] font-medium px-1.5 py-0.5 rounded-full"
+                :class="categoryColor(m.category)"
+                >{{ m.category }}</span
+              >
+              <span class="text-sm font-medium">{{ m.label }}</span>
+            </div>
+            <p class="text-xs text-muted-foreground mt-1">
+              {{ m.description }}
+            </p>
+          </button>
+        </div>
+
         <div>
           <label
             for="alert-name"
@@ -268,6 +508,29 @@ async function handleDelete(id: number) {
           </div>
         </div>
 
+        <!-- Tanso upsell in form -->
+        <div
+          v-if="TANSO_UPSELLS[formMetric]"
+          class="flex items-center justify-between rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3"
+        >
+          <div>
+            <p class="text-sm font-medium text-emerald-900">
+              {{ TANSO_UPSELLS[formMetric] }}
+            </p>
+            <p class="text-xs text-emerald-700 mt-0.5">
+              Tanso can automate the fix when this alert fires.
+            </p>
+          </div>
+          <a
+            :href="`https://tansohq.com?utm_source=observe&utm_medium=alert_form&utm_campaign=${formMetric}`"
+            target="_blank"
+            class="shrink-0 inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-800 bg-emerald-200 hover:bg-emerald-300 px-3 py-1.5 rounded-md transition-colors"
+          >
+            Learn more
+            <ExternalLink class="h-3 w-3" />
+          </a>
+        </div>
+
         <div class="flex gap-2 pt-2">
           <Button :disabled="isSubmitting" @click="handleCreate">
             {{ isSubmitting ? "Creating..." : "Create Alert" }}
@@ -291,6 +554,11 @@ async function handleDelete(id: number) {
               <div class="flex items-center gap-2">
                 <span class="text-sm font-medium">{{ rule.name }}</span>
                 <span
+                  class="text-[10px] font-medium px-1.5 py-0.5 rounded-full"
+                  :class="categoryColor(metricCategory(rule.metric))"
+                  >{{ metricCategory(rule.metric) }}</span
+                >
+                <span
                   :class="[
                     'text-[10px] font-medium px-1.5 py-0.5 rounded-full',
                     rule.enabled
@@ -313,6 +581,15 @@ async function handleDelete(id: number) {
               </p>
             </div>
             <div class="flex items-center gap-2">
+              <a
+                v-if="TANSO_UPSELLS[rule.metric]"
+                :href="`https://tansohq.com?utm_source=observe&utm_medium=alert_rule&utm_campaign=${rule.metric}`"
+                target="_blank"
+                class="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-700 hover:text-emerald-900 transition-colors"
+              >
+                Automate
+                <ExternalLink class="h-3 w-3" />
+              </a>
               <Button
                 variant="outline"
                 size="sm"
@@ -349,8 +626,8 @@ async function handleDelete(id: number) {
         <Bell class="h-10 w-10 text-muted-foreground mx-auto mb-4" />
         <h2 class="text-lg font-semibold">No alerts configured</h2>
         <p class="text-sm text-muted-foreground mt-2 max-w-md mx-auto">
-          Set up alerts to get emailed when your daily AI costs exceed a
-          threshold, margins drop, or per-event costs spike.
+          Set up alerts for margin drops, usage spikes, pricing gaps, and
+          concentration risks. Every alert comes with a suggested fix.
         </p>
         <Button class="mt-4" @click="showForm = true">
           <Plus class="h-4 w-4 mr-2" />
