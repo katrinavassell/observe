@@ -344,7 +344,7 @@ function marginForEvent(event: ObserveEvent): number | null {
 
           <tbody v-else-if="isError" class="divide-y divide-border">
             <tr>
-              <td colspan="10" class="px-4 py-8 text-center text-destructive">
+              <td colspan="12" class="px-4 py-8 text-center text-destructive">
                 Failed to load events.
               </td>
             </tr>
@@ -355,7 +355,7 @@ function marginForEvent(event: ObserveEvent): number | null {
             class="divide-y divide-border"
           >
             <tr>
-              <td colspan="10" class="px-4 py-12 text-center">
+              <td colspan="12" class="px-4 py-12 text-center">
                 <template v-if="hasFilters">
                   <p class="text-muted-foreground mb-3">
                     No events match these filters.
@@ -484,7 +484,7 @@ function marginForEvent(event: ObserveEvent): number | null {
 
               <!-- Expanded detail panel -->
               <tr v-if="expandedIds.has(event.id)">
-                <td :colspan="11" class="px-0 py-0 bg-muted/20 border-b">
+                <td :colspan="12" class="px-0 py-0 bg-muted/20 border-b">
                   <div
                     v-if="loadingDetails.has(event.id)"
                     class="p-6 text-center text-sm text-muted-foreground"
