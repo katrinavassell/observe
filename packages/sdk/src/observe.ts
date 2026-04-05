@@ -7,6 +7,9 @@
  *   const openai = Observe.wrap(new OpenAI())
  */
 
+import type { TraceContext } from "./tracing.js";
+import { startTrace } from "./tracing.js";
+
 interface ObserveConfig {
   apiKey: string;
   baseUrl?: string;
@@ -28,6 +31,7 @@ let _config: { apiKey: string; baseUrl: string } | null = null;
 let _customer: CustomerContext | null = null;
 let _featureKey: string | null = null;
 let _agentId: string | null = null;
+let _traceContext: TraceContext | null = null;
 
 const DEFAULT_BASE_URL = "https://app.tanso.io";
 
@@ -48,6 +52,12 @@ function resolveHeaders(overrides?: WrapOverrides): Record<string, string> {
   if (customerId) headers["x-tanso-customer"] = customerId;
   if (featureKey) headers["x-tanso-feature"] = featureKey;
   if (agentId) headers["x-tanso-agent"] = agentId;
+  if (_traceContext) {
+    headers["x-tanso-trace-id"] = _traceContext.traceId;
+    headers["x-tanso-span-id"] = _traceContext.spanId;
+    if (_traceContext.parentSpanId)
+      headers["x-tanso-parent-span-id"] = _traceContext.parentSpanId;
+  }
   return headers;
 }
 
@@ -113,11 +123,25 @@ export const Observe = {
     );
   },
 
+  startTrace(): TraceContext {
+    _traceContext = startTrace();
+    return _traceContext;
+  },
+
+  setTraceContext(ctx: TraceContext): void {
+    _traceContext = ctx;
+  },
+
+  clearTraceContext(): void {
+    _traceContext = null;
+  },
+
   /** Reset all state — for tests only. */
   _reset(): void {
     _config = null;
     _customer = null;
     _featureKey = null;
     _agentId = null;
+    _traceContext = null;
   },
 } as const;

@@ -583,6 +583,26 @@ async function _doDbInit() {
       `ALTER TABLE observe_events ADD COLUMN IF NOT EXISTS response_body JSONB`,
     );
 
+    // Distributed tracing columns for multi-step agent flow tracking
+    await pool.query(
+      `ALTER TABLE observe_events ADD COLUMN IF NOT EXISTS trace_id TEXT`,
+    );
+    await pool.query(
+      `ALTER TABLE observe_events ADD COLUMN IF NOT EXISTS span_id TEXT`,
+    );
+    await pool.query(
+      `ALTER TABLE observe_events ADD COLUMN IF NOT EXISTS parent_span_id TEXT`,
+    );
+    await pool.query(
+      `ALTER TABLE observe_events ADD COLUMN IF NOT EXISTS duration_ms INTEGER`,
+    );
+    await pool.query(
+      `ALTER TABLE observe_events ADD COLUMN IF NOT EXISTS cost_type TEXT DEFAULT 'llm'`,
+    );
+    await pool.query(
+      `CREATE INDEX IF NOT EXISTS idx_observe_events_trace ON observe_events(user_id, trace_id) WHERE trace_id IS NOT NULL`,
+    );
+
     // Inference profiles table — stores learned distribution patterns from SDK data
     await pool.query(`
       CREATE TABLE IF NOT EXISTS inference_profiles (

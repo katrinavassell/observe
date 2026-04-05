@@ -7,6 +7,7 @@ import {
   getEventsByModel,
   getEventsByCustomer,
   getEventsByAgent,
+  getEventsByCostType,
   getMrrMovements,
   listInsights,
   generateInsights,
@@ -35,7 +36,7 @@ const router = useRouter();
 const queryClient = useQueryClient();
 const { isSampleMode } = useDataMode();
 
-type Tab = "feature" | "model" | "customer" | "agent" | "mrr";
+type Tab = "feature" | "model" | "customer" | "agent" | "cost_type" | "mrr";
 const activeTab = ref<Tab>("feature");
 
 // Insights drawer state
@@ -185,6 +186,19 @@ const { data: agentData } = useQuery({
 const sortedAgents = computed(() => {
   if (!agentData.value) return [];
   return [...agentData.value].sort((a, b) => b.total_cost - a.total_cost);
+});
+
+const { data: costTypeData } = useQuery({
+  queryKey: ["events-by-cost-type"],
+  queryFn: () => getEventsByCostType(),
+  enabled: computed(() => activeTab.value === "cost_type"),
+});
+
+const sortedCostTypes = computed(() => {
+  if (!costTypeData.value?.breakdown) return [];
+  return [...costTypeData.value.breakdown].sort(
+    (a, b) => b.total_cost - a.total_cost,
+  );
 });
 
 const {
@@ -698,6 +712,11 @@ const insightCategories = [
               count: sortedAgents.length,
             },
             {
+              key: 'cost_type',
+              label: 'By Cost Type',
+              count: sortedCostTypes.length,
+            },
+            {
               key: 'mrr',
               label: 'MRR Movement',
               count: mrrMovements.filter((m) => m.category !== 'stable').length,
@@ -926,6 +945,51 @@ const insightCategories = [
           >
             {{ a.margin_pct != null ? fmtPct(a.margin_pct) : "—" }}
           </span>
+        </div>
+      </div>
+
+      <!-- By Cost Type tab -->
+      <div v-if="activeTab === 'cost_type'" class="space-y-1">
+        <div
+          class="flex items-center gap-3 text-xs text-muted-foreground px-3 py-2 border-b"
+        >
+          <span class="w-28">Type</span>
+          <span class="flex-1"></span>
+          <span class="w-16 text-right">Events</span>
+          <span class="w-20 text-right">Cost</span>
+          <span class="w-20 text-right">Revenue</span>
+        </div>
+        <div
+          v-if="!sortedCostTypes.length"
+          class="py-8 text-center text-sm text-muted-foreground"
+        >
+          No cost type data yet. Events will be categorized as they arrive.
+        </div>
+        <div
+          v-for="ct in sortedCostTypes"
+          :key="ct.cost_type"
+          class="flex items-center gap-3 rounded-md px-3 py-2.5 hover:bg-muted/50 transition-colors"
+        >
+          <span class="w-28 text-sm font-medium">{{ ct.cost_type }}</span>
+          <div class="flex-1 h-3 bg-muted rounded-full overflow-hidden">
+            <div
+              class="h-full rounded-full bg-foreground"
+              :style="{
+                width: `${sortedCostTypes.length ? (ct.total_cost / sortedCostTypes[0].total_cost) * 100 : 0}%`,
+              }"
+            />
+          </div>
+          <span
+            class="w-16 text-right text-sm tabular-nums text-muted-foreground"
+            >{{ ct.event_count.toLocaleString() }}</span
+          >
+          <span class="w-20 text-right text-sm tabular-nums">{{
+            fmt(ct.total_cost)
+          }}</span>
+          <span
+            class="w-20 text-right text-sm tabular-nums text-muted-foreground"
+            >{{ fmt(ct.total_revenue) }}</span
+          >
         </div>
       </div>
 

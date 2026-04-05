@@ -1,5 +1,7 @@
 import { BatchQueue } from "./batch.js";
 import { inferModelProvider } from "./providers.js";
+import type { TraceContext } from "./tracing.js";
+import { startTrace, startSpan } from "./tracing.js";
 import type { ClientOptions, IngestEvent, ObserveEvent } from "./types.js";
 
 export class TansoObserve {
@@ -28,6 +30,49 @@ export class TansoObserve {
         event.modelProvider ?? inferModelProvider(event.model) ?? undefined,
     };
     this.queue.add(ingestEvent);
+  }
+
+  startTrace(): TraceContext {
+    return startTrace();
+  }
+
+  async span<T>(
+    ctx: TraceContext,
+    opts: {
+      eventName: string;
+      featureKey: string;
+      customerReferenceId?: string;
+      costType?: string;
+      costAmount?: number;
+      model?: string;
+      modelProvider?: string;
+    },
+    fn: () => Promise<T>,
+  ): Promise<T> {
+    const spanCtx = startSpan(ctx);
+    const start = Date.now();
+    let error: unknown;
+    try {
+      return await fn();
+    } catch (err) {
+      error = err;
+      throw err;
+    } finally {
+      this.track({
+        eventName: opts.eventName,
+        customerReferenceId: opts.customerReferenceId ?? "unknown",
+        featureKey: opts.featureKey,
+        costType: opts.costType,
+        costAmount: opts.costAmount,
+        model: opts.model,
+        modelProvider: opts.modelProvider,
+        traceId: spanCtx.traceId,
+        spanId: spanCtx.spanId,
+        parentSpanId: spanCtx.parentSpanId,
+        durationMs: Date.now() - start,
+        properties: error ? { error: String(error) } : undefined,
+      });
+    }
   }
 
   flush(): void {

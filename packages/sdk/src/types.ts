@@ -11,6 +11,11 @@ export interface ObserveEvent {
   modelProvider?: string;
   properties?: Record<string, unknown>;
   idempotencyKey?: string;
+  traceId?: string;
+  spanId?: string;
+  parentSpanId?: string;
+  durationMs?: number;
+  costType?: string;
 }
 
 export type IngestEvent = ObserveEvent;
