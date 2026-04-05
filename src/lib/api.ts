@@ -1356,3 +1356,15 @@ export async function runDataCleanup(): Promise<{
 }> {
   return request("/admin/cleanup", { method: "POST" });
 }
+
+export async function getAdminEmails(): Promise<{
+  emails: Array<{
+    id: string;
+    to: string[];
+    subject: string;
+    status: string;
+    created_at: string;
+  }>;
+}> {
+  return request("/admin/emails");
+}

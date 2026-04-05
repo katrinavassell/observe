@@ -58,6 +58,64 @@ function inferModelProvider(model: string | undefined): string | null {
   return null;
 }
 
+// In-memory dedup: tracks which usage alerts have already been sent this month
+const usageAlertsSent = new Set<string>();
+
+async function sendUsageLimitEmail(
+  pool: Pool,
+  userId: string,
+  threshold: 80 | 100,
+  used: number,
+  limit: number,
+): Promise<void> {
+  const month = new Date().toISOString().slice(0, 7); // "2026-04"
+  const key = `${userId}-${month}-${threshold}`;
+  if (usageAlertsSent.has(key)) return;
+
+  const resendKey = process.env.RESEND_API_KEY;
+  if (!resendKey) return;
+
+  const accountResult = await pool.query(
+    `SELECT email FROM accounts WHERE visitor_id = $1`,
+    [userId],
+  );
+  const email = accountResult.rows[0]?.email;
+  if (!email) return;
+
+  const subject =
+    threshold === 80
+      ? "You're approaching your monthly event limit"
+      : "Monthly event limit reached";
+
+  const body =
+    threshold === 80
+      ? `<p>You've used ${used.toLocaleString()} of your ${limit.toLocaleString()} monthly events on Observe.</p><p>To keep tracking without interruption, upgrade to Growth for unlimited events.</p><p><a href="https://observemetrics.com/plans">Upgrade now</a></p>`
+      : `<p>You've reached your ${limit.toLocaleString()} monthly event limit on Observe.</p><p>New events will be rejected until next month. Upgrade to Growth for unlimited events.</p><p><a href="https://observemetrics.com/plans">Upgrade now</a></p>`;
+
+  usageAlertsSent.add(key);
+
+  fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${resendKey}`,
+    },
+    body: JSON.stringify({
+      from: "Observe <kat@tansohq.com>",
+      to: email,
+      subject,
+      html: body,
+    }),
+  })
+    .then(() =>
+      console.log("Usage alert sent:", { email, threshold, used, limit }),
+    )
+    .catch((err) => {
+      console.error("Failed to send usage alert email:", err);
+      usageAlertsSent.delete(key);
+    });
+}
+
 export function createEventsRoutes(
   pool: Pool,
   ensureVisitor: any,
@@ -859,6 +917,28 @@ export function createEventsRoutes(
           checkAlerts(pool, userId).catch((err) =>
             console.error("checkAlerts error (ingest):", err),
           );
+          // Check usage limit and send warning emails
+          if (ingestAccess.limit != null && ingestAccess.usage != null) {
+            const newUsage = ingestAccess.usage + inserted;
+            const pct = newUsage / ingestAccess.limit;
+            if (pct >= 1) {
+              sendUsageLimitEmail(
+                pool,
+                userId,
+                100,
+                newUsage,
+                ingestAccess.limit,
+              ).catch((err) => console.error("Usage limit email error:", err));
+            } else if (pct >= 0.8) {
+              sendUsageLimitEmail(
+                pool,
+                userId,
+                80,
+                newUsage,
+                ingestAccess.limit,
+              ).catch((err) => console.error("Usage limit email error:", err));
+            }
+          }
         }
       } catch (error) {
         console.error("POST /events/ingest error:", error);
