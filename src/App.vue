@@ -19,7 +19,7 @@ watch(
   isInitialized,
   async (initialized) => {
     if (!initialized) return;
-    const params = new URLSearchParams(window.location.search);
+    const params = new window.URLSearchParams(window.location.search);
     const refCode = params.get("ref");
     if (!refCode) return;
     try {

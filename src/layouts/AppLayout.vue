@@ -10,11 +10,9 @@ import {
   Bell,
   Layers,
   Users,
-  Settings,
   Eye,
   LogIn,
   Star,
-  Github,
   LogOut,
   Database,
   CreditCard,
@@ -24,7 +22,6 @@ import {
   MessageSquare,
   Shield,
 } from "lucide-vue-next";
-import { toast } from "vue-sonner";
 import ErrorBoundary from "@/components/shared/ErrorBoundary.vue";
 import FeedbackModal from "@/components/shared/FeedbackModal.vue";
 import { useTeam } from "@/composables/useTeam";
@@ -33,7 +30,7 @@ import { useDataMode } from "@/composables/useDataMode";
 import { getUsageLimits } from "@/lib/api";
 
 const route = useRoute();
-const { myRole, isViewer, fetchTeamInfo } = useTeam();
+const { isViewer, fetchTeamInfo } = useTeam();
 const { account, isLoggedIn, logout } = useAuth();
 const {
   isSampleMode,
@@ -256,7 +253,7 @@ function isActive(path: string) {
         <!-- Navigation -->
         <nav class="flex-1 overflow-y-auto px-3 py-4">
           <div class="space-y-1">
-            <template v-for="(item, idx) in allNavItems" :key="item.path">
+            <template v-for="item in allNavItems" :key="item.path">
               <!-- Section divider with label -->
               <div v-if="item.dividerBefore" class="pt-4 pb-1">
                 <div class="h-px bg-sidebar-border mb-3" />

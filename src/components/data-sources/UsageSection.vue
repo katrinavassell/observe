@@ -9,63 +9,62 @@
  * - Stripe metered billing info
  */
 
-import { ref, computed } from 'vue'
-import { toast } from 'vue-sonner'
-import Papa from 'papaparse'
+import { ref } from "vue";
+import { toast } from "vue-sonner";
+import Papa from "papaparse";
+import { BarChart3, Upload, Download, CheckCircle, X } from "lucide-vue-next";
 import {
-  BarChart3,
-  Upload,
-  Download,
-  CheckCircle,
-  X,
-  Info,
-} from 'lucide-vue-next'
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui'
-import Alert from '@/components/ui/alert.vue'
-import * as api from '@/lib/api'
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui";
+import * as api from "@/lib/api";
 import {
   validateFileSize,
   validateCsvExtension,
   validateUsageRecords,
-} from '@/lib/validation'
+  type UsageRecord,
+} from "@/lib/validation";
 
 const props = defineProps<{
   /** Current file info if any */
-  file: { name: string; isSample: boolean } | null
+  file: { name: string; isSample: boolean } | null;
   /** If true, hides upload/clear controls (viewer mode) */
-  readonly?: boolean
-}>()
+  readonly?: boolean;
+}>();
 
 const emit = defineEmits<{
   /** Emitted after successful upload with updated file info */
-  fileUploaded: [file: { name: string; isSample: boolean }]
+  fileUploaded: [file: { name: string; isSample: boolean }];
   /** Emitted when file is cleared */
-  fileCleared: []
-}>()
+  fileCleared: [];
+}>();
 
 // Upload state
-const isUploading = ref(false)
-const isDragging = ref(false)
-const fileInput = ref<HTMLInputElement | null>(null)
+const isUploading = ref(false);
+const isDragging = ref(false);
+const fileInput = ref<HTMLInputElement | null>(null);
 
 function triggerFileInput(): void {
-  fileInput.value?.click()
+  fileInput.value?.click();
 }
 
 function handleFileSelect(event: Event): void {
-  const input = event.target as HTMLInputElement
-  const file = input.files?.[0]
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0];
   if (file) {
-    processFile(file)
+    processFile(file);
   }
-  input.value = ''
+  input.value = "";
 }
 
 function handleDrop(event: DragEvent): void {
-  isDragging.value = false
-  const file = event.dataTransfer?.files[0]
+  isDragging.value = false;
+  const file = event.dataTransfer?.files[0];
   if (file) {
-    processFile(file)
+    processFile(file);
   }
 }
 
@@ -75,77 +74,83 @@ function handleDrop(event: DragEvent): void {
  */
 async function processFile(file: File): Promise<void> {
   // Validate file extension
-  const extValidation = validateCsvExtension(file)
+  const extValidation = validateCsvExtension(file);
   if (!extValidation.valid) {
-    toast.error(extValidation.error!)
-    return
+    toast.error(extValidation.error!);
+    return;
   }
 
   // Validate file size
-  const sizeValidation = validateFileSize(file)
+  const sizeValidation = validateFileSize(file);
   if (!sizeValidation.valid) {
-    toast.error(sizeValidation.error!)
-    return
+    toast.error(sizeValidation.error!);
+    return;
   }
 
-  isUploading.value = true
+  isUploading.value = true;
 
   try {
-    const parseResult = await new Promise<Papa.ParseResult<Record<string, unknown>>>((resolve, reject) => {
+    const parseResult = await new Promise<
+      Papa.ParseResult<Record<string, unknown>>
+    >((resolve, reject) => {
       Papa.parse(file, {
         header: true,
         skipEmptyLines: true,
         complete: resolve,
         error: reject,
-      })
-    })
+      });
+    });
 
-    const rows = parseResult.data
+    const rows = parseResult.data;
 
     // Validate records (supports both metric/value and metric_key/metric_value naming)
-    const validation = validateUsageRecords(rows as {
-      customer_id?: string
-      month?: string
-      metric?: string
-      value?: number | string
-      limit?: number | string
-    }[])
+    const validation = validateUsageRecords(
+      rows as {
+        customer_id?: string;
+        month?: string;
+        metric?: string;
+        value?: number | string;
+        limit?: number | string;
+      }[],
+    );
 
     if (!validation.valid) {
-      toast.error('No valid usage records found', {
-        description: validation.errors.length > 0
-          ? validation.errors.slice(0, 3).join('; ')
-          : 'CSV must have columns: month, customer_id, metric, value',
-      })
-      return
+      toast.error("No valid usage records found", {
+        description:
+          validation.errors.length > 0
+            ? validation.errors.slice(0, 3).join("; ")
+            : "CSV must have columns: month, customer_id, metric, value",
+      });
+      return;
     }
 
     // Filter to valid records only
     const records: UsageRecord[] = rows
-      .filter(r => r.month && r.customer_id && r.metric && r.value)
-      .map(r => ({
+      .filter((r) => r.month && r.customer_id && r.metric && r.value)
+      .map((r) => ({
         month: String(r.month),
         customer_id: String(r.customer_id),
         metric: String(r.metric),
         value: parseFloat(String(r.value)) || 0,
         limit: r.limit ? parseFloat(String(r.limit)) : undefined,
-      }))
+      }));
 
-    const result = await api.uploadUsageData(records)
-    emit('fileUploaded', { name: file.name, isSample: false })
+    const result = await api.uploadUsageData(records);
+    emit("fileUploaded", { name: file.name, isSample: false });
 
     // Show success with validation summary
-    const description = validation.invalidRecords > 0
-      ? `${result.count} records saved, ${validation.invalidRecords} invalid rows skipped`
-      : `${result.count} usage records saved`
+    const description =
+      validation.invalidRecords > 0
+        ? `${result.count} records saved, ${validation.invalidRecords} invalid rows skipped`
+        : `${result.count} usage records saved`;
 
-    toast.success('Usage uploaded!', { description })
+    toast.success("Usage uploaded!", { description });
   } catch (error) {
-    toast.error('Failed to upload usage data', {
-      description: error instanceof Error ? error.message : 'Unknown error',
-    })
+    toast.error("Failed to upload usage data", {
+      description: error instanceof Error ? error.message : "Unknown error",
+    });
   } finally {
-    isUploading.value = false
+    isUploading.value = false;
   }
 }
 
@@ -157,19 +162,19 @@ function downloadTemplate(): void {
 2024-12,cust_001,api_calls,8500,10000
 2024-12,cust_001,tokens,9500000,10000000
 2024-12,cust_002,api_calls,1800,2000
-2024-12,cust_002,tokens,1900000,2000000`
+2024-12,cust_002,tokens,1900000,2000000`;
 
-  const blob = new Blob([content], { type: 'text/csv' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = 'usage-template.csv'
-  a.click()
-  URL.revokeObjectURL(url)
+  const blob = new Blob([content], { type: "text/csv" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "usage-template.csv";
+  a.click();
+  URL.revokeObjectURL(url);
 
-  toast.success('Usage template downloaded', {
-    description: 'Fill in your data and upload it back.',
-  })
+  toast.success("Usage template downloaded", {
+    description: "Fill in your data and upload it back.",
+  });
 }
 </script>
 
@@ -184,7 +189,6 @@ function downloadTemplate(): void {
         <CardDescription>Upload feature and API usage data</CardDescription>
       </CardHeader>
       <CardContent class="p-5 pt-0 space-y-4">
-
         <!-- Hidden file input -->
         <input
           v-if="!props.readonly"
@@ -202,19 +206,17 @@ function downloadTemplate(): void {
             'border-2 border-dashed rounded-lg p-5 transition-colors',
             isDragging
               ? 'border-primary bg-primary/5'
-              : 'border-muted-foreground/25'
+              : 'border-muted-foreground/25',
           ]"
           @dragover.prevent="isDragging = true"
           @dragleave.prevent="isDragging = false"
           @drop.prevent="handleDrop"
         >
-          <div
-            class="text-center cursor-pointer"
-            @click="triggerFileInput"
-          >
+          <div class="text-center cursor-pointer" @click="triggerFileInput">
             <Upload class="h-6 w-6 text-muted-foreground/50 mx-auto mb-2" />
             <p class="text-sm text-muted-foreground">
-              Drop one CSV here or <span class="text-primary font-medium">browse</span>
+              Drop one CSV here or
+              <span class="text-primary font-medium">browse</span>
             </p>
           </div>
         </div>
@@ -247,7 +249,6 @@ function downloadTemplate(): void {
             Download template
           </button>
         </div>
-
       </CardContent>
     </Card>
   </section>

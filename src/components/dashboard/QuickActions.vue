@@ -3,44 +3,53 @@
  * QuickActions - Action button grid for common dashboard actions
  */
 
-import { type Component } from 'vue'
-import { Card, CardContent, CardHeader, CardTitle, Button } from '@/components/ui'
+import { type Component } from "vue";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  Button,
+} from "@/components/ui";
 
 // =============================================================================
 // TYPES
 // =============================================================================
 
 export interface QuickAction {
-  label: string
-  description?: string
-  icon: Component
-  action: () => void
-  variant?: 'default' | 'secondary' | 'outline' | 'ghost'
-  disabled?: boolean
+  label: string;
+  description?: string;
+  icon: Component;
+  action: () => void;
+  variant?: "default" | "secondary" | "outline" | "ghost";
+  disabled?: boolean;
 }
 
 // =============================================================================
 // PROPS
 // =============================================================================
 
-const props = withDefaults(defineProps<{
-  actions: QuickAction[]
-  title?: string
-  columns?: 2 | 3 | 4
-}>(), {
-  title: 'Quick Actions',
-  columns: 3,
-})
+const _props = withDefaults(
+  defineProps<{
+    actions: QuickAction[];
+    title?: string;
+    columns?: 2 | 3 | 4;
+  }>(),
+  {
+    title: "Quick Actions",
+    columns: 3,
+  },
+);
 
 // =============================================================================
 // COMPUTED
 // =============================================================================
 
 const gridClass = {
-  2: 'grid-cols-1 sm:grid-cols-2',
-  3: 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3',
-  4: 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-4',
-}
+  2: "grid-cols-1 sm:grid-cols-2",
+  3: "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3",
+  4: "grid-cols-1 sm:grid-cols-2 lg:grid-cols-4",
+};
 </script>
 
 <template>
@@ -62,7 +71,10 @@ const gridClass = {
               class="h-8 w-8 mx-auto mb-3 text-primary"
             />
             <p class="font-semibold mb-1">{{ action.label }}</p>
-            <p v-if="action.description" class="text-sm text-muted-foreground mb-3">
+            <p
+              v-if="action.description"
+              class="text-sm text-muted-foreground mb-3"
+            >
               {{ action.description }}
             </p>
             <Button

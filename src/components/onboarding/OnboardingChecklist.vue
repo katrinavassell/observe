@@ -17,7 +17,7 @@ const emit = defineEmits<{ (e: "dismiss"): void }>();
 const { hasData, hasCosts, hasRevenue, isSampleMode } = useDataMode();
 
 const insightsGenerated = computed(
-  () => localStorage.getItem("observe:insights_generated") === "true",
+  () => window.localStorage.getItem("observe:insights_generated") === "true",
 );
 
 const steps = computed(() => [
