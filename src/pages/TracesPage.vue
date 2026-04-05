@@ -52,19 +52,19 @@ function formatDuration(ms: number | null) {
 function costTypeBadgeClass(type: string) {
   switch (type) {
     case "llm":
-      return "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300";
+      return "bg-blue-600 text-white";
     case "embedding":
-      return "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300";
+      return "bg-purple-600 text-white";
     case "vector_db":
-      return "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300";
+      return "bg-amber-600 text-white";
     case "compute":
-      return "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300";
+      return "bg-green-600 text-white";
     case "api":
-      return "bg-cyan-100 text-cyan-800 dark:bg-cyan-900/30 dark:text-cyan-300";
+      return "bg-cyan-600 text-white";
     case "database":
-      return "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300";
+      return "bg-orange-600 text-white";
     default:
-      return "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300";
+      return "bg-slate-500 text-white";
   }
 }
 
