@@ -105,6 +105,9 @@ export function createAuthRoutes(
         }
 
         const normalizedEmail = email.toLowerCase().trim();
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+          return res.status(400).json({ error: "Invalid email format" });
+        }
         const existing = await pool.query(
           "SELECT id FROM accounts WHERE email = $1",
           [normalizedEmail],

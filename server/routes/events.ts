@@ -74,7 +74,7 @@ export function createEventsRoutes(
     async (req: AuthRequest, res: Response) => {
       try {
         const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
-        const offset = parseInt(req.query.offset as string) || 0;
+        const offset = Math.max(parseInt(req.query.offset as string) || 0, 0);
         const featureKey = req.query.feature_key as string | undefined;
         const customerId = req.query.customer_id as string | undefined;
         const model = req.query.model as string | undefined;
@@ -660,8 +660,23 @@ export function createEventsRoutes(
           costType?: string;
         }> = [];
 
+        const stripNulls = (s: unknown) =>
+          typeof s === "string" ? s.replace(/\0/g, "") : s;
+
         for (let i = 0; i < events.length; i++) {
           const evt = events[i];
+          // Strip null bytes from string fields to prevent PostgreSQL errors
+          if (typeof evt.eventName === "string")
+            evt.eventName = stripNulls(evt.eventName) as string;
+          if (typeof evt.customerReferenceId === "string")
+            evt.customerReferenceId = stripNulls(
+              evt.customerReferenceId,
+            ) as string;
+          if (typeof evt.featureKey === "string")
+            evt.featureKey = stripNulls(evt.featureKey) as string;
+          if (typeof evt.model === "string")
+            evt.model = stripNulls(evt.model) as string;
+
           const missing: string[] = [];
           if (!evt.eventName) missing.push("eventName");
           if (!evt.customerReferenceId) missing.push("customerReferenceId");
