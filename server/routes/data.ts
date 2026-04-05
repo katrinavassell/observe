@@ -167,14 +167,20 @@ export function createDataRoutes(
           [req.visitorId],
         );
 
+        const eventsResult = await pool.query(
+          "SELECT COUNT(*) FROM observe_events WHERE user_id = $1",
+          [req.visitorId],
+        );
+
         const status = statusResult.rows[0] || { data_mode: "none" };
         const customerCount = parseInt(customersResult.rows[0].count);
         const costsCount = parseInt(costsResult.rows[0].count);
         const usageCount = parseInt(usageResult.rows[0].count);
+        const eventsCount = parseInt(eventsResult.rows[0].count);
 
         res.json({
           data_mode: status.data_mode,
-          has_data: customerCount > 0,
+          has_data: customerCount > 0 || eventsCount > 0,
           customer_count: customerCount,
           has_revenue: customerCount > 0,
           has_costs: costsCount > 0,
