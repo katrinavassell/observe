@@ -331,9 +331,7 @@ function isActive(path: string) {
               <LogOut class="h-4 w-4" />
             </button>
           </div>
-          <div v-else class="px-3 py-2.5 text-xs text-sidebar-foreground/40">
-            Browsing as guest
-          </div>
+          <div v-else class="px-3 py-1" />
           <!-- Feedback & Discord -->
           <div class="flex items-center gap-1 px-2 pt-1">
             <button

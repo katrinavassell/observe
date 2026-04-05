@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/vue-query";
 import { useRouter } from "vue-router";
 import { toast } from "vue-sonner";
 import { Bell, Plus, Trash2, Loader2, Lock, Zap } from "lucide-vue-next";
+import { useAuth } from "@/composables/useAuth";
 import {
   Card,
   CardContent,
@@ -21,10 +22,12 @@ import type { AlertRule } from "@/lib/api";
 
 const router = useRouter();
 const queryClient = useQueryClient();
+const { isLoggedIn } = useAuth();
 
 const { data, isLoading, isError } = useQuery({
   queryKey: ["alert-rules"],
   queryFn: listAlertRules,
+  enabled: isLoggedIn,
 });
 
 const isGated = computed(() => data.value?.gated === true);
