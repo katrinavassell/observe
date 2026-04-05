@@ -3,7 +3,7 @@ import type { Pool } from "pg";
 import crypto from "crypto";
 import rateLimit from "express-rate-limit";
 import { type AuthRequest } from "./auth.js";
-import { encryptApiKey, decryptApiKey } from "../stripe-client.js";
+import { encryptApiKey } from "../stripe-client.js";
 import { calculateCostFromTokens as calcCostFromDb } from "../model-pricing.js";
 import { checkAlerts } from "./alerts.js";
 import { checkFeatureAccess } from "../billing.js";
@@ -108,7 +108,7 @@ async function sendUsageLimitEmail(
     }),
   })
     .then(() =>
-      console.log("Usage alert sent:", { email, threshold, used, limit }),
+      console.warn("Usage alert sent:", { email, threshold, used, limit }),
     )
     .catch((err) => {
       console.error("Failed to send usage alert email:", err);
@@ -379,7 +379,7 @@ export function createEventsRoutes(
         return res.status(401).json({ error: "Authentication required" });
       }
       const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
-      const offset = parseInt(req.query.offset as string) || 0;
+      const offset = Math.max(parseInt(req.query.offset as string) || 0, 0);
       const result = await pool.query(
         `SELECT trace_id,
            MIN(timestamp) as start_time,

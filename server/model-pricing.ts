@@ -25,7 +25,7 @@ let cacheLoadedAt = 0;
 const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
 
 // Providers we care about from OpenRouter (filter the 400+ models down)
-const TRACKED_PROVIDERS = [
+const _TRACKED_PROVIDERS = [
   "openai",
   "anthropic",
   "google",
@@ -916,13 +916,13 @@ export async function refreshFromSources(
 
   try {
     freshPricing = await fetchFromOpenRouter();
-    console.log(`Fetched ${freshPricing.length} models from OpenRouter`);
+    console.warn(`Fetched ${freshPricing.length} models from OpenRouter`);
   } catch (err) {
     console.warn("OpenRouter fetch failed, trying LiteLLM:", err);
     try {
       freshPricing = await fetchFromLiteLLM();
       source = "litellm";
-      console.log(`Fetched ${freshPricing.length} models from LiteLLM`);
+      console.warn(`Fetched ${freshPricing.length} models from LiteLLM`);
     } catch (err2) {
       console.error("Both pricing sources failed:", err2);
       return { updated: 0, added: 0, source: "none" };
@@ -964,7 +964,7 @@ export async function refreshFromSources(
   }
 
   if (updated > 0 || added > 0) {
-    console.log(
+    console.warn(
       `Pricing refresh: ${updated} updated, ${added} new models (source: ${source})`,
     );
     cacheLoadedAt = 0;
