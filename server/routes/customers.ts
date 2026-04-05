@@ -513,6 +513,7 @@ export function createCustomersRoutes(
         }
 
         const subscriptions = [
+          // EXPANSION: acme_saas — old sub (499) + recent add-on (200) = current 699 vs prior 499
           {
             subscription_id: "sub_acme",
             customer_id: "acme_saas",
@@ -521,20 +522,33 @@ export function createCustomersRoutes(
             mrr_override: 499,
             previous_mrr: 199,
             created_at: "2025-08-01T00:00:00Z",
-            current_period_start: "2026-03-01T00:00:00Z",
-            current_period_end: "2026-04-01T00:00:00Z",
+            current_period_start: "2026-04-01T00:00:00Z",
+            current_period_end: "2026-05-01T00:00:00Z",
           },
+          {
+            subscription_id: "sub_acme_addon",
+            customer_id: "acme_saas",
+            plan_id: "pro",
+            is_active: true,
+            mrr_override: 200,
+            previous_mrr: 0,
+            created_at: "2026-03-15T00:00:00Z",
+            current_period_start: "2026-04-01T00:00:00Z",
+            current_period_end: "2026-05-01T00:00:00Z",
+          },
+          // STABLE: tidewater_ai — single old sub, unchanged
           {
             subscription_id: "sub_tidewater",
             customer_id: "tidewater_ai",
             plan_id: "starter",
             is_active: true,
             mrr_override: 49,
-            previous_mrr: 0,
+            previous_mrr: 49,
             created_at: "2025-11-15T00:00:00Z",
-            current_period_start: "2026-03-01T00:00:00Z",
-            current_period_end: "2026-04-01T00:00:00Z",
+            current_period_start: "2026-04-01T00:00:00Z",
+            current_period_end: "2026-05-01T00:00:00Z",
           },
+          // EXPANSION: neondata — old sub (499) + recent add-on (100) = current 599 vs prior 499
           {
             subscription_id: "sub_neon",
             customer_id: "neondata",
@@ -543,9 +557,21 @@ export function createCustomersRoutes(
             mrr_override: 499,
             previous_mrr: 299,
             created_at: "2025-09-10T00:00:00Z",
-            current_period_start: "2026-03-01T00:00:00Z",
-            current_period_end: "2026-04-01T00:00:00Z",
+            current_period_start: "2026-04-01T00:00:00Z",
+            current_period_end: "2026-05-01T00:00:00Z",
           },
+          {
+            subscription_id: "sub_neon_addon",
+            customer_id: "neondata",
+            plan_id: "starter",
+            is_active: true,
+            mrr_override: 100,
+            previous_mrr: 0,
+            created_at: "2026-03-01T00:00:00Z",
+            current_period_start: "2026-04-01T00:00:00Z",
+            current_period_end: "2026-05-01T00:00:00Z",
+          },
+          // NEW: circleops — sub created within last 60 days, so prior MRR = 0
           {
             subscription_id: "sub_circle",
             customer_id: "circleops",
@@ -553,21 +579,23 @@ export function createCustomersRoutes(
             is_active: true,
             mrr_override: 49,
             previous_mrr: 0,
-            created_at: "2026-02-01T00:00:00Z",
-            current_period_start: "2026-03-01T00:00:00Z",
-            current_period_end: "2026-04-01T00:00:00Z",
+            created_at: "2026-03-10T00:00:00Z",
+            current_period_start: "2026-04-01T00:00:00Z",
+            current_period_end: "2026-05-01T00:00:00Z",
           },
+          // STABLE: blazeml — single old sub, unchanged
           {
             subscription_id: "sub_blaze",
             customer_id: "blazeml",
             plan_id: "pro",
             is_active: true,
             mrr_override: 99,
-            previous_mrr: 49,
+            previous_mrr: 99,
             created_at: "2025-12-01T00:00:00Z",
-            current_period_start: "2026-03-01T00:00:00Z",
-            current_period_end: "2026-04-01T00:00:00Z",
+            current_period_start: "2026-04-01T00:00:00Z",
+            current_period_end: "2026-05-01T00:00:00Z",
           },
+          // STABLE: quantumhr — single old sub, unchanged
           {
             subscription_id: "sub_quantum",
             customer_id: "quantumhr",
@@ -576,8 +604,8 @@ export function createCustomersRoutes(
             mrr_override: 199,
             previous_mrr: 199,
             created_at: "2025-06-01T00:00:00Z",
-            current_period_start: "2026-03-01T00:00:00Z",
-            current_period_end: "2026-04-01T00:00:00Z",
+            current_period_start: "2026-04-01T00:00:00Z",
+            current_period_end: "2026-05-01T00:00:00Z",
           },
         ];
         for (const sub of subscriptions) {

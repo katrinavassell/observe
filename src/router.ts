@@ -126,6 +126,11 @@ const router = createRouter({
       redirect: "/models",
     },
     {
+      path: "/admin",
+      name: "admin",
+      component: () => import("@/pages/AdminPage.vue"),
+    },
+    {
       path: "/team",
       name: "team",
       component: () => import("@/pages/TeamSettingsPage.vue"),
