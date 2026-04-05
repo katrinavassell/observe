@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, reactive } from "vue";
+import { ref, computed, reactive, watch, onMounted } from "vue";
 import { useQuery } from "@tanstack/vue-query";
 import { useRouter, useRoute } from "vue-router";
 import {
@@ -16,10 +16,11 @@ import {
   ChevronRight,
   ChevronDown,
   ChevronLeft,
+  ChevronUp,
   X,
   Plug,
-  FlaskConical,
-  MessageSquare,
+  Settings2,
+  RotateCcw,
   Bot,
   User,
 } from "lucide-vue-next";
@@ -48,7 +49,101 @@ const dateTo = ref<string | undefined>();
 const currentPage = ref(0);
 const PAGE_SIZE = 50;
 
-// Expandable event detail
+// ── Column configuration ─────────────────────────────────────────────────────
+
+interface TableColumn {
+  id: string;
+  label: string;
+  visible: boolean;
+  align: "left" | "right";
+}
+
+const DEFAULT_COLUMNS: TableColumn[] = [
+  { id: "timestamp", label: "Timestamp", visible: true, align: "left" },
+  { id: "event", label: "Event", visible: true, align: "left" },
+  { id: "feature", label: "Feature", visible: true, align: "left" },
+  { id: "customer", label: "Customer", visible: true, align: "left" },
+  { id: "model", label: "Model", visible: true, align: "left" },
+  { id: "source", label: "Source", visible: true, align: "left" },
+  { id: "trace", label: "Trace", visible: true, align: "left" },
+  { id: "usage", label: "Usage", visible: true, align: "right" },
+  { id: "cost", label: "Cost", visible: true, align: "right" },
+  { id: "revenue", label: "Revenue", visible: true, align: "right" },
+  { id: "margin", label: "Margin", visible: true, align: "right" },
+  { id: "duration", label: "Duration", visible: false, align: "right" },
+  { id: "cost_type", label: "Cost Type", visible: false, align: "left" },
+  { id: "properties", label: "Properties", visible: false, align: "left" },
+];
+
+const STORAGE_KEY = "observe:events-columns";
+
+function loadColumns(): TableColumn[] {
+  const saved = localStorage.getItem(STORAGE_KEY);
+  if (!saved) return DEFAULT_COLUMNS.map((c) => ({ ...c }));
+  try {
+    const { order, hidden } = JSON.parse(saved) as {
+      order: string[];
+      hidden: string[];
+    };
+    const byId = new Map(DEFAULT_COLUMNS.map((c) => [c.id, { ...c }]));
+    const result: TableColumn[] = [];
+    for (const id of order) {
+      const col = byId.get(id);
+      if (col) {
+        col.visible = !hidden.includes(id);
+        result.push(col);
+        byId.delete(id);
+      }
+    }
+    // Append any new columns not in saved order
+    for (const col of byId.values()) {
+      result.push(col);
+    }
+    return result;
+  } catch {
+    return DEFAULT_COLUMNS.map((c) => ({ ...c }));
+  }
+}
+
+function saveColumns(cols: TableColumn[]) {
+  localStorage.setItem(
+    STORAGE_KEY,
+    JSON.stringify({
+      order: cols.map((c) => c.id),
+      hidden: cols.filter((c) => !c.visible).map((c) => c.id),
+    }),
+  );
+}
+
+const columns = ref<TableColumn[]>(loadColumns());
+const visibleColumns = computed(() => columns.value.filter((c) => c.visible));
+const colCount = computed(() => visibleColumns.value.length + 1); // +1 for expand chevron
+const showColumnSettings = ref(false);
+
+function toggleColumn(id: string) {
+  const col = columns.value.find((c) => c.id === id);
+  if (col) {
+    col.visible = !col.visible;
+    saveColumns(columns.value);
+  }
+}
+
+function moveColumn(index: number, direction: -1 | 1) {
+  const target = index + direction;
+  if (target < 0 || target >= columns.value.length) return;
+  const arr = [...columns.value];
+  [arr[index], arr[target]] = [arr[target], arr[index]];
+  columns.value = arr;
+  saveColumns(columns.value);
+}
+
+function resetColumns() {
+  columns.value = DEFAULT_COLUMNS.map((c) => ({ ...c }));
+  localStorage.removeItem(STORAGE_KEY);
+}
+
+// ── Expandable event detail ──────────────────────────────────────────────────
+
 const expandedIds = reactive(new Set<number>());
 const eventDetails = reactive<Record<number, EventDetail>>({});
 const loadingDetails = reactive(new Set<number>());
@@ -95,6 +190,8 @@ function getResponseContent(
   if (content?.[0]?.text) return content[0].text;
   return null;
 }
+
+// ── Filters & queries ────────────────────────────────────────────────────────
 
 const SOURCES = [
   { value: "sdk", label: "SDK" },
@@ -221,6 +318,10 @@ function marginForEvent(event: ObserveEvent): number | null {
     ((event.revenue_amount - event.cost_amount) / event.revenue_amount) * 100,
   );
 }
+
+function isColumnVisible(id: string): boolean {
+  return visibleColumns.value.some((c) => c.id === id);
+}
 </script>
 
 <template>
@@ -300,7 +401,79 @@ function marginForEvent(event: ObserveEvent): number | null {
         <X class="h-4 w-4 mr-1.5" />
         Clear
       </Button>
+
+      <!-- Column settings -->
+      <div class="relative ml-auto">
+        <Button
+          variant="outline"
+          size="sm"
+          class="h-9 px-2.5"
+          @click="showColumnSettings = !showColumnSettings"
+        >
+          <Settings2 class="h-4 w-4" />
+        </Button>
+
+        <div
+          v-if="showColumnSettings"
+          class="absolute right-0 top-full mt-1 z-50 w-64 rounded-lg border bg-card shadow-lg"
+        >
+          <div
+            class="flex items-center justify-between px-3 py-2 border-b text-xs font-medium text-muted-foreground"
+          >
+            <span>Columns</span>
+            <button
+              class="flex items-center gap-1 hover:text-foreground transition-colors"
+              @click="resetColumns"
+            >
+              <RotateCcw class="h-3 w-3" />
+              Reset
+            </button>
+          </div>
+          <div class="max-h-80 overflow-y-auto py-1">
+            <div
+              v-for="(col, idx) in columns"
+              :key="col.id"
+              class="flex items-center gap-2 px-3 py-1.5 hover:bg-muted/50 text-sm"
+            >
+              <input
+                type="checkbox"
+                :checked="col.visible"
+                class="h-3.5 w-3.5 rounded border-input accent-primary"
+                @change="toggleColumn(col.id)"
+              />
+              <span
+                class="flex-1"
+                :class="!col.visible && 'text-muted-foreground'"
+                >{{ col.label }}</span
+              >
+              <div class="flex gap-0.5">
+                <button
+                  class="p-0.5 text-muted-foreground/50 hover:text-foreground disabled:opacity-20"
+                  :disabled="idx === 0"
+                  @click="moveColumn(idx, -1)"
+                >
+                  <ChevronUp class="h-3 w-3" />
+                </button>
+                <button
+                  class="p-0.5 text-muted-foreground/50 hover:text-foreground disabled:opacity-20"
+                  :disabled="idx === columns.length - 1"
+                  @click="moveColumn(idx, 1)"
+                >
+                  <ChevronDown class="h-3 w-3" />
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
+
+    <!-- Click-away overlay -->
+    <div
+      v-if="showColumnSettings"
+      class="fixed inset-0 z-40"
+      @click="showColumnSettings = false"
+    />
 
     <!-- Table -->
     <div class="rounded-md border bg-card overflow-hidden">
@@ -311,40 +484,35 @@ function marginForEvent(event: ObserveEvent): number | null {
           >
             <tr>
               <th class="w-6"></th>
-              <th class="px-4 py-3 font-medium">Timestamp</th>
-              <th class="px-4 py-3 font-medium">Event</th>
-              <th class="px-4 py-3 font-medium">Feature</th>
-              <th class="px-4 py-3 font-medium">Customer</th>
-              <th class="px-4 py-3 font-medium">Model</th>
-              <th class="px-4 py-3 font-medium">Source</th>
-              <th class="px-4 py-3 font-medium">Trace</th>
-              <th class="px-4 py-3 text-right font-medium">Usage</th>
-              <th class="px-4 py-3 text-right font-medium">Cost</th>
-              <th class="px-4 py-3 text-right font-medium">Revenue</th>
-              <th class="px-4 py-3 text-right font-medium">Margin</th>
+              <th
+                v-for="col in visibleColumns"
+                :key="col.id"
+                class="px-4 py-3 font-medium"
+                :class="col.align === 'right' && 'text-right'"
+              >
+                {{ col.label }}
+              </th>
             </tr>
           </thead>
 
           <tbody v-if="isLoading" class="divide-y divide-border">
             <tr v-for="i in 10" :key="i">
-              <td class="px-4 py-3"><Skeleton class="h-4 w-24" /></td>
-              <td class="px-4 py-3"><Skeleton class="h-4 w-20" /></td>
-              <td class="px-4 py-3"><Skeleton class="h-4 w-28" /></td>
-              <td class="px-4 py-3"><Skeleton class="h-4 w-32" /></td>
-              <td class="px-4 py-3"><Skeleton class="h-4 w-24" /></td>
-              <td class="px-4 py-3"><Skeleton class="h-4 w-16" /></td>
-              <td class="px-4 py-3"><Skeleton class="h-4 w-12 ml-auto" /></td>
-              <td class="px-4 py-3"><Skeleton class="h-4 w-16 ml-auto" /></td>
-              <td class="px-4 py-3"><Skeleton class="h-4 w-16 ml-auto" /></td>
-              <td class="px-4 py-3">
-                <Skeleton class="h-5 w-14 rounded-full ml-auto" />
+              <td class="px-4 py-3"></td>
+              <td v-for="col in visibleColumns" :key="col.id" class="px-4 py-3">
+                <Skeleton
+                  class="h-4 w-20"
+                  :class="col.align === 'right' && 'ml-auto'"
+                />
               </td>
             </tr>
           </tbody>
 
           <tbody v-else-if="isError" class="divide-y divide-border">
             <tr>
-              <td colspan="12" class="px-4 py-8 text-center text-destructive">
+              <td
+                :colspan="colCount"
+                class="px-4 py-8 text-center text-destructive"
+              >
                 Failed to load events.
               </td>
             </tr>
@@ -355,7 +523,7 @@ function marginForEvent(event: ObserveEvent): number | null {
             class="divide-y divide-border"
           >
             <tr>
-              <td colspan="12" class="px-4 py-12 text-center">
+              <td :colspan="colCount" class="px-4 py-12 text-center">
                 <template v-if="hasFilters">
                   <p class="text-muted-foreground mb-3">
                     No events match these filters.
@@ -406,85 +574,151 @@ function marginForEvent(event: ObserveEvent): number | null {
                     class="h-3.5 w-3.5 text-muted-foreground"
                   />
                 </td>
-                <td
-                  class="px-4 py-3 text-muted-foreground whitespace-nowrap text-xs"
-                >
-                  {{ formatDate(event.timestamp) }}
-                </td>
-                <td class="px-4 py-3 text-xs text-foreground">
-                  {{ event.event_name }}
-                </td>
-                <td class="px-4 py-3">
-                  <span
-                    v-if="event.feature_key"
-                    class="font-mono text-xs bg-muted px-1.5 py-0.5 rounded"
+
+                <template v-for="col in visibleColumns" :key="col.id">
+                  <!-- Timestamp -->
+                  <td
+                    v-if="col.id === 'timestamp'"
+                    class="px-4 py-3 text-muted-foreground whitespace-nowrap text-xs"
                   >
-                    {{ event.feature_key }}
-                  </span>
-                  <span v-else class="text-muted-foreground text-sm">—</span>
-                </td>
-                <td class="px-4 py-3">
-                  <span v-if="event.customer_id" class="text-sm">
-                    {{ event.customer_name || event.customer_id }}
-                  </span>
-                  <span v-else class="text-muted-foreground text-sm">—</span>
-                </td>
-                <td class="px-4 py-3">
-                  <span
-                    v-if="event.model"
-                    class="font-mono text-xs bg-muted text-muted-foreground px-2 py-0.5 rounded-md border"
+                    {{ formatDate(event.timestamp) }}
+                  </td>
+
+                  <!-- Event -->
+                  <td
+                    v-else-if="col.id === 'event'"
+                    class="px-4 py-3 text-xs text-foreground"
                   >
-                    {{ event.model }}
-                  </span>
-                  <span v-else class="text-muted-foreground text-sm">—</span>
-                </td>
-                <td class="px-4 py-3">
-                  <SourceBadge
-                    v-if="event.is_inferred"
-                    source=""
-                    :is-inferred="true"
-                  />
-                  <SourceBadge
-                    v-else-if="event.source"
-                    :source="event.source"
-                  />
-                  <span v-else class="text-muted-foreground text-sm">—</span>
-                </td>
-                <td class="px-4 py-3">
-                  <code
-                    v-if="event.trace_id"
-                    class="text-[10px] bg-muted px-1.5 py-0.5 rounded font-mono cursor-pointer hover:bg-muted-foreground/20 transition-colors"
-                    @click.stop="router.push('/traces')"
-                    >{{ event.trace_id.slice(0, 8) }}</code
+                    {{ event.event_name }}
+                  </td>
+
+                  <!-- Feature -->
+                  <td v-else-if="col.id === 'feature'" class="px-4 py-3">
+                    <span
+                      v-if="event.feature_key"
+                      class="font-mono text-xs bg-muted px-1.5 py-0.5 rounded"
+                    >
+                      {{ event.feature_key }}
+                    </span>
+                    <span v-else class="text-muted-foreground text-sm">—</span>
+                  </td>
+
+                  <!-- Customer -->
+                  <td v-else-if="col.id === 'customer'" class="px-4 py-3">
+                    <span v-if="event.customer_id" class="text-sm">
+                      {{ event.customer_name || event.customer_id }}
+                    </span>
+                    <span v-else class="text-muted-foreground text-sm">—</span>
+                  </td>
+
+                  <!-- Model -->
+                  <td v-else-if="col.id === 'model'" class="px-4 py-3">
+                    <span
+                      v-if="event.model"
+                      class="font-mono text-xs bg-muted text-muted-foreground px-2 py-0.5 rounded-md border"
+                    >
+                      {{ event.model }}
+                    </span>
+                    <span v-else class="text-muted-foreground text-sm">—</span>
+                  </td>
+
+                  <!-- Source -->
+                  <td v-else-if="col.id === 'source'" class="px-4 py-3">
+                    <SourceBadge
+                      v-if="event.is_inferred"
+                      source=""
+                      :is-inferred="true"
+                    />
+                    <SourceBadge
+                      v-else-if="event.source"
+                      :source="event.source"
+                    />
+                    <span v-else class="text-muted-foreground text-sm">—</span>
+                  </td>
+
+                  <!-- Trace -->
+                  <td v-else-if="col.id === 'trace'" class="px-4 py-3">
+                    <code
+                      v-if="event.trace_id"
+                      class="text-[10px] bg-muted px-1.5 py-0.5 rounded font-mono cursor-pointer hover:bg-muted-foreground/20 transition-colors"
+                      @click.stop="router.push('/traces')"
+                      >{{ event.trace_id.slice(0, 8) }}</code
+                    >
+                  </td>
+
+                  <!-- Usage -->
+                  <td
+                    v-else-if="col.id === 'usage'"
+                    class="px-4 py-3 text-right text-xs text-muted-foreground tabular-nums"
                   >
-                </td>
-                <td
-                  class="px-4 py-3 text-right text-xs text-muted-foreground tabular-nums"
-                >
-                  {{
-                    event.usage_units != null && event.usage_units !== 0
-                      ? event.usage_units.toLocaleString()
-                      : "—"
-                  }}
-                </td>
-                <td
-                  class="px-4 py-3 text-right text-xs text-foreground tabular-nums"
-                >
-                  {{ formatCost(event.cost_amount) }}
-                </td>
-                <td
-                  class="px-4 py-3 text-right text-xs text-foreground tabular-nums"
-                >
-                  {{ formatCost(event.revenue_amount) }}
-                </td>
-                <td class="px-4 py-3 text-right">
-                  <MarginBadge :margin="marginForEvent(event)" />
-                </td>
+                    {{
+                      event.usage_units != null && event.usage_units !== 0
+                        ? event.usage_units.toLocaleString()
+                        : "—"
+                    }}
+                  </td>
+
+                  <!-- Cost -->
+                  <td
+                    v-else-if="col.id === 'cost'"
+                    class="px-4 py-3 text-right text-xs text-foreground tabular-nums"
+                  >
+                    {{ formatCost(event.cost_amount) }}
+                  </td>
+
+                  <!-- Revenue -->
+                  <td
+                    v-else-if="col.id === 'revenue'"
+                    class="px-4 py-3 text-right text-xs text-foreground tabular-nums"
+                  >
+                    {{ formatCost(event.revenue_amount) }}
+                  </td>
+
+                  <!-- Margin -->
+                  <td
+                    v-else-if="col.id === 'margin'"
+                    class="px-4 py-3 text-right"
+                  >
+                    <MarginBadge :margin="marginForEvent(event)" />
+                  </td>
+
+                  <!-- Duration -->
+                  <td
+                    v-else-if="col.id === 'duration'"
+                    class="px-4 py-3 text-right text-xs text-muted-foreground tabular-nums"
+                  >
+                    {{
+                      event.duration_ms != null ? `${event.duration_ms}ms` : "—"
+                    }}
+                  </td>
+
+                  <!-- Cost Type -->
+                  <td
+                    v-else-if="col.id === 'cost_type'"
+                    class="px-4 py-3 text-xs text-muted-foreground"
+                  >
+                    {{ event.cost_type || "—" }}
+                  </td>
+
+                  <!-- Properties -->
+                  <td
+                    v-else-if="col.id === 'properties'"
+                    class="px-4 py-3 text-xs text-muted-foreground max-w-[200px] truncate"
+                  >
+                    {{
+                      event.properties
+                        ? Object.entries(event.properties)
+                            .map(([k, v]) => `${k}=${v}`)
+                            .join(", ")
+                        : "—"
+                    }}
+                  </td>
+                </template>
               </tr>
 
               <!-- Expanded detail panel -->
               <tr v-if="expandedIds.has(event.id)">
-                <td :colspan="12" class="px-0 py-0 bg-muted/20 border-b">
+                <td :colspan="colCount" class="px-0 py-0 bg-muted/20 border-b">
                   <div
                     v-if="loadingDetails.has(event.id)"
                     class="p-6 text-center text-sm text-muted-foreground"

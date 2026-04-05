@@ -18,14 +18,103 @@ import {
   Minus,
   ChevronDown,
   ChevronRight,
+  ChevronUp,
   Sparkles,
   Loader2,
+  Settings2,
+  RotateCcw,
 } from "lucide-vue-next";
 import { Card, Skeleton, Button } from "@/components/ui";
 import { formatCurrency as fmt, formatPct as fmtPct } from "@/lib/format";
 import { toast } from "vue-sonner";
 
 const queryClient = useQueryClient();
+
+// ── Column configuration ─────────────────────────────────────────────────────
+
+interface TableColumn {
+  id: string;
+  label: string;
+  visible: boolean;
+  align: "left" | "right";
+}
+
+const DEFAULT_COLUMNS: TableColumn[] = [
+  { id: "customer", label: "Customer", visible: true, align: "left" },
+  { id: "health", label: "Health", visible: true, align: "left" },
+  { id: "revenue", label: "Revenue", visible: true, align: "right" },
+  { id: "cost", label: "Cost", visible: true, align: "right" },
+  { id: "margin", label: "Margin", visible: true, align: "right" },
+  { id: "active_days", label: "Active Days", visible: true, align: "right" },
+  { id: "mrr", label: "MRR", visible: true, align: "left" },
+];
+
+const STORAGE_KEY = "observe:cohorts-columns";
+
+function loadColumns(): TableColumn[] {
+  const saved = localStorage.getItem(STORAGE_KEY);
+  if (!saved) return DEFAULT_COLUMNS.map((c) => ({ ...c }));
+  try {
+    const { order, hidden } = JSON.parse(saved) as {
+      order: string[];
+      hidden: string[];
+    };
+    const byId = new Map(DEFAULT_COLUMNS.map((c) => [c.id, { ...c }]));
+    const result: TableColumn[] = [];
+    for (const id of order) {
+      const col = byId.get(id);
+      if (col) {
+        col.visible = !hidden.includes(id);
+        result.push(col);
+        byId.delete(id);
+      }
+    }
+    // Append any new columns not in saved order
+    for (const col of byId.values()) {
+      result.push(col);
+    }
+    return result;
+  } catch {
+    return DEFAULT_COLUMNS.map((c) => ({ ...c }));
+  }
+}
+
+function saveColumns(cols: TableColumn[]) {
+  localStorage.setItem(
+    STORAGE_KEY,
+    JSON.stringify({
+      order: cols.map((c) => c.id),
+      hidden: cols.filter((c) => !c.visible).map((c) => c.id),
+    }),
+  );
+}
+
+const columns = ref<TableColumn[]>(loadColumns());
+const visibleColumns = computed(() => columns.value.filter((c) => c.visible));
+const colCount = computed(() => visibleColumns.value.length + 1); // +1 for expand chevron
+const showColumnSettings = ref(false);
+
+function toggleColumn(id: string) {
+  const col = columns.value.find((c) => c.id === id);
+  if (col) {
+    col.visible = !col.visible;
+    saveColumns(columns.value);
+  }
+}
+
+function moveColumn(index: number, direction: -1 | 1) {
+  const target = index + direction;
+  if (target < 0 || target >= columns.value.length) return;
+  const arr = [...columns.value];
+  [arr[index], arr[target]] = [arr[target], arr[index]];
+  columns.value = arr;
+  saveColumns(columns.value);
+}
+
+function resetColumns() {
+  columns.value = DEFAULT_COLUMNS.map((c) => ({ ...c }));
+  localStorage.removeItem(STORAGE_KEY);
+}
 
 const {
   data: cohortsData,
@@ -229,8 +318,8 @@ const filteredCustomers = computed(() => {
         </Card>
       </div>
 
-      <!-- Cohort filter chips -->
-      <div class="flex flex-wrap gap-2">
+      <!-- Cohort filter chips + column settings -->
+      <div class="flex flex-wrap items-center gap-2">
         <button
           v-for="label in cohortLabels"
           :key="label"
@@ -247,7 +336,79 @@ const filteredCustomers = computed(() => {
             >({{ summary[label].count }})</span
           >
         </button>
+
+        <!-- Column settings -->
+        <div class="relative ml-auto">
+          <Button
+            variant="outline"
+            size="sm"
+            class="h-9 px-2.5"
+            @click="showColumnSettings = !showColumnSettings"
+          >
+            <Settings2 class="h-4 w-4" />
+          </Button>
+
+          <div
+            v-if="showColumnSettings"
+            class="absolute right-0 top-full mt-1 z-50 w-64 rounded-lg border bg-card shadow-lg"
+          >
+            <div
+              class="flex items-center justify-between px-3 py-2 border-b text-xs font-medium text-muted-foreground"
+            >
+              <span>Columns</span>
+              <button
+                class="flex items-center gap-1 hover:text-foreground transition-colors"
+                @click="resetColumns"
+              >
+                <RotateCcw class="h-3 w-3" />
+                Reset
+              </button>
+            </div>
+            <div class="max-h-80 overflow-y-auto py-1">
+              <div
+                v-for="(col, idx) in columns"
+                :key="col.id"
+                class="flex items-center gap-2 px-3 py-1.5 hover:bg-muted/50 text-sm"
+              >
+                <input
+                  type="checkbox"
+                  :checked="col.visible"
+                  class="h-3.5 w-3.5 rounded border-input accent-primary"
+                  @change="toggleColumn(col.id)"
+                />
+                <span
+                  class="flex-1"
+                  :class="!col.visible && 'text-muted-foreground'"
+                  >{{ col.label }}</span
+                >
+                <div class="flex gap-0.5">
+                  <button
+                    class="p-0.5 text-muted-foreground/50 hover:text-foreground disabled:opacity-20"
+                    :disabled="idx === 0"
+                    @click="moveColumn(idx, -1)"
+                  >
+                    <ChevronUp class="h-3 w-3" />
+                  </button>
+                  <button
+                    class="p-0.5 text-muted-foreground/50 hover:text-foreground disabled:opacity-20"
+                    :disabled="idx === columns.length - 1"
+                    @click="moveColumn(idx, 1)"
+                  >
+                    <ChevronDown class="h-3 w-3" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
+
+      <!-- Click-away overlay -->
+      <div
+        v-if="showColumnSettings"
+        class="fixed inset-0 z-40"
+        @click="showColumnSettings = false"
+      />
 
       <!-- AI discovery -->
       <Card class="p-4">
@@ -335,13 +496,14 @@ const filteredCustomers = computed(() => {
             <thead>
               <tr class="border-b bg-muted/50">
                 <th class="text-left p-3 font-medium w-6"></th>
-                <th class="text-left p-3 font-medium">Customer</th>
-                <th class="text-left p-3 font-medium">Health</th>
-                <th class="text-right p-3 font-medium">Revenue</th>
-                <th class="text-right p-3 font-medium">Cost</th>
-                <th class="text-right p-3 font-medium">Margin</th>
-                <th class="text-right p-3 font-medium">Active Days</th>
-                <th class="text-left p-3 font-medium">MRR</th>
+                <th
+                  v-for="col in visibleColumns"
+                  :key="col.id"
+                  class="p-3 font-medium"
+                  :class="col.align === 'right' ? 'text-right' : 'text-left'"
+                >
+                  {{ col.label }}
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -366,43 +528,70 @@ const filteredCustomers = computed(() => {
                       class="h-3.5 w-3.5 text-muted-foreground"
                     />
                   </td>
-                  <td class="p-3">
-                    <div class="flex items-center gap-2">
-                      <span class="font-medium">{{ c.customer_name }}</span>
-                      <span
-                        class="inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium"
-                        :class="cohortMeta[c.cohort].color"
-                      >
-                        {{ cohortMeta[c.cohort].label }}
-                      </span>
-                    </div>
-                  </td>
-                  <td class="p-3">
-                    <div class="flex items-center gap-2">
-                      <span
-                        class="h-2 w-2 rounded-full"
-                        :class="healthColor(c.health_score)"
-                      />
-                      <span>{{ c.health_score }}</span>
-                    </div>
-                  </td>
-                  <td class="p-3 text-right">{{ fmt(c.total_revenue) }}</td>
-                  <td class="p-3 text-right">{{ fmt(c.total_cost) }}</td>
-                  <td class="p-3 text-right">{{ fmtPct(c.margin_pct) }}</td>
-                  <td class="p-3 text-right">{{ c.active_days_30d }}</td>
-                  <td class="p-3">
-                    <span
-                      v-if="c.mrr_movement"
-                      class="inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium"
-                      :class="
-                        mrrMeta[c.mrr_movement]?.color ??
-                        'bg-gray-100 text-gray-600'
-                      "
+
+                  <template v-for="col in visibleColumns" :key="col.id">
+                    <!-- Customer -->
+                    <td v-if="col.id === 'customer'" class="p-3">
+                      <div class="flex items-center gap-2">
+                        <span class="font-medium">{{ c.customer_name }}</span>
+                        <span
+                          class="inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium"
+                          :class="cohortMeta[c.cohort].color"
+                        >
+                          {{ cohortMeta[c.cohort].label }}
+                        </span>
+                      </div>
+                    </td>
+
+                    <!-- Health -->
+                    <td v-else-if="col.id === 'health'" class="p-3">
+                      <div class="flex items-center gap-2">
+                        <span
+                          class="h-2 w-2 rounded-full"
+                          :class="healthColor(c.health_score)"
+                        />
+                        <span>{{ c.health_score }}</span>
+                      </div>
+                    </td>
+
+                    <!-- Revenue -->
+                    <td v-else-if="col.id === 'revenue'" class="p-3 text-right">
+                      {{ fmt(c.total_revenue) }}
+                    </td>
+
+                    <!-- Cost -->
+                    <td v-else-if="col.id === 'cost'" class="p-3 text-right">
+                      {{ fmt(c.total_cost) }}
+                    </td>
+
+                    <!-- Margin -->
+                    <td v-else-if="col.id === 'margin'" class="p-3 text-right">
+                      {{ fmtPct(c.margin_pct) }}
+                    </td>
+
+                    <!-- Active Days -->
+                    <td
+                      v-else-if="col.id === 'active_days'"
+                      class="p-3 text-right"
                     >
-                      {{ mrrMeta[c.mrr_movement]?.label ?? c.mrr_movement }}
-                    </span>
-                    <span v-else class="text-muted-foreground">—</span>
-                  </td>
+                      {{ c.active_days_30d }}
+                    </td>
+
+                    <!-- MRR -->
+                    <td v-else-if="col.id === 'mrr'" class="p-3">
+                      <span
+                        v-if="c.mrr_movement"
+                        class="inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium"
+                        :class="
+                          mrrMeta[c.mrr_movement]?.color ??
+                          'bg-gray-100 text-gray-600'
+                        "
+                      >
+                        {{ mrrMeta[c.mrr_movement]?.label ?? c.mrr_movement }}
+                      </span>
+                      <span v-else class="text-muted-foreground">—</span>
+                    </td>
+                  </template>
                 </tr>
                 <!-- Expanded model-swap row -->
                 <tr
@@ -412,7 +601,7 @@ const filteredCustomers = computed(() => {
                   class="bg-muted/20"
                 >
                   <td></td>
-                  <td colspan="7" class="p-3">
+                  <td :colspan="colCount - 1" class="p-3">
                     <div class="flex items-center gap-4 text-xs">
                       <span class="text-muted-foreground"
                         >Model swap suggestion:</span
@@ -445,7 +634,10 @@ const filteredCustomers = computed(() => {
                 </tr>
               </template>
               <tr v-if="!filteredCustomers.length">
-                <td colspan="8" class="p-6 text-center text-muted-foreground">
+                <td
+                  :colspan="colCount"
+                  class="p-6 text-center text-muted-foreground"
+                >
                   No customers match the current filters.
                 </td>
               </tr>
