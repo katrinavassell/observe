@@ -804,6 +804,315 @@ export function createProxyRoutes(
     }
   });
 
+  // POST /v1/google/generateContent — Google Gemini proxy + log
+  router.post(
+    "/v1/google/generateContent",
+    async (req: Request, res: Response) => {
+      try {
+        const authHeader = req.headers.authorization;
+        if (!authHeader) {
+          return res.status(401).json({
+            error: {
+              message: "Missing Authorization header (Google API key)",
+              type: "auth_error",
+            },
+          });
+        }
+
+        const {
+          observeKey,
+          customerId,
+          featureKey: feat,
+          properties,
+          agentId,
+          traceId,
+          spanId,
+          parentSpanId,
+        } = parseProxyHeaders(req);
+        if (!observeKey) {
+          return res.status(401).json({
+            error: {
+              message: "Missing observe key (x-tanso-key header)",
+              type: "auth_error",
+            },
+          });
+        }
+        const userId = await resolveProxyUserId(observeKey);
+        if (!userId) {
+          return res.status(401).json({
+            error: {
+              message: "Invalid or revoked observe key",
+              type: "auth_error",
+            },
+          });
+        }
+        const featureKey = feat || "generate_content";
+        const model = req.body.model || "gemini-2.5-flash";
+
+        // Google uses ?key= query param for auth
+        const apiKey = authHeader.replace(/^Bearer\s+/i, "");
+        const upstreamUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+
+        const proxyStart = Date.now();
+        const googleResponse = await fetch(upstreamUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(req.body),
+        });
+
+        const data = (await googleResponse.json()) as Record<string, unknown>;
+        const durationMs = Date.now() - proxyStart;
+        res.status(googleResponse.status).json(data);
+
+        if (userId && googleResponse.ok && data.usageMetadata) {
+          const usage = data.usageMetadata as {
+            promptTokenCount?: number;
+            candidatesTokenCount?: number;
+          };
+          const respModel = model;
+          const inputTokens = usage.promptTokenCount || 0;
+          const outputTokens = usage.candidatesTokenCount || 0;
+          const cost = await calculateCost(
+            respModel,
+            inputTokens,
+            outputTokens,
+          );
+          logProxyEvent(
+            userId,
+            respModel,
+            inputTokens,
+            outputTokens,
+            cost,
+            customerId,
+            featureKey,
+            "google",
+            properties,
+            req.body,
+            data,
+            agentId,
+            traceId,
+            spanId,
+            parentSpanId,
+            durationMs,
+            "llm",
+          ).catch((err) =>
+            console.error("Google proxy event logging failed:", err),
+          );
+        }
+      } catch (error) {
+        console.error("POST /v1/google/generateContent proxy error:", error);
+        res.status(502).json({
+          error: {
+            message: "Failed to reach Google Gemini",
+            type: "proxy_error",
+          },
+        });
+      }
+    },
+  );
+
+  // POST /v1/cohere/chat — Cohere proxy + log
+  router.post("/v1/cohere/chat", async (req: Request, res: Response) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader) {
+        return res.status(401).json({
+          error: {
+            message: "Missing Authorization header (Cohere key)",
+            type: "auth_error",
+          },
+        });
+      }
+
+      const {
+        observeKey,
+        customerId,
+        featureKey: feat,
+        properties,
+        agentId,
+        traceId,
+        spanId,
+        parentSpanId,
+      } = parseProxyHeaders(req);
+      if (!observeKey) {
+        return res.status(401).json({
+          error: {
+            message: "Missing observe key (x-tanso-key header)",
+            type: "auth_error",
+          },
+        });
+      }
+      const userId = await resolveProxyUserId(observeKey);
+      if (!userId) {
+        return res.status(401).json({
+          error: {
+            message: "Invalid or revoked observe key",
+            type: "auth_error",
+          },
+        });
+      }
+      const featureKey = feat || "cohere_chat";
+      const model = req.body.model || "command-r-plus";
+
+      const proxyStart = Date.now();
+      const cohereResponse = await fetch("https://api.cohere.com/v2/chat", {
+        method: "POST",
+        headers: {
+          Authorization: authHeader,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(req.body),
+      });
+
+      const data = (await cohereResponse.json()) as Record<string, unknown>;
+      const durationMs = Date.now() - proxyStart;
+      res.status(cohereResponse.status).json(data);
+
+      if (userId && cohereResponse.ok && data.usage) {
+        const usage = data.usage as {
+          billed_input_tokens?: number;
+          billed_output_tokens?: number;
+        };
+        const respModel = (data.model as string) || model;
+        const inputTokens = usage.billed_input_tokens || 0;
+        const outputTokens = usage.billed_output_tokens || 0;
+        const cost = await calculateCost(respModel, inputTokens, outputTokens);
+        logProxyEvent(
+          userId,
+          respModel,
+          inputTokens,
+          outputTokens,
+          cost,
+          customerId,
+          featureKey,
+          "cohere",
+          properties,
+          req.body,
+          data,
+          agentId,
+          traceId,
+          spanId,
+          parentSpanId,
+          durationMs,
+          "llm",
+        ).catch((err) =>
+          console.error("Cohere proxy event logging failed:", err),
+        );
+      }
+    } catch (error) {
+      console.error("POST /v1/cohere/chat proxy error:", error);
+      res.status(502).json({
+        error: { message: "Failed to reach Cohere", type: "proxy_error" },
+      });
+    }
+  });
+
+  // POST /v1/mistral/chat/completions — Mistral proxy + log
+  router.post(
+    "/v1/mistral/chat/completions",
+    async (req: Request, res: Response) => {
+      try {
+        const authHeader = req.headers.authorization;
+        if (!authHeader) {
+          return res.status(401).json({
+            error: {
+              message: "Missing Authorization header (Mistral key)",
+              type: "auth_error",
+            },
+          });
+        }
+
+        const {
+          observeKey,
+          customerId,
+          featureKey: feat,
+          properties,
+          agentId,
+          traceId,
+          spanId,
+          parentSpanId,
+        } = parseProxyHeaders(req);
+        if (!observeKey) {
+          return res.status(401).json({
+            error: {
+              message: "Missing observe key (x-tanso-key header)",
+              type: "auth_error",
+            },
+          });
+        }
+        const userId = await resolveProxyUserId(observeKey);
+        if (!userId) {
+          return res.status(401).json({
+            error: {
+              message: "Invalid or revoked observe key",
+              type: "auth_error",
+            },
+          });
+        }
+        const featureKey = feat || "mistral_chat";
+        const model = req.body.model || "mistral-large-latest";
+
+        const proxyStart = Date.now();
+        const mistralResponse = await fetch(
+          "https://api.mistral.ai/v1/chat/completions",
+          {
+            method: "POST",
+            headers: {
+              Authorization: authHeader,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(req.body),
+          },
+        );
+
+        const data = (await mistralResponse.json()) as Record<string, unknown>;
+        const durationMs = Date.now() - proxyStart;
+        res.status(mistralResponse.status).json(data);
+
+        if (userId && mistralResponse.ok && data.usage) {
+          const usage = data.usage as {
+            prompt_tokens?: number;
+            completion_tokens?: number;
+          };
+          const respModel = (data.model as string) || model;
+          const inputTokens = usage.prompt_tokens || 0;
+          const outputTokens = usage.completion_tokens || 0;
+          const cost = await calculateCost(
+            respModel,
+            inputTokens,
+            outputTokens,
+          );
+          logProxyEvent(
+            userId,
+            respModel,
+            inputTokens,
+            outputTokens,
+            cost,
+            customerId,
+            featureKey,
+            "mistral",
+            properties,
+            req.body,
+            data,
+            agentId,
+            traceId,
+            spanId,
+            parentSpanId,
+            durationMs,
+            "llm",
+          ).catch((err) =>
+            console.error("Mistral proxy event logging failed:", err),
+          );
+        }
+      } catch (error) {
+        console.error("POST /v1/mistral/chat/completions proxy error:", error);
+        res.status(502).json({
+          error: { message: "Failed to reach Mistral", type: "proxy_error" },
+        });
+      }
+    },
+  );
+
   // GET /proxy/cache/stats — cache performance metrics for current user
   router.get(
     "/proxy/cache/stats",

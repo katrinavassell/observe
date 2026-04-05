@@ -557,6 +557,86 @@ watch(
           map it later.
         </p>
 
+        <!-- Other provider snippets (collapsed) -->
+        <details class="group">
+          <summary
+            class="text-xs font-medium text-muted-foreground cursor-pointer hover:text-foreground transition-colors"
+          >
+            Google Gemini, Cohere, and Mistral examples
+          </summary>
+          <div class="mt-3 space-y-4">
+            <!-- Google Gemini -->
+            <div>
+              <h4 class="text-xs font-semibold mb-2">Google Gemini</h4>
+              <div
+                class="rounded-md bg-zinc-950 border border-zinc-800 p-4 font-mono text-xs leading-relaxed overflow-x-auto"
+              >
+                <pre
+                  class="whitespace-pre text-zinc-100"
+                ><span class="text-zinc-500">// Pass your Google API key as a Bearer token.</span>
+<span class="text-zinc-500">// Observe extracts it and forwards via ?key= to Google.</span>
+
+curl -X POST <span class="text-amber-300">'{{ proxyBaseUrl }}/google/generateContent'</span> \
+  -H <span class="text-amber-300">'Authorization: Bearer YOUR_GOOGLE_API_KEY'</span> \
+  -H <span class="text-amber-300">'x-tanso-key: {{ apiKeyForSnippet }}'</span> \
+  -H <span class="text-amber-300">'x-tanso-customer: cus_123'</span> \
+  -H <span class="text-amber-300">'x-tanso-feature: ai_chat'</span> \
+  -H <span class="text-amber-300">'Content-Type: application/json'</span> \
+  -d <span class="text-amber-300">'{"model":"gemini-2.5-flash","contents":[{"parts":[{"text":"Hello"}]}]}'</span></pre>
+              </div>
+            </div>
+            <!-- Cohere -->
+            <div>
+              <h4 class="text-xs font-semibold mb-2">Cohere</h4>
+              <div
+                class="rounded-md bg-zinc-950 border border-zinc-800 p-4 font-mono text-xs leading-relaxed overflow-x-auto"
+              >
+                <pre
+                  class="whitespace-pre text-zinc-100"
+                ><span class="text-emerald-400">import</span> { CohereClient } <span class="text-emerald-400">from</span> <span class="text-amber-300">'cohere-ai'</span>
+
+<span class="text-zinc-500">// Point the Cohere SDK at the Observe proxy</span>
+<span class="text-emerald-400">const</span> cohere = <span class="text-emerald-400">new</span> CohereClient({
+  <span class="text-sky-300">token</span>: <span class="text-amber-300">'YOUR_COHERE_KEY'</span>,
+  <span class="text-sky-300">baseUrl</span>: <span class="text-amber-300">'{{ proxyBaseUrl }}/cohere'</span>,
+})
+<span class="text-zinc-500">// Add x-tanso-key, x-tanso-customer, x-tanso-feature via fetch override or headers.</span>
+
+<span class="text-zinc-500">// Or use curl directly:</span>
+<span class="text-zinc-500">// curl -X POST '{{ proxyBaseUrl }}/cohere/chat' \</span>
+<span class="text-zinc-500">//   -H 'Authorization: Bearer YOUR_COHERE_KEY' \</span>
+<span class="text-zinc-500">//   -H 'x-tanso-key: {{ apiKeyForSnippet }}' \</span>
+<span class="text-zinc-500">//   -H 'x-tanso-customer: cus_123' \</span>
+<span class="text-zinc-500">//   -d '{"model":"command-r-plus","messages":[{"role":"user","content":"Hello"}]}'</span></pre>
+              </div>
+            </div>
+            <!-- Mistral -->
+            <div>
+              <h4 class="text-xs font-semibold mb-2">Mistral</h4>
+              <div
+                class="rounded-md bg-zinc-950 border border-zinc-800 p-4 font-mono text-xs leading-relaxed overflow-x-auto"
+              >
+                <pre
+                  class="whitespace-pre text-zinc-100"
+                ><span class="text-emerald-400">import</span> { Mistral } <span class="text-emerald-400">from</span> <span class="text-amber-300">'@mistralai/mistralai'</span>
+
+<span class="text-emerald-400">const</span> mistral = <span class="text-emerald-400">new</span> Mistral({
+  <span class="text-sky-300">apiKey</span>: <span class="text-amber-300">'YOUR_MISTRAL_KEY'</span>,
+  <span class="text-sky-300">serverURL</span>: <span class="text-amber-300">'{{ proxyBaseUrl }}/mistral'</span>,
+})
+<span class="text-zinc-500">// Add x-tanso-key, x-tanso-customer, x-tanso-feature via additionalHeaders.</span>
+
+<span class="text-zinc-500">// Or use curl directly:</span>
+<span class="text-zinc-500">// curl -X POST '{{ proxyBaseUrl }}/mistral/chat/completions' \</span>
+<span class="text-zinc-500">//   -H 'Authorization: Bearer YOUR_MISTRAL_KEY' \</span>
+<span class="text-zinc-500">//   -H 'x-tanso-key: {{ apiKeyForSnippet }}' \</span>
+<span class="text-zinc-500">//   -H 'x-tanso-customer: cus_123' \</span>
+<span class="text-zinc-500">//   -d '{"model":"mistral-large-latest","messages":[{"role":"user","content":"Hello"}]}'</span></pre>
+              </div>
+            </div>
+          </div>
+        </details>
+
         <!-- API Key section — compact -->
         <div
           v-if="!isLoggedIn"
