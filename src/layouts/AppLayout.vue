@@ -99,16 +99,16 @@ const navItems = computed(() => [
     description: "AI model cost breakdown",
   },
   {
-    path: "/alerts",
-    label: "Alerts",
-    icon: Bell,
-    description: "Cost spike and margin alerts",
-  },
-  {
     path: "/cohorts",
     label: "Cohorts",
     icon: Users,
     description: "Customer segments by profitability and behavior",
+  },
+  {
+    path: "/alerts",
+    label: "Alerts",
+    icon: Bell,
+    description: "Cost spike and margin alerts",
   },
   {
     path: "/data-sources",

@@ -23,7 +23,7 @@ const insightsGenerated = computed(
 const steps = computed(() => [
   {
     label: "Connect your data sources",
-    done: hasCosts.value || hasRevenue.value,
+    done: hasData.value || hasCosts.value || hasRevenue.value,
     action: () => router.push("/data-sources"),
   },
   {
@@ -34,7 +34,7 @@ const steps = computed(() => [
   {
     label: "Generate AI insights",
     done: insightsGenerated.value,
-    action: null,
+    action: () => window.scrollTo({ top: 0, behavior: "smooth" }),
   },
 ]);
 
