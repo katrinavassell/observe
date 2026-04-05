@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import { useQuery } from "@tanstack/vue-query";
 import {
   Users,
@@ -7,9 +7,11 @@ import {
   DollarSign,
   Lightbulb,
   ShieldAlert,
+  Mail,
 } from "lucide-vue-next";
 import { Card, CardContent, Skeleton, Badge } from "@/components/ui";
 import { formatCurrency } from "@/lib/format";
+import { getAdminEmails } from "@/lib/api";
 
 interface AdminUser {
   email: string;
@@ -46,9 +48,18 @@ const { data, isLoading, isError, error } = useQuery({
   retry: false,
 });
 
+const activeTab = ref<"users" | "emails">("users");
+
 const isForbidden = computed(
   () => isError.value && error.value?.message === "FORBIDDEN",
 );
+
+const { data: emailsData, isLoading: emailsLoading } = useQuery({
+  queryKey: ["admin", "emails"],
+  queryFn: getAdminEmails,
+  retry: false,
+  enabled: computed(() => !isForbidden.value),
+});
 
 const sortedUsers = computed(() => {
   if (!data.value) return [];
@@ -87,6 +98,32 @@ function formatDate(iso: string): string {
     day: "numeric",
     year: "numeric",
   });
+}
+
+function formatDateTime(iso: string): string {
+  const d = new Date(iso);
+  return d.toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function emailStatusVariant(
+  status: string,
+): "success" | "destructive" | "default" | "secondary" {
+  switch (status) {
+    case "delivered":
+      return "success";
+    case "bounced":
+      return "destructive";
+    case "sent":
+      return "default";
+    default:
+      return "secondary";
+  }
 }
 </script>
 
@@ -182,8 +219,39 @@ function formatDate(iso: string): string {
         </div>
       </div>
 
+      <!-- Section tabs -->
+      <div class="flex gap-1 border-b">
+        <button
+          class="px-4 py-2 text-sm font-medium transition-colors"
+          :class="
+            activeTab === 'users'
+              ? 'border-b-2 border-foreground text-foreground'
+              : 'text-muted-foreground hover:text-foreground'
+          "
+          @click="activeTab = 'users'"
+        >
+          <Users class="inline h-3.5 w-3.5 mr-1.5" />
+          Users
+        </button>
+        <button
+          class="px-4 py-2 text-sm font-medium transition-colors"
+          :class="
+            activeTab === 'emails'
+              ? 'border-b-2 border-foreground text-foreground'
+              : 'text-muted-foreground hover:text-foreground'
+          "
+          @click="activeTab = 'emails'"
+        >
+          <Mail class="inline h-3.5 w-3.5 mr-1.5" />
+          Emails
+        </button>
+      </div>
+
       <!-- Users table -->
-      <div class="rounded-lg border bg-card overflow-hidden">
+      <div
+        v-if="activeTab === 'users'"
+        class="rounded-lg border bg-card overflow-hidden"
+      >
         <div class="overflow-x-auto">
           <table class="w-full text-sm">
             <thead
@@ -248,6 +316,59 @@ function formatDate(iso: string): string {
           class="flex items-center justify-center py-12 text-sm text-muted-foreground"
         >
           No users found.
+        </div>
+      </div>
+
+      <!-- Emails table -->
+      <div v-if="activeTab === 'emails'">
+        <div v-if="emailsLoading" class="space-y-3">
+          <Skeleton v-for="i in 5" :key="i" class="h-10 w-full" />
+        </div>
+
+        <div
+          v-else-if="!emailsData?.emails?.length"
+          class="flex items-center justify-center py-12 text-sm text-muted-foreground"
+        >
+          No emails sent yet
+        </div>
+
+        <div v-else class="rounded-lg border bg-card overflow-hidden">
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead
+                class="bg-muted/50 text-muted-foreground text-xs font-medium uppercase tracking-wider"
+              >
+                <tr>
+                  <th class="px-4 py-3 font-medium text-left">To</th>
+                  <th class="px-4 py-3 font-medium text-left">Subject</th>
+                  <th class="px-4 py-3 font-medium text-left">Status</th>
+                  <th class="px-4 py-3 font-medium text-right">Sent At</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y">
+                <tr
+                  v-for="email in emailsData.emails"
+                  :key="email.id"
+                  class="hover:bg-muted/50 transition-colors"
+                >
+                  <td class="px-4 py-3">
+                    <span class="font-mono text-xs">{{
+                      Array.isArray(email.to) ? email.to.join(", ") : email.to
+                    }}</span>
+                  </td>
+                  <td class="px-4 py-3">{{ email.subject || "—" }}</td>
+                  <td class="px-4 py-3">
+                    <Badge :variant="emailStatusVariant(email.status)">
+                      {{ email.status }}
+                    </Badge>
+                  </td>
+                  <td class="px-4 py-3 text-right text-muted-foreground">
+                    {{ formatDateTime(email.created_at) }}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
     </template>

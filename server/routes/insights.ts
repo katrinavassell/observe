@@ -805,6 +805,46 @@ Return ONLY the JSON array, no markdown or explanation.`;
     },
   );
 
+  // GET /admin/emails — list recent emails sent via Resend (admin only)
+  router.get(
+    "/admin/emails",
+    ensureVisitor,
+    async (req: AuthRequest, res: Response) => {
+      try {
+        if (
+          !req.accountEmail ||
+          req.accountEmail.toLowerCase() !==
+            (process.env.ADMIN_EMAIL || "").toLowerCase()
+        ) {
+          return res.status(403).json({ error: "Admin access required" });
+        }
+
+        const apiKey = process.env.RESEND_API_KEY;
+        if (!apiKey) {
+          return res.json({ emails: [], error: "Resend not configured" });
+        }
+
+        const response = await fetch("https://api.resend.com/emails", {
+          headers: { Authorization: `Bearer ${apiKey}` },
+        });
+
+        if (!response.ok) {
+          const text = await response.text();
+          console.error("Resend API error:", response.status, text);
+          return res
+            .status(502)
+            .json({ error: "Failed to fetch emails from Resend" });
+        }
+
+        const data = await response.json();
+        res.json({ emails: data.data ?? [] });
+      } catch (err) {
+        console.error("GET /admin/emails error:", err);
+        res.status(500).json({ error: "Failed to fetch emails" });
+      }
+    },
+  );
+
   // POST /admin/cleanup — delete events older than 30 days for free-plan users
   router.post(
     "/admin/cleanup",

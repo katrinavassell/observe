@@ -22,6 +22,7 @@ import {
   X,
   Sparkles,
   MessageSquare,
+  Shield,
 } from "lucide-vue-next";
 import { toast } from "vue-sonner";
 import ErrorBoundary from "@/components/shared/ErrorBoundary.vue";
@@ -133,6 +134,26 @@ const navItems = computed(() => [
   },
 ]);
 
+const isAdmin = computed(
+  () => account.value?.email?.endsWith("@tansohq.com") ?? false,
+);
+
+const adminNavItem = computed(() =>
+  isAdmin.value
+    ? [
+        {
+          path: "/admin",
+          label: "Admin",
+          icon: Shield,
+          description: "Admin dashboard",
+          dividerBefore: true,
+        },
+      ]
+    : [],
+);
+
+const allNavItems = computed(() => [...navItems.value, ...adminNavItem.value]);
+
 const sidebarOpen = ref(false);
 
 watch(
@@ -235,7 +256,7 @@ function isActive(path: string) {
         <!-- Navigation -->
         <nav class="flex-1 overflow-y-auto px-3 py-4">
           <div class="space-y-1">
-            <template v-for="(item, idx) in navItems" :key="item.path">
+            <template v-for="(item, idx) in allNavItems" :key="item.path">
               <!-- Section divider with label -->
               <div v-if="item.dividerBefore" class="pt-4 pb-1">
                 <div class="h-px bg-sidebar-border mb-3" />
