@@ -13,6 +13,7 @@ import {
   Loader2,
   Settings2,
   RotateCcw,
+  ArrowRight,
 } from "lucide-vue-next";
 import { Card, Skeleton, Button } from "@/components/ui";
 import { formatCurrency as fmt, formatPct as fmtPct } from "@/lib/format";

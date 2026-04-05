@@ -1049,6 +1049,10 @@ export interface UsageLimits {
     allowed: boolean;
     usage?: { used: number; limit: number; remaining: number };
   };
+  event_ingest?: {
+    allowed: boolean;
+    usage: { used: number; limit: number; remaining: number };
+  };
 }
 
 export async function getUsageLimits(): Promise<UsageLimits> {

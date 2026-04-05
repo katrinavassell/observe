@@ -9,7 +9,11 @@ import { Card, Button, Skeleton } from "@/components/ui";
 const _router = useRouter();
 const selectedTraceId = ref<string | null>(null);
 
-const { data: tracesData, isLoading: tracesLoading } = useQuery({
+const {
+  data: tracesData,
+  isLoading: tracesLoading,
+  isError: tracesError,
+} = useQuery({
   queryKey: ["traces"],
   queryFn: () => getTraces(),
   enabled: computed(() => !selectedTraceId.value),
@@ -135,6 +139,10 @@ const maxDuration = computed(() => {
           <Skeleton v-for="i in 5" :key="i" class="h-12 w-full mb-2" />
         </Card>
       </div>
+
+      <Card v-else-if="tracesError" class="p-8 text-center">
+        <p class="text-sm text-destructive">Failed to load traces.</p>
+      </Card>
 
       <div
         v-else-if="!tracesData?.traces.length"

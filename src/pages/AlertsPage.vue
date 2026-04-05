@@ -22,7 +22,7 @@ import type { AlertRule } from "@/lib/api";
 const router = useRouter();
 const queryClient = useQueryClient();
 
-const { data, isLoading } = useQuery({
+const { data, isLoading, isError } = useQuery({
   queryKey: ["alert-rules"],
   queryFn: listAlertRules,
 });
@@ -332,6 +332,13 @@ async function handleDelete(id: number) {
         </CardContent>
       </Card>
     </div>
+
+    <!-- Error state -->
+    <Card v-else-if="isError">
+      <CardContent class="p-8 text-center">
+        <p class="text-sm text-destructive">Failed to load alerts</p>
+      </CardContent>
+    </Card>
 
     <!-- Empty state -->
     <Card v-else>
