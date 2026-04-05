@@ -69,9 +69,9 @@ export function createBillingApiRoutes(
     message: { error: "Too many requests, please try again in a minute" },
   });
 
-  // GET /api/feature-pricing — list all feature pricing rules
+  // GET /feature-pricing — list all feature pricing rules
   router.get(
-    "/api/feature-pricing",
+    "/feature-pricing",
     ensureVisitor,
     async (req: AuthRequest, res: Response) => {
       try {
@@ -87,15 +87,15 @@ export function createBillingApiRoutes(
           })),
         });
       } catch (error) {
-        console.error("GET /api/feature-pricing error:", error);
+        console.error("GET /feature-pricing error:", error);
         res.status(500).json({ error: "Failed to fetch feature pricing" });
       }
     },
   );
 
-  // POST /api/feature-pricing — upsert a feature pricing rule
+  // POST /feature-pricing — upsert a feature pricing rule
   router.post(
-    "/api/feature-pricing",
+    "/feature-pricing",
     ensureVisitor,
     async (req: AuthRequest, res: Response) => {
       const { feature_key, revenue_per_unit, unit_label } = req.body;
@@ -115,15 +115,15 @@ export function createBillingApiRoutes(
         );
         res.json({ ok: true });
       } catch (error) {
-        console.error("POST /api/feature-pricing error:", error);
+        console.error("POST /feature-pricing error:", error);
         res.status(500).json({ error: "Failed to save feature pricing" });
       }
     },
   );
 
-  // DELETE /api/feature-pricing/:featureKey — remove a feature pricing rule
+  // DELETE /feature-pricing/:featureKey — remove a feature pricing rule
   router.delete(
-    "/api/feature-pricing/:featureKey",
+    "/feature-pricing/:featureKey",
     ensureVisitor,
     async (req: AuthRequest, res: Response) => {
       try {
@@ -133,15 +133,15 @@ export function createBillingApiRoutes(
         );
         res.json({ ok: true });
       } catch (error) {
-        console.error("DELETE /api/feature-pricing error:", error);
+        console.error("DELETE /feature-pricing error:", error);
         res.status(500).json({ error: "Failed to delete feature pricing" });
       }
     },
   );
 
-  // GET /api/feature-pricing/features — list distinct feature keys from events
+  // GET /feature-pricing/features — list distinct feature keys from events
   router.get(
-    "/api/feature-pricing/features",
+    "/feature-pricing/features",
     ensureVisitor,
     async (req: AuthRequest, res: Response) => {
       try {
@@ -157,7 +157,7 @@ export function createBillingApiRoutes(
           ),
         });
       } catch (error) {
-        console.error("GET /api/feature-pricing/features error:", error);
+        console.error("GET /feature-pricing/features error:", error);
         res.status(500).json({ error: "Failed to fetch features" });
       }
     },
