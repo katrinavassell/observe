@@ -1335,12 +1335,18 @@ export function createCustomersRoutes(
           if (!ev.agent_id && props?.trace_id) {
             ev.agent_id = `agent_${ev.feature_key}`;
           }
+          if (props?.trace_id && !ev.trace_id) {
+            ev.trace_id = props.trace_id as string;
+          }
+          if (props?.span_id && !ev.span_id) {
+            ev.span_id = props.span_id as string;
+          }
         }
 
         for (const ev of sampleEvents as Array<Record<string, unknown>>) {
           await client.query(
-            `INSERT INTO observe_events (user_id, customer_id, feature_key, event_name, timestamp, cost_amount, cost_unit, revenue_amount, usage_units, model, model_provider, source, granularity, properties, request_body, response_body, agent_id, cost_type)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'event', $13, $14, $15, $16, $17)`,
+            `INSERT INTO observe_events (user_id, customer_id, feature_key, event_name, timestamp, cost_amount, cost_unit, revenue_amount, usage_units, model, model_provider, source, granularity, properties, request_body, response_body, agent_id, cost_type, trace_id, span_id)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'event', $13, $14, $15, $16, $17, $18, $19)`,
             [
               req.visitorId,
               ev.customer_id,
@@ -1359,6 +1365,8 @@ export function createCustomersRoutes(
               ev.response_body ? JSON.stringify(ev.response_body) : null,
               ev.agent_id || null,
               ev.cost_type || null,
+              ev.trace_id || null,
+              ev.span_id || null,
             ],
           );
         }
