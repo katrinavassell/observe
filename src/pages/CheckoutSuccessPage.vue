@@ -68,10 +68,17 @@ onMounted(async () => {
             : planConfirmed
               ? "Redirecting to your dashboard..."
               : timedOut
-                ? "This may take a moment. Check back shortly."
+                ? "This may take a moment. Check back shortly or go to your dashboard."
                 : "This may take a few seconds."
         }}
       </p>
+      <router-link v-if="timedOut || noSession" to="/">
+        <button
+          class="mt-2 px-4 py-2 rounded bg-primary text-primary-foreground text-sm font-medium"
+        >
+          Go to dashboard
+        </button>
+      </router-link>
     </div>
   </div>
 </template>

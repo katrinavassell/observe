@@ -87,7 +87,9 @@ async function handleSubmit() {
       await login(trimmedEmail, password.value);
       toast.success("Welcome back!");
     }
-    const redirectTo = (route.query.redirect as string) || "/";
+    const rawRedirect = route.query.redirect as string;
+    const redirectTo =
+      rawRedirect && rawRedirect.startsWith("/") ? rawRedirect : "/";
     router.push(redirectTo);
   } catch (error) {
     const message =

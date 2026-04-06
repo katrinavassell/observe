@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, reactive } from "vue";
+import { logger } from "@/lib/logger";
 import { useQuery } from "@tanstack/vue-query";
 import { useRouter, useRoute } from "vue-router";
 import {
@@ -201,8 +202,8 @@ async function toggleEvent(id: number) {
     loadingDetails.add(id);
     try {
       eventDetails[id] = await getEventDetail(id);
-    } catch {
-      /* silently fail */
+    } catch (err) {
+      logger.error("Failed to load event detail", { id, error: err });
     }
     loadingDetails.delete(id);
   }
