@@ -157,8 +157,11 @@ const maxDuration = computed(() => {
         </p>
       </div>
 
-      <div v-else class="rounded-md border bg-card overflow-hidden">
-        <table class="w-full text-sm text-left">
+      <div
+        v-else
+        class="rounded-md border bg-card overflow-hidden overflow-x-auto"
+      >
+        <table class="w-full text-sm text-left min-w-[700px]">
           <thead
             class="border-b bg-muted/40 text-muted-foreground text-xs font-medium uppercase tracking-wider"
           >
@@ -290,9 +293,9 @@ const maxDuration = computed(() => {
         </div>
 
         <!-- Waterfall -->
-        <Card class="overflow-hidden">
+        <Card class="overflow-hidden overflow-x-auto">
           <div
-            class="border-b bg-muted/40 px-4 py-2.5 flex items-center gap-3 text-xs text-muted-foreground font-medium uppercase tracking-wider"
+            class="border-b bg-muted/40 px-4 py-2.5 flex items-center gap-3 text-xs text-muted-foreground font-medium uppercase tracking-wider min-w-[700px]"
           >
             <span class="w-[280px]">Span</span>
             <span class="w-20">Type</span>

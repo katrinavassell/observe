@@ -368,7 +368,7 @@ const insightCategories = [
       side="right"
       @update:open="insightsOpen = $event"
     >
-      <div class="w-[420px] p-6 space-y-5">
+      <div class="w-full sm:w-[420px] p-6 space-y-5">
         <div>
           <div class="flex items-center gap-2 mb-1">
             <Sparkles class="h-5 w-5 text-primary" />
@@ -600,7 +600,7 @@ const insightCategories = [
 
     <!-- Loading state -->
     <div v-else-if="isLoading">
-      <div class="grid grid-cols-3 gap-4 mb-6">
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
         <Card v-for="i in 3" :key="i" class="p-6">
           <Skeleton class="h-4 w-24 mb-2" />
           <Skeleton class="h-8 w-20" />
@@ -1007,7 +1007,7 @@ const insightCategories = [
         </div>
         <template v-else-if="mrrSummary">
           <!-- Summary cards -->
-          <div class="grid grid-cols-5 gap-3 mb-6">
+          <div class="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-6">
             <Card class="p-4">
               <div class="text-xs font-medium text-muted-foreground">
                 New MRR

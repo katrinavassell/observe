@@ -300,7 +300,7 @@ const filteredCustomers = computed(() => {
 
     <!-- Loading -->
     <div v-if="isLoading" class="space-y-4">
-      <div class="grid grid-cols-4 gap-4">
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <Skeleton v-for="i in 4" :key="i" class="h-24 rounded-lg" />
       </div>
       <Skeleton class="h-64 rounded-lg" />
@@ -325,7 +325,7 @@ const filteredCustomers = computed(() => {
     <!-- Main content -->
     <template v-else>
       <!-- KPI cards -->
-      <div class="grid grid-cols-4 gap-4">
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <Card class="p-4">
           <p class="text-xs text-muted-foreground uppercase tracking-wider">
             Customers
