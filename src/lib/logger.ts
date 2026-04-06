@@ -88,6 +88,7 @@ export const logger = {
   debug(message: string, context?: Record<string, unknown>) {
     if (isDev) {
       const entry = createLogEntry('debug', message, context)
+      // eslint-disable-next-line no-console
       console.debug(formatLogEntry(entry))
     }
   },
@@ -95,6 +96,7 @@ export const logger = {
   info(message: string, context?: Record<string, unknown>) {
     if (isDev) {
       const entry = createLogEntry('info', message, context)
+      // eslint-disable-next-line no-console
       console.info(formatLogEntry(entry))
     }
   },

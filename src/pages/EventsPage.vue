@@ -31,6 +31,7 @@ import {
 import MarginBadge from "@/components/shared/MarginBadge.vue";
 import SourceBadge from "@/components/shared/SourceBadge.vue";
 import { Select, Input, Button, Skeleton } from "@/components/ui";
+import { toast } from "vue-sonner";
 
 const router = useRouter();
 const route = useRoute();
@@ -202,7 +203,7 @@ async function toggleEvent(id: number) {
     try {
       eventDetails[id] = await getEventDetail(id);
     } catch {
-      /* silently fail */
+      toast.error("Failed to load event details");
     }
     loadingDetails.delete(id);
   }

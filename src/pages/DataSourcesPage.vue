@@ -106,7 +106,7 @@ async function loadSdkKeys() {
   try {
     sdkKeys.value = await listSdkKeys();
   } catch {
-    // silently fail - keys list is not critical
+    toast.error("Failed to load SDK keys");
   }
 }
 

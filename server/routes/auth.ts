@@ -218,8 +218,8 @@ export function createAuthRoutes(
           account: { id: account.id, email: account.email, name: account.name },
           sdkKey,
         });
-      } catch (error: any) {
-        if (error.code === "23505") {
+      } catch (error: unknown) {
+        if ((error as { code?: string }).code === "23505") {
           return res
             .status(409)
             .json({ error: "An account with this email already exists" });

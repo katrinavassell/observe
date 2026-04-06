@@ -76,14 +76,14 @@ async function processFile(file: File): Promise<void> {
   // Validate file extension
   const extValidation = validateCsvExtension(file);
   if (!extValidation.valid) {
-    toast.error(extValidation.error!);
+    toast.error(extValidation.error ?? "Invalid file type");
     return;
   }
 
   // Validate file size
   const sizeValidation = validateFileSize(file);
   if (!sizeValidation.valid) {
-    toast.error(sizeValidation.error!);
+    toast.error(sizeValidation.error ?? "File too large");
     return;
   }
 

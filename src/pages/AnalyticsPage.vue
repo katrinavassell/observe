@@ -74,8 +74,8 @@ async function handleGenerate() {
     await refetchInsights();
     // Refresh usage limits
     queryClient.invalidateQueries({ queryKey: ["usage-limits"] });
-  } catch (e: any) {
-    generateError.value = e?.message || "Failed to generate insights";
+  } catch (e: unknown) {
+    generateError.value = e instanceof Error ? e.message : "Failed to generate insights";
   } finally {
     isGenerating.value = false;
   }

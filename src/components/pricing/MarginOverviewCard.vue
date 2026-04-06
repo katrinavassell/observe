@@ -98,7 +98,7 @@ const chartOptions = computed(() => ({
     },
     tooltip: {
       callbacks: {
-        label: (context: any) => {
+        label: (context: { dataset: { label?: string }; raw: unknown }) => {
           if (context.dataset.label === 'Margin %') {
             return `${context.dataset.label}: ${context.raw}%`
           }

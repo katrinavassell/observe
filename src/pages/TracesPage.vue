@@ -21,7 +21,7 @@ const {
 
 const { data: traceDetail, isLoading: detailLoading } = useQuery({
   queryKey: ["trace", selectedTraceId],
-  queryFn: () => getTrace(selectedTraceId.value!),
+  queryFn: () => getTrace(selectedTraceId.value ?? ""),
   enabled: computed(() => !!selectedTraceId.value),
 });
 

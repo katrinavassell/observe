@@ -647,7 +647,7 @@ export function calculatePlanHealth(
         if (!usageTrends.has(u.customer_id)) {
           usageTrends.set(u.customer_id, [])
         }
-        usageTrends.get(u.customer_id)!.push(u.metric_value)
+        usageTrends.get(u.customer_id)?.push(u.metric_value)
       }
     }
   })
@@ -776,7 +776,7 @@ export function calculateCohorts(
     if (!cohorts.has(cohortKey)) {
       cohorts.set(cohortKey, { customers: [], subscriptions: [] })
     }
-    cohorts.get(cohortKey)!.customers.push(customer)
+    cohorts.get(cohortKey)?.customers.push(customer)
   })
 
   // Assign subscriptions to cohorts
@@ -1303,12 +1303,14 @@ export function analyzeUsageAnomalies(
     if (!usageHistory.has(u.customer_id)) {
       usageHistory.set(u.customer_id, new Map())
     }
-    const customerHistory = usageHistory.get(u.customer_id)!
+    const customerHistory = usageHistory.get(u.customer_id)
+    if (!customerHistory) return
 
     if (!customerHistory.has(month)) {
       customerHistory.set(month, new Map())
     }
-    const monthData = customerHistory.get(month)!
+    const monthData = customerHistory.get(month)
+    if (!monthData) return
 
     monthData.set(u.metric_key, {
       value: u.metric_value,
@@ -1631,7 +1633,7 @@ export function calculateUpcomingRenewals(
       const customer = customerMap.get(sub.customer_id)
       const plan = planMap.get(sub.plan_id)
 
-      const renewalDate = new Date(sub.current_period_end!)
+      const renewalDate = new Date(sub.current_period_end ?? "")
       const daysUntilRenewal = Math.ceil((renewalDate.getTime() - now.getTime()) / (24 * 60 * 60 * 1000))
 
       const intervalMonths = plan?.interval_months || 1
@@ -1695,7 +1697,7 @@ export function calculateCohortRetentionMatrix(
     if (!cohorts.has(cohortKey)) {
       cohorts.set(cohortKey, { customers: new Set(), created: createdAt })
     }
-    cohorts.get(cohortKey)!.customers.add(c.customer_id)
+    cohorts.get(cohortKey)?.customers.add(c.customer_id)
   })
 
   // Build subscription status map

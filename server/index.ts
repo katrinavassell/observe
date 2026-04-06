@@ -185,6 +185,11 @@ const expensiveLimiter = rateLimit({
   message: { error: "Too many requests, please try again in a minute" },
 });
 
+// ─── Health check ───────────────────────────────────────────────────────────
+app.get("/api/health", (_req: Request, res: Response) => {
+  res.json({ status: "ok" });
+});
+
 // ─── Route modules ──────────────────────────────────────────────────────────
 app.use(
   createCustomersRoutes(pool, ensureVisitor, {

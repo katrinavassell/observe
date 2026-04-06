@@ -27,7 +27,7 @@ onMounted(async () => {
   try {
     billing.value = await getBillingStatus();
   } catch {
-    console.error("Failed to load billing status");
+    toast.error("Failed to load billing status");
   } finally {
     isLoading.value = false;
   }

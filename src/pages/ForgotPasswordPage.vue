@@ -23,8 +23,8 @@ async function handleSubmit() {
     }
     submitted.value = true;
     window.posthog?.capture("forgot_password_requested");
-  } catch (err: any) {
-    toast.error(err.message);
+  } catch (err: unknown) {
+    toast.error(err instanceof Error ? err.message : "Something went wrong");
   } finally {
     isLoading.value = false;
   }
