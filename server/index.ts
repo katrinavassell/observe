@@ -55,14 +55,6 @@ app.use((req, res, next) => {
   }
 });
 
-// Strip /api prefix so routes work in both dev (Vite proxy) and production (same origin)
-app.use((req, _res, next) => {
-  if (req.path.startsWith("/api/")) {
-    req.url = req.url.replace("/api", "");
-  }
-  next();
-});
-
 // Security headers
 app.use(helmet());
 
@@ -77,7 +69,7 @@ app.use(
   }),
 );
 
-// Rate limiting
+// Rate limiting — must be registered BEFORE /api/ prefix stripping so paths match
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 20, // 20 attempts per window
@@ -92,8 +84,16 @@ const apiLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: "Too many requests, please slow down" },
 });
-app.use("/auth/", authLimiter);
+app.use("/api/auth/", authLimiter);
 app.use("/api/", apiLimiter);
+
+// Strip /api prefix so routes work in both dev (Vite proxy) and production (same origin)
+app.use((req, _res, next) => {
+  if (req.path.startsWith("/api/")) {
+    req.url = req.url.replace("/api", "");
+  }
+  next();
+});
 
 // Ensure DB tables exist before anything else (critical for serverless cold starts)
 app.use(async (_req: Request, _res: Response, next: NextFunction) => {
@@ -134,6 +134,11 @@ app.use(
     },
   }),
 );
+
+// Health check endpoint
+app.get("/health", (_req: Request, res: Response) => {
+  res.json({ status: "ok", timestamp: new Date().toISOString() });
+});
 
 // Auth routes + middleware (extracted to routes/auth.ts)
 const ensureVisitor = createEnsureVisitor(pool);
@@ -849,6 +854,12 @@ if (
     res.sendFile(path.join(distPath, "index.html"));
   });
 }
+
+// Global error handler — must be last middleware registered
+app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
+  console.error("Unhandled server error:", err);
+  res.status(500).json({ error: "Internal server error" });
+});
 
 // Local dev server
 const port = parseInt(process.env.PORT || "3001", 10);

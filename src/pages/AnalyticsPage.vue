@@ -15,7 +15,6 @@ import {
   listFeaturePricing,
   getSourceBreakdown,
 } from "@/lib/api";
-import type {} from "@/lib/api";
 import { AlertCircle, AlertTriangle, Plug, Sparkles } from "lucide-vue-next";
 import { useDataMode } from "@/composables/useDataMode";
 import { useAuth } from "@/composables/useAuth";

@@ -12,6 +12,7 @@ import {
   getUsageLimits,
 } from "@/lib/api";
 import { useAuth } from "@/composables/useAuth";
+import logger from "@/lib/logger";
 import type { BillingStatus } from "@/lib/api";
 
 const router = useRouter();
@@ -27,7 +28,7 @@ onMounted(async () => {
   try {
     billing.value = await getBillingStatus();
   } catch {
-    console.error("Failed to load billing status");
+    logger.error("Failed to load billing status");
   } finally {
     isLoading.value = false;
   }
