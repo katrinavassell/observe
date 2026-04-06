@@ -105,8 +105,8 @@ const keyCopied = ref(false);
 async function loadSdkKeys() {
   try {
     sdkKeys.value = await listSdkKeys();
-  } catch {
-    // silently fail - keys list is not critical
+  } catch (err) {
+    console.warn("Failed to load SDK keys:", err);
   }
 }
 
@@ -251,8 +251,8 @@ const isSyncingInvoices = ref(false);
 async function loadStripeStatus() {
   try {
     stripeStatus.value = await getStripeStatus();
-  } catch {
-    // silently fail
+  } catch (err) {
+    console.warn("Failed to load Stripe status:", err);
   }
 }
 

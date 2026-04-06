@@ -6,7 +6,6 @@ import { type AuthRequest } from "./auth.js";
 import { getUncachableStripeClient } from "../stripe-client.js";
 import { createStripeClientFromKey, encryptApiKey } from "../stripe-client.js";
 import {
-  checkFeatureAccess,
   createCheckoutSession,
   createPortalSession,
   handleWebhook,
@@ -14,7 +13,6 @@ import {
   getBonusCredits,
   CREDIT_REWARDS,
 } from "../billing.js";
-import type { CreditRewardType } from "../billing.js";
 import { calculateCostFromTokens as calcCostFromDb } from "../model-pricing.js";
 import { syncStripeDataForUser } from "./integrations.js";
 
@@ -907,7 +905,7 @@ export function createBillingApiRoutes(
               }
             }
           } else if (usageResponse.status === 403) {
-            console.log(
+            console.warn(
               `OpenAI usage API returned 403 for user ${visitorId} - no admin access`,
             );
           }
@@ -1104,7 +1102,7 @@ export function createBillingApiRoutes(
               }
             }
           } else if (usageResponse.status === 403) {
-            console.log(
+            console.warn(
               `Anthropic usage API returned 403 for user ${visitorId} - no admin access`,
             );
           }
