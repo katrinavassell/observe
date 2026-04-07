@@ -179,7 +179,7 @@ export function createAuthRoutes(
               Authorization: `Bearer ${resendKey}`,
             },
             body: JSON.stringify({
-              from: "Observe <notifications@updates.tanso.io>",
+              from: "Observe <kat@tansohq.com>",
               to: "kat@tansohq.com",
               subject: `New signup: ${normalizedEmail}`,
               html: `<p><strong>New user signed up for Observe</strong></p><p>Email: ${normalizedEmail}</p><p>Name: ${name?.trim() || "(not provided)"}</p><p>Time: ${new Date().toISOString()}</p>`,
@@ -288,7 +288,7 @@ export function createAuthRoutes(
               Authorization: `Bearer ${resendKey}`,
             },
             body: JSON.stringify({
-              from: "Observe <notifications@updates.tanso.io>",
+              from: "Observe <kat@tansohq.com>",
               to: "kat@tansohq.com",
               subject: `Login: ${account.email}`,
               html: `<p><strong>User logged in to Observe</strong></p><p>Email: ${account.email}</p><p>Name: ${account.name || "(not set)"}</p><p>Time: ${new Date().toISOString()}</p>`,
