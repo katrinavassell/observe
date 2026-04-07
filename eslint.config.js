@@ -33,6 +33,7 @@ export default tseslint.config(
         setInterval: 'readonly',
         clearInterval: 'readonly',
         URL: 'readonly',
+        URLSearchParams: 'readonly',
         Blob: 'readonly',
         File: 'readonly',
         FileReader: 'readonly',
@@ -46,6 +47,11 @@ export default tseslint.config(
         Response: 'readonly',
         Headers: 'readonly',
         RequestInit: 'readonly',
+        navigator: 'readonly',
+        localStorage: 'readonly',
+        sessionStorage: 'readonly',
+        confirm: 'readonly',
+        crypto: 'readonly',
       },
       parserOptions: {
         parser: tseslint.parser,
@@ -82,5 +88,39 @@ export default tseslint.config(
     rules: {
       '@typescript-eslint/no-require-imports': 'off',
     },
-  }
+  },
+
+  // Server code uses Express/PostgreSQL patterns that require any types and non-null assertions
+  {
+    files: ['server/**/*.ts'],
+    rules: {
+      '@typescript-eslint/no-explicit-any': 'off',
+      '@typescript-eslint/no-non-null-assertion': 'off',
+      'no-console': 'off',
+    },
+  },
+
+  // Test files use non-null assertions on expected-to-exist values
+  {
+    files: ['**/*.test.ts', '**/*.spec.ts'],
+    rules: {
+      '@typescript-eslint/no-non-null-assertion': 'off',
+    },
+  },
+
+  // Logger file is expected to use console
+  {
+    files: ['src/lib/logger.ts'],
+    rules: {
+      'no-console': 'off',
+    },
+  },
+
+  // pricing-analyzer uses Map.get()! after Map.has() which is safe but triggers no-non-null-assertion
+  {
+    files: ['src/lib/pricing-analyzer.ts'],
+    rules: {
+      '@typescript-eslint/no-non-null-assertion': 'off',
+    },
+  },
 )

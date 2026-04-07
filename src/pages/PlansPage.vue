@@ -17,13 +17,14 @@ const { isLoggedIn } = useAuth();
 
 const billing = ref<BillingStatus | null>(null);
 const isLoading = ref(true);
+const billingError = ref(false);
 const isUpgrading = ref(false);
 
 onMounted(async () => {
   try {
     billing.value = await getBillingStatus();
   } catch {
-    console.error("Failed to load billing status");
+    billingError.value = true;
   } finally {
     isLoading.value = false;
   }
@@ -58,8 +59,6 @@ async function handleManage() {
     });
   }
 }
-
-const currentPlan = ref<string>("free");
 
 const plans = [
   {
@@ -98,6 +97,10 @@ const repoUrl = "https://github.com/katrinalaszlo/observe";
     <div>
       <h1 class="text-2xl font-semibold tracking-tight">Plans</h1>
       <p class="text-muted-foreground">Choose the plan that fits your needs</p>
+    </div>
+
+    <div v-if="billingError" class="max-w-2xl rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
+      Failed to load billing information. Please refresh the page.
     </div>
 
     <div class="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-2xl">

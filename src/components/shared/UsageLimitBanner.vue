@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ArrowUpRight, AlertTriangle, Zap } from 'lucide-vue-next'
 
-const props = defineProps<{
+defineProps<{
   featureLabel: string
   allowed: boolean
   usage: number

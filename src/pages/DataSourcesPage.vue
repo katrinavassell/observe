@@ -9,12 +9,11 @@
  * - Unsaved changes confirmation
  */
 
-import { ref, computed, watch, onMounted, onUnmounted } from "vue";
+import { ref, computed, watch, onMounted } from "vue";
 import { useRouter } from "vue-router";
 import { useQueryClient } from "@tanstack/vue-query";
 import { toast } from "vue-sonner";
 import {
-  TrendingUp,
   Eye,
   Key,
   Copy,
@@ -40,12 +39,10 @@ import {
   createSdkKey,
   listSdkKeys,
   revokeSdkKey,
-  resetSdkKey,
   listFeaturePricing,
   upsertFeaturePricing,
   deleteFeaturePricing,
   listFeatureKeys,
-  syncStripeInvoices,
   uploadProviderCsv,
 } from "@/lib/api";
 import {
@@ -71,10 +68,8 @@ const canEdit = computed(() => isLoggedIn.value && !isViewer.value);
 const {
   dataMode,
   refetch: refetchDataMode,
-  hasRevenue,
   hasCosts,
   hasUsage,
-  lastSyncAt,
 } = useDataMode();
 
 /** Track file state for each section */
@@ -87,9 +82,6 @@ const ingestUrl =
     : "/api/events/ingest";
 const proxyBaseUrl =
   typeof window !== "undefined" ? `${window.location.origin}/v1` : "/v1";
-
-/** Integration mode toggle */
-const integrationTab = ref<"proxy" | "wrapper" | "api">("proxy");
 
 /** SDK API Key state */
 const sdkKeys = ref<SdkKey[]>([]);
@@ -153,22 +145,6 @@ const apiKeyForSnippet = computed(() => {
   return "YOUR_API_KEY";
 });
 
-async function handleResetKey(id: number) {
-  if (
-    !confirm("Reset this API key? The old key will stop working immediately.")
-  )
-    return;
-  try {
-    await resetSdkKey(id);
-    await loadSdkKeys();
-    toast.success("API key reset");
-  } catch (error) {
-    toast.error("Failed to reset key", {
-      description: error instanceof Error ? error.message : "Please try again.",
-    });
-  }
-}
-
 const keyCopiedId = ref<number | null>(null);
 const revealedKeyId = ref<number | null>(null);
 function copyFullKey(key: SdkKey) {
@@ -181,51 +157,9 @@ function copyFullKey(key: SdkKey) {
   }, 2000);
 }
 
-const snippetCopied = ref(false);
-const curlCopied = ref(false);
-function copyCurl() {
-  const apiKey = apiKeyForSnippet.value;
-  const curl = `curl -X POST '${ingestUrl}' \\
-  -H 'Content-Type: application/json' \\
-  -H 'Authorization: Bearer ${apiKey}' \\
-  -d '{"events":[{"eventName":"chat_completion","customerReferenceId":"cus_test_123","featureKey":"ai_summarization","model":"gpt-4o","inputTokens":500,"outputTokens":100}]}'`;
-  navigator.clipboard.writeText(curl);
-  curlCopied.value = true;
-  setTimeout(() => {
-    curlCopied.value = false;
-  }, 2000);
-}
-function copySnippet() {
-  const apiKey = apiKeyForSnippet.value;
-  const snippet = `await fetch('${ingestUrl}', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json',
-             'Authorization': 'Bearer ${apiKey}' },
-  body: JSON.stringify({ events: [{
-    eventName: 'chat_completion',
-    customerReferenceId: userId,
-    featureKey: 'ai_summarization',
-    model: 'gpt-4o',
-    inputTokens: response.usage.prompt_tokens,
-    outputTokens: response.usage.completion_tokens,
-  }]})
-})`;
-  navigator.clipboard.writeText(snippet);
-  snippetCopied.value = true;
-  setTimeout(() => {
-    snippetCopied.value = false;
-  }, 2000);
-}
-
 function dismissGeneratedKey() {
   generatedKey.value = null;
   showKeyGenerator.value = false;
-}
-
-function scrollToStripe() {
-  document
-    .getElementById("stripe-section")
-    ?.scrollIntoView({ behavior: "smooth" });
 }
 
 /** Provider modals */
@@ -241,7 +175,6 @@ const stripeStatus = ref<StripeStatus>({
 });
 const isSyncingStripe = ref(false);
 const isDisconnectingStripe = ref(false);
-const isSyncingInvoices = ref(false);
 
 async function loadStripeStatus() {
   try {
@@ -269,23 +202,6 @@ async function handleStripeSync() {
     });
   } finally {
     isSyncingStripe.value = false;
-  }
-}
-
-async function handleInvoiceSync() {
-  isSyncingInvoices.value = true;
-  try {
-    const result = await syncStripeInvoices();
-    await refetchDataMode();
-    toast.success(
-      `Imported ${result.line_items} line items from ${result.invoices} invoices`,
-    );
-  } catch (error) {
-    toast.error("Failed to import invoices", {
-      description: error instanceof Error ? error.message : "Please try again.",
-    });
-  } finally {
-    isSyncingInvoices.value = false;
   }
 }
 

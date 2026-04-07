@@ -23,7 +23,7 @@ export interface QuickAction {
 // PROPS
 // =============================================================================
 
-const props = withDefaults(defineProps<{
+withDefaults(defineProps<{
   actions: QuickAction[]
   title?: string
   columns?: 2 | 3 | 4

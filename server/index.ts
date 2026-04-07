@@ -809,6 +809,22 @@ if (
   });
 }
 
+// Global error handler — catches malformed JSON and other Express errors
+app.use(
+  (
+    err: Error & { type?: string; status?: number },
+    _req: Request,
+    res: Response,
+    _next: NextFunction,
+  ) => {
+    if (err.type === "entity.parse.failed") {
+      return res.status(400).json({ error: "Invalid JSON in request body" });
+    }
+    console.error("Unhandled error:", err);
+    res.status(err.status || 500).json({ error: "Internal server error" });
+  },
+);
+
 // Local dev server
 const port = parseInt(process.env.PORT || "3001", 10);
 if (process.env.NODE_ENV !== "production" || !process.env.VERCEL) {

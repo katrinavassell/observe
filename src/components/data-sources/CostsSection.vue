@@ -9,7 +9,6 @@ import {
   CardHeader,
   CardTitle,
   CardDescription,
-  Button,
 } from "@/components/ui";
 import * as api from "@/lib/api";
 import {
@@ -56,13 +55,13 @@ function handleDrop(event: DragEvent): void {
 async function processFile(file: File): Promise<void> {
   const extValidation = validateCsvExtension(file);
   if (!extValidation.valid) {
-    toast.error(extValidation.error!);
+    toast.error(extValidation.error ?? "Invalid file type");
     return;
   }
 
   const sizeValidation = validateFileSize(file);
   if (!sizeValidation.valid) {
-    toast.error(sizeValidation.error!);
+    toast.error(sizeValidation.error ?? "File too large");
     return;
   }
 

@@ -13,14 +13,11 @@ import {
   listFeaturePricing,
   getSourceBreakdown,
 } from "@/lib/api";
-import type { AiInsight, MrrMovement, MrrSummary } from "@/lib/api";
 import {
   AlertCircle,
   AlertTriangle,
-  Database,
   Plug,
   Sparkles,
-  Zap,
 } from "lucide-vue-next";
 import { useDataMode } from "@/composables/useDataMode";
 import { useAuth } from "@/composables/useAuth";
@@ -80,8 +77,8 @@ async function handleGenerate() {
     await refetchInsights();
     // Refresh usage limits
     queryClient.invalidateQueries({ queryKey: ["usage-limits"] });
-  } catch (e: any) {
-    generateError.value = e?.message || "Failed to generate insights";
+  } catch (e) {
+    generateError.value = e instanceof Error ? e.message : "Failed to generate insights";
   } finally {
     isGenerating.value = false;
   }
@@ -280,16 +277,6 @@ const maxCustomerCost = computed(() => {
 const totalEvents = computed(() => {
   if (!featureData.value) return 0;
   return featureData.value.reduce((s, f) => s + (f.event_count || 0), 0);
-});
-const dataConfidence = computed(() => {
-  const n = totalEvents.value;
-  if (n === 0)
-    return { label: "No data", color: "text-muted-foreground", pct: 0 };
-  if (n < 10) return { label: "Very low", color: "text-destructive", pct: 15 };
-  if (n < 50) return { label: "Low", color: "text-warning", pct: 35 };
-  if (n < 200) return { label: "Medium", color: "text-warning", pct: 60 };
-  if (n < 500) return { label: "Good", color: "text-success", pct: 80 };
-  return { label: "High", color: "text-success", pct: 95 };
 });
 
 function retry() {

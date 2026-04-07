@@ -3,7 +3,7 @@ import { ref, computed, reactive } from 'vue'
 import { useQuery } from '@tanstack/vue-query'
 import { useRouter, useRoute } from 'vue-router'
 import { getEvents, getEventsByCustomer, getEventsByModel, getFeatures, getEventDetail, type ObserveEvent, type EventDetail } from '@/lib/api'
-import { Activity, ChevronRight, ChevronDown, ChevronLeft, X, Plug, FlaskConical, MessageSquare, Bot, User } from 'lucide-vue-next'
+import { Activity, ChevronRight, ChevronDown, ChevronLeft, X, Plug, Bot, User } from 'lucide-vue-next'
 import MarginBadge from '@/components/shared/MarginBadge.vue'
 import SourceBadge from '@/components/shared/SourceBadge.vue'
 import { Select, Input, Button, Skeleton } from '@/components/ui'
@@ -25,6 +25,7 @@ const PAGE_SIZE = 50
 const expandedIds = reactive(new Set<number>())
 const eventDetails = reactive<Record<number, EventDetail>>({})
 const loadingDetails = reactive(new Set<number>())
+const failedDetails = reactive(new Set<number>())
 
 async function toggleEvent(id: number) {
   if (expandedIds.has(id)) {
@@ -34,9 +35,12 @@ async function toggleEvent(id: number) {
   expandedIds.add(id)
   if (!eventDetails[id]) {
     loadingDetails.add(id)
+    failedDetails.delete(id)
     try {
       eventDetails[id] = await getEventDetail(id)
-    } catch { /* silently fail */ }
+    } catch {
+      failedDetails.add(id)
+    }
     loadingDetails.delete(id)
   }
 }
@@ -369,6 +373,9 @@ function marginForEvent(event: ObserveEvent): number | null {
               <td :colspan="11" class="px-0 py-0 bg-muted/20 border-b">
                 <div v-if="loadingDetails.has(event.id)" class="p-6 text-center text-sm text-muted-foreground">
                   Loading...
+                </div>
+                <div v-else-if="failedDetails.has(event.id)" class="p-6 text-center text-sm text-destructive">
+                  Failed to load event details. Please try again.
                 </div>
                 <div v-else-if="eventDetails[event.id]" class="p-5 space-y-4">
                   <!-- Request messages -->

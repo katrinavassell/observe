@@ -6,7 +6,6 @@ import { type AuthRequest } from "./auth.js";
 import { getUncachableStripeClient } from "../stripe-client.js";
 import { createStripeClientFromKey, encryptApiKey } from "../stripe-client.js";
 import {
-  checkFeatureAccess,
   createCheckoutSession,
   createPortalSession,
   handleWebhook,
@@ -14,7 +13,6 @@ import {
   getBonusCredits,
   CREDIT_REWARDS,
 } from "../billing.js";
-import type { CreditRewardType } from "../billing.js";
 import { calculateCostFromTokens as calcCostFromDb } from "../model-pricing.js";
 import { syncStripeDataForUser } from "./integrations.js";
 

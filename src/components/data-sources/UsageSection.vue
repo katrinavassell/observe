@@ -9,7 +9,7 @@
  * - Stripe metered billing info
  */
 
-import { ref, computed } from 'vue'
+import { ref } from 'vue'
 import { toast } from 'vue-sonner'
 import Papa from 'papaparse'
 import {
@@ -18,11 +18,10 @@ import {
   Download,
   CheckCircle,
   X,
-  Info,
 } from 'lucide-vue-next'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui'
-import Alert from '@/components/ui/alert.vue'
 import * as api from '@/lib/api'
+import type { UsageRecord } from '@/lib/api'
 import {
   validateFileSize,
   validateCsvExtension,
@@ -77,14 +76,14 @@ async function processFile(file: File): Promise<void> {
   // Validate file extension
   const extValidation = validateCsvExtension(file)
   if (!extValidation.valid) {
-    toast.error(extValidation.error!)
+    toast.error(extValidation.error ?? "Invalid file type")
     return
   }
 
   // Validate file size
   const sizeValidation = validateFileSize(file)
   if (!sizeValidation.valid) {
-    toast.error(sizeValidation.error!)
+    toast.error(sizeValidation.error ?? "File too large")
     return
   }
 

@@ -1,21 +1,15 @@
 <script setup lang="ts">
 import { ref, computed } from "vue";
-import { useQuery, useQueryClient } from "@tanstack/vue-query";
+import { useQuery } from "@tanstack/vue-query";
 import { getCohorts, discoverCohorts } from "@/lib/api";
 import type {
-  CohortCustomer,
   CohortLabel,
   CohortSummary,
-  CohortTotals,
   DiscoveredCluster,
-  ModelSwapSuggestion,
 } from "@/lib/api";
 import {
   AlertCircle,
   Database,
-  TrendingUp,
-  TrendingDown,
-  Minus,
   ChevronDown,
   ChevronRight,
   Sparkles,
@@ -24,8 +18,6 @@ import {
 import { Card, Skeleton, Button } from "@/components/ui";
 import { formatCurrency as fmt, formatPct as fmtPct } from "@/lib/format";
 import { toast } from "vue-sonner";
-
-const queryClient = useQueryClient();
 
 const {
   data: cohortsData,
@@ -74,8 +66,8 @@ async function loadDiscovery() {
     discoveryLoaded.value = true;
     discoveryExpanded.value = true;
     window.posthog?.capture("ai_discovery_run");
-  } catch (e: any) {
-    toast.error(e?.message || "Failed to discover patterns");
+  } catch (e) {
+    toast.error(e instanceof Error ? e.message : "Failed to discover patterns");
   } finally {
     discoveryLoading.value = false;
   }
@@ -153,7 +145,7 @@ const filteredCustomers = computed(() => {
     list = list.filter((c) => c.cohort === activeCohort.value);
   }
   if (discoveredCustomerIds.value) {
-    list = list.filter((c) => discoveredCustomerIds.value!.has(c.customer_id));
+    list = list.filter((c) => discoveredCustomerIds.value?.has(c.customer_id));
   }
   return [...list].sort((a, b) => a.health_score - b.health_score);
 });

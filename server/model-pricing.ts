@@ -24,9 +24,6 @@ let pricingCache: ModelPrice[] = []
 let cacheLoadedAt = 0
 const CACHE_TTL_MS = 60 * 60 * 1000 // 1 hour
 
-// Providers we care about from OpenRouter (filter the 400+ models down)
-const TRACKED_PROVIDERS = ['openai', 'anthropic', 'google', 'mistral', 'meta-llama', 'cohere']
-
 // Map OpenRouter provider names to our internal names
 const PROVIDER_MAP: Record<string, string> = {
   'openai': 'openai',

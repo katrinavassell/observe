@@ -95,6 +95,18 @@ const router = createRouter({
       meta: { noLayout: true },
     },
     {
+      path: "/forgot-password",
+      name: "forgot-password",
+      component: () => import("@/pages/ForgotPasswordPage.vue"),
+      meta: { noLayout: true },
+    },
+    {
+      path: "/reset-password",
+      name: "reset-password",
+      component: () => import("@/pages/ResetPasswordPage.vue"),
+      meta: { noLayout: true },
+    },
+    {
       path: "/plans",
       name: "plans",
       component: () => import("@/pages/PlansPage.vue"),
