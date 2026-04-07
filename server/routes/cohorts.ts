@@ -684,5 +684,187 @@ Return ONLY valid JSON array, no markdown.`,
     },
   );
 
+  // ═══════════════════════════════════════════════════════════════════════
+  // CUSTOM COHORTS — user-defined customer groups
+  // ═══════════════════════════════════════════════════════════════════════
+
+  // List custom cohorts with member counts
+  router.get(
+    "/cohorts/custom",
+    ensureVisitor,
+    async (req: AuthRequest, res: Response) => {
+      try {
+        const result = await pool.query(
+          `SELECT cc.*, COUNT(cm.id) as member_count
+           FROM custom_cohorts cc
+           LEFT JOIN cohort_members cm ON cm.cohort_id = cc.id
+           WHERE cc.user_id = $1
+           GROUP BY cc.id
+           ORDER BY cc.created_at DESC`,
+          [req.visitorId],
+        );
+        res.json({ cohorts: result.rows });
+      } catch (error) {
+        console.error("GET /cohorts/custom error:", error);
+        res.status(500).json({ error: "Failed to list custom cohorts" });
+      }
+    },
+  );
+
+  // Create custom cohort
+  router.post(
+    "/cohorts/custom",
+    ensureVisitor,
+    async (req: AuthRequest, res: Response) => {
+      try {
+        const { name, description, color, customer_ids } = req.body;
+        if (!name || typeof name !== "string") {
+          return res.status(400).json({ error: "name is required" });
+        }
+
+        const cohortResult = await pool.query(
+          "INSERT INTO custom_cohorts (user_id, name, description, color) VALUES ($1, $2, $3, $4) RETURNING *",
+          [req.visitorId, name.trim(), description || null, color || "#6366f1"],
+        );
+        const cohort = cohortResult.rows[0];
+
+        // Add members if provided
+        if (Array.isArray(customer_ids) && customer_ids.length > 0) {
+          const values = customer_ids
+            .map((_: string, i: number) => `($1, $${i + 2})`)
+            .join(", ");
+          await pool.query(
+            `INSERT INTO cohort_members (cohort_id, customer_id) VALUES ${values} ON CONFLICT DO NOTHING`,
+            [cohort.id, ...customer_ids],
+          );
+        }
+
+        res.status(201).json(cohort);
+      } catch (error: any) {
+        if (error.code === "23505") {
+          return res
+            .status(409)
+            .json({ error: "A cohort with this name already exists" });
+        }
+        console.error("POST /cohorts/custom error:", error);
+        res.status(500).json({ error: "Failed to create cohort" });
+      }
+    },
+  );
+
+  // Get cohort with members
+  router.get(
+    "/cohorts/custom/:id",
+    ensureVisitor,
+    async (req: AuthRequest, res: Response) => {
+      try {
+        const cohortResult = await pool.query(
+          "SELECT * FROM custom_cohorts WHERE id = $1 AND user_id = $2",
+          [req.params.id, req.visitorId],
+        );
+        if (cohortResult.rows.length === 0) {
+          return res.status(404).json({ error: "Cohort not found" });
+        }
+
+        const members = await pool.query(
+          `SELECT cm.customer_id, c.name as customer_name, cm.added_at
+           FROM cohort_members cm
+           LEFT JOIN customers c ON c.user_id = $2 AND c.customer_id = cm.customer_id
+           WHERE cm.cohort_id = $1
+           ORDER BY cm.added_at DESC`,
+          [req.params.id, req.visitorId],
+        );
+
+        res.json({ ...cohortResult.rows[0], members: members.rows });
+      } catch (error) {
+        console.error("GET /cohorts/custom/:id error:", error);
+        res.status(500).json({ error: "Failed to get cohort" });
+      }
+    },
+  );
+
+  // Add members to cohort
+  router.post(
+    "/cohorts/custom/:id/members",
+    ensureVisitor,
+    async (req: AuthRequest, res: Response) => {
+      try {
+        const { customer_ids } = req.body;
+        if (!Array.isArray(customer_ids) || customer_ids.length === 0) {
+          return res.status(400).json({ error: "customer_ids array required" });
+        }
+
+        // Verify ownership
+        const check = await pool.query(
+          "SELECT id FROM custom_cohorts WHERE id = $1 AND user_id = $2",
+          [req.params.id, req.visitorId],
+        );
+        if (check.rows.length === 0) {
+          return res.status(404).json({ error: "Cohort not found" });
+        }
+
+        const values = customer_ids
+          .map((_: string, i: number) => `($1, $${i + 2})`)
+          .join(", ");
+        await pool.query(
+          `INSERT INTO cohort_members (cohort_id, customer_id) VALUES ${values} ON CONFLICT DO NOTHING`,
+          [req.params.id, ...customer_ids],
+        );
+
+        res.json({ added: customer_ids.length });
+      } catch (error) {
+        console.error("POST /cohorts/custom/:id/members error:", error);
+        res.status(500).json({ error: "Failed to add members" });
+      }
+    },
+  );
+
+  // Remove member from cohort
+  router.delete(
+    "/cohorts/custom/:id/members/:customerId",
+    ensureVisitor,
+    async (req: AuthRequest, res: Response) => {
+      try {
+        const check = await pool.query(
+          "SELECT id FROM custom_cohorts WHERE id = $1 AND user_id = $2",
+          [req.params.id, req.visitorId],
+        );
+        if (check.rows.length === 0) {
+          return res.status(404).json({ error: "Cohort not found" });
+        }
+
+        await pool.query(
+          "DELETE FROM cohort_members WHERE cohort_id = $1 AND customer_id = $2",
+          [req.params.id, req.params.customerId],
+        );
+        res.json({ removed: true });
+      } catch (error) {
+        console.error("DELETE cohort member error:", error);
+        res.status(500).json({ error: "Failed to remove member" });
+      }
+    },
+  );
+
+  // Delete cohort
+  router.delete(
+    "/cohorts/custom/:id",
+    ensureVisitor,
+    async (req: AuthRequest, res: Response) => {
+      try {
+        const result = await pool.query(
+          "DELETE FROM custom_cohorts WHERE id = $1 AND user_id = $2 RETURNING id",
+          [req.params.id, req.visitorId],
+        );
+        if (result.rows.length === 0) {
+          return res.status(404).json({ error: "Cohort not found" });
+        }
+        res.json({ deleted: true });
+      } catch (error) {
+        console.error("DELETE /cohorts/custom/:id error:", error);
+        res.status(500).json({ error: "Failed to delete cohort" });
+      }
+    },
+  );
+
   return router;
 }

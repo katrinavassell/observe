@@ -153,15 +153,21 @@ Available actions you can suggest (the user can execute these with one click):
 - Create an alert for cost spikes or margin drops
 - Switch a routing target to a different model
 - Add a fallback provider for reliability
+- Create a customer cohort to group customers for routing or analysis
 
 When the user asks you to DO something (not just analyze), respond with a JSON action block that the system can execute:
 \`\`\`action
 {"type": "create_routing_rule", "config_name": "default", "field": "customer_id", "operator": "eq", "value": "acme", "target_provider": "openai", "target_model": "gpt-4o-mini"}
 \`\`\`
 
-Or for alerts:
+For alerts:
 \`\`\`action
 {"type": "create_alert", "name": "Cost spike alert", "metric": "daily_cost", "operator": "gt", "threshold": 100}
+\`\`\`
+
+For cohorts:
+\`\`\`action
+{"type": "create_cohort", "name": "EU Enterprise", "description": "High-value EU customers", "customer_ids": ["acme", "siemens", "bmw"]}
 \`\`\`
 
 Only include action blocks when the user explicitly asks you to do something. For analysis questions, just answer with text.`;
@@ -355,6 +361,36 @@ Only include action blocks when the user explicitly asks you to do something. Fo
             return res.json({
               success: true,
               message: `Alert created: ${action.name || "Chat-created alert"}`,
+            });
+          }
+
+          case "create_cohort": {
+            const cohortResult = await pool.query(
+              "INSERT INTO custom_cohorts (user_id, name, description) VALUES ($1, $2, $3) RETURNING id",
+              [
+                req.visitorId,
+                action.name || "Chat-created cohort",
+                action.description || null,
+              ],
+            );
+            const cohortId = cohortResult.rows[0].id;
+
+            if (
+              Array.isArray(action.customer_ids) &&
+              action.customer_ids.length > 0
+            ) {
+              const values = (action.customer_ids as string[])
+                .map((_: string, i: number) => `($1, $${i + 2})`)
+                .join(", ");
+              await pool.query(
+                `INSERT INTO cohort_members (cohort_id, customer_id) VALUES ${values} ON CONFLICT DO NOTHING`,
+                [cohortId, ...(action.customer_ids as string[])],
+              );
+            }
+
+            return res.json({
+              success: true,
+              message: `Cohort "${action.name}" created with ${(action.customer_ids as string[])?.length || 0} members`,
             });
           }
 
