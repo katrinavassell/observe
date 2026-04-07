@@ -23,7 +23,9 @@ const insightsGenerated = computed(
 const steps = computed(() => [
   {
     label: "Connect your data sources",
-    done: hasData.value || hasCosts.value || hasRevenue.value,
+    done:
+      (hasData.value || hasCosts.value || hasRevenue.value) &&
+      !isSampleMode.value,
     action: () => router.push("/data-sources"),
   },
   {
