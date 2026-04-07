@@ -849,16 +849,89 @@ Return ONLY the JSON array, no markdown or explanation.`;
     },
   );
 
+  // GET /admin/activity — recent user activity log
+  router.get(
+    "/admin/activity",
+    ensureVisitor,
+    async (req: AuthRequest, res: Response) => {
+      try {
+        const adminEmail3 = (
+          process.env.ADMIN_EMAIL || "tansoadmin@tansohq.com"
+        ).toLowerCase();
+        if (
+          !req.accountEmail ||
+          req.accountEmail.toLowerCase() !== adminEmail3
+        ) {
+          return res.status(403).json({ error: "Admin access required" });
+        }
+
+        const limit = Math.min(parseInt(req.query.limit as string) || 100, 500);
+
+        const result = await pool.query(
+          `SELECT
+            a.email,
+            a.name,
+            e.event_name,
+            e.model,
+            e.model_provider,
+            e.customer_id,
+            e.feature_key,
+            e.source,
+            e.cost_amount,
+            e.revenue_amount,
+            e.timestamp,
+            e.properties
+          FROM observe_events e
+          JOIN accounts a ON a.visitor_id = e.user_id
+          WHERE e.source != 'sample'
+            AND e.timestamp >= NOW() - INTERVAL '7 days'
+          ORDER BY e.timestamp DESC
+          LIMIT $1`,
+          [limit],
+        );
+
+        // Also get recent signups and logins
+        const signups = await pool.query(
+          `SELECT email, name, created_at FROM accounts
+           WHERE created_at >= NOW() - INTERVAL '7 days'
+           ORDER BY created_at DESC`,
+        );
+
+        // Recent recommendation activity
+        const recActivity = await pool.query(
+          `SELECT r.type, r.title, r.severity, r.status, r.created_at, r.applied_at, r.dismissed_at,
+            a.email
+          FROM recommendations r
+          JOIN accounts a ON a.visitor_id = r.user_id
+          WHERE r.created_at >= NOW() - INTERVAL '7 days'
+          ORDER BY r.created_at DESC
+          LIMIT 50`,
+        );
+
+        res.json({
+          events: result.rows,
+          signups: signups.rows,
+          recommendation_activity: recActivity.rows,
+        });
+      } catch (err) {
+        console.error("GET /admin/activity error:", err);
+        res.status(500).json({ error: "Failed to fetch activity log" });
+      }
+    },
+  );
+
   // POST /admin/cleanup — delete events older than 30 days for free-plan users
   router.post(
     "/admin/cleanup",
     ensureVisitor,
     async (req: AuthRequest, res: Response) => {
       try {
+        const adminEmail4 = (
+          process.env.ADMIN_EMAIL || "tansoadmin@tansohq.com"
+        ).toLowerCase();
         if (
           !req.accountEmail ||
-          req.accountEmail.toLowerCase() !==
-            (process.env.ADMIN_EMAIL || "").toLowerCase()
+          req.accountEmail.toLowerCase() !== adminEmail4
         ) {
           return res.status(403).json({ error: "Admin access required" });
         }

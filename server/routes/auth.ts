@@ -38,34 +38,28 @@ export function createEnsureVisitor(pool: Pool) {
         req.accountId = req.session.accountId;
         req.accountEmail = req.session.accountEmail;
 
-        // Logged-in users should never see sample data — clear it on first request if present
+        // Logged-in users should never see sample data — always clean on first request per session
         if (!req.session._sampleCleared) {
-          const status = await pool.query(
-            "SELECT data_mode FROM user_data_status WHERE user_id = $1",
+          await pool.query(
+            "DELETE FROM observe_events WHERE user_id = $1 AND source = 'sample'",
             [req.visitorId],
           );
-          if (status.rows[0]?.data_mode === "sample") {
-            await pool.query(
-              "DELETE FROM observe_events WHERE user_id = $1 AND source = 'sample'",
-              [req.visitorId],
-            );
-            await pool.query(
-              "DELETE FROM customers WHERE user_id = $1 AND customer_id IN ('cus_001','cus_002','cus_003','cus_004','cus_005')",
-              [req.visitorId],
-            );
-            await pool.query(
-              "DELETE FROM subscriptions WHERE user_id = $1 AND subscription_id IN ('sub_001','sub_002','sub_003','sub_004','sub_005')",
-              [req.visitorId],
-            );
-            await pool.query(
-              "DELETE FROM plans WHERE user_id = $1 AND plan_id IN ('starter', 'pro', 'enterprise')",
-              [req.visitorId],
-            );
-            await pool.query(
-              "UPDATE user_data_status SET data_mode = 'none' WHERE user_id = $1",
-              [req.visitorId],
-            );
-          }
+          await pool.query(
+            "DELETE FROM customers WHERE user_id = $1 AND customer_id IN ('cus_001','cus_002','cus_003','cus_004','cus_005')",
+            [req.visitorId],
+          );
+          await pool.query(
+            "DELETE FROM subscriptions WHERE user_id = $1 AND subscription_id IN ('sub_001','sub_002','sub_003','sub_004','sub_005')",
+            [req.visitorId],
+          );
+          await pool.query(
+            "DELETE FROM plans WHERE user_id = $1 AND plan_id IN ('starter', 'pro', 'enterprise')",
+            [req.visitorId],
+          );
+          await pool.query(
+            "UPDATE user_data_status SET data_mode = CASE WHEN data_mode = 'sample' THEN 'none' ELSE data_mode END WHERE user_id = $1",
+            [req.visitorId],
+          );
           req.session._sampleCleared = true;
         }
       }
