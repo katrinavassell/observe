@@ -3,7 +3,7 @@ import type { Pool } from "pg";
 import crypto from "crypto";
 import rateLimit from "express-rate-limit";
 import { type AuthRequest } from "./auth.js";
-import { encryptApiKey, decryptApiKey } from "../stripe-client.js";
+import { encryptApiKey } from "../stripe-client.js";
 import { calculateCostFromTokens as calcCostFromDb } from "../model-pricing.js";
 import { checkAlerts } from "./alerts.js";
 import { checkFeatureAccess } from "../billing.js";
@@ -793,7 +793,7 @@ export function createEventsRoutes(
         return res.json({ traces: sampleTraces() });
       }
       const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
-      const offset = parseInt(req.query.offset as string) || 0;
+      const offset = Math.max(parseInt(req.query.offset as string) || 0, 0);
       const result = await pool.query(
         `SELECT trace_id,
            MIN(timestamp) as start_time,

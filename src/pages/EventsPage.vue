@@ -189,6 +189,7 @@ function resetColumns() {
 const expandedIds = reactive(new Set<number>());
 const eventDetails = reactive<Record<number, EventDetail>>({});
 const loadingDetails = reactive(new Set<number>());
+const failedDetails = reactive(new Set<number>());
 
 async function toggleEvent(id: number) {
   if (expandedIds.has(id)) {
@@ -197,12 +198,13 @@ async function toggleEvent(id: number) {
   }
   expandedIds.add(id);
   window.posthog?.capture("event_expanded", { event_id: id });
-  if (!eventDetails[id]) {
+  if (!eventDetails[id] && !failedDetails.has(id)) {
     loadingDetails.add(id);
     try {
       eventDetails[id] = await getEventDetail(id);
-    } catch {
-      /* silently fail */
+    } catch (err) {
+      console.error("Failed to load event detail:", err);
+      failedDetails.add(id);
     }
     loadingDetails.delete(id);
   }
@@ -855,6 +857,12 @@ function marginForEvent(event: ObserveEvent): number | null {
                     class="p-6 text-center text-sm text-muted-foreground"
                   >
                     Loading...
+                  </div>
+                  <div
+                    v-else-if="failedDetails.has(event.id)"
+                    class="p-6 text-center text-sm text-destructive"
+                  >
+                    Failed to load event details.
                   </div>
                   <div v-else-if="eventDetails[event.id]" class="p-5 space-y-4">
                     <!-- Request messages -->

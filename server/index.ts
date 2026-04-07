@@ -232,6 +232,11 @@ app.use(createInferenceRoutes(pool, ensureVisitor));
 app.use(createA2ARoutes(pool, ensureVisitor));
 app.use(createCloudCostRoutes(pool, ensureVisitor));
 
+// ─── Health check ────────────────────────────────────────────────────────────
+app.get("/api/health", (_req: Request, res: Response) => {
+  res.json({ status: "ok" });
+});
+
 // ─── Database initialization ────────────────────────────────────────────────
 
 async function clearSampleData(

@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref, computed } from "vue";
-import { useQueryClient } from "@tanstack/vue-query";
 import { useRouter } from "vue-router";
 import { toast } from "vue-sonner";
 import {
@@ -23,7 +22,6 @@ import { uploadProviderCsv, createSdkKey } from "@/lib/api";
 import type { StripeStatus, SyncResult } from "@/api/client";
 
 const router = useRouter();
-const queryClient = useQueryClient();
 
 // ---------------------------------------------------------------------------
 // Track selection: Quick Start vs Full Setup

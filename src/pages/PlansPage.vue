@@ -22,12 +22,14 @@ const activeTab = ref<"plans" | "usage">("plans");
 const billing = ref<BillingStatus | null>(null);
 const isLoading = ref(true);
 const isUpgrading = ref(false);
+const billingLoadError = ref(false);
 
 onMounted(async () => {
   try {
     billing.value = await getBillingStatus();
-  } catch {
-    console.error("Failed to load billing status");
+  } catch (err) {
+    console.error("Failed to load billing status:", err);
+    billingLoadError.value = true;
   } finally {
     isLoading.value = false;
   }
@@ -164,6 +166,14 @@ const repoUrl = "https://github.com/katrinalaszlo/observe";
       >
         {{ tab.label }}
       </button>
+    </div>
+
+    <!-- Billing load error -->
+    <div
+      v-if="billingLoadError"
+      class="text-sm text-destructive bg-destructive/10 rounded-md px-4 py-3"
+    >
+      Failed to load billing status. Please refresh to try again.
     </div>
 
     <!-- Plans tab -->

@@ -8,7 +8,7 @@ import {
   encryptApiKey,
   getStripeClientForUser,
 } from "../stripe-client.js";
-import { calculateCostFromTokens, getModelPricing } from "../model-pricing.js";
+import { calculateCostFromTokens } from "../model-pricing.js";
 
 type TrackBillingUsageFn = (
   visitorId: string,
@@ -831,7 +831,7 @@ export function createIntegrationsRoutes(
             (account as any).business_profile?.name ||
             (account as any).display_name ||
             account.id;
-        } catch (stripeErr) {
+        } catch {
           return res.status(400).json({
             success: false,
             message:
