@@ -1560,3 +1560,50 @@ export async function testRoutingConfig(
 export async function listGatewayProviders(): Promise<{ providers: string[] }> {
   return request("/gateway/providers");
 }
+
+// ── Recommendations ──────────────────────────────────────────────────────────
+
+export interface Recommendation {
+  id: number;
+  user_id: string;
+  type: string;
+  title: string;
+  description: string;
+  severity: "critical" | "warning" | "info";
+  action_type: string;
+  action_payload: Record<string, unknown>;
+  context: Record<string, unknown>;
+  status: "pending" | "applied" | "dismissed";
+  created_at: string;
+  applied_at: string | null;
+  dismissed_at: string | null;
+}
+
+export async function listRecommendations(
+  status = "pending",
+): Promise<{ recommendations: Recommendation[] }> {
+  return request(`/recommendations?status=${status}`);
+}
+
+export async function getRecommendationCount(): Promise<{ count: number }> {
+  return request("/recommendations/count");
+}
+
+export async function computeRecommendations(): Promise<{
+  computed: boolean;
+  pending_count: number;
+}> {
+  return request("/recommendations/compute", { method: "POST" });
+}
+
+export async function applyRecommendation(
+  id: number,
+): Promise<{ applied: boolean; action_result: Record<string, unknown> }> {
+  return request(`/recommendations/${id}/apply`, { method: "POST" });
+}
+
+export async function dismissRecommendation(
+  id: number,
+): Promise<{ dismissed: boolean }> {
+  return request(`/recommendations/${id}/dismiss`, { method: "POST" });
+}

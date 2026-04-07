@@ -20,6 +20,7 @@ import rateLimit from "express-rate-limit";
 import { initModelPricing } from "./model-pricing.js";
 import { createProxyRoutes } from "./routes/proxy.js";
 import { createGatewayRoutes } from "./routes/gateway.js";
+import { createRecommendationsRoutes } from "./routes/recommendations.js";
 import { createCustomersRoutes } from "./routes/customers.js";
 import { createEventsRoutes } from "./routes/events.js";
 import { createFeaturesRoutes } from "./routes/features.js";
@@ -211,6 +212,7 @@ app.use(
   }),
 );
 app.use(createGatewayRoutes(pool, ensureVisitor));
+app.use(createRecommendationsRoutes(pool, ensureVisitor));
 app.use(
   createEventsRoutes(pool, ensureVisitor, {
     computeInferenceProfiles: (userId: string) =>
@@ -849,6 +851,28 @@ async function _doDbInit() {
         created_at TIMESTAMPTZ DEFAULT NOW()
       )
     `);
+
+    // ── Recommendations table ──────────────────────────────────────────────
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS recommendations (
+        id SERIAL PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        type TEXT NOT NULL,
+        title TEXT NOT NULL,
+        description TEXT NOT NULL,
+        severity TEXT NOT NULL DEFAULT 'info',
+        action_type TEXT NOT NULL,
+        action_payload JSONB NOT NULL DEFAULT '{}',
+        context JSONB DEFAULT '{}',
+        status TEXT NOT NULL DEFAULT 'pending',
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        applied_at TIMESTAMPTZ,
+        dismissed_at TIMESTAMPTZ
+      )
+    `);
+    await pool.query(
+      `CREATE INDEX IF NOT EXISTS idx_recommendations_user_status ON recommendations(user_id, status)`,
+    );
 
     // Initialize model pricing table
     await initModelPricing(pool);
