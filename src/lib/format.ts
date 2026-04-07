@@ -1,18 +1,24 @@
-export function formatCurrency(val: number | null | undefined): string {
-  if (val === null || val === undefined) return '—'
-  if (val < 0) return `-${formatCurrency(-val)}`
-  if (val === 0) return '$0'
-  if (val >= 1000) return `$${(val / 1000).toFixed(1)}k`
-  if (val >= 0.01) return `$${val.toFixed(2)}`
-  return `$${val.toFixed(4).replace(/0+$/, '').replace(/\.$/, '.00')}`
+export function formatCurrency(
+  val: number | string | null | undefined,
+): string {
+  if (val === null || val === undefined) return "—";
+  const n = typeof val === "string" ? parseFloat(val) : val;
+  if (isNaN(n)) return "—";
+  if (n < 0) return `-${formatCurrency(-n)}`;
+  if (n === 0) return "$0";
+  if (n >= 1000) return `$${(n / 1000).toFixed(1)}k`;
+  if (n >= 0.01) return `$${n.toFixed(2)}`;
+  return `$${n.toFixed(4).replace(/0+$/, "").replace(/\.$/, ".00")}`;
 }
 
-export function formatPct(val: number | null | undefined): string {
-  if (val === null || val === undefined) return '—'
-  return `${val.toFixed(0)}%`
+export function formatPct(val: number | string | null | undefined): string {
+  if (val === null || val === undefined) return "—";
+  const n = typeof val === "string" ? parseFloat(val) : val;
+  if (isNaN(n)) return "—";
+  return `${n.toFixed(0)}%`;
 }
 
 export function computeMargin(revenue: number, cost: number): number | null {
-  if (revenue === 0) return null
-  return ((revenue - cost) / revenue) * 100
+  if (revenue === 0) return null;
+  return ((revenue - cost) / revenue) * 100;
 }
