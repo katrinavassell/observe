@@ -1390,6 +1390,36 @@ export async function getAdminEmails(): Promise<{
   return request("/admin/emails");
 }
 
+export async function getAdminActivity(): Promise<{
+  events: Array<{
+    email: string;
+    name: string;
+    event_name: string;
+    model: string;
+    model_provider: string;
+    customer_id: string;
+    feature_key: string;
+    source: string;
+    cost_amount: string;
+    revenue_amount: string;
+    timestamp: string;
+    properties: Record<string, unknown>;
+  }>;
+  signups: Array<{ email: string; name: string; created_at: string }>;
+  recommendation_activity: Array<{
+    type: string;
+    title: string;
+    severity: string;
+    status: string;
+    created_at: string;
+    applied_at: string | null;
+    dismissed_at: string | null;
+    email: string;
+  }>;
+}> {
+  return request("/admin/activity");
+}
+
 // ── Routing / Gateway ────────────────────────────────────────────────────────
 
 export interface RoutingTarget {

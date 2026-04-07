@@ -10,7 +10,7 @@ import {
 } from "lucide-vue-next";
 import { Card, CardContent, Skeleton, Badge } from "@/components/ui";
 import { formatCurrency } from "@/lib/format";
-import { getAdminEmails } from "@/lib/api";
+import { getAdminEmails, getAdminActivity } from "@/lib/api";
 
 interface AdminUser {
   email: string;
@@ -47,7 +47,7 @@ const { data, isLoading, isError, error } = useQuery({
   retry: false,
 });
 
-const activeTab = ref<"users" | "emails">("users");
+const activeTab = ref<"users" | "emails" | "activity">("users");
 
 const isForbidden = computed(
   () => isError.value && error.value?.message === "FORBIDDEN",
@@ -58,6 +58,13 @@ const { data: emailsData, isLoading: emailsLoading } = useQuery({
   queryFn: getAdminEmails,
   retry: false,
   enabled: computed(() => !isForbidden.value),
+});
+
+const { data: activityData, isLoading: activityLoading } = useQuery({
+  queryKey: ["admin", "activity"],
+  queryFn: getAdminActivity,
+  retry: false,
+  enabled: computed(() => !isForbidden.value && activeTab.value === "activity"),
 });
 
 const sortedUsers = computed(() => {
@@ -244,6 +251,18 @@ function emailStatusVariant(
           <Mail class="inline h-3.5 w-3.5 mr-1.5" />
           Emails
         </button>
+        <button
+          class="px-4 py-2 text-sm font-medium transition-colors"
+          :class="
+            activeTab === 'activity'
+              ? 'border-b-2 border-foreground text-foreground'
+              : 'text-muted-foreground hover:text-foreground'
+          "
+          @click="activeTab = 'activity'"
+        >
+          <Activity class="inline h-3.5 w-3.5 mr-1.5" />
+          Activity Log
+        </button>
       </div>
 
       <!-- Users table -->
@@ -367,6 +386,131 @@ function emailStatusVariant(
                 </tr>
               </tbody>
             </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Activity Log tab -->
+      <div v-if="activeTab === 'activity'">
+        <div v-if="activityLoading" class="space-y-2 py-4">
+          <Skeleton v-for="i in 8" :key="i" class="h-10 w-full" />
+        </div>
+        <div v-else-if="activityData" class="space-y-6">
+          <!-- Recent signups -->
+          <div v-if="activityData.signups.length > 0">
+            <h3 class="text-sm font-medium mb-2">Recent Signups (7d)</h3>
+            <div class="space-y-1">
+              <div
+                v-for="signup in activityData.signups"
+                :key="signup.email"
+                class="flex items-center gap-3 rounded-md px-3 py-2 bg-success/5 border border-success/20 text-sm"
+              >
+                <span class="font-mono text-xs">{{ signup.email }}</span>
+                <span v-if="signup.name" class="text-muted-foreground">{{
+                  signup.name
+                }}</span>
+                <div class="flex-1" />
+                <span class="text-xs text-muted-foreground">{{
+                  formatDateTime(signup.created_at)
+                }}</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Recent recommendations -->
+          <div v-if="activityData.recommendation_activity.length > 0">
+            <h3 class="text-sm font-medium mb-2">
+              Recommendation Activity (7d)
+            </h3>
+            <div class="space-y-1">
+              <div
+                v-for="(rec, i) in activityData.recommendation_activity"
+                :key="i"
+                class="flex items-center gap-3 rounded-md px-3 py-2 text-sm border"
+              >
+                <Badge
+                  :variant="
+                    rec.status === 'applied'
+                      ? 'default'
+                      : rec.status === 'dismissed'
+                        ? 'secondary'
+                        : 'outline'
+                  "
+                >
+                  {{ rec.status }}
+                </Badge>
+                <span class="text-xs truncate flex-1">{{ rec.title }}</span>
+                <span class="font-mono text-xs text-muted-foreground">{{
+                  rec.email
+                }}</span>
+                <span class="text-xs text-muted-foreground">{{
+                  formatDateTime(rec.created_at)
+                }}</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Event stream -->
+          <div>
+            <h3 class="text-sm font-medium mb-2">
+              Event Stream (7d, last 100)
+            </h3>
+            <div class="rounded-lg border overflow-hidden">
+              <table class="w-full text-sm table-auto">
+                <thead
+                  class="bg-muted/50 text-muted-foreground text-xs font-medium uppercase tracking-wider"
+                >
+                  <tr>
+                    <th class="px-3 py-2 text-left">User</th>
+                    <th class="px-3 py-2 text-left">Source</th>
+                    <th class="px-3 py-2 text-left">Model</th>
+                    <th class="px-3 py-2 text-left">Customer</th>
+                    <th class="px-3 py-2 text-left">Feature</th>
+                    <th class="px-3 py-2 text-right">Cost</th>
+                    <th class="px-3 py-2 text-right">Time</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y">
+                  <tr
+                    v-for="(evt, i) in activityData.events"
+                    :key="i"
+                    class="hover:bg-muted/50"
+                  >
+                    <td class="px-3 py-2 font-mono text-xs whitespace-nowrap">
+                      {{ evt.email }}
+                    </td>
+                    <td class="px-3 py-2">
+                      <span class="text-xs rounded-full border px-1.5 py-0.5">{{
+                        evt.source
+                      }}</span>
+                    </td>
+                    <td class="px-3 py-2 font-mono text-xs whitespace-nowrap">
+                      {{ evt.model || "—" }}
+                    </td>
+                    <td class="px-3 py-2 text-xs">
+                      {{ evt.customer_id || "—" }}
+                    </td>
+                    <td class="px-3 py-2 text-xs">
+                      {{ evt.feature_key || "—" }}
+                    </td>
+                    <td class="px-3 py-2 text-right text-xs tabular-nums">
+                      {{ formatCurrency(Number(evt.cost_amount)) }}
+                    </td>
+                    <td
+                      class="px-3 py-2 text-right text-xs text-muted-foreground whitespace-nowrap"
+                    >
+                      {{ formatDateTime(evt.timestamp) }}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+              <div
+                v-if="activityData.events.length === 0"
+                class="py-8 text-center text-sm text-muted-foreground"
+              >
+                No events in the last 7 days
+              </div>
+            </div>
           </div>
         </div>
       </div>
