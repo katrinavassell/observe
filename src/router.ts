@@ -53,6 +53,11 @@ const router = createRouter({
       component: () => import("@/pages/DataSourcesPage.vue"),
     },
     {
+      path: "/insights",
+      name: "insights",
+      component: () => import("@/pages/InsightsPage.vue"),
+    },
+    {
       path: "/alerts",
       name: "alerts",
       component: () => import("@/pages/AlertsPage.vue"),

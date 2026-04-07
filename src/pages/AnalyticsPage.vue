@@ -356,10 +356,12 @@ const insightCategories = [
           </div>
         </div>
       </div>
-      <Button variant="outline" size="sm" @click="insightsOpen = true">
-        <Sparkles class="h-3.5 w-3.5 mr-1.5" />
-        AI Insights
-      </Button>
+      <router-link to="/insights">
+        <Button variant="outline" size="sm">
+          <Sparkles class="h-3.5 w-3.5 mr-1.5" />
+          Insights
+        </Button>
+      </router-link>
     </div>
 
     <!-- AI Insights Drawer -->

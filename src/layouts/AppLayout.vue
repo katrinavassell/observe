@@ -28,16 +28,7 @@ import FeedbackModal from "@/components/shared/FeedbackModal.vue";
 import { useTeam } from "@/composables/useTeam";
 import { useAuth } from "@/composables/useAuth";
 import { useDataMode } from "@/composables/useDataMode";
-import {
-  getUsageLimits,
-  listRecommendations,
-  getRecommendationCount,
-  computeRecommendations,
-  applyRecommendation,
-  dismissRecommendation,
-} from "@/lib/api";
-import type { Recommendation } from "@/lib/api";
-import Sheet from "@/components/ui/sheet.vue";
+import { getUsageLimits } from "@/lib/api";
 
 const route = useRoute();
 const { isViewer, fetchTeamInfo } = useTeam();
@@ -65,80 +56,7 @@ const { data: usageLimits } = useQuery({
 const aiCredits = computed(() => usageLimits.value?.ai_insights?.usage ?? null);
 
 const feedbackOpen = ref(false);
-const recsOpen = ref(false);
 const queryClient = useQueryClient();
-
-// Recommendations
-const { data: recCountData } = useQuery({
-  queryKey: ["recommendations-count"],
-  queryFn: getRecommendationCount,
-  staleTime: 30_000,
-  enabled: isLoggedIn,
-});
-const recCount = computed(() => recCountData.value?.count ?? 0);
-
-const { data: recsData, refetch: refetchRecs } = useQuery({
-  queryKey: ["recommendations"],
-  queryFn: () => listRecommendations("pending"),
-  enabled: computed(() => recsOpen.value && isLoggedIn.value),
-});
-const recommendations = computed(() => recsData.value?.recommendations ?? []);
-
-const isComputing = ref(false);
-async function handleCompute() {
-  isComputing.value = true;
-  try {
-    await computeRecommendations();
-    await refetchRecs();
-    queryClient.invalidateQueries({ queryKey: ["recommendations-count"] });
-  } catch (err) {
-    console.error("Failed to compute recommendations:", err);
-  } finally {
-    isComputing.value = false;
-  }
-}
-
-async function handleApply(id: number) {
-  try {
-    await applyRecommendation(id);
-    await refetchRecs();
-    queryClient.invalidateQueries({ queryKey: ["recommendations-count"] });
-  } catch (err) {
-    console.error("Failed to apply recommendation:", err);
-  }
-}
-
-async function handleDismiss(id: number) {
-  try {
-    await dismissRecommendation(id);
-    await refetchRecs();
-    queryClient.invalidateQueries({ queryKey: ["recommendations-count"] });
-  } catch (err) {
-    console.error("Failed to dismiss recommendation:", err);
-  }
-}
-
-function recSeverityClass(severity: string) {
-  switch (severity) {
-    case "critical":
-      return "border-destructive/30 bg-destructive/5";
-    case "warning":
-      return "border-warning/30 bg-warning/5";
-    default:
-      return "border-border bg-muted/30";
-  }
-}
-
-function recSeverityBadge(severity: string) {
-  switch (severity) {
-    case "critical":
-      return "bg-destructive/10 text-destructive";
-    case "warning":
-      return "bg-warning/10 text-warning";
-    default:
-      return "bg-muted text-muted-foreground";
-  }
-}
 
 function handleFeedbackCredited() {
   queryClient.invalidateQueries({ queryKey: ["usage-limits"] });
@@ -157,6 +75,12 @@ onMounted(async () => {
 });
 
 const navItems = computed(() => [
+  {
+    path: "/insights",
+    label: "Insights",
+    icon: Sparkles,
+    description: "Recommendations and AI analysis",
+  },
   {
     path: "/",
     label: "Analytics",
@@ -276,19 +200,6 @@ function isActive(path: string) {
         O
       </div>
       <span class="text-base font-semibold">Observe</span>
-      <div class="flex-1" />
-      <button
-        v-if="isLoggedIn"
-        class="relative p-1.5 rounded-md hover:bg-sidebar-accent transition-colors"
-        @click="recsOpen = true"
-      >
-        <Bell class="h-4 w-4" />
-        <span
-          v-if="recCount > 0"
-          class="absolute -top-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-[10px] font-bold text-white"
-          >{{ recCount > 9 ? "9+" : recCount }}</span
-        >
-      </button>
     </div>
 
     <!-- Mobile backdrop -->
@@ -428,20 +339,6 @@ function isActive(path: string) {
               <LogOut class="h-4 w-4" />
             </button>
           </div>
-          <!-- Recommendations bell -->
-          <button
-            v-if="isLoggedIn"
-            class="relative flex items-center gap-1.5 mx-2 mt-1 px-2 py-1.5 text-xs text-sidebar-foreground/40 hover:text-sidebar-foreground hover:bg-sidebar-accent/50 transition-all duration-150 rounded-md"
-            @click="recsOpen = true"
-          >
-            <Bell class="h-3.5 w-3.5" />
-            Recommendations
-            <span
-              v-if="recCount > 0"
-              class="ml-auto flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-bold text-white"
-              >{{ recCount }}</span
-            >
-          </button>
           <!-- Feedback & Discord -->
           <div class="flex items-center gap-1 px-2 pt-1">
             <button
@@ -508,78 +405,5 @@ function isActive(path: string) {
       @close="feedbackOpen = false"
       @credited="handleFeedbackCredited"
     />
-
-    <!-- Recommendations Drawer -->
-    <Sheet :open="recsOpen" side="right" @update:open="recsOpen = $event">
-      <div class="w-full sm:w-[420px] p-6 space-y-4">
-        <div class="flex items-center justify-between">
-          <div class="flex items-center gap-2">
-            <Bell class="h-5 w-5 text-primary" />
-            <h2 class="text-lg font-semibold">Recommendations</h2>
-          </div>
-          <button
-            class="text-xs text-primary hover:underline"
-            :disabled="isComputing"
-            @click="handleCompute"
-          >
-            {{ isComputing ? "Analyzing..." : "Refresh" }}
-          </button>
-        </div>
-        <p class="text-xs text-muted-foreground">
-          Cost optimizations and routing suggestions based on your margin data.
-        </p>
-
-        <div v-if="recommendations.length === 0" class="py-8 text-center">
-          <Bell class="h-8 w-8 text-muted-foreground/30 mx-auto mb-2" />
-          <p class="text-sm text-muted-foreground">
-            No pending recommendations
-          </p>
-          <button
-            class="mt-2 text-xs text-primary hover:underline"
-            @click="handleCompute"
-          >
-            Analyze your data now
-          </button>
-        </div>
-
-        <div v-else class="space-y-3">
-          <div
-            v-for="rec in recommendations"
-            :key="rec.id"
-            class="rounded-lg border p-3 space-y-2"
-            :class="recSeverityClass(rec.severity)"
-          >
-            <div class="flex items-center gap-2">
-              <span
-                class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium"
-                :class="recSeverityBadge(rec.severity)"
-                >{{ rec.severity }}</span
-              >
-              <span class="text-[10px] text-muted-foreground font-mono">{{
-                rec.type.replace(/_/g, " ")
-              }}</span>
-            </div>
-            <div class="text-sm font-medium">{{ rec.title }}</div>
-            <div class="text-xs text-muted-foreground">
-              {{ rec.description }}
-            </div>
-            <div class="flex gap-2 pt-1">
-              <button
-                class="text-xs font-medium text-primary hover:underline"
-                @click="handleApply(rec.id)"
-              >
-                Apply
-              </button>
-              <button
-                class="text-xs text-muted-foreground hover:text-foreground"
-                @click="handleDismiss(rec.id)"
-              >
-                Dismiss
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </Sheet>
   </div>
 </template>
