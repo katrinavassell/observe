@@ -285,6 +285,34 @@ export function createAuthRoutes(
         req.session.accountId = account.id;
         req.session.accountEmail = account.email;
 
+        // Clear sample data from the account's visitor so logged-in users see only real data
+        const idsToClean = [visitorIdToUse];
+        if (req.visitorId !== visitorIdToUse) {
+          idsToClean.push(req.visitorId!);
+        }
+        for (const vid of idsToClean) {
+          await pool.query(
+            "DELETE FROM observe_events WHERE user_id = $1 AND source = $2",
+            [vid, "sample"],
+          );
+          await pool.query(
+            "DELETE FROM customers WHERE user_id = $1 AND customer_id IN ('cus_001','cus_002','cus_003','cus_004','cus_005')",
+            [vid],
+          );
+          await pool.query(
+            "DELETE FROM subscriptions WHERE user_id = $1 AND subscription_id IN ('sub_001','sub_002','sub_003','sub_004','sub_005')",
+            [vid],
+          );
+          await pool.query(
+            "DELETE FROM plans WHERE user_id = $1 AND plan_id IN ('starter', 'pro', 'enterprise')",
+            [vid],
+          );
+          await pool.query(
+            "UPDATE user_data_status SET data_mode = CASE WHEN data_mode = 'sample' THEN 'none' ELSE data_mode END WHERE user_id = $1",
+            [vid],
+          );
+        }
+
         // Notify Kat of login
         const resendKey = process.env.RESEND_API_KEY;
         if (resendKey) {
