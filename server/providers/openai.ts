@@ -1,0 +1,81 @@
+import type {
+  ProviderAdapter,
+  ProviderRequest,
+  ProviderResponse,
+} from "./types.js";
+
+const DEFAULT_BASE_URL = "https://api.openai.com";
+
+export const openaiAdapter: ProviderAdapter = {
+  name: "openai",
+
+  async send(
+    request: ProviderRequest,
+    apiKey: string,
+    baseUrl?: string,
+    timeoutMs = 25000,
+  ): Promise<ProviderResponse> {
+    const base = baseUrl || DEFAULT_BASE_URL;
+    const url = `${base}/v1/chat/completions`;
+    const start = Date.now();
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(request),
+        signal: controller.signal,
+      });
+
+      const data = (await response.json()) as Record<string, unknown>;
+      const durationMs = Date.now() - start;
+
+      if (!response.ok) {
+        return {
+          ok: false,
+          status: response.status,
+          model: request.model,
+          inputTokens: 0,
+          outputTokens: 0,
+          body: data,
+          durationMs,
+          error:
+            (data.error as { message?: string })?.message ||
+            `HTTP ${response.status}`,
+        };
+      }
+
+      const usage = data.usage as
+        | { prompt_tokens?: number; completion_tokens?: number }
+        | undefined;
+      return {
+        ok: true,
+        status: response.status,
+        model: (data.model as string) || request.model,
+        inputTokens: usage?.prompt_tokens || 0,
+        outputTokens: usage?.completion_tokens || 0,
+        body: data,
+        durationMs,
+      };
+    } catch (err: unknown) {
+      return {
+        ok: false,
+        status: 502,
+        model: request.model,
+        inputTokens: 0,
+        outputTokens: 0,
+        body: {},
+        durationMs: Date.now() - start,
+        error: err instanceof Error ? err.message : "Provider request failed",
+      };
+    } finally {
+      clearTimeout(timer);
+    }
+  },
+};

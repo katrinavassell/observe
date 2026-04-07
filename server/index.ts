@@ -19,6 +19,7 @@ import cors from "cors";
 import rateLimit from "express-rate-limit";
 import { initModelPricing } from "./model-pricing.js";
 import { createProxyRoutes } from "./routes/proxy.js";
+import { createGatewayRoutes } from "./routes/gateway.js";
 import { createCustomersRoutes } from "./routes/customers.js";
 import { createEventsRoutes } from "./routes/events.js";
 import { createFeaturesRoutes } from "./routes/features.js";
@@ -209,6 +210,7 @@ app.use(
     getAdminVisitorId,
   }),
 );
+app.use(createGatewayRoutes(pool, ensureVisitor));
 app.use(
   createEventsRoutes(pool, ensureVisitor, {
     computeInferenceProfiles: (userId: string) =>
@@ -801,6 +803,50 @@ async function _doDbInit() {
         last_sync_at TIMESTAMPTZ,
         created_at TIMESTAMPTZ DEFAULT NOW(),
         UNIQUE(user_id, provider)
+      )
+    `);
+
+    // ── Routing / Gateway tables ────────────────────────────────────────────
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS routing_configs (
+        id SERIAL PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        description TEXT,
+        is_active BOOLEAN DEFAULT true,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(user_id, name)
+      )
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS routing_targets (
+        id SERIAL PRIMARY KEY,
+        config_id INTEGER NOT NULL REFERENCES routing_configs(id) ON DELETE CASCADE,
+        priority INTEGER NOT NULL DEFAULT 0,
+        provider TEXT NOT NULL,
+        model TEXT NOT NULL,
+        api_base_url TEXT,
+        encrypted_api_key TEXT,
+        max_retries INTEGER DEFAULT 1,
+        timeout_ms INTEGER DEFAULT 25000,
+        weight INTEGER DEFAULT 100,
+        enabled BOOLEAN DEFAULT true,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS routing_rules (
+        id SERIAL PRIMARY KEY,
+        config_id INTEGER NOT NULL REFERENCES routing_configs(id) ON DELETE CASCADE,
+        field TEXT NOT NULL,
+        operator TEXT NOT NULL,
+        value TEXT NOT NULL,
+        target_id INTEGER REFERENCES routing_targets(id) ON DELETE SET NULL,
+        priority INTEGER DEFAULT 0,
+        created_at TIMESTAMPTZ DEFAULT NOW()
       )
     `);
 
