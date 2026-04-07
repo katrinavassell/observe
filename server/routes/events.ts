@@ -3,7 +3,7 @@ import type { Pool } from "pg";
 import crypto from "crypto";
 import rateLimit from "express-rate-limit";
 import { type AuthRequest } from "./auth.js";
-import { encryptApiKey, decryptApiKey } from "../stripe-client.js";
+import { encryptApiKey } from "../stripe-client.js";
 import { calculateCostFromTokens as calcCostFromDb } from "../model-pricing.js";
 import { checkAlerts } from "./alerts.js";
 import { checkFeatureAccess } from "../billing.js";
@@ -522,7 +522,7 @@ async function sendUsageLimitEmail(
     }),
   })
     .then(() =>
-      console.log("Usage alert sent:", { email, threshold, used, limit }),
+      console.warn("Usage alert sent:", { email, threshold, used, limit }),
     )
     .catch((err) => {
       console.error("Failed to send usage alert email:", err);

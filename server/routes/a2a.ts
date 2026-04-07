@@ -1,9 +1,9 @@
-import { Router, Request, Response, NextFunction } from "express";
+import { Router, Response, NextFunction } from "express";
 import type { Pool } from "pg";
 import crypto from "crypto";
 import { type AuthRequest } from "./auth.js";
 
-export function createA2ARoutes(pool: Pool, ensureVisitor: any) {
+export function createA2ARoutes(pool: Pool, _ensureVisitor: any) {
   const router = Router();
 
   // Auth middleware that accepts either session cookie OR x-tanso-key header

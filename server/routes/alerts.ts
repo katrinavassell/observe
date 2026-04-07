@@ -224,7 +224,7 @@ export function createAlertRoutes(
   },
 ) {
   const router = Router();
-  const { checkTansoFeatureAccess } = deps;
+  const { checkTansoFeatureAccess: _checkTansoFeatureAccess } = deps;
 
   // List alert rules (+ entitlement status)
   router.get(
