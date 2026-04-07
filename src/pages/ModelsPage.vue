@@ -360,7 +360,7 @@ function goToModel(model: string) {
     <!-- Table -->
     <div v-else class="rounded-lg border bg-card overflow-hidden">
       <div class="overflow-x-auto">
-        <table class="w-full text-sm">
+        <table class="w-full text-sm table-auto">
           <thead
             class="bg-muted/50 text-muted-foreground text-xs font-medium uppercase tracking-wider"
           >
@@ -384,7 +384,7 @@ function goToModel(model: string) {
             >
               <template v-for="col in visibleColumns" :key="col.id">
                 <!-- Model -->
-                <td v-if="col.id === 'model'" class="px-4 py-3">
+                <td v-if="col.id === 'model'" class="px-4 py-3 whitespace-nowrap">
                   <span
                     class="font-mono text-xs bg-muted px-2 py-0.5 rounded"
                     >{{ m.model }}</span
