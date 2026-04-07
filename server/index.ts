@@ -21,6 +21,7 @@ import { initModelPricing } from "./model-pricing.js";
 import { createProxyRoutes } from "./routes/proxy.js";
 import { createGatewayRoutes } from "./routes/gateway.js";
 import { createRecommendationsRoutes } from "./routes/recommendations.js";
+import { createChatRoutes } from "./routes/chat.js";
 import { createCustomersRoutes } from "./routes/customers.js";
 import { createEventsRoutes } from "./routes/events.js";
 import { createFeaturesRoutes } from "./routes/features.js";
@@ -213,6 +214,11 @@ app.use(
 );
 app.use(createGatewayRoutes(pool, ensureVisitor));
 app.use(createRecommendationsRoutes(pool, ensureVisitor));
+app.use(
+  createChatRoutes(pool, ensureVisitor, {
+    checkBillingFeatureAccess,
+  }),
+);
 app.use(
   createEventsRoutes(pool, ensureVisitor, {
     computeInferenceProfiles: (userId: string) =>
