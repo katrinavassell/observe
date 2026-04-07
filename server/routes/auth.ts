@@ -145,6 +145,13 @@ export function createAuthRoutes(
         await pool.query("DELETE FROM usage_records WHERE user_id = $1", [
           req.visitorId,
         ]);
+        await pool.query("DELETE FROM ai_insights WHERE user_id = $1", [
+          req.visitorId,
+        ]);
+        await pool.query(
+          "UPDATE user_data_status SET data_mode = 'none' WHERE user_id = $1",
+          [req.visitorId],
+        );
 
         // Auto-generate an SDK key so onboarding can show it immediately
         let sdkKey: string | null = null;
