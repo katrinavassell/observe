@@ -82,12 +82,6 @@ const navItems = computed(() => [
     description: "Recommendations and AI analysis",
   },
   {
-    path: "/chat",
-    label: "Chat",
-    icon: MessageSquare,
-    description: "AI assistant for costs, routing & actions",
-  },
-  {
     path: "/analytics",
     label: "Analytics",
     icon: BarChart3,

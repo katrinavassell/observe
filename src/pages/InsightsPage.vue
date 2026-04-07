@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from "vue";
+import { ref, computed, nextTick } from "vue";
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
 import { toast } from "vue-sonner";
 import {
@@ -13,8 +13,10 @@ import {
   Info,
   GitBranch,
   Bell,
-  Users,
   DollarSign,
+  Send,
+  Bot,
+  User,
 } from "lucide-vue-next";
 import { useAuth } from "@/composables/useAuth";
 import { Card, Button, Skeleton } from "@/components/ui";
@@ -27,8 +29,15 @@ import {
   computeRecommendations,
   applyRecommendation,
   dismissRecommendation,
+  sendChatMessage,
+  executeChatAction,
 } from "@/lib/api";
-import type { AiInsight, Recommendation } from "@/lib/api";
+import type {
+  AiInsight,
+  Recommendation,
+  ChatMessage,
+  ChatAction,
+} from "@/lib/api";
 
 const queryClient = useQueryClient();
 const { isLoggedIn } = useAuth();
@@ -41,7 +50,7 @@ function dismissOnboarding() {
   onboardingDismissed.value = true;
 }
 
-// ── Unified insights: deterministic recommendations + AI insights ────────────
+// ── Recommendations + AI insights ────────────────────────────────────────────
 
 const { data: recsData, isLoading: recsLoading } = useQuery({
   queryKey: ["recommendations"],
@@ -67,7 +76,7 @@ const insightsAllowed = computed(
   () => usageLimits.value?.ai_insights?.allowed !== false,
 );
 
-// Merge both into one sorted list
+// Merge into one sorted list
 interface UnifiedInsight {
   id: string;
   source: "recommendation" | "ai";
@@ -81,10 +90,7 @@ interface UnifiedInsight {
 
 const allInsights = computed<UnifiedInsight[]>(() => {
   const items: UnifiedInsight[] = [];
-
-  // Recommendations (actionable)
   for (const rec of recsData.value?.recommendations ?? []) {
-    const action = getActionForRec(rec);
     items.push({
       id: `rec-${rec.id}`,
       source: "recommendation",
@@ -92,12 +98,10 @@ const allInsights = computed<UnifiedInsight[]>(() => {
       title: rec.title,
       description: rec.description,
       type: rec.type,
-      action,
+      action: getActionForRec(rec),
       recId: rec.id,
     });
   }
-
-  // AI insights (informational)
   for (const ins of insightsData.value ?? []) {
     items.push({
       id: `ai-${ins.id}`,
@@ -108,21 +112,15 @@ const allInsights = computed<UnifiedInsight[]>(() => {
       type: ins.insight_type,
     });
   }
-
-  // Sort: critical first, then warning, then info. Within same severity, recommendations before AI.
-  const severityOrder: Record<string, number> = {
+  const order: Record<string, number> = {
     critical: 0,
     warning: 1,
     info: 2,
     positive: 3,
   };
-  return items.sort((a, b) => {
-    const sa = severityOrder[a.severity] ?? 4;
-    const sb = severityOrder[b.severity] ?? 4;
-    if (sa !== sb) return sa - sb;
-    if (a.source !== b.source) return a.source === "recommendation" ? -1 : 1;
-    return 0;
-  });
+  return items.sort(
+    (a, b) => (order[a.severity] ?? 4) - (order[b.severity] ?? 4),
+  );
 });
 
 function getActionForRec(rec: Recommendation): UnifiedInsight["action"] {
@@ -154,7 +152,7 @@ function getActionForRec(rec: Recommendation): UnifiedInsight["action"] {
   }
 }
 
-// ── Actions ──────────────────────────────────────────────────────────────────
+// ── Scan & generate actions ──────────────────────────────────────────────────
 
 const isAnalyzing = ref(false);
 const isGeneratingAI = ref(false);
@@ -164,7 +162,6 @@ async function handleAnalyze() {
   try {
     await computeRecommendations();
     queryClient.invalidateQueries({ queryKey: ["recommendations"] });
-    queryClient.invalidateQueries({ queryKey: ["recommendations-count"] });
     toast.success("Analysis complete");
   } catch (err: any) {
     toast.error(err.message || "Analysis failed");
@@ -194,9 +191,7 @@ async function handleApply(recId: number) {
   try {
     const result = await applyRecommendation(recId);
     queryClient.invalidateQueries({ queryKey: ["recommendations"] });
-    queryClient.invalidateQueries({ queryKey: ["recommendations-count"] });
-    const note = (result.action_result as any)?.note;
-    toast.success(note || "Applied successfully");
+    toast.success((result.action_result as any)?.note || "Applied");
   } catch (err: any) {
     toast.error(err.message || "Failed to apply");
   } finally {
@@ -208,16 +203,106 @@ async function handleDismiss(recId: number) {
   try {
     await dismissRecommendation(recId);
     queryClient.invalidateQueries({ queryKey: ["recommendations"] });
-    queryClient.invalidateQueries({ queryKey: ["recommendations-count"] });
   } catch (err: any) {
     toast.error(err.message || "Failed to dismiss");
   }
 }
 
+// ── Chat ─────────────────────────────────────────────────────────────────────
+
+const chatMessages = ref<
+  Array<ChatMessage & { action?: ChatAction | null; actionExecuted?: boolean }>
+>([]);
+const chatInput = ref("");
+const chatLoading = ref(false);
+const feedRef = ref<HTMLElement | null>(null);
+
+const SUGGESTIONS = [
+  "Which customers are losing money?",
+  "Route unprofitable customers to gpt-4o-mini",
+  "Create an alert if daily cost exceeds $50",
+  "Group my EU customers into a cohort",
+];
+
+async function handleChatSend() {
+  const text = chatInput.value.trim();
+  if (!text || chatLoading.value) return;
+
+  chatInput.value = "";
+  chatMessages.value.push({ role: "user", content: text });
+  scrollToBottom();
+
+  chatLoading.value = true;
+  try {
+    const msgs: ChatMessage[] = chatMessages.value.map((m) => ({
+      role: m.role,
+      content: m.content,
+    }));
+    const result = await sendChatMessage(msgs);
+    chatMessages.value.push({
+      role: "assistant",
+      content: result.message,
+      action: result.action,
+    });
+    scrollToBottom();
+  } catch (err: any) {
+    chatMessages.value.push({
+      role: "assistant",
+      content: err.message || "Something went wrong.",
+    });
+  } finally {
+    chatLoading.value = false;
+  }
+}
+
+async function handleChatAction(index: number) {
+  const msg = chatMessages.value[index];
+  if (!msg.action) return;
+  try {
+    const result = await executeChatAction(msg.action);
+    msg.actionExecuted = true;
+    toast.success(result.message);
+    queryClient.invalidateQueries({ queryKey: ["recommendations"] });
+  } catch (err: any) {
+    toast.error(err.message || "Failed to execute");
+  }
+}
+
+function handleSuggestion(text: string) {
+  chatInput.value = text;
+  handleChatSend();
+}
+
+function handleKeydown(e: KeyboardEvent) {
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    handleChatSend();
+  }
+}
+
+function scrollToBottom() {
+  nextTick(() => {
+    if (feedRef.value) feedRef.value.scrollTop = feedRef.value.scrollHeight;
+  });
+}
+
+function formatActionLabel(action: ChatAction): string {
+  switch (action.type) {
+    case "create_routing_rule":
+      return `Create routing rule: ${action.field} ${action.operator} "${action.value}"`;
+    case "create_alert":
+      return `Create alert: ${action.name}`;
+    case "create_cohort":
+      return `Create cohort "${action.name}" with ${(action.customer_ids as string[])?.length || 0} customers`;
+    default:
+      return `Execute: ${action.type}`;
+  }
+}
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-function severityClass(severity: string) {
-  switch (severity) {
+function severityClass(s: string) {
+  switch (s) {
     case "critical":
       return "border-destructive/30 bg-destructive/5";
     case "warning":
@@ -228,9 +313,8 @@ function severityClass(severity: string) {
       return "border-border bg-card";
   }
 }
-
-function severityBadge(severity: string) {
-  switch (severity) {
+function severityBadge(s: string) {
+  switch (s) {
     case "critical":
       return "bg-destructive/10 text-destructive";
     case "warning":
@@ -241,9 +325,8 @@ function severityBadge(severity: string) {
       return "bg-muted text-muted-foreground";
   }
 }
-
-function severityIcon(severity: string) {
-  switch (severity) {
+function severityIcon(s: string) {
+  switch (s) {
     case "critical":
       return AlertCircle;
     case "warning":
@@ -256,7 +339,7 @@ function severityIcon(severity: string) {
 
 <template>
   <div class="space-y-6">
-    <!-- Onboarding checklist -->
+    <!-- Onboarding -->
     <OnboardingChecklist
       v-if="isLoggedIn && !onboardingDismissed"
       @dismiss="dismissOnboarding"
@@ -267,7 +350,7 @@ function severityIcon(severity: string) {
       <div>
         <h1 class="text-2xl font-semibold tracking-tight">Insights</h1>
         <p class="text-muted-foreground">
-          Actionable recommendations from your cost and margin data
+          Recommendations, AI analysis, and actions
         </p>
       </div>
       <div class="flex gap-2">
@@ -292,80 +375,16 @@ function severityIcon(severity: string) {
           />
           <Sparkles v-else class="h-3.5 w-3.5 mr-1.5" />
           {{ isGeneratingAI ? "Generating..." : "AI Analysis" }}
-          <span v-if="insightsUsage" class="ml-1 text-xs opacity-60">
-            ({{ insightsUsage.remaining }} credits)
-          </span>
-        </Button>
-      </div>
-    </div>
-
-    <!-- Loading -->
-    <div v-if="recsLoading && insightsLoading" class="space-y-3">
-      <Skeleton v-for="i in 4" :key="i" class="h-28 w-full" />
-    </div>
-
-    <!-- Empty state -->
-    <div
-      v-else-if="allInsights.length === 0"
-      class="flex flex-col items-center justify-center py-20 text-center max-w-lg mx-auto"
-    >
-      <Lightbulb class="h-12 w-12 text-primary/40 mb-4" />
-      <p class="text-lg font-semibold mb-2">
-        Find savings. Apply them instantly.
-      </p>
-      <p class="text-sm text-muted-foreground mb-6 leading-relaxed">
-        Observe scans your cost and margin data, finds unprofitable customers,
-        expensive models, and missing fallbacks — then creates routing rules,
-        alerts, and pricing changes for you with one click.
-      </p>
-
-      <div class="grid grid-cols-3 gap-4 mb-8 w-full text-left">
-        <div class="rounded-lg border p-3">
-          <GitBranch class="h-4 w-4 text-primary mb-1.5" />
-          <div class="text-xs font-medium">Route to cheaper models</div>
-          <div class="text-[11px] text-muted-foreground">
-            Auto-switch unprofitable customers to cost-effective alternatives
-          </div>
-        </div>
-        <div class="rounded-lg border p-3">
-          <Bell class="h-4 w-4 text-primary mb-1.5" />
-          <div class="text-xs font-medium">Create alerts</div>
-          <div class="text-[11px] text-muted-foreground">
-            Set up cost spike and margin alerts from detected patterns
-          </div>
-        </div>
-        <div class="rounded-lg border p-3">
-          <DollarSign class="h-4 w-4 text-primary mb-1.5" />
-          <div class="text-xs font-medium">Optimize pricing</div>
-          <div class="text-[11px] text-muted-foreground">
-            Adjust feature pricing based on actual cost and usage data
-          </div>
-        </div>
-      </div>
-
-      <div class="flex gap-3">
-        <Button
-          size="sm"
-          variant="outline"
-          :disabled="isAnalyzing"
-          @click="handleAnalyze"
-        >
-          <Lightbulb class="h-3.5 w-3.5 mr-1.5" />
-          Quick Scan (free)
-        </Button>
-        <Button
-          size="sm"
-          :disabled="isGeneratingAI || !insightsAllowed"
-          @click="handleGenerateAI"
-        >
-          <Sparkles class="h-3.5 w-3.5 mr-1.5" />
-          AI Analysis
         </Button>
       </div>
     </div>
 
     <!-- Insight cards -->
-    <div v-else class="space-y-3">
+    <div v-if="recsLoading && insightsLoading" class="space-y-3">
+      <Skeleton v-for="i in 3" :key="i" class="h-24 w-full" />
+    </div>
+
+    <div v-else-if="allInsights.length > 0" class="space-y-3">
       <Card
         v-for="insight in allInsights"
         :key="insight.id"
@@ -373,21 +392,10 @@ function severityIcon(severity: string) {
         :class="severityClass(insight.severity)"
       >
         <div class="flex gap-3">
-          <!-- Severity icon -->
-          <div class="pt-0.5 shrink-0">
-            <component
-              :is="severityIcon(insight.severity)"
-              class="h-5 w-5"
-              :class="
-                severityBadge(insight.severity)
-                  .replace('bg-', 'text-')
-                  .split(' ')
-                  .pop()
-              "
-            />
-          </div>
-
-          <!-- Content -->
+          <component
+            :is="severityIcon(insight.severity)"
+            class="h-5 w-5 shrink-0 mt-0.5"
+          />
           <div class="flex-1 min-w-0 space-y-1.5">
             <div class="flex items-center gap-2 flex-wrap">
               <span
@@ -395,24 +403,19 @@ function severityIcon(severity: string) {
                 :class="severityBadge(insight.severity)"
                 >{{ insight.severity }}</span
               >
-              <span class="text-[10px] text-muted-foreground font-mono">
-                {{ insight.type.replace(/_/g, " ") }}
-              </span>
+              <span class="text-[10px] text-muted-foreground font-mono">{{
+                insight.type.replace(/_/g, " ")
+              }}</span>
               <span
                 v-if="insight.source === 'ai'"
                 class="inline-flex items-center gap-0.5 text-[10px] text-primary"
+                ><Sparkles class="h-2.5 w-2.5" /> AI</span
               >
-                <Sparkles class="h-2.5 w-2.5" />
-                AI
-              </span>
             </div>
-
             <div class="text-sm font-medium">{{ insight.title }}</div>
             <div class="text-xs text-muted-foreground leading-relaxed">
               {{ insight.description }}
             </div>
-
-            <!-- Action block (recommendations only) -->
             <div
               v-if="insight.action && insight.recId"
               class="flex items-center gap-3 pt-2 border-t border-border/50 mt-2"
@@ -452,6 +455,111 @@ function severityIcon(severity: string) {
           </div>
         </div>
       </Card>
+    </div>
+
+    <!-- Chat section -->
+    <div class="border-t pt-6">
+      <div class="flex items-center gap-2 mb-3">
+        <Bot class="h-4 w-4 text-primary" />
+        <span class="text-sm font-medium">Ask anything</span>
+      </div>
+
+      <!-- Suggestion chips (when no messages) -->
+      <div v-if="chatMessages.length === 0" class="flex flex-wrap gap-2 mb-4">
+        <button
+          v-for="s in SUGGESTIONS"
+          :key="s"
+          class="text-xs rounded-full border px-3 py-1.5 hover:bg-muted/50 transition-colors text-muted-foreground hover:text-foreground"
+          @click="handleSuggestion(s)"
+        >
+          {{ s }}
+        </button>
+      </div>
+
+      <!-- Chat messages -->
+      <div
+        v-if="chatMessages.length > 0"
+        ref="feedRef"
+        class="space-y-3 max-h-96 overflow-y-auto mb-4"
+      >
+        <div
+          v-for="(msg, i) in chatMessages"
+          :key="i"
+          class="flex gap-3"
+          :class="msg.role === 'user' ? 'justify-end' : ''"
+        >
+          <div
+            v-if="msg.role === 'assistant'"
+            class="shrink-0 flex h-6 w-6 items-center justify-center rounded-full bg-primary/10"
+          >
+            <Bot class="h-3.5 w-3.5 text-primary" />
+          </div>
+          <div
+            class="max-w-[80%] rounded-lg px-3 py-2 text-sm"
+            :class="
+              msg.role === 'user'
+                ? 'bg-primary text-primary-foreground'
+                : 'bg-muted'
+            "
+          >
+            <div class="whitespace-pre-wrap">
+              {{ msg.content.replace(/```action[\s\S]*?```/g, "").trim() }}
+            </div>
+            <div
+              v-if="msg.action && !msg.actionExecuted"
+              class="mt-2 rounded border bg-background p-2"
+            >
+              <div class="text-xs font-medium mb-1.5">
+                {{ formatActionLabel(msg.action) }}
+              </div>
+              <Button size="sm" @click="handleChatAction(i)">
+                <Check class="h-3 w-3 mr-1" /> Do it
+              </Button>
+            </div>
+            <div
+              v-if="msg.action && msg.actionExecuted"
+              class="mt-1.5 flex items-center gap-1 text-xs text-success"
+            >
+              <Check class="h-3 w-3" /> Done
+            </div>
+          </div>
+          <div
+            v-if="msg.role === 'user'"
+            class="shrink-0 flex h-6 w-6 items-center justify-center rounded-full bg-foreground/10"
+          >
+            <User class="h-3.5 w-3.5" />
+          </div>
+        </div>
+        <div v-if="chatLoading" class="flex gap-3">
+          <div
+            class="shrink-0 flex h-6 w-6 items-center justify-center rounded-full bg-primary/10"
+          >
+            <Bot class="h-3.5 w-3.5 text-primary" />
+          </div>
+          <div
+            class="bg-muted rounded-lg px-3 py-2 text-sm text-muted-foreground flex items-center gap-2"
+          >
+            <Loader2 class="h-3.5 w-3.5 animate-spin" /> Thinking...
+          </div>
+        </div>
+      </div>
+
+      <!-- Input -->
+      <div class="flex gap-2">
+        <input
+          v-model="chatInput"
+          class="flex-1 rounded-lg border bg-background px-4 py-2.5 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
+          placeholder="Ask about your costs, margins, or take an action..."
+          :disabled="chatLoading || !isLoggedIn"
+          @keydown="handleKeydown"
+        />
+        <Button
+          :disabled="chatLoading || !chatInput.trim() || !isLoggedIn"
+          @click="handleChatSend"
+        >
+          <Send class="h-4 w-4" />
+        </Button>
+      </div>
     </div>
   </div>
 </template>
