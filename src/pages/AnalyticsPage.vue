@@ -584,12 +584,6 @@ const insightCategories = [
       </div>
     </Sheet>
 
-    <!-- Onboarding checklist for authenticated users -->
-    <OnboardingChecklist
-      v-if="isLoggedIn && !onboardingDismissed"
-      @dismiss="dismissOnboarding"
-    />
-
     <!-- Error state -->
     <div
       v-if="isError && !isLoading"

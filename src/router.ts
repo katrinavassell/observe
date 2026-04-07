@@ -5,6 +5,10 @@ const router = createRouter({
   routes: [
     {
       path: "/",
+      redirect: "/insights",
+    },
+    {
+      path: "/analytics",
       name: "analytics",
       component: () => import("@/pages/AnalyticsPage.vue"),
     },

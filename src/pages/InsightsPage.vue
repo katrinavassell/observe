@@ -18,6 +18,7 @@ import {
 } from "lucide-vue-next";
 import { useAuth } from "@/composables/useAuth";
 import { Card, Button, Skeleton } from "@/components/ui";
+import OnboardingChecklist from "@/components/onboarding/OnboardingChecklist.vue";
 import {
   listInsights,
   generateInsights,
@@ -31,6 +32,14 @@ import type { AiInsight, Recommendation } from "@/lib/api";
 
 const queryClient = useQueryClient();
 const { isLoggedIn } = useAuth();
+
+const onboardingDismissed = ref(
+  window.localStorage.getItem("observe:onboarding_dismissed") === "true",
+);
+function dismissOnboarding() {
+  window.localStorage.setItem("observe:onboarding_dismissed", "true");
+  onboardingDismissed.value = true;
+}
 
 // ── Unified insights: deterministic recommendations + AI insights ────────────
 
@@ -247,6 +256,12 @@ function severityIcon(severity: string) {
 
 <template>
   <div class="space-y-6">
+    <!-- Onboarding checklist -->
+    <OnboardingChecklist
+      v-if="isLoggedIn && !onboardingDismissed"
+      @dismiss="dismissOnboarding"
+    />
+
     <!-- Header -->
     <div class="flex items-start justify-between">
       <div>
@@ -292,15 +307,43 @@ function severityIcon(severity: string) {
     <!-- Empty state -->
     <div
       v-else-if="allInsights.length === 0"
-      class="flex flex-col items-center justify-center py-20 text-center max-w-md mx-auto"
+      class="flex flex-col items-center justify-center py-20 text-center max-w-lg mx-auto"
     >
-      <Lightbulb class="h-12 w-12 text-muted-foreground/30 mb-4" />
-      <p class="text-sm font-medium mb-1">No insights yet</p>
-      <p class="text-xs text-muted-foreground mb-5">
-        Run a quick scan to analyze your margin data for optimization
-        opportunities, or use AI analysis for deeper pattern detection.
+      <Lightbulb class="h-12 w-12 text-primary/40 mb-4" />
+      <p class="text-lg font-semibold mb-2">
+        Find savings. Apply them instantly.
       </p>
-      <div class="flex gap-2">
+      <p class="text-sm text-muted-foreground mb-6 leading-relaxed">
+        Observe scans your cost and margin data, finds unprofitable customers,
+        expensive models, and missing fallbacks — then creates routing rules,
+        alerts, and pricing changes for you with one click.
+      </p>
+
+      <div class="grid grid-cols-3 gap-4 mb-8 w-full text-left">
+        <div class="rounded-lg border p-3">
+          <GitBranch class="h-4 w-4 text-primary mb-1.5" />
+          <div class="text-xs font-medium">Route to cheaper models</div>
+          <div class="text-[11px] text-muted-foreground">
+            Auto-switch unprofitable customers to cost-effective alternatives
+          </div>
+        </div>
+        <div class="rounded-lg border p-3">
+          <Bell class="h-4 w-4 text-primary mb-1.5" />
+          <div class="text-xs font-medium">Create alerts</div>
+          <div class="text-[11px] text-muted-foreground">
+            Set up cost spike and margin alerts from detected patterns
+          </div>
+        </div>
+        <div class="rounded-lg border p-3">
+          <DollarSign class="h-4 w-4 text-primary mb-1.5" />
+          <div class="text-xs font-medium">Optimize pricing</div>
+          <div class="text-[11px] text-muted-foreground">
+            Adjust feature pricing based on actual cost and usage data
+          </div>
+        </div>
+      </div>
+
+      <div class="flex gap-3">
         <Button
           size="sm"
           variant="outline"

@@ -82,7 +82,7 @@ const navItems = computed(() => [
     description: "Recommendations and AI analysis",
   },
   {
-    path: "/",
+    path: "/analytics",
     label: "Analytics",
     icon: BarChart3,
     description: "Revenue, costs & margin overview",
