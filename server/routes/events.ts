@@ -810,7 +810,11 @@ export function createEventsRoutes(
            LIMIT $2 OFFSET $3`,
         [userId, limit, offset],
       );
-      if (result.rows.length === 0 && offset === 0 && !authReq.accountId) {
+      if (
+        result.rows.length === 0 &&
+        offset === 0 &&
+        !authReq.session?.accountId
+      ) {
         return res.json({ traces: sampleTraces() });
       }
       res.json({
@@ -858,7 +862,7 @@ export function createEventsRoutes(
            ORDER BY timestamp ASC`,
         [userId, traceId],
       );
-      if (result.rows.length === 0 && !authReq.accountId) {
+      if (result.rows.length === 0 && !authReq.session?.accountId) {
         const detail = sampleTraceDetail(traceId);
         if (detail) return res.json(detail);
       }
