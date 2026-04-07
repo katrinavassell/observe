@@ -1389,3 +1389,174 @@ export async function getAdminEmails(): Promise<{
 }> {
   return request("/admin/emails");
 }
+
+// ── Routing / Gateway ────────────────────────────────────────────────────────
+
+export interface RoutingTarget {
+  id: number;
+  priority: number;
+  provider: string;
+  model: string;
+  api_base_url: string | null;
+  max_retries: number;
+  timeout_ms: number;
+  weight: number;
+  enabled: boolean;
+  created_at: string;
+}
+
+export interface RoutingRule {
+  id: number;
+  field: string;
+  operator: string;
+  value: string;
+  target_id: number | null;
+  priority: number;
+  created_at: string;
+}
+
+export interface RoutingConfig {
+  id: number;
+  name: string;
+  description: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  target_count?: number;
+  targets?: RoutingTarget[];
+  rules?: RoutingRule[];
+}
+
+export async function listRoutingConfigs(): Promise<{
+  configs: RoutingConfig[];
+}> {
+  return request("/gateway/configs");
+}
+
+export async function getRoutingConfig(id: number): Promise<RoutingConfig> {
+  return request(`/gateway/configs/${id}`);
+}
+
+export async function createRoutingConfig(data: {
+  name: string;
+  description?: string;
+}): Promise<RoutingConfig> {
+  return request("/gateway/configs", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function updateRoutingConfig(
+  id: number,
+  data: Partial<Pick<RoutingConfig, "name" | "description" | "is_active">>,
+): Promise<RoutingConfig> {
+  return request(`/gateway/configs/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deleteRoutingConfig(
+  id: number,
+): Promise<{ deleted: boolean }> {
+  return request(`/gateway/configs/${id}`, { method: "DELETE" });
+}
+
+export async function addRoutingTarget(
+  configId: number,
+  target: {
+    provider: string;
+    model: string;
+    api_key?: string;
+    api_base_url?: string;
+    priority?: number;
+    max_retries?: number;
+    timeout_ms?: number;
+    weight?: number;
+  },
+): Promise<RoutingTarget> {
+  return request(`/gateway/configs/${configId}/targets`, {
+    method: "POST",
+    body: JSON.stringify(target),
+  });
+}
+
+export async function updateRoutingTarget(
+  configId: number,
+  targetId: number,
+  updates: Partial<{
+    provider: string;
+    model: string;
+    api_key: string;
+    api_base_url: string;
+    priority: number;
+    max_retries: number;
+    timeout_ms: number;
+    weight: number;
+    enabled: boolean;
+  }>,
+): Promise<RoutingTarget> {
+  return request(`/gateway/configs/${configId}/targets/${targetId}`, {
+    method: "PUT",
+    body: JSON.stringify(updates),
+  });
+}
+
+export async function deleteRoutingTarget(
+  configId: number,
+  targetId: number,
+): Promise<{ deleted: boolean }> {
+  return request(`/gateway/configs/${configId}/targets/${targetId}`, {
+    method: "DELETE",
+  });
+}
+
+export async function addRoutingRule(
+  configId: number,
+  rule: {
+    field: string;
+    operator: string;
+    value: string;
+    target_id?: number;
+    priority?: number;
+  },
+): Promise<RoutingRule> {
+  return request(`/gateway/configs/${configId}/rules`, {
+    method: "POST",
+    body: JSON.stringify(rule),
+  });
+}
+
+export async function deleteRoutingRule(
+  configId: number,
+  ruleId: number,
+): Promise<{ deleted: boolean }> {
+  return request(`/gateway/configs/${configId}/rules/${ruleId}`, {
+    method: "DELETE",
+  });
+}
+
+export async function testRoutingConfig(
+  configId: number,
+  metadata: Record<string, string>,
+): Promise<{
+  config: string;
+  metadata: Record<string, string>;
+  matched_rule: RoutingRule | null;
+  target_order: Array<{
+    id: number;
+    provider: string;
+    model: string;
+    priority: number;
+  }>;
+}> {
+  return request(`/gateway/configs/${configId}/test`, {
+    method: "POST",
+    body: JSON.stringify({ metadata }),
+  });
+}
+
+export async function listGatewayProviders(): Promise<{ providers: string[] }> {
+  return request("/gateway/providers");
+}
