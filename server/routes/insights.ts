@@ -762,10 +762,12 @@ Return ONLY the JSON array, no markdown or explanation.`;
     ensureVisitor,
     async (req: AuthRequest, res: Response) => {
       try {
+        const adminEmail = (
+          process.env.ADMIN_EMAIL || "tansoadmin@tansohq.com"
+        ).toLowerCase();
         if (
           !req.accountEmail ||
-          req.accountEmail.toLowerCase() !==
-            (process.env.ADMIN_EMAIL || "").toLowerCase()
+          req.accountEmail.toLowerCase() !== adminEmail
         ) {
           return res.status(403).json({ error: "Admin access required" });
         }
@@ -811,10 +813,12 @@ Return ONLY the JSON array, no markdown or explanation.`;
     ensureVisitor,
     async (req: AuthRequest, res: Response) => {
       try {
+        const adminEmail2 = (
+          process.env.ADMIN_EMAIL || "tansoadmin@tansohq.com"
+        ).toLowerCase();
         if (
           !req.accountEmail ||
-          req.accountEmail.toLowerCase() !==
-            (process.env.ADMIN_EMAIL || "").toLowerCase()
+          req.accountEmail.toLowerCase() !== adminEmail2
         ) {
           return res.status(403).json({ error: "Admin access required" });
         }
