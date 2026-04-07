@@ -299,7 +299,7 @@ npm run lint        # lint
 
 ## Community
 
-- [Discord](https://discord.gg/zSVwxgvxCj) -- chat with the team and other users
+- [Discord](https://discord.gg/6GHcsaQTy7) -- chat with the team and other users
 - [GitHub Issues](https://github.com/katrinalaszlo/observe/issues) -- bug reports and feature requests
 - [GitHub Discussions](https://github.com/katrinalaszlo/observe/discussions) -- questions, ideas, show & tell
 

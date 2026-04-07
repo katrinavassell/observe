@@ -356,7 +356,7 @@ function isActive(path: string) {
               Feedback
             </button>
             <a
-              href="https://discord.gg/zSVwxgvxCj"
+              href="https://discord.gg/6GHcsaQTy7"
               target="_blank"
               rel="noopener noreferrer"
               class="flex items-center gap-1.5 px-2 py-1 text-xs text-sidebar-foreground/40 hover:text-sidebar-foreground hover:bg-sidebar-accent/50 transition-all duration-150 rounded-md"
