@@ -880,6 +880,30 @@ async function _doDbInit() {
       `CREATE INDEX IF NOT EXISTS idx_recommendations_user_status ON recommendations(user_id, status)`,
     );
 
+    // ── Custom cohorts ─────────────────────────────────────────────────────
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS custom_cohorts (
+        id SERIAL PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        description TEXT,
+        color TEXT DEFAULT '#6366f1',
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(user_id, name)
+      )
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS cohort_members (
+        id SERIAL PRIMARY KEY,
+        cohort_id INTEGER NOT NULL REFERENCES custom_cohorts(id) ON DELETE CASCADE,
+        customer_id TEXT NOT NULL,
+        added_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(cohort_id, customer_id)
+      )
+    `);
+
     // Initialize model pricing table
     await initModelPricing(pool);
 

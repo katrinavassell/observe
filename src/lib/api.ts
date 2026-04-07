@@ -1669,3 +1669,66 @@ export async function executeChatAction(
     body: JSON.stringify({ action }),
   });
 }
+
+// ── Custom Cohorts ───────────────────────────────────────────────────────────
+
+export interface CustomCohort {
+  id: number;
+  name: string;
+  description: string | null;
+  color: string;
+  member_count: number;
+  created_at: string;
+  members?: Array<{
+    customer_id: string;
+    customer_name: string | null;
+    added_at: string;
+  }>;
+}
+
+export async function listCustomCohorts(): Promise<{
+  cohorts: CustomCohort[];
+}> {
+  return request("/cohorts/custom");
+}
+
+export async function getCustomCohort(id: number): Promise<CustomCohort> {
+  return request(`/cohorts/custom/${id}`);
+}
+
+export async function createCustomCohort(data: {
+  name: string;
+  description?: string;
+  color?: string;
+  customer_ids?: string[];
+}): Promise<CustomCohort> {
+  return request("/cohorts/custom", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function addCohortMembers(
+  cohortId: number,
+  customerIds: string[],
+): Promise<{ added: number }> {
+  return request(`/cohorts/custom/${cohortId}/members`, {
+    method: "POST",
+    body: JSON.stringify({ customer_ids: customerIds }),
+  });
+}
+
+export async function removeCohortMember(
+  cohortId: number,
+  customerId: string,
+): Promise<{ removed: boolean }> {
+  return request(`/cohorts/custom/${cohortId}/members/${customerId}`, {
+    method: "DELETE",
+  });
+}
+
+export async function deleteCustomCohort(
+  id: number,
+): Promise<{ deleted: boolean }> {
+  return request(`/cohorts/custom/${id}`, { method: "DELETE" });
+}

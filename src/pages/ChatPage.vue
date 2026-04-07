@@ -23,7 +23,7 @@ const SUGGESTIONS = [
   "What model should I switch to for cost savings?",
   "Create an alert if daily cost exceeds $50",
   "Route unprofitable customers to gpt-4o-mini",
-  "What are my highest-cost features?",
+  "Group my EU customers into a cohort",
   "How can I improve my margins?",
 ];
 
@@ -97,6 +97,8 @@ function formatActionLabel(action: ChatAction): string {
       return `Create routing rule: ${action.field} ${action.operator} "${action.value}"`;
     case "create_alert":
       return `Create alert: ${action.name}`;
+    case "create_cohort":
+      return `Create cohort "${action.name}" with ${(action.customer_ids as string[])?.length || 0} customers`;
     default:
       return `Execute: ${action.type}`;
   }
