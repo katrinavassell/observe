@@ -21,6 +21,7 @@ import {
   Sparkles,
   MessageSquare,
   Shield,
+  GitBranch,
 } from "lucide-vue-next";
 import ErrorBoundary from "@/components/shared/ErrorBoundary.vue";
 import FeedbackModal from "@/components/shared/FeedbackModal.vue";
@@ -109,6 +110,12 @@ const navItems = computed(() => [
     label: "Alerts",
     icon: Bell,
     description: "Cost spike and margin alerts",
+  },
+  {
+    path: "/routing",
+    label: "Routing",
+    icon: GitBranch,
+    description: "LLM provider routing & fallback chains",
   },
   {
     path: "/data-sources",
