@@ -132,7 +132,7 @@ const navItems = computed(() => [
 ]);
 
 const isAdmin = computed(
-  () => account.value?.email?.endsWith("@tansohq.com") ?? false,
+  () => account.value?.email?.toLowerCase() === "tansoadmin@tansohq.com",
 );
 
 const adminNavItem = computed(() =>
