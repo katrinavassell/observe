@@ -37,6 +37,109 @@ function inferModelProvider(model: string | undefined): string | null {
   return null;
 }
 
+// ── Rule evaluation for dynamic cohorts ─────────────────────────────────────
+
+interface CohortRule {
+  field: string;
+  operator: string;
+  value: number | string;
+}
+
+interface CustomerData {
+  customer_id: string;
+  customer_name: string;
+  total_revenue: number;
+  total_cost: number;
+  margin_pct: number;
+  health_score: number;
+  active_days_30d: number;
+  cohort: string;
+}
+
+function evaluateRules(
+  customers: CustomerData[],
+  rules: CohortRule[],
+): CustomerData[] {
+  return customers.filter((c) =>
+    rules.every((rule) => {
+      const val =
+        typeof rule.field === "string" ? (c as any)[rule.field] : undefined;
+      if (val === undefined || val === null) return false;
+      const numVal = typeof val === "number" ? val : parseFloat(val);
+      const ruleVal =
+        typeof rule.value === "number"
+          ? rule.value
+          : parseFloat(rule.value as string);
+      switch (rule.operator) {
+        case "gt":
+          return numVal > ruleVal;
+        case "lt":
+          return numVal < ruleVal;
+        case "gte":
+          return numVal >= ruleVal;
+        case "lte":
+          return numVal <= ruleVal;
+        case "eq":
+          return typeof rule.value === "string"
+            ? String(val) === rule.value
+            : numVal === ruleVal;
+        case "neq":
+          return typeof rule.value === "string"
+            ? String(val) !== rule.value
+            : numVal !== ruleVal;
+        default:
+          return false;
+      }
+    }),
+  );
+}
+
+async function getCustomerDataForRules(
+  pool: Pool,
+  userId: string,
+): Promise<CustomerData[]> {
+  const result = await pool.query(
+    `SELECT oe.customer_id,
+            COALESCE(c.name, oe.customer_id) AS customer_name,
+            COALESCE(SUM(oe.revenue_amount), 0) AS total_revenue,
+            COALESCE(SUM(oe.cost_amount), 0) AS total_cost,
+            COUNT(DISTINCT CASE WHEN oe.timestamp >= NOW() - INTERVAL '30 days' THEN DATE(oe.timestamp) END) AS active_days_30d
+     FROM observe_events oe
+     LEFT JOIN customers c ON oe.user_id = c.user_id AND oe.customer_id = c.customer_id
+     WHERE oe.user_id = $1 AND oe.customer_id IS NOT NULL
+     GROUP BY oe.customer_id, c.name`,
+    [userId],
+  );
+  return result.rows.map((r) => {
+    const revenue = parseFloat(r.total_revenue) || 0;
+    const cost = parseFloat(r.total_cost) || 0;
+    const margin_pct =
+      revenue > 0 ? ((revenue - cost) / revenue) * 100 : cost > 0 ? -100 : 0;
+    const active_days = parseInt(r.active_days_30d) || 0;
+    // Simple health score: weighted margin + activity
+    const health_score = Math.max(
+      0,
+      Math.min(100, Math.round(margin_pct * 0.6 + active_days * 2)),
+    );
+    let cohort: string = "healthy";
+    if (margin_pct < 0) cohort = "unprofitable";
+    else if (margin_pct < 15) cohort = "at_risk";
+    else if (active_days === 0) cohort = "inactive";
+    else if (margin_pct >= 50 && active_days >= 10) cohort = "champion";
+
+    return {
+      customer_id: r.customer_id,
+      customer_name: r.customer_name,
+      total_revenue: revenue,
+      total_cost: cost,
+      margin_pct: Math.round(margin_pct * 100) / 100,
+      health_score,
+      active_days_30d: active_days,
+      cohort,
+    };
+  });
+}
+
 export function createCohortsRoutes(pool: Pool, ensureVisitor: any) {
   const router = Router();
 
@@ -703,6 +806,21 @@ Return ONLY valid JSON array, no markdown.`,
            ORDER BY cc.created_at DESC`,
           [req.visitorId],
         );
+
+        // For dynamic cohorts, compute member_count from rules
+        const dynamicCohorts = result.rows.filter(
+          (c) => c.cohort_type === "dynamic" && c.rules,
+        );
+        if (dynamicCohorts.length > 0) {
+          const customers = await getCustomerDataForRules(pool, req.visitorId!);
+          for (const cohort of result.rows) {
+            if (cohort.cohort_type === "dynamic" && cohort.rules) {
+              const matched = evaluateRules(customers, cohort.rules);
+              cohort.member_count = matched.length;
+            }
+          }
+        }
+
         res.json({ cohorts: result.rows });
       } catch (error) {
         console.error("GET /cohorts/custom error:", error);
@@ -717,19 +835,34 @@ Return ONLY valid JSON array, no markdown.`,
     ensureVisitor,
     async (req: AuthRequest, res: Response) => {
       try {
-        const { name, description, color, customer_ids } = req.body;
+        const { name, description, color, customer_ids, cohort_type, rules } =
+          req.body;
         if (!name || typeof name !== "string") {
           return res.status(400).json({ error: "name is required" });
         }
 
+        const type = cohort_type === "dynamic" ? "dynamic" : "static";
         const cohortResult = await pool.query(
-          "INSERT INTO custom_cohorts (user_id, name, description, color) VALUES ($1, $2, $3, $4) RETURNING *",
-          [req.visitorId, name.trim(), description || null, color || "#6366f1"],
+          "INSERT INTO custom_cohorts (user_id, name, description, color, cohort_type, rules) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *",
+          [
+            req.visitorId,
+            name.trim(),
+            description || null,
+            color || "#6366f1",
+            type,
+            type === "dynamic" && Array.isArray(rules)
+              ? JSON.stringify(rules)
+              : null,
+          ],
         );
         const cohort = cohortResult.rows[0];
 
-        // Add members if provided
-        if (Array.isArray(customer_ids) && customer_ids.length > 0) {
+        // Add members for static cohorts only
+        if (
+          type === "static" &&
+          Array.isArray(customer_ids) &&
+          customer_ids.length > 0
+        ) {
           const values = customer_ids
             .map((_: string, i: number) => `($1, $${i + 2})`)
             .join(", ");
@@ -766,16 +899,34 @@ Return ONLY valid JSON array, no markdown.`,
           return res.status(404).json({ error: "Cohort not found" });
         }
 
-        const members = await pool.query(
-          `SELECT cm.customer_id, c.name as customer_name, cm.added_at
-           FROM cohort_members cm
-           LEFT JOIN customers c ON c.user_id = $2 AND c.customer_id = cm.customer_id
-           WHERE cm.cohort_id = $1
-           ORDER BY cm.added_at DESC`,
-          [req.params.id, req.visitorId],
-        );
+        const cohort = cohortResult.rows[0];
+        let members;
 
-        res.json({ ...cohortResult.rows[0], members: members.rows });
+        if (cohort.cohort_type === "dynamic" && cohort.rules) {
+          // Evaluate rules to compute members dynamically
+          const customers = await getCustomerDataForRules(pool, req.visitorId!);
+          const matched = evaluateRules(customers, cohort.rules);
+          members = matched.map((c) => ({
+            customer_id: c.customer_id,
+            customer_name: c.customer_name,
+            margin_pct: c.margin_pct,
+            total_cost: c.total_cost,
+            total_revenue: c.total_revenue,
+            health_score: c.health_score,
+          }));
+        } else {
+          const result = await pool.query(
+            `SELECT cm.customer_id, c.name as customer_name, cm.added_at
+             FROM cohort_members cm
+             LEFT JOIN customers c ON c.user_id = $2 AND c.customer_id = cm.customer_id
+             WHERE cm.cohort_id = $1
+             ORDER BY cm.added_at DESC`,
+            [req.params.id, req.visitorId],
+          );
+          members = result.rows;
+        }
+
+        res.json({ ...cohort, members });
       } catch (error) {
         console.error("GET /cohorts/custom/:id error:", error);
         res.status(500).json({ error: "Failed to get cohort" });

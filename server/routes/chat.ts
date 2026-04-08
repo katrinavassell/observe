@@ -165,10 +165,19 @@ For alerts:
 {"type": "create_alert", "name": "Cost spike alert", "metric": "daily_cost", "operator": "gt", "threshold": 100}
 \`\`\`
 
-For cohorts:
+For static cohorts (specific customers):
 \`\`\`action
 {"type": "create_cohort", "name": "EU Enterprise", "description": "High-value EU customers", "customer_ids": ["acme", "siemens", "bmw"]}
 \`\`\`
+
+For dynamic/rule-based cohorts (auto-updating based on data):
+\`\`\`action
+{"type": "create_cohort", "name": "Unprofitable Customers", "description": "Customers with negative margin", "cohort_type": "dynamic", "rules": [{"field": "margin_pct", "operator": "lt", "value": 0}]}
+\`\`\`
+
+Available rule fields: margin_pct, total_cost, total_revenue, health_score, active_days_30d, cohort.
+Available operators: gt, lt, gte, lte, eq, neq.
+Prefer dynamic cohorts when the user describes a condition (e.g. "unprofitable customers", "high-cost customers") rather than naming specific customers.
 
 Only include action blocks when the user explicitly asks you to do something. For analysis questions, just answer with text.`;
 
@@ -365,17 +374,27 @@ Only include action blocks when the user explicitly asks you to do something. Fo
           }
 
           case "create_cohort": {
+            const cohortType =
+              action.cohort_type === "dynamic" ? "dynamic" : "static";
+            const rules =
+              cohortType === "dynamic" && Array.isArray(action.rules)
+                ? JSON.stringify(action.rules)
+                : null;
+
             const cohortResult = await pool.query(
-              "INSERT INTO custom_cohorts (user_id, name, description) VALUES ($1, $2, $3) RETURNING id",
+              "INSERT INTO custom_cohorts (user_id, name, description, cohort_type, rules) VALUES ($1, $2, $3, $4, $5) RETURNING id",
               [
                 req.visitorId,
                 action.name || "Chat-created cohort",
                 action.description || null,
+                cohortType,
+                rules,
               ],
             );
             const cohortId = cohortResult.rows[0].id;
 
             if (
+              cohortType === "static" &&
               Array.isArray(action.customer_ids) &&
               action.customer_ids.length > 0
             ) {
@@ -388,10 +407,11 @@ Only include action blocks when the user explicitly asks you to do something. Fo
               );
             }
 
-            return res.json({
-              success: true,
-              message: `Cohort "${action.name}" created with ${(action.customer_ids as string[])?.length || 0} members`,
-            });
+            const msg =
+              cohortType === "dynamic"
+                ? `Dynamic cohort "${action.name}" created with ${(action.rules as any[])?.length || 0} rule(s)`
+                : `Cohort "${action.name}" created with ${(action.customer_ids as string[])?.length || 0} members`;
+            return res.json({ success: true, message: msg });
           }
 
           default:

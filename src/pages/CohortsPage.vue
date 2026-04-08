@@ -1,8 +1,18 @@
 <script setup lang="ts">
 import { ref, computed } from "vue";
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
-import { getCohorts, discoverCohorts } from "@/lib/api";
-import type { CohortLabel, CohortSummary, DiscoveredCluster } from "@/lib/api";
+import {
+  getCohorts,
+  discoverCohorts,
+  getCustomers,
+  createCustomCohort,
+} from "@/lib/api";
+import type {
+  CohortLabel,
+  CohortSummary,
+  DiscoveredCluster,
+  CohortRule,
+} from "@/lib/api";
 import {
   AlertCircle,
   Database,
@@ -14,14 +24,141 @@ import {
   Settings2,
   RotateCcw,
   ArrowRight,
+  Plus,
+  X,
 } from "lucide-vue-next";
+import {
+  DialogRoot,
+  DialogPortal,
+  DialogOverlay,
+  DialogContent,
+  DialogTitle,
+  DialogClose,
+} from "radix-vue";
 import { Card, Skeleton, Button } from "@/components/ui";
 import { formatCurrency as fmt, formatPct as fmtPct } from "@/lib/format";
 import { toast } from "vue-sonner";
 import { useAuth } from "@/composables/useAuth";
 
-const _queryClient = useQueryClient();
+const queryClient = useQueryClient();
 const { isLoggedIn } = useAuth();
+
+// ── Create cohort dialog ────────────────────────────────────────────────────
+
+const createDialogOpen = ref(false);
+const newCohortName = ref("");
+const newCohortDescription = ref("");
+const newCohortColor = ref("#6366f1");
+const selectedCustomerIds = ref<Set<string>>(new Set());
+const creating = ref(false);
+const customerSearch = ref("");
+const cohortType = ref<"static" | "dynamic">("dynamic");
+const rules = ref<CohortRule[]>([
+  { field: "margin_pct", operator: "lt", value: 0 },
+]);
+
+const RULE_FIELDS = [
+  { value: "margin_pct", label: "Margin %" },
+  { value: "total_cost", label: "Total Cost" },
+  { value: "total_revenue", label: "Total Revenue" },
+  { value: "health_score", label: "Health Score" },
+  { value: "active_days_30d", label: "Active Days (30d)" },
+];
+
+const RULE_OPERATORS = [
+  { value: "gt", label: ">" },
+  { value: "lt", label: "<" },
+  { value: "gte", label: ">=" },
+  { value: "lte", label: "<=" },
+  { value: "eq", label: "=" },
+  { value: "neq", label: "!=" },
+];
+
+function addRule() {
+  rules.value.push({ field: "margin_pct", operator: "lt", value: 0 });
+}
+
+function removeRule(index: number) {
+  rules.value.splice(index, 1);
+}
+
+const COHORT_COLORS = [
+  "#6366f1",
+  "#8b5cf6",
+  "#ec4899",
+  "#ef4444",
+  "#f97316",
+  "#eab308",
+  "#22c55e",
+  "#14b8a6",
+  "#06b6d4",
+  "#3b82f6",
+];
+
+const { data: allCustomers } = useQuery({
+  queryKey: ["customers"],
+  queryFn: getCustomers,
+  enabled: isLoggedIn,
+});
+
+const filteredCustomerList = computed(() => {
+  const list = allCustomers.value ?? [];
+  if (!customerSearch.value.trim()) return list;
+  const q = customerSearch.value.toLowerCase();
+  return list.filter(
+    (c) =>
+      c.name?.toLowerCase().includes(q) ||
+      c.customer_id.toLowerCase().includes(q),
+  );
+});
+
+function toggleCustomer(id: string) {
+  const next = new Set(selectedCustomerIds.value);
+  if (next.has(id)) next.delete(id);
+  else next.add(id);
+  selectedCustomerIds.value = next;
+}
+
+function openCreateDialog() {
+  newCohortName.value = "";
+  newCohortDescription.value = "";
+  newCohortColor.value = "#6366f1";
+  selectedCustomerIds.value = new Set();
+  customerSearch.value = "";
+  cohortType.value = "dynamic";
+  rules.value = [{ field: "margin_pct", operator: "lt", value: 0 }];
+  createDialogOpen.value = true;
+}
+
+async function handleCreate() {
+  if (!newCohortName.value.trim()) {
+    toast.error("Cohort name is required");
+    return;
+  }
+  if (cohortType.value === "dynamic" && rules.value.length === 0) {
+    toast.error("Add at least one rule");
+    return;
+  }
+  creating.value = true;
+  try {
+    await createCustomCohort({
+      name: newCohortName.value.trim(),
+      description: newCohortDescription.value.trim() || undefined,
+      color: newCohortColor.value,
+      cohort_type: cohortType.value,
+      ...(cohortType.value === "dynamic"
+        ? { rules: rules.value }
+        : { customer_ids: [...selectedCustomerIds.value] }),
+    });
+    queryClient.invalidateQueries({ queryKey: ["cohorts"] });
+    createDialogOpen.value = false;
+    toast.success(`Cohort "${newCohortName.value.trim()}" created`);
+  } catch (err: any) {
+    toast.error(err.message || "Failed to create cohort");
+  } finally {
+    creating.value = false;
+  }
+}
 
 const SAMPLE_DISCOVERY: {
   clusters: DiscoveredCluster[];
@@ -293,9 +430,17 @@ const filteredCustomers = computed(() => {
 <template>
   <div class="space-y-6">
     <!-- Page header -->
-    <div>
-      <h1 class="text-2xl font-semibold tracking-tight">Cohorts</h1>
-      <p class="text-muted-foreground mt-1">Customer health and segmentation</p>
+    <div class="flex items-start justify-between">
+      <div>
+        <h1 class="text-2xl font-semibold tracking-tight">Cohorts</h1>
+        <p class="text-muted-foreground mt-1">
+          Customer health and segmentation
+        </p>
+      </div>
+      <Button v-if="isLoggedIn" size="sm" @click="openCreateDialog">
+        <Plus class="h-3.5 w-3.5 mr-1.5" />
+        New Cohort
+      </Button>
     </div>
 
     <!-- Loading -->
@@ -609,5 +754,220 @@ const filteredCustomers = computed(() => {
         </div>
       </Card>
     </template>
+
+    <!-- Create Cohort Dialog -->
+    <DialogRoot
+      :open="createDialogOpen"
+      @update:open="createDialogOpen = $event"
+    >
+      <DialogPortal>
+        <DialogOverlay
+          class="fixed inset-0 z-50 bg-black/80 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0"
+        />
+        <DialogContent
+          class="fixed left-[50%] top-[50%] z-50 w-full max-w-md translate-x-[-50%] translate-y-[-50%] border bg-background p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 sm:rounded-lg"
+        >
+          <div class="flex items-center justify-between mb-4">
+            <DialogTitle class="text-lg font-semibold">New Cohort</DialogTitle>
+            <DialogClose
+              class="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+            >
+              <X class="h-4 w-4" />
+            </DialogClose>
+          </div>
+
+          <div class="space-y-4">
+            <!-- Name -->
+            <div>
+              <label class="text-sm font-medium mb-1.5 block">Name</label>
+              <input
+                v-model="newCohortName"
+                class="w-full rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                placeholder="e.g. Enterprise EU"
+              />
+            </div>
+
+            <!-- Description -->
+            <div>
+              <label class="text-sm font-medium mb-1.5 block"
+                >Description
+                <span class="text-muted-foreground font-normal"
+                  >(optional)</span
+                ></label
+              >
+              <input
+                v-model="newCohortDescription"
+                class="w-full rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                placeholder="High-value EU customers"
+              />
+            </div>
+
+            <!-- Color -->
+            <div>
+              <label class="text-sm font-medium mb-1.5 block">Color</label>
+              <div class="flex gap-2">
+                <button
+                  v-for="color in COHORT_COLORS"
+                  :key="color"
+                  class="h-6 w-6 rounded-full transition-all"
+                  :class="
+                    newCohortColor === color
+                      ? 'ring-2 ring-offset-2 ring-primary'
+                      : 'hover:scale-110'
+                  "
+                  :style="{ backgroundColor: color }"
+                  @click="newCohortColor = color"
+                />
+              </div>
+            </div>
+
+            <!-- Type toggle -->
+            <div>
+              <label class="text-sm font-medium mb-1.5 block">Type</label>
+              <div class="flex gap-1 p-0.5 bg-muted rounded-md">
+                <button
+                  class="flex-1 px-3 py-1.5 rounded text-xs font-medium transition-colors"
+                  :class="
+                    cohortType === 'dynamic'
+                      ? 'bg-background shadow-sm'
+                      : 'text-muted-foreground'
+                  "
+                  @click="cohortType = 'dynamic'"
+                >
+                  Rule-based
+                </button>
+                <button
+                  class="flex-1 px-3 py-1.5 rounded text-xs font-medium transition-colors"
+                  :class="
+                    cohortType === 'static'
+                      ? 'bg-background shadow-sm'
+                      : 'text-muted-foreground'
+                  "
+                  @click="cohortType = 'static'"
+                >
+                  Manual
+                </button>
+              </div>
+            </div>
+
+            <!-- Rules (dynamic) -->
+            <div v-if="cohortType === 'dynamic'">
+              <label class="text-sm font-medium mb-1.5 block">Rules</label>
+              <div class="space-y-2">
+                <div
+                  v-for="(rule, i) in rules"
+                  :key="i"
+                  class="flex items-center gap-1.5"
+                >
+                  <select
+                    v-model="rule.field"
+                    class="flex-1 rounded-md border bg-background px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  >
+                    <option
+                      v-for="f in RULE_FIELDS"
+                      :key="f.value"
+                      :value="f.value"
+                    >
+                      {{ f.label }}
+                    </option>
+                  </select>
+                  <select
+                    v-model="rule.operator"
+                    class="w-14 rounded-md border bg-background px-2 py-1.5 text-xs text-center focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  >
+                    <option
+                      v-for="op in RULE_OPERATORS"
+                      :key="op.value"
+                      :value="op.value"
+                    >
+                      {{ op.label }}
+                    </option>
+                  </select>
+                  <input
+                    v-model.number="rule.value"
+                    type="number"
+                    class="w-20 rounded-md border bg-background px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  />
+                  <button
+                    v-if="rules.length > 1"
+                    class="p-1 text-muted-foreground hover:text-foreground"
+                    @click="removeRule(i)"
+                  >
+                    <X class="h-3 w-3" />
+                  </button>
+                </div>
+              </div>
+              <button
+                class="mt-2 flex items-center gap-1 text-xs text-primary hover:underline"
+                @click="addRule"
+              >
+                <Plus class="h-3 w-3" /> Add rule
+              </button>
+              <p class="text-[11px] text-muted-foreground mt-1.5">
+                Customers matching all rules are automatically included.
+              </p>
+            </div>
+
+            <!-- Customers (static) -->
+            <div v-if="cohortType === 'static'">
+              <label class="text-sm font-medium mb-1.5 block">
+                Customers
+                <span class="text-muted-foreground font-normal">
+                  ({{ selectedCustomerIds.size }} selected)
+                </span>
+              </label>
+              <input
+                v-model="customerSearch"
+                class="w-full rounded-md border bg-background px-3 py-2 text-sm mb-2 focus:outline-none focus:ring-2 focus:ring-primary/20"
+                placeholder="Search customers..."
+              />
+              <div class="max-h-40 overflow-y-auto border rounded-md">
+                <label
+                  v-for="c in filteredCustomerList"
+                  :key="c.customer_id"
+                  class="flex items-center gap-2 px-3 py-1.5 hover:bg-muted/50 cursor-pointer text-sm"
+                >
+                  <input
+                    type="checkbox"
+                    :checked="selectedCustomerIds.has(c.customer_id)"
+                    class="h-3.5 w-3.5 rounded border-input accent-primary"
+                    @change="toggleCustomer(c.customer_id)"
+                  />
+                  <span>{{ c.name || c.customer_id }}</span>
+                </label>
+                <div
+                  v-if="filteredCustomerList.length === 0"
+                  class="px-3 py-3 text-xs text-muted-foreground text-center"
+                >
+                  No customers found
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Actions -->
+          <div class="flex justify-end gap-2 mt-6">
+            <Button
+              variant="outline"
+              size="sm"
+              @click="createDialogOpen = false"
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              :disabled="creating || !newCohortName.trim()"
+              @click="handleCreate"
+            >
+              <Loader2
+                v-if="creating"
+                class="h-3.5 w-3.5 mr-1.5 animate-spin"
+              />
+              Create
+            </Button>
+          </div>
+        </DialogContent>
+      </DialogPortal>
+    </DialogRoot>
   </div>
 </template>
