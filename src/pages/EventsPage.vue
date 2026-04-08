@@ -665,7 +665,7 @@ function marginForEvent(event: ObserveEvent): number | null {
                 </template>
                 <template v-else>
                   <Activity
-                    class="h-8 w-8 mx-auto text-muted-foreground/40 mb-3"
+                    class="h-10 w-10 mx-auto text-muted-foreground/40 mb-3"
                   />
                   <p class="text-sm font-medium mb-1">No events yet</p>
                   <p

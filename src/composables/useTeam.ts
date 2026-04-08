@@ -6,7 +6,7 @@ const isLoading = ref(false);
 const error = ref<string | null>(null);
 
 export function useTeam() {
-  const myRole = computed(() => teamInfo.value?.my_role ?? "viewer");
+  const myRole = computed(() => teamInfo.value?.my_role ?? null);
   const isAdmin = computed(() => myRole.value === "admin");
   const isViewer = computed(() => myRole.value === "viewer");
   const org = computed(() => teamInfo.value?.org ?? null);

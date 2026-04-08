@@ -24,6 +24,7 @@ import {
   Settings2,
   RotateCcw,
   ArrowRight,
+  Plug,
   Plus,
   X,
 } from "lucide-vue-next";
@@ -460,12 +461,24 @@ const filteredCustomers = computed(() => {
     </Card>
 
     <!-- Empty state -->
-    <Card v-else-if="!customers.length" class="p-12 text-center">
-      <Database class="h-10 w-10 mx-auto text-muted-foreground mb-3" />
-      <p class="text-muted-foreground">
-        No customer data yet. Import data from the Data Sources page.
+    <div
+      v-else-if="!customers.length"
+      class="flex flex-col items-center justify-center py-16 text-center max-w-md mx-auto"
+    >
+      <Database class="h-10 w-10 text-muted-foreground/40 mb-3" />
+      <p class="text-sm font-medium mb-1">No customer data yet</p>
+      <p class="text-xs text-muted-foreground mb-4">
+        Import data from the Data Sources page to see customer cohorts.
       </p>
-    </Card>
+      <Button
+        size="sm"
+        variant="outline"
+        @click="$router.push('/data-sources')"
+      >
+        <Plug class="h-3.5 w-3.5 mr-1.5" />
+        Data Sources
+      </Button>
+    </div>
 
     <!-- Main content -->
     <template v-else>

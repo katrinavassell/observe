@@ -621,19 +621,20 @@ async function handleDelete(id: number) {
     </Card>
 
     <!-- Empty state -->
-    <Card v-else>
-      <CardContent class="p-8 text-center">
-        <Bell class="h-10 w-10 text-muted-foreground mx-auto mb-4" />
-        <h2 class="text-lg font-semibold">No alerts configured</h2>
-        <p class="text-sm text-muted-foreground mt-2 max-w-md mx-auto">
-          Set up alerts for margin drops, usage spikes, pricing gaps, and
-          concentration risks. Every alert comes with a suggested fix.
-        </p>
-        <Button class="mt-4" @click="showForm = true">
-          <Plus class="h-4 w-4 mr-2" />
-          Create your first alert
-        </Button>
-      </CardContent>
-    </Card>
+    <div
+      v-else
+      class="flex flex-col items-center justify-center py-16 text-center max-w-md mx-auto"
+    >
+      <Bell class="h-10 w-10 text-muted-foreground/40 mb-3" />
+      <p class="text-sm font-medium mb-1">No alerts configured</p>
+      <p class="text-xs text-muted-foreground mb-4">
+        Set up alerts for margin drops, usage spikes, pricing gaps, and
+        concentration risks. Every alert comes with a suggested fix.
+      </p>
+      <Button size="sm" @click="showForm = true">
+        <Plus class="h-3.5 w-3.5 mr-1.5" />
+        Create Your First Alert
+      </Button>
+    </div>
   </div>
 </template>
