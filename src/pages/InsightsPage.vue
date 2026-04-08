@@ -3,7 +3,14 @@ import { ref, computed, nextTick } from "vue";
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
 import { useRouter } from "vue-router";
 import { toast } from "vue-sonner";
-import { Loader2, Check, Send, Bot, User } from "lucide-vue-next";
+import { Loader2, Check, Send, Bot, User, X } from "lucide-vue-next";
+import {
+  DialogRoot,
+  DialogPortal,
+  DialogOverlay,
+  DialogContent,
+  DialogClose,
+} from "radix-vue";
 import { useAuth } from "@/composables/useAuth";
 import { Button } from "@/components/ui";
 import { getUsageLimits, sendChatMessage, executeChatAction } from "@/lib/api";
@@ -46,14 +53,11 @@ const SUGGESTIONS = [
   "What's my overall margin and how can I improve it?",
 ];
 
+const showSignupPrompt = ref(false);
+
 function requireAuth(): boolean {
   if (!isLoggedIn.value) {
-    toast("Sign up to use AI features", {
-      action: {
-        label: "Sign Up",
-        onClick: () => router.push("/signup"),
-      },
-    });
+    showSignupPrompt.value = true;
     return false;
   }
   return true;
@@ -299,4 +303,45 @@ function formatActionLabel(action: ChatAction): string {
       </div>
     </div>
   </div>
+
+  <!-- Signup prompt modal -->
+  <DialogRoot :open="showSignupPrompt" @update:open="showSignupPrompt = $event">
+    <DialogPortal>
+      <DialogOverlay
+        class="fixed inset-0 z-50 bg-black/80 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0"
+      />
+      <DialogContent
+        class="fixed left-[50%] top-[50%] z-50 w-full max-w-sm translate-x-[-50%] translate-y-[-50%] border bg-background p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 sm:rounded-lg text-center"
+      >
+        <DialogClose
+          class="absolute right-3 top-3 p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+        >
+          <X class="h-4 w-4" />
+        </DialogClose>
+        <Bot class="h-10 w-10 text-primary/40 mx-auto mb-3" />
+        <p class="text-lg font-semibold mb-1">Sign up to continue</p>
+        <p class="text-sm text-muted-foreground mb-4">
+          Create a free account to use the AI assistant and get 25 messages per
+          month.
+        </p>
+        <div class="flex flex-col gap-2">
+          <Button
+            @click="
+              router.push('/signup');
+              showSignupPrompt = false;
+            "
+          >
+            Sign Up Free
+          </Button>
+          <router-link
+            to="/login"
+            class="text-xs text-muted-foreground hover:text-foreground"
+            @click="showSignupPrompt = false"
+          >
+            Already have an account? Sign in
+          </router-link>
+        </div>
+      </DialogContent>
+    </DialogPortal>
+  </DialogRoot>
 </template>
