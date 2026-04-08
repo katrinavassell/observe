@@ -62,7 +62,7 @@ const usageItems = computed(() => {
   const ai = usageLimits.value.ai_insights?.usage;
   if (ai) {
     items.push({
-      label: "AI insights this month",
+      label: "Messages this month",
       used: ai.used,
       limit: ai.limit || null,
       pct: ai.limit ? Math.min(100, Math.round((ai.used / ai.limit) * 100)) : 0,
@@ -110,7 +110,7 @@ const plans = [
     interval: "forever",
     features: [
       "10,000 events per month",
-      "5 AI insights per month",
+      "25 AI messages per month",
       "1 team member",
       "30-day data retention",
       "1 cost alert",
@@ -126,7 +126,7 @@ const plans = [
     interval: "/month",
     features: [
       "Unlimited events",
-      "100 AI insights per month",
+      "500 AI messages per month",
       "Unlimited team members",
       "1-year data retention",
       "Unlimited cost alerts",

@@ -1,14 +1,16 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { ref, computed } from "vue";
 import { useRouter } from "vue-router";
+import { Button } from "@/components/ui";
 import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  Button,
-} from "@/components/ui";
-import { Check, Circle, X, Rocket } from "lucide-vue-next";
+  Check,
+  Circle,
+  X,
+  Rocket,
+  ChevronUp,
+  MessageSquare,
+  HelpCircle,
+} from "lucide-vue-next";
 import { useDataMode } from "@/composables/useDataMode";
 
 const router = useRouter();
@@ -36,23 +38,28 @@ const steps = computed(() => [
   {
     label: "Generate AI insights",
     done: insightsGenerated.value,
-    action: () => window.scrollTo({ top: 0, behavior: "smooth" }),
+    action: () => router.push("/insights"),
   },
 ]);
 
 const completedCount = computed(() => steps.value.filter((s) => s.done).length);
 const allDone = computed(() => completedCount.value === steps.value.length);
+const expanded = ref(false);
 </script>
 
 <template>
-  <Card v-if="!allDone" class="mb-6 border-primary/20 bg-primary/5">
-    <CardHeader class="pb-3">
-      <div class="flex items-center justify-between">
+  <div v-if="!allDone" class="fixed bottom-6 right-6 z-50">
+    <!-- Expanded panel -->
+    <div
+      v-if="expanded"
+      class="mb-2 w-72 rounded-lg border bg-background shadow-lg"
+    >
+      <div class="flex items-center justify-between px-4 py-3 border-b">
         <div class="flex items-center gap-2">
-          <Rocket class="h-4 w-4 text-primary" />
-          <CardTitle class="text-sm">
-            Get started ({{ completedCount }}/{{ steps.length }})
-          </CardTitle>
+          <Rocket class="h-3.5 w-3.5 text-primary" />
+          <span class="text-sm font-medium"
+            >Get started ({{ completedCount }}/{{ steps.length }})</span
+          >
         </div>
         <button
           class="text-muted-foreground hover:text-foreground transition-colors"
@@ -63,40 +70,65 @@ const allDone = computed(() => completedCount.value === steps.value.length);
             }
           "
         >
-          <X class="h-4 w-4" />
+          <X class="h-3.5 w-3.5" />
         </button>
       </div>
-    </CardHeader>
-    <CardContent class="pt-0">
-      <ul class="space-y-2">
+      <ul class="px-4 py-3 space-y-2">
         <li
           v-for="(step, i) in steps"
           :key="i"
-          class="flex items-center gap-3 text-sm"
+          class="flex items-center gap-2.5 text-xs"
         >
-          <Check v-if="step.done" class="h-4 w-4 text-green-500 shrink-0" />
-          <Circle v-else class="h-4 w-4 text-muted-foreground/40 shrink-0" />
-          <span :class="step.done ? 'text-muted-foreground line-through' : ''">
-            {{ step.label }}
-          </span>
-          <Button
+          <Check v-if="step.done" class="h-3.5 w-3.5 text-green-500 shrink-0" />
+          <Circle
+            v-else
+            class="h-3.5 w-3.5 text-muted-foreground/40 shrink-0"
+          />
+          <span
+            class="flex-1"
+            :class="step.done ? 'text-muted-foreground line-through' : ''"
+            >{{ step.label }}</span
+          >
+          <button
             v-if="!step.done && step.action"
-            variant="link"
-            size="sm"
-            class="ml-auto h-auto p-0 text-xs"
-            @click="
-              () => {
-                step.action();
-                window.posthog?.capture('onboarding_step_clicked', {
-                  step: step.label,
-                });
-              }
-            "
+            class="text-primary text-[11px] font-medium hover:underline shrink-0"
+            @click="step.action()"
           >
             Go
-          </Button>
+          </button>
         </li>
       </ul>
-    </CardContent>
-  </Card>
+      <div class="border-t px-4 py-2.5 flex items-center gap-3">
+        <a
+          href="mailto:kat@tansohq.com"
+          class="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <MessageSquare class="h-3 w-3" />
+          Feedback
+        </a>
+        <a
+          href="https://discord.gg/6GHcsaQTy7"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <HelpCircle class="h-3 w-3" />
+          Help
+        </a>
+      </div>
+    </div>
+
+    <!-- Pill button -->
+    <button
+      class="flex items-center gap-2 rounded-full border bg-background px-4 py-2 shadow-md hover:shadow-lg transition-all text-sm font-medium"
+      @click="expanded = !expanded"
+    >
+      <Rocket class="h-3.5 w-3.5 text-primary" />
+      <span>{{ completedCount }}/{{ steps.length }}</span>
+      <ChevronUp
+        class="h-3 w-3 text-muted-foreground transition-transform"
+        :class="expanded ? '' : 'rotate-180'"
+      />
+    </button>
+  </div>
 </template>

@@ -63,8 +63,7 @@ const router = createRouter({
     },
     {
       path: "/chat",
-      name: "chat",
-      component: () => import("@/pages/ChatPage.vue"),
+      redirect: "/insights",
     },
     {
       path: "/alerts",

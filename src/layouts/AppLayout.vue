@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
-import { useQuery, useQueryClient } from "@tanstack/vue-query";
+import { useQueryClient } from "@tanstack/vue-query";
 import {
   BarChart3,
   Plug,
@@ -25,10 +25,10 @@ import {
 } from "lucide-vue-next";
 import ErrorBoundary from "@/components/shared/ErrorBoundary.vue";
 import FeedbackModal from "@/components/shared/FeedbackModal.vue";
+import OnboardingChecklist from "@/components/onboarding/OnboardingChecklist.vue";
 import { useTeam } from "@/composables/useTeam";
 import { useAuth } from "@/composables/useAuth";
 import { useDataMode } from "@/composables/useDataMode";
-import { getUsageLimits } from "@/lib/api";
 
 const route = useRoute();
 const { isViewer, fetchTeamInfo } = useTeam();
@@ -47,13 +47,13 @@ watch(isLoggedIn, (loggedIn) => {
   }
 });
 
-const { data: usageLimits } = useQuery({
-  queryKey: ["usage-limits"],
-  queryFn: getUsageLimits,
-  staleTime: 60_000,
-});
-
-const aiCredits = computed(() => usageLimits.value?.ai_insights?.usage ?? null);
+const onboardingDismissed = ref(
+  window.localStorage.getItem("observe:onboarding_dismissed") === "true",
+);
+function dismissOnboarding() {
+  window.localStorage.setItem("observe:onboarding_dismissed", "true");
+  onboardingDismissed.value = true;
+}
 
 const feedbackOpen = ref(false);
 const queryClient = useQueryClient();
@@ -80,12 +80,6 @@ const navItems = computed(() => [
     label: "Insights",
     icon: Sparkles,
     description: "Recommendations and AI analysis",
-  },
-  {
-    path: "/chat",
-    label: "Chat",
-    icon: MessageSquare,
-    description: "AI assistant for costs, routing & actions",
   },
   {
     path: "/analytics",
@@ -356,7 +350,7 @@ function isActive(path: string) {
               Feedback
             </button>
             <a
-              href="https://discord.gg/zSVwxgvxCj"
+              href="https://discord.gg/6GHcsaQTy7"
               target="_blank"
               rel="noopener noreferrer"
               class="flex items-center gap-1.5 px-2 py-1 text-xs text-sidebar-foreground/40 hover:text-sidebar-foreground hover:bg-sidebar-accent/50 transition-all duration-150 rounded-md"
@@ -364,22 +358,6 @@ function isActive(path: string) {
               Discord
             </a>
           </div>
-          <!-- AI credits in sidebar -->
-          <router-link
-            v-if="aiCredits"
-            to="/plans"
-            class="flex items-center gap-1.5 px-3 py-1.5 text-xs text-sidebar-foreground/40 hover:text-sidebar-foreground transition-all duration-150"
-            :title="`${aiCredits.remaining} of ${aiCredits.limit} AI credits remaining this month`"
-          >
-            <Sparkles class="h-3 w-3" />
-            <span
-              :class="
-                aiCredits.remaining === 0 ? 'text-destructive font-medium' : ''
-              "
-            >
-              {{ aiCredits.remaining }}/{{ aiCredits.limit }} AI credits
-            </span>
-          </router-link>
         </div>
       </div>
     </aside>
@@ -410,6 +388,11 @@ function isActive(path: string) {
       :open="feedbackOpen"
       @close="feedbackOpen = false"
       @credited="handleFeedbackCredited"
+    />
+
+    <OnboardingChecklist
+      v-if="isLoggedIn && !onboardingDismissed"
+      @dismiss="dismissOnboarding"
     />
   </div>
 </template>

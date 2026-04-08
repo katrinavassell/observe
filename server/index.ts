@@ -888,11 +888,23 @@ async function _doDbInit() {
         name TEXT NOT NULL,
         description TEXT,
         color TEXT DEFAULT '#6366f1',
+        cohort_type TEXT NOT NULL DEFAULT 'static',
+        rules JSONB,
         created_at TIMESTAMPTZ DEFAULT NOW(),
         updated_at TIMESTAMPTZ DEFAULT NOW(),
         UNIQUE(user_id, name)
       )
     `);
+
+    // Add columns if they don't exist (migration for existing DBs)
+    await pool
+      .query(
+        `ALTER TABLE custom_cohorts ADD COLUMN IF NOT EXISTS cohort_type TEXT NOT NULL DEFAULT 'static'`,
+      )
+      .catch(() => {});
+    await pool
+      .query(`ALTER TABLE custom_cohorts ADD COLUMN IF NOT EXISTS rules JSONB`)
+      .catch(() => {});
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS cohort_members (

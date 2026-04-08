@@ -1,59 +1,17 @@
 <script setup lang="ts">
-import { ref, computed } from "vue";
+import { ref, computed, nextTick } from "vue";
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
+import { useRouter } from "vue-router";
 import { toast } from "vue-sonner";
-import {
-  Lightbulb,
-  Sparkles,
-  Loader2,
-  Check,
-  X,
-  AlertTriangle,
-  AlertCircle,
-  Info,
-  GitBranch,
-  Bell,
-  Users,
-  DollarSign,
-} from "lucide-vue-next";
+import { Loader2, Check, Send, Bot, User } from "lucide-vue-next";
 import { useAuth } from "@/composables/useAuth";
-import { Card, Button, Skeleton } from "@/components/ui";
-import OnboardingChecklist from "@/components/onboarding/OnboardingChecklist.vue";
-import {
-  listInsights,
-  generateInsights,
-  getUsageLimits,
-  listRecommendations,
-  computeRecommendations,
-  applyRecommendation,
-  dismissRecommendation,
-} from "@/lib/api";
-import type { AiInsight, Recommendation } from "@/lib/api";
+import { Button } from "@/components/ui";
+import { getUsageLimits, sendChatMessage, executeChatAction } from "@/lib/api";
+import type { ChatMessage, ChatAction } from "@/lib/api";
 
 const queryClient = useQueryClient();
+const router = useRouter();
 const { isLoggedIn } = useAuth();
-
-const onboardingDismissed = ref(
-  window.localStorage.getItem("observe:onboarding_dismissed") === "true",
-);
-function dismissOnboarding() {
-  window.localStorage.setItem("observe:onboarding_dismissed", "true");
-  onboardingDismissed.value = true;
-}
-
-// ── Unified insights: deterministic recommendations + AI insights ────────────
-
-const { data: recsData, isLoading: recsLoading } = useQuery({
-  queryKey: ["recommendations"],
-  queryFn: () => listRecommendations("pending"),
-  enabled: isLoggedIn,
-});
-
-const { data: insightsData, isLoading: insightsLoading } = useQuery({
-  queryKey: ["insights"],
-  queryFn: listInsights,
-  enabled: isLoggedIn,
-});
 
 const { data: usageLimits } = useQuery({
   queryKey: ["usage-limits"],
@@ -63,395 +21,282 @@ const { data: usageLimits } = useQuery({
 const insightsUsage = computed(
   () => usageLimits.value?.ai_insights?.usage ?? null,
 );
-const insightsAllowed = computed(
-  () => usageLimits.value?.ai_insights?.allowed !== false,
+const creditsRemaining = computed(() => insightsUsage.value?.remaining ?? null);
+const outOfCredits = computed(
+  () => creditsRemaining.value !== null && creditsRemaining.value <= 0,
 );
 
-// Merge both into one sorted list
-interface UnifiedInsight {
-  id: string;
-  source: "recommendation" | "ai";
-  severity: string;
-  title: string;
-  description: string;
-  type: string;
-  action?: { label: string; icon: typeof GitBranch; description: string };
-  recId?: number;
-}
+// ── Chat ─────────────────────────────────────────────────────────────────────
 
-const allInsights = computed<UnifiedInsight[]>(() => {
-  const items: UnifiedInsight[] = [];
+const chatMessages = ref<
+  Array<ChatMessage & { action?: ChatAction | null; actionExecuted?: boolean }>
+>([]);
+const chatInput = ref("");
+const chatLoading = ref(false);
+const feedRef = ref<HTMLElement | null>(null);
 
-  // Recommendations (actionable)
-  for (const rec of recsData.value?.recommendations ?? []) {
-    const action = getActionForRec(rec);
-    items.push({
-      id: `rec-${rec.id}`,
-      source: "recommendation",
-      severity: rec.severity,
-      title: rec.title,
-      description: rec.description,
-      type: rec.type,
-      action,
-      recId: rec.id,
+const hasMessages = computed(() => chatMessages.value.length > 0);
+
+const SUGGESTIONS = [
+  "Which customers are unprofitable?",
+  "Compare costs across my AI models",
+  "Create an alert when daily cost exceeds $50",
+  "Route my highest-cost customer to gpt-4o-mini",
+  "Group my top 5 customers into a cohort",
+  "What's my overall margin and how can I improve it?",
+];
+
+function requireAuth(): boolean {
+  if (!isLoggedIn.value) {
+    toast("Sign up to use AI features", {
+      action: {
+        label: "Sign Up",
+        onClick: () => router.push("/signup"),
+      },
     });
+    return false;
   }
+  return true;
+}
 
-  // AI insights (informational)
-  for (const ins of insightsData.value ?? []) {
-    items.push({
-      id: `ai-${ins.id}`,
-      source: "ai",
-      severity: ins.severity,
-      title: ins.title,
-      description: ins.description,
-      type: ins.insight_type,
+async function handleChatSend() {
+  const text = chatInput.value.trim();
+  if (!text || chatLoading.value) return;
+  if (!requireAuth()) return;
+
+  chatInput.value = "";
+  chatMessages.value.push({ role: "user", content: text });
+  scrollToBottom();
+
+  chatLoading.value = true;
+  try {
+    const msgs: ChatMessage[] = chatMessages.value.map((m) => ({
+      role: m.role,
+      content: m.content,
+    }));
+    const result = await sendChatMessage(msgs);
+    chatMessages.value.push({
+      role: "assistant",
+      content: result.message,
+      action: result.action,
     });
-  }
-
-  // Sort: critical first, then warning, then info. Within same severity, recommendations before AI.
-  const severityOrder: Record<string, number> = {
-    critical: 0,
-    warning: 1,
-    info: 2,
-    positive: 3,
-  };
-  return items.sort((a, b) => {
-    const sa = severityOrder[a.severity] ?? 4;
-    const sb = severityOrder[b.severity] ?? 4;
-    if (sa !== sb) return sa - sb;
-    if (a.source !== b.source) return a.source === "recommendation" ? -1 : 1;
-    return 0;
-  });
-});
-
-function getActionForRec(rec: Recommendation): UnifiedInsight["action"] {
-  switch (rec.action_type) {
-    case "create_routing_rule":
-      return {
-        label: "Create routing rule",
-        icon: GitBranch,
-        description: `Route ${(rec.action_payload as any).value || "this customer"} to a cheaper model`,
-      };
-    case "update_routing_target":
-      return {
-        label: "Switch model",
-        icon: GitBranch,
-        description: `Change from ${(rec.action_payload as any).current_model} to ${(rec.action_payload as any).suggested_model}`,
-      };
-    case "create_routing_config":
-      return {
-        label: "Add fallback provider",
-        icon: GitBranch,
-        description: "Create a routing config with provider fallbacks",
-      };
-    default:
-      return {
-        label: "Apply",
-        icon: Check,
-        description: "Apply this recommendation",
-      };
-  }
-}
-
-// ── Actions ──────────────────────────────────────────────────────────────────
-
-const isAnalyzing = ref(false);
-const isGeneratingAI = ref(false);
-
-async function handleAnalyze() {
-  isAnalyzing.value = true;
-  try {
-    await computeRecommendations();
-    queryClient.invalidateQueries({ queryKey: ["recommendations"] });
-    queryClient.invalidateQueries({ queryKey: ["recommendations-count"] });
-    toast.success("Analysis complete");
-  } catch (err: any) {
-    toast.error(err.message || "Analysis failed");
-  } finally {
-    isAnalyzing.value = false;
-  }
-}
-
-async function handleGenerateAI() {
-  isGeneratingAI.value = true;
-  try {
-    await generateInsights();
-    queryClient.invalidateQueries({ queryKey: ["insights"] });
     queryClient.invalidateQueries({ queryKey: ["usage-limits"] });
-    toast.success("AI insights generated");
+    scrollToBottom();
   } catch (err: any) {
-    toast.error(err.message || "Failed to generate");
+    chatMessages.value.push({
+      role: "assistant",
+      content: err.message || "Something went wrong.",
+    });
   } finally {
-    isGeneratingAI.value = false;
+    chatLoading.value = false;
   }
 }
 
-const applyingId = ref<number | null>(null);
-
-async function handleApply(recId: number) {
-  applyingId.value = recId;
+async function handleChatAction(index: number) {
+  const msg = chatMessages.value[index];
+  if (!msg.action) return;
   try {
-    const result = await applyRecommendation(recId);
+    const result = await executeChatAction(msg.action);
+    msg.actionExecuted = true;
+    toast.success(result.message);
     queryClient.invalidateQueries({ queryKey: ["recommendations"] });
-    queryClient.invalidateQueries({ queryKey: ["recommendations-count"] });
-    const note = (result.action_result as any)?.note;
-    toast.success(note || "Applied successfully");
   } catch (err: any) {
-    toast.error(err.message || "Failed to apply");
-  } finally {
-    applyingId.value = null;
+    toast.error(err.message || "Failed to execute");
   }
 }
 
-async function handleDismiss(recId: number) {
-  try {
-    await dismissRecommendation(recId);
-    queryClient.invalidateQueries({ queryKey: ["recommendations"] });
-    queryClient.invalidateQueries({ queryKey: ["recommendations-count"] });
-  } catch (err: any) {
-    toast.error(err.message || "Failed to dismiss");
+function handleSuggestion(text: string) {
+  if (!requireAuth()) return;
+  chatInput.value = text;
+  handleChatSend();
+}
+
+function handleKeydown(e: KeyboardEvent) {
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    handleChatSend();
+  }
+}
+
+function scrollToBottom() {
+  nextTick(() => {
+    if (feedRef.value) feedRef.value.scrollTop = feedRef.value.scrollHeight;
+  });
+}
+
+function formatActionLabel(action: ChatAction): string {
+  switch (action.type) {
+    case "create_routing_rule":
+      return `Create routing rule: ${action.field} ${action.operator} "${action.value}"`;
+    case "create_alert":
+      return `Create alert: ${action.name}`;
+    case "create_cohort":
+      return `Create cohort "${action.name}" with ${(action.customer_ids as string[])?.length || 0} customers`;
+    default:
+      return `Execute: ${action.type}`;
   }
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
-
-function severityClass(severity: string) {
-  switch (severity) {
-    case "critical":
-      return "border-destructive/30 bg-destructive/5";
-    case "warning":
-      return "border-warning/30 bg-warning/5";
-    case "positive":
-      return "border-success/30 bg-success/5";
-    default:
-      return "border-border bg-card";
-  }
-}
-
-function severityBadge(severity: string) {
-  switch (severity) {
-    case "critical":
-      return "bg-destructive/10 text-destructive";
-    case "warning":
-      return "bg-warning/10 text-warning";
-    case "positive":
-      return "bg-success/10 text-success";
-    default:
-      return "bg-muted text-muted-foreground";
-  }
-}
-
-function severityIcon(severity: string) {
-  switch (severity) {
-    case "critical":
-      return AlertCircle;
-    case "warning":
-      return AlertTriangle;
-    default:
-      return Info;
-  }
-}
 </script>
 
 <template>
-  <div class="space-y-6">
-    <!-- Onboarding checklist -->
-    <OnboardingChecklist
-      v-if="isLoggedIn && !onboardingDismissed"
-      @dismiss="dismissOnboarding"
-    />
-
+  <div class="flex flex-col h-[calc(100vh-theme(spacing.6)*2)]">
     <!-- Header -->
-    <div class="flex items-start justify-between">
-      <div>
-        <h1 class="text-2xl font-semibold tracking-tight">Insights</h1>
-        <p class="text-muted-foreground">
-          Actionable recommendations from your cost and margin data
-        </p>
-      </div>
-      <div class="flex gap-2">
-        <Button
-          size="sm"
-          variant="outline"
-          :disabled="isAnalyzing"
-          @click="handleAnalyze"
-        >
-          <Loader2 v-if="isAnalyzing" class="h-3.5 w-3.5 mr-1.5 animate-spin" />
-          <Lightbulb v-else class="h-3.5 w-3.5 mr-1.5" />
-          {{ isAnalyzing ? "Scanning..." : "Quick Scan" }}
-        </Button>
-        <Button
-          size="sm"
-          :disabled="isGeneratingAI || !insightsAllowed"
-          @click="handleGenerateAI"
-        >
-          <Loader2
-            v-if="isGeneratingAI"
-            class="h-3.5 w-3.5 mr-1.5 animate-spin"
-          />
-          <Sparkles v-else class="h-3.5 w-3.5 mr-1.5" />
-          {{ isGeneratingAI ? "Generating..." : "AI Analysis" }}
-          <span v-if="insightsUsage" class="ml-1 text-xs opacity-60">
-            ({{ insightsUsage.remaining }} credits)
-          </span>
-        </Button>
-      </div>
-    </div>
-
-    <!-- Loading -->
-    <div v-if="recsLoading && insightsLoading" class="space-y-3">
-      <Skeleton v-for="i in 4" :key="i" class="h-28 w-full" />
-    </div>
-
-    <!-- Empty state -->
-    <div
-      v-else-if="allInsights.length === 0"
-      class="flex flex-col items-center justify-center py-20 text-center max-w-lg mx-auto"
-    >
-      <Lightbulb class="h-12 w-12 text-primary/40 mb-4" />
-      <p class="text-lg font-semibold mb-2">
-        Find savings. Apply them instantly.
+    <div class="shrink-0 pb-4">
+      <h1 class="text-2xl font-semibold tracking-tight">Insights</h1>
+      <p class="text-muted-foreground text-sm mt-0.5">
+        Ask questions, get recommendations, and take action
       </p>
-      <p class="text-sm text-muted-foreground mb-6 leading-relaxed">
-        Observe scans your cost and margin data, finds unprofitable customers,
-        expensive models, and missing fallbacks — then creates routing rules,
-        alerts, and pricing changes for you with one click.
-      </p>
-
-      <div class="grid grid-cols-3 gap-4 mb-8 w-full text-left">
-        <div class="rounded-lg border p-3">
-          <GitBranch class="h-4 w-4 text-primary mb-1.5" />
-          <div class="text-xs font-medium">Route to cheaper models</div>
-          <div class="text-[11px] text-muted-foreground">
-            Auto-switch unprofitable customers to cost-effective alternatives
-          </div>
-        </div>
-        <div class="rounded-lg border p-3">
-          <Bell class="h-4 w-4 text-primary mb-1.5" />
-          <div class="text-xs font-medium">Create alerts</div>
-          <div class="text-[11px] text-muted-foreground">
-            Set up cost spike and margin alerts from detected patterns
-          </div>
-        </div>
-        <div class="rounded-lg border p-3">
-          <DollarSign class="h-4 w-4 text-primary mb-1.5" />
-          <div class="text-xs font-medium">Optimize pricing</div>
-          <div class="text-[11px] text-muted-foreground">
-            Adjust feature pricing based on actual cost and usage data
-          </div>
-        </div>
-      </div>
-
-      <div class="flex gap-3">
-        <Button
-          size="sm"
-          variant="outline"
-          :disabled="isAnalyzing"
-          @click="handleAnalyze"
-        >
-          <Lightbulb class="h-3.5 w-3.5 mr-1.5" />
-          Quick Scan (free)
-        </Button>
-        <Button
-          size="sm"
-          :disabled="isGeneratingAI || !insightsAllowed"
-          @click="handleGenerateAI"
-        >
-          <Sparkles class="h-3.5 w-3.5 mr-1.5" />
-          AI Analysis
-        </Button>
-      </div>
     </div>
 
-    <!-- Insight cards -->
-    <div v-else class="space-y-3">
-      <Card
-        v-for="insight in allInsights"
-        :key="insight.id"
-        class="p-4"
-        :class="severityClass(insight.severity)"
+    <!-- Chat area -->
+    <div ref="feedRef" class="flex-1 overflow-y-auto space-y-4 pb-4">
+      <!-- Empty state -->
+      <div
+        v-if="!hasMessages && !chatLoading"
+        class="flex flex-col items-center justify-center h-full text-center max-w-lg mx-auto"
       >
-        <div class="flex gap-3">
-          <!-- Severity icon -->
-          <div class="pt-0.5 shrink-0">
-            <component
-              :is="severityIcon(insight.severity)"
-              class="h-5 w-5"
-              :class="
-                severityBadge(insight.severity)
-                  .replace('bg-', 'text-')
-                  .split(' ')
-                  .pop()
-              "
-            />
+        <Bot class="h-12 w-12 text-primary/30 mb-4" />
+        <p class="text-lg font-semibold mb-2">What do you want to know?</p>
+        <p class="text-sm text-muted-foreground mb-6">
+          Ask about costs, margins, customers — or take action like creating
+          routing rules, alerts, and cohorts.
+        </p>
+        <div class="grid grid-cols-2 gap-2 w-full">
+          <button
+            v-for="suggestion in SUGGESTIONS"
+            :key="suggestion"
+            class="text-left text-xs rounded-lg border px-3 py-2.5 hover:bg-muted/50 transition-colors text-muted-foreground hover:text-foreground"
+            @click="handleSuggestion(suggestion)"
+          >
+            {{ suggestion }}
+          </button>
+        </div>
+      </div>
+
+      <!-- Message bubbles -->
+      <template v-for="(msg, i) in chatMessages" :key="i">
+        <div
+          class="flex gap-3"
+          :class="msg.role === 'user' ? 'justify-end' : 'justify-start'"
+        >
+          <div
+            v-if="msg.role === 'assistant'"
+            class="shrink-0 flex h-7 w-7 items-center justify-center rounded-full bg-primary/10"
+          >
+            <Bot class="h-4 w-4 text-primary" />
           </div>
 
-          <!-- Content -->
-          <div class="flex-1 min-w-0 space-y-1.5">
-            <div class="flex items-center gap-2 flex-wrap">
-              <span
-                class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium"
-                :class="severityBadge(insight.severity)"
-                >{{ insight.severity }}</span
-              >
-              <span class="text-[10px] text-muted-foreground font-mono">
-                {{ insight.type.replace(/_/g, " ") }}
-              </span>
-              <span
-                v-if="insight.source === 'ai'"
-                class="inline-flex items-center gap-0.5 text-[10px] text-primary"
-              >
-                <Sparkles class="h-2.5 w-2.5" />
-                AI
-              </span>
+          <div
+            class="max-w-[75%] rounded-lg px-4 py-2.5 text-sm leading-relaxed"
+            :class="
+              msg.role === 'user'
+                ? 'bg-primary text-primary-foreground'
+                : 'bg-muted'
+            "
+          >
+            <div class="whitespace-pre-wrap">
+              {{ msg.content.replace(/```action[\s\S]*?```/g, "").trim() }}
             </div>
 
-            <div class="text-sm font-medium">{{ insight.title }}</div>
-            <div class="text-xs text-muted-foreground leading-relaxed">
-              {{ insight.description }}
-            </div>
-
-            <!-- Action block (recommendations only) -->
             <div
-              v-if="insight.action && insight.recId"
-              class="flex items-center gap-3 pt-2 border-t border-border/50 mt-2"
+              v-if="msg.action && !msg.actionExecuted"
+              class="mt-3 rounded-md border bg-background p-3"
             >
-              <div class="flex-1">
-                <div class="flex items-center gap-1.5 text-xs font-medium">
-                  <component
-                    :is="insight.action.icon"
-                    class="h-3 w-3 text-primary"
-                  />
-                  {{ insight.action.label }}
-                </div>
-                <div class="text-[11px] text-muted-foreground">
-                  {{ insight.action.description }}
-                </div>
+              <div class="text-xs text-muted-foreground mb-2">
+                Suggested action:
               </div>
-              <Button
-                size="sm"
-                class="shrink-0"
-                :disabled="applyingId === insight.recId"
-                @click="handleApply(insight.recId!)"
-              >
-                <Loader2
-                  v-if="applyingId === insight.recId"
-                  class="h-3 w-3 mr-1 animate-spin"
-                />
-                <Check v-else class="h-3 w-3 mr-1" />
+              <div class="text-xs font-medium mb-2">
+                {{ formatActionLabel(msg.action) }}
+              </div>
+              <Button size="sm" @click="handleChatAction(i)">
+                <Check class="h-3 w-3 mr-1" />
                 Do it
               </Button>
-              <button
-                class="text-xs text-muted-foreground hover:text-foreground shrink-0"
-                @click="handleDismiss(insight.recId!)"
-              >
-                <X class="h-3.5 w-3.5" />
-              </button>
+            </div>
+
+            <div
+              v-if="msg.action && msg.actionExecuted"
+              class="mt-2 flex items-center gap-1.5 text-xs text-success"
+            >
+              <Check class="h-3 w-3" />
+              Done
             </div>
           </div>
+
+          <div
+            v-if="msg.role === 'user'"
+            class="shrink-0 flex h-7 w-7 items-center justify-center rounded-full bg-foreground/10"
+          >
+            <User class="h-4 w-4" />
+          </div>
         </div>
-      </Card>
+      </template>
+
+      <!-- Loading indicator -->
+      <div v-if="chatLoading" class="flex gap-3">
+        <div
+          class="shrink-0 flex h-7 w-7 items-center justify-center rounded-full bg-primary/10"
+        >
+          <Bot class="h-4 w-4 text-primary" />
+        </div>
+        <div class="bg-muted rounded-lg px-4 py-3">
+          <div class="flex items-center gap-2 text-sm text-muted-foreground">
+            <Loader2 class="h-3.5 w-3.5 animate-spin" />
+            Thinking...
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Input area -->
+    <div class="shrink-0 border-t pt-4">
+      <div class="flex gap-2">
+        <input
+          v-model="chatInput"
+          class="flex-1 rounded-lg border bg-background px-4 py-2.5 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
+          :disabled="chatLoading || outOfCredits"
+          :placeholder="
+            outOfCredits
+              ? 'No messages remaining'
+              : 'Ask about your costs, margins, or take an action...'
+          "
+          @keydown="handleKeydown"
+        />
+        <Button
+          :disabled="chatLoading || !chatInput.trim() || outOfCredits"
+          @click="handleChatSend"
+        >
+          <Send class="h-4 w-4" />
+        </Button>
+      </div>
+      <div class="flex items-center justify-between mt-2">
+        <p v-if="!isLoggedIn" class="text-xs text-muted-foreground">
+          <router-link to="/signup" class="text-primary hover:underline"
+            >Sign up</router-link
+          >
+          to use AI features.
+        </p>
+        <template v-else-if="insightsUsage">
+          <p v-if="outOfCredits" class="text-xs text-destructive font-medium">
+            No messages remaining.
+            <router-link to="/plans" class="underline">Upgrade</router-link>
+          </p>
+          <p
+            v-else
+            class="text-xs"
+            :class="
+              creditsRemaining! <= 5
+                ? 'text-warning font-medium'
+                : 'text-muted-foreground'
+            "
+          >
+            {{ insightsUsage.remaining }}/{{ insightsUsage.limit }} messages
+            remaining
+          </p>
+        </template>
+      </div>
     </div>
   </div>
 </template>

@@ -20,7 +20,7 @@ export const OBSERVE_PLANS: Record<string, PlanConfig> = {
   free: {
     name: "Free",
     features: {
-      ai_insights: { limit: 5, reset: "monthly" },
+      ai_insights: { limit: 25, reset: "monthly" },
       event_ingest: { limit: 10000, reset: "monthly" },
       cost_alerts: { limit: 1 },
       csv_upload: { limit: null },
@@ -34,7 +34,7 @@ export const OBSERVE_PLANS: Record<string, PlanConfig> = {
     name: "Growth",
     stripePriceId: process.env.STRIPE_GROWTH_PRICE_ID || "",
     features: {
-      ai_insights: { limit: 100, reset: "monthly" },
+      ai_insights: { limit: 500, reset: "monthly" },
       event_ingest: { limit: null },
       cost_alerts: { limit: null },
       csv_upload: { limit: null },
@@ -121,13 +121,16 @@ export async function checkFeatureAccess(
     }
   }
 
-  // Add bonus credits to the effective limit
-  const bonusResult = await pool.query(
-    `SELECT bonus_credits FROM accounts WHERE visitor_id = $1`,
-    [visitorId],
-  );
-  const bonusCredits = bonusResult.rows[0]?.bonus_credits ?? 0;
-  const effectiveLimit = featureConfig.limit + bonusCredits;
+  // Add bonus credits to AI insights limit only
+  let effectiveLimit = featureConfig.limit;
+  if (featureKey === "ai_insights") {
+    const bonusResult = await pool.query(
+      `SELECT bonus_credits FROM accounts WHERE visitor_id = $1`,
+      [visitorId],
+    );
+    const bonusCredits = bonusResult.rows[0]?.bonus_credits ?? 0;
+    effectiveLimit += bonusCredits;
+  }
 
   const remaining = Math.max(0, effectiveLimit - used);
   return {

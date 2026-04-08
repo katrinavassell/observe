@@ -356,12 +356,6 @@ const insightCategories = [
           </div>
         </div>
       </div>
-      <router-link to="/insights">
-        <Button variant="outline" size="sm">
-          <Sparkles class="h-3.5 w-3.5 mr-1.5" />
-          Insights
-        </Button>
-      </router-link>
     </div>
 
     <!-- AI Insights Drawer -->
@@ -541,7 +535,7 @@ const insightCategories = [
                 v-if="!isGenerating && insightsAllowed"
                 class="text-xs text-muted-foreground text-center mt-1.5"
               >
-                Uses 1 AI credit
+                Uses 1 message
               </p>
             </div>
             <div v-else class="rounded-lg border bg-muted/30 p-3 text-center">

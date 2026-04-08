@@ -1672,17 +1672,25 @@ export async function executeChatAction(
 
 // ── Custom Cohorts ───────────────────────────────────────────────────────────
 
+export interface CohortRule {
+  field: string;
+  operator: string;
+  value: number | string;
+}
+
 export interface CustomCohort {
   id: number;
   name: string;
   description: string | null;
   color: string;
+  cohort_type: "static" | "dynamic";
+  rules: CohortRule[] | null;
   member_count: number;
   created_at: string;
   members?: Array<{
     customer_id: string;
     customer_name: string | null;
-    added_at: string;
+    added_at?: string;
   }>;
 }
 
@@ -1701,6 +1709,8 @@ export async function createCustomCohort(data: {
   description?: string;
   color?: string;
   customer_ids?: string[];
+  cohort_type?: "static" | "dynamic";
+  rules?: CohortRule[];
 }): Promise<CustomCohort> {
   return request("/cohorts/custom", {
     method: "POST",
