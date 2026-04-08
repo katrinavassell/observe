@@ -269,7 +269,7 @@ function copyEndpoint() {
     <div class="flex items-start justify-between">
       <div>
         <h1 class="text-2xl font-semibold tracking-tight">Routing</h1>
-        <p class="text-muted-foreground">
+        <p class="text-sm text-muted-foreground mt-1">
           Route LLM requests to providers with fallback chains
         </p>
       </div>
@@ -360,14 +360,10 @@ function copyEndpoint() {
       >
         <GitBranch class="h-10 w-10 text-muted-foreground/40 mb-3" />
         <p class="text-sm font-medium mb-1">No routing configs yet</p>
-        <p class="text-xs text-muted-foreground mb-4">
+        <p class="text-xs text-muted-foreground">
           Create a routing config to define provider targets, fallback chains,
-          and conditional routing rules.
+          and conditional routing rules. Use the button above to get started.
         </p>
-        <Button size="sm" @click="showCreateForm = true">
-          <Plus class="h-3.5 w-3.5 mr-1.5" />
-          Create Your First Config
-        </Button>
       </div>
 
       <Card

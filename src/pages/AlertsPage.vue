@@ -345,15 +345,15 @@ async function handleDelete(id: number) {
 
 <template>
   <div class="space-y-6 pb-12">
-    <div class="flex items-center justify-between">
+    <div class="flex items-start justify-between">
       <div>
         <h1 class="text-2xl font-semibold tracking-tight">Cost Alerts</h1>
-        <p class="text-muted-foreground text-sm">
+        <p class="text-sm text-muted-foreground mt-1">
           Get emailed when costs spike, margins drop, or usage patterns change
         </p>
       </div>
-      <Button v-if="!showForm" @click="showForm = true">
-        <Plus class="h-4 w-4 mr-2" />
+      <Button v-if="!showForm" size="sm" @click="showForm = true">
+        <Plus class="h-3.5 w-3.5 mr-1.5" />
         New Alert
       </Button>
     </div>
@@ -627,14 +627,10 @@ async function handleDelete(id: number) {
     >
       <Bell class="h-10 w-10 text-muted-foreground/40 mb-3" />
       <p class="text-sm font-medium mb-1">No alerts configured</p>
-      <p class="text-xs text-muted-foreground mb-4">
+      <p class="text-xs text-muted-foreground">
         Set up alerts for margin drops, usage spikes, pricing gaps, and
-        concentration risks. Every alert comes with a suggested fix.
+        concentration risks. Use the button above to get started.
       </p>
-      <Button size="sm" @click="showForm = true">
-        <Plus class="h-3.5 w-3.5 mr-1.5" />
-        Create Your First Alert
-      </Button>
     </div>
   </div>
 </template>

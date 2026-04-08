@@ -384,7 +384,7 @@ function marginForEvent(event: ObserveEvent): number | null {
 
 <template>
   <div class="space-y-6">
-    <div class="flex items-center justify-between">
+    <div class="flex items-start justify-between">
       <div>
         <h1 class="text-2xl font-semibold tracking-tight">Events</h1>
         <p class="text-sm text-muted-foreground mt-1">

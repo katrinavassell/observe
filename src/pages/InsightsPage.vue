@@ -145,7 +145,7 @@ function formatActionLabel(action: ChatAction): string {
     <!-- Header -->
     <div class="shrink-0 pb-4">
       <h1 class="text-2xl font-semibold tracking-tight">Insights</h1>
-      <p class="text-muted-foreground text-sm mt-0.5">
+      <p class="text-sm text-muted-foreground mt-1">
         Ask questions, get recommendations, and take action
       </p>
     </div>
