@@ -3,7 +3,7 @@ import { ref, nextTick, computed } from "vue";
 import { toast } from "vue-sonner";
 import { Send, Loader2, Sparkles, Check, Bot, User } from "lucide-vue-next";
 import { useAuth } from "@/composables/useAuth";
-import { Button, Input, Card } from "@/components/ui";
+import { Button } from "@/components/ui";
 import { sendChatMessage, executeChatAction } from "@/lib/api";
 import type { ChatMessage, ChatAction } from "@/lib/api";
 

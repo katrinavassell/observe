@@ -19,7 +19,6 @@ import {
   ChevronDown,
   ChevronRight,
   ChevronUp,
-  Sparkles,
   Loader2,
   Settings2,
   RotateCcw,
@@ -327,7 +326,7 @@ const discoveryExpanded = ref(false);
 const discoveryFilter = ref<string | null>(null);
 const activeClusterName = ref<string | null>(null);
 
-async function loadDiscovery() {
+async function _loadDiscovery() {
   discoveryLoading.value = true;
   try {
     if (!isLoggedIn.value) {
@@ -350,7 +349,7 @@ async function loadDiscovery() {
   }
 }
 
-function selectCluster(cluster: DiscoveredCluster) {
+function _selectCluster(cluster: DiscoveredCluster) {
   if (activeClusterName.value === cluster.name) {
     activeClusterName.value = null;
     discoveryFilter.value = null;
@@ -393,7 +392,7 @@ function healthColor(score: number): string {
   return "bg-green-500";
 }
 
-function severityBorder(severity: string): string {
+function _severityBorder(severity: string): string {
   switch (severity) {
     case "critical":
       return "border-red-400";

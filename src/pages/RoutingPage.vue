@@ -17,14 +17,7 @@ import {
   Check,
 } from "lucide-vue-next";
 import { useAuth } from "@/composables/useAuth";
-import {
-  Card,
-  CardContent,
-  Button,
-  Input,
-  Skeleton,
-  Badge,
-} from "@/components/ui";
+import { Card, Button, Input, Skeleton, Badge } from "@/components/ui";
 import {
   listRoutingConfigs,
   getRoutingConfig,
@@ -37,7 +30,7 @@ import {
   testRoutingConfig,
   listGatewayProviders,
 } from "@/lib/api";
-import type { RoutingConfig, RoutingTarget, RoutingRule } from "@/lib/api";
+import type { RoutingRule } from "@/lib/api";
 
 const queryClient = useQueryClient();
 const { isLoggedIn } = useAuth();

@@ -23,7 +23,7 @@ import { uploadProviderCsv, createSdkKey } from "@/lib/api";
 import type { StripeStatus, SyncResult } from "@/api/client";
 
 const router = useRouter();
-const queryClient = useQueryClient();
+const _queryClient = useQueryClient();
 
 // ---------------------------------------------------------------------------
 // Track selection: Quick Start vs Full Setup

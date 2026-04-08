@@ -21,7 +21,6 @@ import { useDataMode } from "@/composables/useDataMode";
 import { useAuth } from "@/composables/useAuth";
 import Sheet from "@/components/ui/sheet.vue";
 import { Card, Skeleton, Button } from "@/components/ui";
-import OnboardingChecklist from "@/components/onboarding/OnboardingChecklist.vue";
 import SourceBadge from "@/components/shared/SourceBadge.vue";
 import { formatCurrency as fmt, formatPct as fmtPct } from "@/lib/format";
 
@@ -56,14 +55,6 @@ const insightsUsage = computed(
 );
 
 const { isLoggedIn } = useAuth();
-const onboardingDismissed = ref(
-  window.localStorage.getItem("observe:onboarding_dismissed") === "true",
-);
-function dismissOnboarding() {
-  window.localStorage.setItem("observe:onboarding_dismissed", "true");
-  onboardingDismissed.value = true;
-}
-
 async function handleGenerate() {
   isGenerating.value = true;
   generateError.value = null;
