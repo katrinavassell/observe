@@ -6,7 +6,6 @@ import {
   discoverCohorts,
   getCustomers,
   createCustomCohort,
-  setCustomerInternal,
 } from "@/lib/api";
 import type {
   CohortLabel,
@@ -283,30 +282,50 @@ function resetColumns() {
   window.localStorage.removeItem(STORAGE_KEY);
 }
 
-const showInternal = ref(false);
+// Exclude filter — hide customers whose name/ID contains any of these strings
+const EXCLUDE_STORAGE_KEY = "observe:cohorts-exclude";
+
+function loadExcludePatterns(): string[] {
+  const saved = window.localStorage.getItem(EXCLUDE_STORAGE_KEY);
+  if (!saved) return [];
+  try {
+    return JSON.parse(saved);
+  } catch {
+    return [];
+  }
+}
+
+const excludePatterns = ref<string[]>(loadExcludePatterns());
+const excludeInput = ref("");
+const showExcludeEditor = ref(false);
+
+function addExcludePattern() {
+  const pattern = excludeInput.value.trim().toLowerCase();
+  if (!pattern || excludePatterns.value.includes(pattern)) return;
+  excludePatterns.value.push(pattern);
+  window.localStorage.setItem(
+    EXCLUDE_STORAGE_KEY,
+    JSON.stringify(excludePatterns.value),
+  );
+  excludeInput.value = "";
+}
+
+function removeExcludePattern(index: number) {
+  excludePatterns.value.splice(index, 1);
+  window.localStorage.setItem(
+    EXCLUDE_STORAGE_KEY,
+    JSON.stringify(excludePatterns.value),
+  );
+}
 
 const {
   data: cohortsData,
   isLoading,
   isError,
 } = useQuery({
-  queryKey: computed(() => ["cohorts", { showInternal: showInternal.value }]),
-  queryFn: () => getCohorts(showInternal.value),
+  queryKey: ["cohorts"],
+  queryFn: () => getCohorts(),
 });
-
-async function toggleInternal(customerId: string, currentValue: boolean) {
-  try {
-    await setCustomerInternal(customerId, !currentValue);
-    queryClient.invalidateQueries({ queryKey: ["cohorts"] });
-    toast.success(
-      !currentValue
-        ? `Marked ${customerId} as internal`
-        : `Removed internal flag from ${customerId}`,
-    );
-  } catch (err: any) {
-    toast.error(err.message || "Failed to update customer");
-  }
-}
 
 const customers = computed(() => cohortsData.value?.customers ?? []);
 const summary = computed(
@@ -440,7 +459,27 @@ const filteredCustomers = computed(() => {
   if (discoveredCustomerIds.value) {
     list = list.filter((c) => discoveredCustomerIds.value!.has(c.customer_id));
   }
+  if (excludePatterns.value.length > 0) {
+    list = list.filter((c) => {
+      const name = (c.customer_name || "").toLowerCase();
+      const id = c.customer_id.toLowerCase();
+      return !excludePatterns.value.some(
+        (p) => name.includes(p) || id.includes(p),
+      );
+    });
+  }
   return [...list].sort((a, b) => a.health_score - b.health_score);
+});
+
+const excludedCount = computed(() => {
+  if (excludePatterns.value.length === 0) return 0;
+  return customers.value.filter((c) => {
+    const name = (c.customer_name || "").toLowerCase();
+    const id = c.customer_id.toLowerCase();
+    return excludePatterns.value.some(
+      (p) => name.includes(p) || id.includes(p),
+    );
+  }).length;
 });
 </script>
 
@@ -455,17 +494,66 @@ const filteredCustomers = computed(() => {
         </p>
       </div>
       <div class="flex items-center gap-3">
-        <label
-          class="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer"
-        >
-          <input
-            type="checkbox"
-            :checked="showInternal"
-            class="rounded border-input"
-            @change="showInternal = !showInternal"
-          />
-          Show internal
-        </label>
+        <div class="relative">
+          <button
+            class="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+            @click="showExcludeEditor = !showExcludeEditor"
+          >
+            <Settings2 class="h-3.5 w-3.5" />
+            Exclude
+            <span
+              v-if="excludePatterns.length"
+              class="text-xs bg-muted rounded-full px-1.5"
+            >
+              {{ excludedCount }} hidden
+            </span>
+          </button>
+          <div
+            v-if="showExcludeEditor"
+            class="absolute right-0 top-8 z-20 w-72 rounded-lg border bg-background shadow-lg p-3 space-y-2"
+          >
+            <p class="text-xs font-medium">
+              Hide customers where name or ID contains:
+            </p>
+            <div class="flex gap-1.5">
+              <Input
+                v-model="excludeInput"
+                placeholder="e.g. test, internal, demo"
+                class="flex-1 text-xs"
+                @keydown.enter="addExcludePattern"
+              />
+              <Button
+                size="sm"
+                variant="outline"
+                class="h-9 px-2"
+                @click="addExcludePattern"
+              >
+                <Plus class="h-3.5 w-3.5" />
+              </Button>
+            </div>
+            <div v-if="excludePatterns.length" class="flex flex-wrap gap-1.5">
+              <span
+                v-for="(pattern, i) in excludePatterns"
+                :key="pattern"
+                class="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs"
+              >
+                {{ pattern }}
+                <button
+                  class="hover:text-foreground"
+                  @click="removeExcludePattern(i)"
+                >
+                  <X class="h-3 w-3" />
+                </button>
+              </span>
+            </div>
+            <p
+              v-if="excludePatterns.length"
+              class="text-[10px] text-muted-foreground"
+            >
+              Saved across sessions
+            </p>
+          </div>
+        </div>
         <Button v-if="isLoggedIn" size="sm" @click="openCreateDialog">
           <Plus class="h-3.5 w-3.5 mr-1.5" />
           New Cohort
@@ -632,11 +720,16 @@ const filteredCustomers = computed(() => {
         </div>
       </div>
 
-      <!-- Click-away overlay -->
+      <!-- Click-away overlays -->
       <div
         v-if="showColumnSettings"
         class="fixed inset-0 z-40"
         @click="showColumnSettings = false"
+      />
+      <div
+        v-if="showExcludeEditor"
+        class="fixed inset-0 z-10"
+        @click="showExcludeEditor = false"
       />
 
       <!-- Customer table -->
@@ -690,23 +783,6 @@ const filteredCustomers = computed(() => {
                         >
                           {{ cohortMeta[c.cohort].label }}
                         </span>
-                        <span
-                          v-if="c.is_internal"
-                          class="inline-flex px-1.5 py-0.5 rounded text-[10px] font-medium bg-muted text-muted-foreground"
-                        >
-                          Internal
-                        </span>
-                        <button
-                          v-if="isLoggedIn"
-                          class="opacity-0 group-hover:opacity-100 text-[10px] text-muted-foreground hover:text-foreground transition-opacity"
-                          @click.stop="
-                            toggleInternal(c.customer_id, c.is_internal)
-                          "
-                        >
-                          {{
-                            c.is_internal ? "Remove internal" : "Mark internal"
-                          }}
-                        </button>
                       </div>
                     </td>
 
