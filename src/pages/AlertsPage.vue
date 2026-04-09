@@ -419,7 +419,7 @@ async function handleDelete(id: number) {
             v-model="formName"
             type="text"
             placeholder="e.g. Daily cost spike"
-            class="w-full h-9 rounded-md border bg-background px-3 text-sm"
+            class="w-full h-9 rounded-md border bg-background px-3 pr-8 text-sm appearance-none bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2216%22%20height%3D%2216%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%2371717a%22%20stroke-width%3D%222%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22%2F%3E%3C%2Fsvg%3E')] bg-[length:16px] bg-[right_8px_center] bg-no-repeat"
           />
         </div>
 
@@ -433,7 +433,7 @@ async function handleDelete(id: number) {
             <select
               id="alert-metric"
               v-model="formMetric"
-              class="w-full h-9 rounded-md border bg-background px-3 text-sm"
+              class="w-full h-9 rounded-md border bg-background px-3 pr-8 text-sm appearance-none bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2216%22%20height%3D%2216%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%2371717a%22%20stroke-width%3D%222%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22%2F%3E%3C%2Fsvg%3E')] bg-[length:16px] bg-[right_8px_center] bg-no-repeat"
             >
               <option v-for="m in METRICS" :key="m.value" :value="m.value">
                 {{ m.label }}
@@ -449,7 +449,7 @@ async function handleDelete(id: number) {
             <select
               id="alert-operator"
               v-model="formOperator"
-              class="w-full h-9 rounded-md border bg-background px-3 text-sm"
+              class="w-full h-9 rounded-md border bg-background px-3 pr-8 text-sm appearance-none bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2216%22%20height%3D%2216%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%2371717a%22%20stroke-width%3D%222%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22%2F%3E%3C%2Fsvg%3E')] bg-[length:16px] bg-[right_8px_center] bg-no-repeat"
             >
               <option v-for="op in OPERATORS" :key="op.value" :value="op.value">
                 {{ op.label }}
@@ -467,7 +467,7 @@ async function handleDelete(id: number) {
               v-model.number="formThreshold"
               type="number"
               step="any"
-              class="w-full h-9 rounded-md border bg-background px-3 text-sm"
+              class="w-full h-9 rounded-md border bg-background px-3 pr-8 text-sm appearance-none bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2216%22%20height%3D%2216%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%2371717a%22%20stroke-width%3D%222%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22%2F%3E%3C%2Fsvg%3E')] bg-[length:16px] bg-[right_8px_center] bg-no-repeat"
             />
           </div>
         </div>
@@ -484,7 +484,7 @@ async function handleDelete(id: number) {
               v-model="formEmail"
               type="email"
               placeholder="you@company.com"
-              class="w-full h-9 rounded-md border bg-background px-3 text-sm"
+              class="w-full h-9 rounded-md border bg-background px-3 pr-8 text-sm appearance-none bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2216%22%20height%3D%2216%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%2371717a%22%20stroke-width%3D%222%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22%2F%3E%3C%2Fsvg%3E')] bg-[length:16px] bg-[right_8px_center] bg-no-repeat"
             />
           </div>
           <div>
@@ -499,7 +499,7 @@ async function handleDelete(id: number) {
                 v-model.number="formCooldown"
                 type="number"
                 min="1"
-                class="w-full h-9 rounded-md border bg-background px-3 text-sm"
+                class="w-full h-9 rounded-md border bg-background px-3 pr-8 text-sm appearance-none bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2216%22%20height%3D%2216%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%2371717a%22%20stroke-width%3D%222%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22%2F%3E%3C%2Fsvg%3E')] bg-[length:16px] bg-[right_8px_center] bg-no-repeat"
               />
               <span class="text-xs text-muted-foreground shrink-0"
                 >minutes</span

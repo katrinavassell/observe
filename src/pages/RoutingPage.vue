@@ -372,10 +372,10 @@ function copyEndpoint() {
               <Badge
                 v-if="config.is_active"
                 class="bg-success/10 text-success text-[10px]"
-                >active</Badge
+                >Active</Badge
               >
               <Badge v-else class="bg-muted text-muted-foreground text-[10px]"
-                >inactive</Badge
+                >Inactive</Badge
               >
             </div>
             <div class="text-xs text-muted-foreground mt-0.5">
@@ -413,7 +413,7 @@ function copyEndpoint() {
           <Badge
             v-if="selectedConfig.is_active"
             class="bg-success/10 text-success text-[10px]"
-            >active</Badge
+            >Active</Badge
           >
         </div>
 
@@ -448,7 +448,7 @@ function copyEndpoint() {
                 >
                 <select
                   v-model="targetProvider"
-                  class="w-full rounded-md border bg-background px-3 py-2 text-sm"
+                  class="w-full h-9 rounded-md border bg-background px-3 pr-8 py-2 text-sm appearance-none bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2216%22%20height%3D%2216%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%2371717a%22%20stroke-width%3D%222%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22%2F%3E%3C%2Fsvg%3E')] bg-[length:16px] bg-[right_8px_center] bg-no-repeat"
                 >
                   <option v-for="p in providers" :key="p" :value="p">
                     {{ p }}
@@ -599,7 +599,7 @@ function copyEndpoint() {
                 >
                 <select
                   v-model="ruleField"
-                  class="w-full rounded-md border bg-background px-3 py-2 text-sm"
+                  class="w-full h-9 rounded-md border bg-background px-3 pr-8 py-2 text-sm appearance-none bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2216%22%20height%3D%2216%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%2371717a%22%20stroke-width%3D%222%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22%2F%3E%3C%2Fsvg%3E')] bg-[length:16px] bg-[right_8px_center] bg-no-repeat"
                 >
                   <option value="region">region</option>
                   <option value="customer_id">customer_id</option>
@@ -613,7 +613,7 @@ function copyEndpoint() {
                 >
                 <select
                   v-model="ruleOperator"
-                  class="w-full rounded-md border bg-background px-3 py-2 text-sm"
+                  class="w-full h-9 rounded-md border bg-background px-3 pr-8 py-2 text-sm appearance-none bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2216%22%20height%3D%2216%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%2371717a%22%20stroke-width%3D%222%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22%2F%3E%3C%2Fsvg%3E')] bg-[length:16px] bg-[right_8px_center] bg-no-repeat"
                 >
                   <option value="eq">equals</option>
                   <option value="neq">not equals</option>
@@ -635,7 +635,7 @@ function copyEndpoint() {
                 >
                 <select
                   v-model="ruleTargetId"
-                  class="w-full rounded-md border bg-background px-3 py-2 text-sm"
+                  class="w-full h-9 rounded-md border bg-background px-3 pr-8 py-2 text-sm appearance-none bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2216%22%20height%3D%2216%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%2371717a%22%20stroke-width%3D%222%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22%2F%3E%3C%2Fsvg%3E')] bg-[length:16px] bg-[right_8px_center] bg-no-repeat"
                 >
                   <option :value="null">Auto (priority order)</option>
                   <option v-for="t in targets" :key="t.id" :value="t.id">

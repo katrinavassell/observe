@@ -996,7 +996,7 @@ const excludedCount = computed(() => {
                 >
                   <select
                     v-model="rule.field"
-                    class="flex-1 rounded-md border bg-background px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-primary/20"
+                    class="flex-1 rounded-md border bg-background px-2 pr-6 py-1.5 text-xs appearance-none bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%2371717a%22%20stroke-width%3D%222%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22%2F%3E%3C%2Fsvg%3E')] bg-[length:12px] bg-[right_6px_center] bg-no-repeat focus:outline-none focus:ring-2 focus:ring-primary/20"
                   >
                     <option
                       v-for="f in RULE_FIELDS"
@@ -1008,7 +1008,7 @@ const excludedCount = computed(() => {
                   </select>
                   <select
                     v-model="rule.operator"
-                    class="w-14 rounded-md border bg-background px-2 py-1.5 text-xs text-center focus:outline-none focus:ring-2 focus:ring-primary/20"
+                    class="w-16 rounded-md border bg-background px-2 pr-5 py-1.5 text-xs appearance-none bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%2371717a%22%20stroke-width%3D%222%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22%2F%3E%3C%2Fsvg%3E')] bg-[length:12px] bg-[right_4px_center] bg-no-repeat focus:outline-none focus:ring-2 focus:ring-primary/20"
                   >
                     <option
                       v-for="op in RULE_OPERATORS"

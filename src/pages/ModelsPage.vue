@@ -348,9 +348,10 @@ function goToModel(model: string) {
       class="flex flex-col items-center justify-center py-16 text-center"
     >
       <Cpu class="h-10 w-10 text-muted-foreground/40 mb-3" />
-      <p class="text-muted-foreground mb-4">
-        Models appear when you connect an AI provider (OpenAI, Anthropic) or
-        send events via the SDK with a model field.
+      <p class="text-sm font-medium mb-1">No model data yet</p>
+      <p class="text-sm text-muted-foreground mb-4">
+        Connect an AI provider (OpenAI, Anthropic) or send events via the SDK
+        with a model field.
       </p>
       <Button variant="outline" @click="router.push('/data-sources')">
         <Plug class="h-4 w-4 mr-2" />
@@ -384,7 +385,10 @@ function goToModel(model: string) {
             >
               <template v-for="col in visibleColumns" :key="col.id">
                 <!-- Model -->
-                <td v-if="col.id === 'model'" class="px-4 py-3 whitespace-nowrap">
+                <td
+                  v-if="col.id === 'model'"
+                  class="px-4 py-3 whitespace-nowrap"
+                >
                   <span
                     class="font-mono text-xs bg-muted px-2 py-0.5 rounded"
                     >{{ m.model }}</span
