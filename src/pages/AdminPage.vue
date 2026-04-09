@@ -7,8 +7,18 @@ import {
   DollarSign,
   ShieldAlert,
   Mail,
+  Settings2,
+  Plus,
+  X,
 } from "lucide-vue-next";
-import { Card, CardContent, Skeleton, Badge } from "@/components/ui";
+import {
+  Card,
+  CardContent,
+  Skeleton,
+  Badge,
+  Button,
+  Input,
+} from "@/components/ui";
 import { formatCurrency } from "@/lib/format";
 import { getAdminEmails, getAdminActivity } from "@/lib/api";
 
@@ -67,31 +77,83 @@ const { data: activityData, isLoading: activityLoading } = useQuery({
   enabled: computed(() => !isForbidden.value && activeTab.value === "activity"),
 });
 
-const sortedUsers = computed(() => {
+// Exclude filter — persisted to localStorage
+const EXCLUDE_KEY = "observe:admin-exclude";
+
+function loadExclude(): string[] {
+  const saved = window.localStorage.getItem(EXCLUDE_KEY);
+  if (!saved) return [];
+  try {
+    return JSON.parse(saved);
+  } catch {
+    return [];
+  }
+}
+
+const excludePatterns = ref<string[]>(loadExclude());
+const excludeInput = ref("");
+const showExcludeEditor = ref(false);
+
+function addExclude() {
+  const p = excludeInput.value.trim().toLowerCase();
+  if (!p || excludePatterns.value.includes(p)) return;
+  excludePatterns.value.push(p);
+  window.localStorage.setItem(
+    EXCLUDE_KEY,
+    JSON.stringify(excludePatterns.value),
+  );
+  excludeInput.value = "";
+}
+
+function removeExclude(i: number) {
+  excludePatterns.value.splice(i, 1);
+  window.localStorage.setItem(
+    EXCLUDE_KEY,
+    JSON.stringify(excludePatterns.value),
+  );
+}
+
+const filteredUsers = computed(() => {
   if (!data.value) return [];
-  return [...data.value.users].sort(
+  let list = data.value.users;
+  if (excludePatterns.value.length > 0) {
+    list = list.filter((u) => {
+      const email = (u.email || "").toLowerCase();
+      const name = (u.name || "").toLowerCase();
+      return !excludePatterns.value.some(
+        (p) => email.includes(p) || name.includes(p),
+      );
+    });
+  }
+  return list;
+});
+
+const sortedUsers = computed(() => {
+  return [...filteredUsers.value].sort(
     (a, b) => Number(b.events_this_month) - Number(a.events_this_month),
   );
 });
 
-const totalUsers = computed(() => data.value?.users.length ?? 0);
+const excludedCount = computed(() => {
+  if (!data.value || excludePatterns.value.length === 0) return 0;
+  return data.value.users.length - filteredUsers.value.length;
+});
+
+const totalUsers = computed(() => filteredUsers.value.length);
 
 const totalEvents = computed(() =>
-  (data.value?.users ?? []).reduce(
-    (sum, u) => sum + Number(u.events_this_month),
-    0,
-  ),
+  filteredUsers.value.reduce((sum, u) => sum + Number(u.events_this_month), 0),
 );
 
 const totalCost = computed(() =>
-  (data.value?.users ?? []).reduce(
+  filteredUsers.value.reduce(
     (sum, u) => sum + Number(u.total_cost_this_month),
     0,
   ),
 );
 
 const totalRevenue = computed(() =>
-  (data.value?.users ?? []).reduce(
+  filteredUsers.value.reduce(
     (sum, u) => sum + Number(u.total_revenue_this_month),
     0,
   ),
@@ -135,12 +197,77 @@ function emailStatusVariant(
 
 <template>
   <div class="space-y-6">
-    <div>
-      <h1 class="text-2xl font-semibold tracking-tight">Admin Dashboard</h1>
-      <p class="text-sm text-muted-foreground mt-1">
-        Usage overview across all accounts
-      </p>
+    <div class="flex items-start justify-between">
+      <div>
+        <h1 class="text-2xl font-semibold tracking-tight">Admin Dashboard</h1>
+        <p class="text-sm text-muted-foreground mt-1">
+          Usage overview across all accounts
+        </p>
+      </div>
+      <div class="relative">
+        <button
+          class="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+          @click="showExcludeEditor = !showExcludeEditor"
+        >
+          <Settings2 class="h-3.5 w-3.5" />
+          Exclude
+          <span
+            v-if="excludePatterns.length"
+            class="text-xs bg-muted rounded-full px-1.5"
+          >
+            {{ excludedCount }} hidden
+          </span>
+        </button>
+        <div
+          v-if="showExcludeEditor"
+          class="absolute right-0 top-8 z-20 w-72 rounded-lg border bg-background shadow-lg p-3 space-y-2"
+        >
+          <p class="text-xs font-medium">
+            Hide accounts where email or name contains:
+          </p>
+          <div class="flex gap-1.5">
+            <Input
+              v-model="excludeInput"
+              placeholder="e.g. test, @tansohq.com"
+              class="flex-1 text-xs"
+              @keydown.enter="addExclude"
+            />
+            <Button
+              size="sm"
+              variant="outline"
+              class="h-9 px-2"
+              @click="addExclude"
+            >
+              <Plus class="h-3.5 w-3.5" />
+            </Button>
+          </div>
+          <div v-if="excludePatterns.length" class="flex flex-wrap gap-1.5">
+            <span
+              v-for="(pattern, i) in excludePatterns"
+              :key="pattern"
+              class="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs"
+            >
+              {{ pattern }}
+              <button class="hover:text-foreground" @click="removeExclude(i)">
+                <X class="h-3 w-3" />
+              </button>
+            </span>
+          </div>
+          <p
+            v-if="excludePatterns.length"
+            class="text-[10px] text-muted-foreground"
+          >
+            Saved across sessions
+          </p>
+        </div>
+      </div>
     </div>
+    <!-- Click-away for exclude editor -->
+    <div
+      v-if="showExcludeEditor"
+      class="fixed inset-0 z-10"
+      @click="showExcludeEditor = false"
+    />
 
     <!-- Forbidden -->
     <div
