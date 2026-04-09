@@ -8,6 +8,7 @@ declare module "express-session" {
     visitorId: string;
     accountId: number;
     accountEmail: string;
+    _sampleCleared?: boolean;
   }
 }
 
@@ -45,11 +46,11 @@ export function createEnsureVisitor(pool: Pool) {
             [req.visitorId],
           );
           await pool.query(
-            "DELETE FROM customers WHERE user_id = $1 AND customer_id IN ('cus_001','cus_002','cus_003','cus_004','cus_005')",
+            "DELETE FROM customers WHERE user_id = $1 AND customer_id IN ('acme_saas','tidewater_ai','neondata','circleops','blazeml','quantumhr')",
             [req.visitorId],
           );
           await pool.query(
-            "DELETE FROM subscriptions WHERE user_id = $1 AND subscription_id IN ('sub_001','sub_002','sub_003','sub_004','sub_005')",
+            "DELETE FROM subscriptions WHERE user_id = $1 AND subscription_id IN ('sub_acme','sub_acme_addon','sub_tidewater','sub_neon','sub_neon_addon','sub_circle','sub_blaze','sub_quantum')",
             [req.visitorId],
           );
           await pool.query(
@@ -321,11 +322,11 @@ export function createAuthRoutes(
             [vid, "sample"],
           );
           await pool.query(
-            "DELETE FROM customers WHERE user_id = $1 AND customer_id IN ('cus_001','cus_002','cus_003','cus_004','cus_005')",
+            "DELETE FROM customers WHERE user_id = $1 AND customer_id IN ('acme_saas','tidewater_ai','neondata','circleops','blazeml','quantumhr')",
             [vid],
           );
           await pool.query(
-            "DELETE FROM subscriptions WHERE user_id = $1 AND subscription_id IN ('sub_001','sub_002','sub_003','sub_004','sub_005')",
+            "DELETE FROM subscriptions WHERE user_id = $1 AND subscription_id IN ('sub_acme','sub_acme_addon','sub_tidewater','sub_neon','sub_neon_addon','sub_circle','sub_blaze','sub_quantum')",
             [vid],
           );
           await pool.query(

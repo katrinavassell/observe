@@ -785,17 +785,20 @@ export function createEventsRoutes(
   );
 
   // GET /events/traces — paginated list of traces (must be before /events/:id)
-  router.get("/events/traces", async (req: Request, res: Response) => {
-    try {
-      const authReq = req as AuthRequest;
-      const userId = authReq.session?.visitorId || authReq.visitorId;
-      if (!userId) {
-        return res.json({ traces: sampleTraces() });
-      }
-      const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
-      const offset = parseInt(req.query.offset as string) || 0;
-      const result = await pool.query(
-        `SELECT trace_id,
+  router.get(
+    "/events/traces",
+    ensureVisitor,
+    async (req: Request, res: Response) => {
+      try {
+        const authReq = req as AuthRequest;
+        const userId = authReq.visitorId;
+        if (!userId) {
+          return res.json({ traces: sampleTraces() });
+        }
+        const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
+        const offset = parseInt(req.query.offset as string) || 0;
+        const result = await pool.query(
+          `SELECT trace_id,
            MIN(timestamp) as start_time,
            COUNT(*) as span_count,
            COALESCE(SUM(cost_amount), 0) as total_cost,
@@ -808,70 +811,75 @@ export function createEventsRoutes(
            GROUP BY trace_id
            ORDER BY start_time DESC
            LIMIT $2 OFFSET $3`,
-        [userId, limit, offset],
-      );
-      if (
-        result.rows.length === 0 &&
-        offset === 0 &&
-        !authReq.session?.accountId
-      ) {
-        return res.json({ traces: sampleTraces() });
+          [userId, limit, offset],
+        );
+        if (
+          result.rows.length === 0 &&
+          offset === 0 &&
+          !authReq.session?.accountId
+        ) {
+          return res.json({ traces: sampleTraces() });
+        }
+        res.json({
+          traces: result.rows.map((r) => ({
+            trace_id: r.trace_id,
+            start_time: r.start_time,
+            span_count: parseInt(r.span_count),
+            total_cost: parseFloat(r.total_cost),
+            total_revenue: parseFloat(r.total_revenue),
+            total_duration_ms: r.total_duration_ms
+              ? parseInt(r.total_duration_ms)
+              : null,
+            root_event: r.root_event,
+            cost_types: r.cost_types,
+          })),
+        });
+      } catch (error) {
+        console.error("GET /events/traces error:", error);
+        res.status(500).json({ error: "Failed to fetch traces" });
       }
-      res.json({
-        traces: result.rows.map((r) => ({
-          trace_id: r.trace_id,
-          start_time: r.start_time,
-          span_count: parseInt(r.span_count),
-          total_cost: parseFloat(r.total_cost),
-          total_revenue: parseFloat(r.total_revenue),
-          total_duration_ms: r.total_duration_ms
-            ? parseInt(r.total_duration_ms)
-            : null,
-          root_event: r.root_event,
-          cost_types: r.cost_types,
-        })),
-      });
-    } catch (error) {
-      console.error("GET /events/traces error:", error);
-      res.status(500).json({ error: "Failed to fetch traces" });
-    }
-  });
+    },
+  );
 
   // GET /events/trace/:traceId — all events for a trace
-  router.get("/events/trace/:traceId", async (req: Request, res: Response) => {
-    try {
-      const authReq = req as AuthRequest;
-      const userId = authReq.session?.visitorId || authReq.visitorId;
-      if (!userId) {
+  router.get(
+    "/events/trace/:traceId",
+    ensureVisitor,
+    async (req: Request, res: Response) => {
+      try {
+        const authReq = req as AuthRequest;
+        const userId = authReq.visitorId;
+        if (!userId) {
+          const { traceId } = req.params;
+          const detail = sampleTraceDetail(traceId);
+          if (detail) return res.json(detail);
+          return res.status(404).json({ error: "Trace not found" });
+        }
         const { traceId } = req.params;
-        const detail = sampleTraceDetail(traceId);
-        if (detail) return res.json(detail);
-        return res.status(404).json({ error: "Trace not found" });
-      }
-      const { traceId } = req.params;
-      if (!traceId) {
-        return res.status(400).json({ error: "traceId is required" });
-      }
-      const result = await pool.query(
-        `SELECT id, customer_id, feature_key, event_name, timestamp,
+        if (!traceId) {
+          return res.status(400).json({ error: "traceId is required" });
+        }
+        const result = await pool.query(
+          `SELECT id, customer_id, feature_key, event_name, timestamp,
            cost_amount, cost_unit, revenue_amount, usage_units,
            model, model_provider, source, properties, agent_id,
            trace_id, span_id, parent_span_id, duration_ms, cost_type
            FROM observe_events
            WHERE user_id = $1 AND trace_id = $2
            ORDER BY timestamp ASC`,
-        [userId, traceId],
-      );
-      if (result.rows.length === 0 && !authReq.session?.accountId) {
-        const detail = sampleTraceDetail(traceId);
-        if (detail) return res.json(detail);
+          [userId, traceId],
+        );
+        if (result.rows.length === 0 && !authReq.session?.accountId) {
+          const detail = sampleTraceDetail(traceId);
+          if (detail) return res.json(detail);
+        }
+        res.json({ trace_id: traceId, spans: result.rows });
+      } catch (error) {
+        console.error("GET /events/trace/:traceId error:", error);
+        res.status(500).json({ error: "Failed to fetch trace" });
       }
-      res.json({ trace_id: traceId, spans: result.rows });
-    } catch (error) {
-      console.error("GET /events/trace/:traceId error:", error);
-      res.status(500).json({ error: "Failed to fetch trace" });
-    }
-  });
+    },
+  );
 
   // GET /events/by-cost-type — cost breakdown by type
   router.get("/events/by-cost-type", async (req: Request, res: Response) => {

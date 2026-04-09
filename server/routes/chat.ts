@@ -355,14 +355,46 @@ Only include action blocks when the user explicitly asks you to do something. Fo
           }
 
           case "create_alert": {
+            const VALID_METRICS = [
+              "daily_cost",
+              "margin_percent",
+              "cost_per_event",
+              "customer_margin",
+              "feature_margin_trend",
+              "customer_cost_vs_revenue",
+              "model_cost_spike",
+              "usage_velocity",
+              "customer_cost_share",
+              "credit_burn_rate",
+              "top_customer_unprofitable",
+              "feature_cost_disparity",
+              "model_cost_increase",
+              "margin_compression",
+              "customer_concentration",
+              "provider_concentration",
+              "model_concentration",
+            ];
+            const VALID_OPERATORS = ["gt", "lt", "gte", "lte"];
+            const metric = action.metric || "daily_cost";
+            const operator = action.operator || "gt";
+            if (!VALID_METRICS.includes(metric)) {
+              return res
+                .status(400)
+                .json({ error: `Invalid metric: ${metric}` });
+            }
+            if (!VALID_OPERATORS.includes(operator)) {
+              return res
+                .status(400)
+                .json({ error: `Invalid operator: ${operator}` });
+            }
             await pool.query(
               `INSERT INTO alert_rules (user_id, name, metric, operator, threshold, email, cooldown_minutes)
              VALUES ($1, $2, $3, $4, $5, $6, 60)`,
               [
                 req.visitorId,
                 action.name || "Chat-created alert",
-                action.metric || "daily_cost",
-                action.operator || "gt",
+                metric,
+                operator,
                 action.threshold || 100,
                 req.accountEmail || "noreply@observemetrics.com",
               ],

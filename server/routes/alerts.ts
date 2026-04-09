@@ -278,12 +278,17 @@ export function createAlertRoutes(
   );
 
   // Update alert rule
+  const alertPatchSchema = alertRuleSchema.partial();
+
   router.patch(
     "/alerts/:id",
     ensureVisitor,
     async (req: AuthRequest, res: Response) => {
       try {
         const id = parseInt(req.params.id);
+
+        const parsed = alertPatchSchema.parse(req.body);
+
         // Verify ownership
         const existing = await pool.query(
           "SELECT id FROM alert_rules WHERE id = $1 AND user_id = $2",
@@ -305,9 +310,10 @@ export function createAlertRoutes(
           "enabled",
           "cooldown_minutes",
         ] as const) {
-          if (req.body[field] !== undefined) {
+          const val = (parsed as Record<string, unknown>)[field];
+          if (val !== undefined) {
             updates.push(`${field} = $${idx++}`);
-            values.push(req.body[field]);
+            values.push(val);
           }
         }
 
@@ -321,6 +327,11 @@ export function createAlertRoutes(
         );
         res.json(rows[0]);
       } catch (err) {
+        if (err instanceof z.ZodError) {
+          return res
+            .status(400)
+            .json({ error: err.issues[0]?.message || "Invalid input" });
+        }
         console.error("PATCH /alerts/:id error:", err);
         res.status(500).json({ error: "Failed to update alert" });
       }
