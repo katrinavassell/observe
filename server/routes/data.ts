@@ -26,18 +26,22 @@ type ConvertReferralFn = (visitorId: string) => Promise<void>;
 // Clear sample/demo data when transitioning to real user data
 // Uses exact sample IDs to avoid deleting real Stripe data (sub_*, cus_* prefixes match real Stripe IDs)
 const SAMPLE_SUBSCRIPTION_IDS = [
-  "sub_001",
-  "sub_002",
-  "sub_003",
-  "sub_004",
-  "sub_005",
+  "sub_acme",
+  "sub_acme_addon",
+  "sub_tidewater",
+  "sub_neon",
+  "sub_neon_addon",
+  "sub_circle",
+  "sub_blaze",
+  "sub_quantum",
 ];
 const SAMPLE_CUSTOMER_IDS = [
-  "cus_001",
-  "cus_002",
-  "cus_003",
-  "cus_004",
-  "cus_005",
+  "acme_saas",
+  "tidewater_ai",
+  "neondata",
+  "circleops",
+  "blazeml",
+  "quantumhr",
 ];
 const SAMPLE_PLAN_IDS = ["starter", "pro", "enterprise"];
 
