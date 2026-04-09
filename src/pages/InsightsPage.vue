@@ -141,6 +141,21 @@ function formatActionLabel(action: ChatAction): string {
   }
 }
 
+function renderMarkdown(text: string): string {
+  return text
+    .replace(/```action[\s\S]*?```/g, "")
+    .trim()
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+    .replace(
+      /`([^`]+)`/g,
+      '<code class="rounded bg-muted px-1 py-0.5 text-xs">$1</code>',
+    )
+    .replace(/\n/g, "<br>");
+}
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 </script>
 
@@ -200,8 +215,13 @@ function formatActionLabel(action: ChatAction): string {
                 : 'bg-muted'
             "
           >
-            <div class="whitespace-pre-wrap">
-              {{ msg.content.replace(/```action[\s\S]*?```/g, "").trim() }}
+            <div
+              v-if="msg.role === 'assistant'"
+              class="whitespace-pre-wrap"
+              v-html="renderMarkdown(msg.content)"
+            />
+            <div v-else class="whitespace-pre-wrap">
+              {{ msg.content }}
             </div>
 
             <div
