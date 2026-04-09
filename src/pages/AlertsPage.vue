@@ -522,7 +522,7 @@ async function handleDelete(id: number) {
             </p>
           </div>
           <a
-            :href="`https://tansohq.com?utm_source=observe&utm_medium=alert_form&utm_campaign=${formMetric}`"
+            :href="`https://cal.com/katrina-laszlo/30-minute-meeting`"
             target="_blank"
             class="shrink-0 inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-800 bg-emerald-200 hover:bg-emerald-300 px-3 py-1.5 rounded-md transition-colors"
           >
@@ -583,7 +583,7 @@ async function handleDelete(id: number) {
             <div class="flex items-center gap-2">
               <a
                 v-if="TANSO_UPSELLS[rule.metric]"
-                :href="`https://tansohq.com?utm_source=observe&utm_medium=alert_rule&utm_campaign=${rule.metric}`"
+                :href="`https://cal.com/katrina-laszlo/30-minute-meeting`"
                 target="_blank"
                 class="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-700 hover:text-emerald-900 transition-colors"
               >
