@@ -105,8 +105,8 @@ const keyCopied = ref(false);
 async function loadSdkKeys() {
   try {
     sdkKeys.value = await listSdkKeys();
-  } catch {
-    // silently fail - keys list is not critical
+  } catch (e) {
+    console.error("Failed to load SDK keys:", e);
   }
 }
 
@@ -251,8 +251,8 @@ const isSyncingInvoices = ref(false);
 async function loadStripeStatus() {
   try {
     stripeStatus.value = await getStripeStatus();
-  } catch {
-    // silently fail
+  } catch (e) {
+    console.error("Failed to load Stripe status:", e);
   }
 }
 
@@ -330,16 +330,16 @@ const isSavingPricing = ref(false);
 async function loadFeaturePricing() {
   try {
     featurePricingRules.value = await listFeaturePricing();
-  } catch {
-    // Non-critical
+  } catch (e) {
+    console.error("Failed to load feature pricing:", e);
   }
 }
 
 async function loadFeatureKeys() {
   try {
     availableFeatureKeys.value = await listFeatureKeys();
-  } catch {
-    // Non-critical
+  } catch (e) {
+    console.error("Failed to load feature keys:", e);
   }
 }
 

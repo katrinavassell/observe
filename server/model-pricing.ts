@@ -25,7 +25,7 @@ let cacheLoadedAt = 0;
 const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
 
 // Providers we care about from OpenRouter (filter the 400+ models down)
-const TRACKED_PROVIDERS = [
+const _TRACKED_PROVIDERS = [
   "openai",
   "anthropic",
   "google",

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, reactive } from "vue";
+import { toast } from "vue-sonner";
 import { useQuery } from "@tanstack/vue-query";
 import { useRouter, useRoute } from "vue-router";
 import {
@@ -201,10 +202,13 @@ async function toggleEvent(id: number) {
     loadingDetails.add(id);
     try {
       eventDetails[id] = await getEventDetail(id);
-    } catch {
-      /* silently fail */
+    } catch (e) {
+      console.error("Failed to load event detail:", e);
+      expandedIds.delete(id);
+      toast.error("Failed to load event details");
+    } finally {
+      loadingDetails.delete(id);
     }
-    loadingDetails.delete(id);
   }
 }
 
