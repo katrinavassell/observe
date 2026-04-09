@@ -2042,5 +2042,41 @@ export function createCustomersRoutes(
     },
   );
 
+  // PATCH /customers/:customerId/internal — toggle is_internal flag
+  router.patch(
+    "/customers/:customerId/internal",
+    ensureVisitor,
+    async (req: AuthRequest, res: Response) => {
+      try {
+        const { customerId } = req.params;
+        const { is_internal } = req.body;
+        if (typeof is_internal !== "boolean") {
+          return res
+            .status(400)
+            .json({ error: "is_internal must be a boolean" });
+        }
+        const result = await pool.query(
+          `UPDATE customers SET is_internal = $1, updated_at = NOW()
+           WHERE user_id = $2 AND customer_id = $3
+           RETURNING customer_id, is_internal`,
+          [is_internal, req.visitorId, customerId],
+        );
+        if (result.rows.length === 0) {
+          // Customer might only exist in observe_events, not customers table — upsert
+          await pool.query(
+            `INSERT INTO customers (user_id, customer_id, name, is_internal)
+             VALUES ($1, $2, $2, $3)
+             ON CONFLICT (user_id, customer_id) DO UPDATE SET is_internal = $3, updated_at = NOW()`,
+            [req.visitorId, customerId, is_internal],
+          );
+        }
+        res.json({ customer_id: customerId, is_internal });
+      } catch (err) {
+        console.error("PATCH /customers/:customerId/internal error:", err);
+        res.status(500).json({ error: "Failed to update customer" });
+      }
+    },
+  );
+
   return router;
 }

@@ -320,6 +320,12 @@ async function _doDbInit() {
     await pool.query(
       `ALTER TABLE accounts ADD COLUMN IF NOT EXISTS invite_credits_granted INTEGER DEFAULT 0`,
     );
+    await pool.query(
+      `ALTER TABLE accounts ADD COLUMN IF NOT EXISTS is_internal BOOLEAN DEFAULT false`,
+    );
+    await pool.query(
+      `ALTER TABLE customers ADD COLUMN IF NOT EXISTS is_internal BOOLEAN DEFAULT false`,
+    );
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS feedback (

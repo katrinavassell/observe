@@ -895,10 +895,21 @@ export interface ModelSwapSuggestion {
   potential_savings_pct: number;
 }
 
+export async function setCustomerInternal(
+  customerId: string,
+  isInternal: boolean,
+): Promise<{ customer_id: string; is_internal: boolean }> {
+  return request(`/customers/${customerId}/internal`, {
+    method: "PATCH",
+    body: JSON.stringify({ is_internal: isInternal }),
+  });
+}
+
 export interface CohortCustomer {
   customer_id: string;
   customer_name: string;
   segment: string | null;
+  is_internal: boolean;
   total_revenue: number;
   total_cost: number;
   margin_pct: number | null;
@@ -961,12 +972,12 @@ export async function getHealthHistory(
   return request(`/cohorts/${encodeURIComponent(customerId)}/health-history`);
 }
 
-export async function getCohorts(): Promise<{
+export async function getCohorts(showInternal = false): Promise<{
   customers: CohortCustomer[];
   summary: Record<CohortLabel, CohortSummary>;
   totals: CohortTotals;
 }> {
-  return request("/cohorts");
+  return request(`/cohorts${showInternal ? "?show_internal=true" : ""}`);
 }
 
 // ======================================================================// STRIPE INVOICES

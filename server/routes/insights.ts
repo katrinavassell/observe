@@ -771,12 +771,14 @@ Return ONLY the JSON array, no markdown or explanation.`;
         ) {
           return res.status(403).json({ error: "Admin access required" });
         }
+        const showInternal = req.query.show_internal === "true";
         const result = await pool.query(`
           SELECT
             a.email,
             a.name,
             a.stripe_plan,
             a.created_at,
+            a.is_internal,
             COALESCE(e.event_count, 0) as events_this_month,
             COALESCE(e.total_cost, 0) as total_cost_this_month,
             COALESCE(e.total_revenue, 0) as total_revenue_this_month,
@@ -797,6 +799,7 @@ Return ONLY the JSON array, no markdown or explanation.`;
             WHERE created_at >= date_trunc('month', NOW())
             GROUP BY user_id
           ) i ON i.user_id = a.visitor_id
+          ${showInternal ? "" : "WHERE a.is_internal IS NOT TRUE"}
           ORDER BY e.event_count DESC NULLS LAST
         `);
         res.json({ users: result.rows });

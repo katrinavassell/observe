@@ -6,6 +6,7 @@ import {
   discoverCohorts,
   getCustomers,
   createCustomCohort,
+  setCustomerInternal,
 } from "@/lib/api";
 import type {
   CohortLabel,
@@ -282,14 +283,30 @@ function resetColumns() {
   window.localStorage.removeItem(STORAGE_KEY);
 }
 
+const showInternal = ref(false);
+
 const {
   data: cohortsData,
   isLoading,
   isError,
 } = useQuery({
-  queryKey: ["cohorts"],
-  queryFn: getCohorts,
+  queryKey: computed(() => ["cohorts", { showInternal: showInternal.value }]),
+  queryFn: () => getCohorts(showInternal.value),
 });
+
+async function toggleInternal(customerId: string, currentValue: boolean) {
+  try {
+    await setCustomerInternal(customerId, !currentValue);
+    queryClient.invalidateQueries({ queryKey: ["cohorts"] });
+    toast.success(
+      !currentValue
+        ? `Marked ${customerId} as internal`
+        : `Removed internal flag from ${customerId}`,
+    );
+  } catch (err: any) {
+    toast.error(err.message || "Failed to update customer");
+  }
+}
 
 const customers = computed(() => cohortsData.value?.customers ?? []);
 const summary = computed(
@@ -437,10 +454,23 @@ const filteredCustomers = computed(() => {
           Customer health and segmentation
         </p>
       </div>
-      <Button v-if="isLoggedIn" size="sm" @click="openCreateDialog">
-        <Plus class="h-3.5 w-3.5 mr-1.5" />
-        New Cohort
-      </Button>
+      <div class="flex items-center gap-3">
+        <label
+          class="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer"
+        >
+          <input
+            type="checkbox"
+            :checked="showInternal"
+            class="rounded border-input"
+            @change="showInternal = !showInternal"
+          />
+          Show internal
+        </label>
+        <Button v-if="isLoggedIn" size="sm" @click="openCreateDialog">
+          <Plus class="h-3.5 w-3.5 mr-1.5" />
+          New Cohort
+        </Button>
+      </div>
     </div>
 
     <!-- Loading -->
@@ -629,7 +659,7 @@ const filteredCustomers = computed(() => {
             <tbody>
               <template v-for="c in filteredCustomers" :key="c.customer_id">
                 <tr
-                  class="border-b hover:bg-muted/30 transition-colors"
+                  class="group border-b hover:bg-muted/30 transition-colors"
                   :class="{ 'cursor-pointer': c.model_swap_suggestion }"
                   @click="
                     c.model_swap_suggestion
@@ -660,6 +690,23 @@ const filteredCustomers = computed(() => {
                         >
                           {{ cohortMeta[c.cohort].label }}
                         </span>
+                        <span
+                          v-if="c.is_internal"
+                          class="inline-flex px-1.5 py-0.5 rounded text-[10px] font-medium bg-muted text-muted-foreground"
+                        >
+                          Internal
+                        </span>
+                        <button
+                          v-if="isLoggedIn"
+                          class="opacity-0 group-hover:opacity-100 text-[10px] text-muted-foreground hover:text-foreground transition-opacity"
+                          @click.stop="
+                            toggleInternal(c.customer_id, c.is_internal)
+                          "
+                        >
+                          {{
+                            c.is_internal ? "Remove internal" : "Mark internal"
+                          }}
+                        </button>
                       </div>
                     </td>
 
