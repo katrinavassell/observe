@@ -26,8 +26,8 @@ export const OBSERVE_PLANS: Record<string, PlanConfig> = {
       csv_upload: { limit: null },
       stripe_connection: { limit: null },
       ai_provider_connection: { limit: null },
-      team_members: { limit: 1 },
-      data_retention_days: { limit: 30 },
+      team_members: { limit: 20 },
+      data_retention_days: { limit: 90 },
     },
   },
   growth: {

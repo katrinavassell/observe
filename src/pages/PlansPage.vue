@@ -111,8 +111,8 @@ const plans = [
     features: [
       "10,000 events per month",
       "25 AI messages per month",
-      "1 team member",
-      "30-day data retention",
+      "Up to 20 team members",
+      "90-day data retention",
       "1 cost alert",
       "SDK & Proxy tracking",
       "Stripe, OpenAI & Anthropic integrations",

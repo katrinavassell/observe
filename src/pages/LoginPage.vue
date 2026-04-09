@@ -113,9 +113,9 @@ const highlights = [
   },
   {
     icon: FlaskConical,
-    title: "What-if simulations",
+    title: "AI-powered insights",
     description:
-      "Model pricing changes before you ship them. See projected impact on margins and revenue instantly.",
+      "Get actionable recommendations on margin compression, pricing gaps, and cost optimization — automatically.",
   },
   {
     icon: Layers,
