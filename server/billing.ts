@@ -22,7 +22,7 @@ export const OBSERVE_PLANS: Record<string, PlanConfig> = {
     features: {
       ai_insights: { limit: 50, reset: "monthly" },
       event_ingest: { limit: 10000, reset: "monthly" },
-      cost_alerts: { limit: 1 },
+      cost_alerts: { limit: null },
       csv_upload: { limit: null },
       stripe_connection: { limit: null },
       ai_provider_connection: { limit: null },

@@ -109,7 +109,6 @@ const plans = [
       "10,000 events/month",
       "50 AI messages/month",
       "90-day data retention",
-      "1 cost alert",
     ],
   },
   {
@@ -121,7 +120,6 @@ const plans = [
       "Unlimited events",
       "500 AI messages/month",
       "1-year data retention",
-      "Unlimited cost alerts",
     ],
   },
 ];
@@ -129,6 +127,7 @@ const plans = [
 // Features included in ALL plans (shown below the plan cards)
 const sharedFeatures = [
   "Unlimited team members",
+  "Unlimited cost alerts",
   "SDK & Proxy tracking",
   "Stripe, OpenAI & Anthropic integrations",
   "Per-feature margin analysis",
