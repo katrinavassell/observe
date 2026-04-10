@@ -254,18 +254,27 @@ export function createTeamRoutes(pool: Pool, ensureVisitor: any) {
 
         const invite = result.rows[0];
 
-        await pool.query(
-          `UPDATE organization_members
-         SET visitor_id = $1, status = 'active', joined_at = NOW(), invite_token = NULL
-         WHERE id = $2`,
-          [visitorId, invite.id],
-        );
-
-        await pool.query(
-          `INSERT INTO visitor_org_map (visitor_id, org_id) VALUES ($1, $2)
-         ON CONFLICT (visitor_id) DO UPDATE SET org_id = $2`,
-          [visitorId, invite.organization_id],
-        );
+        const client = await pool.connect();
+        try {
+          await client.query("BEGIN");
+          await client.query(
+            `UPDATE organization_members
+           SET visitor_id = $1, status = 'active', joined_at = NOW(), invite_token = NULL
+           WHERE id = $2`,
+            [visitorId, invite.id],
+          );
+          await client.query(
+            `INSERT INTO visitor_org_map (visitor_id, org_id) VALUES ($1, $2)
+           ON CONFLICT (visitor_id) DO UPDATE SET org_id = $2`,
+            [visitorId, invite.organization_id],
+          );
+          await client.query("COMMIT");
+        } catch (txErr) {
+          await client.query("ROLLBACK");
+          throw txErr;
+        } finally {
+          client.release();
+        }
 
         // Grant bonus credits to the org owner who invited
         try {

@@ -212,7 +212,7 @@ app.use(
     getAdminVisitorId,
   }),
 );
-app.use(createGatewayRoutes(pool, ensureVisitor));
+app.use(createGatewayRoutes(pool, ensureVisitor, { apiLimiter }));
 app.use(createRecommendationsRoutes(pool, ensureVisitor));
 app.use(
   createChatRoutes(pool, ensureVisitor, {

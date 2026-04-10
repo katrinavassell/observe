@@ -1134,11 +1134,16 @@ export function createEventsRoutes(
                     err,
                   ),
                 );
+            } else {
+              // Bearer token provided but invalid — don't fall through to session
+              return res.status(401).json({
+                error: "Invalid API key. Check your Bearer token.",
+              });
             }
           }
         }
 
-        // Fallback to session-based auth
+        // Fallback to session-based auth (only when no Bearer token provided)
         if (!userId) {
           const authReq = req as AuthRequest;
           if (authReq.session?.visitorId) {

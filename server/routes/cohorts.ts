@@ -506,39 +506,43 @@ export function createCohortsRoutes(pool: Pool, ensureVisitor: any) {
               : 0,
         };
 
-        // Fire-and-forget health snapshot insert (batched)
+        // Fire-and-forget health snapshot insert (chunked to stay under PG param limit)
         if (customers.length > 0) {
-          const values: unknown[] = [];
-          const placeholders: string[] = [];
-          let idx = 1;
-          for (const c of customers) {
-            placeholders.push(
-              `($${idx}, $${idx + 1}, $${idx + 2}, $${idx + 3}, $${idx + 4}, $${idx + 5})`,
-            );
-            values.push(
-              userId,
-              c.customer_id,
-              c.health_score,
-              c.margin_pct,
-              c.adoption_depth,
-              c.active_days_30d,
-            );
-            idx += 6;
+          const CHUNK_SIZE = 1000;
+          for (let i = 0; i < customers.length; i += CHUNK_SIZE) {
+            const chunk = customers.slice(i, i + CHUNK_SIZE);
+            const values: unknown[] = [];
+            const placeholders: string[] = [];
+            let idx = 1;
+            for (const c of chunk) {
+              placeholders.push(
+                `($${idx}, $${idx + 1}, $${idx + 2}, $${idx + 3}, $${idx + 4}, $${idx + 5})`,
+              );
+              values.push(
+                userId,
+                c.customer_id,
+                c.health_score,
+                c.margin_pct,
+                c.adoption_depth,
+                c.active_days_30d,
+              );
+              idx += 6;
+            }
+            pool
+              .query(
+                `INSERT INTO customer_health_snapshots (user_id, customer_id, health_score, margin_pct, adoption_depth, active_days)
+                 VALUES ${placeholders.join(", ")}
+                 ON CONFLICT (user_id, customer_id, snapshot_date) DO UPDATE SET
+                   health_score = EXCLUDED.health_score,
+                   margin_pct = EXCLUDED.margin_pct,
+                   adoption_depth = EXCLUDED.adoption_depth,
+                   active_days = EXCLUDED.active_days`,
+                values,
+              )
+              .catch((err) =>
+                console.error("Health snapshot insert error:", err),
+              );
           }
-          pool
-            .query(
-              `INSERT INTO customer_health_snapshots (user_id, customer_id, health_score, margin_pct, adoption_depth, active_days)
-               VALUES ${placeholders.join(", ")}
-               ON CONFLICT (user_id, customer_id, snapshot_date) DO UPDATE SET
-                 health_score = EXCLUDED.health_score,
-                 margin_pct = EXCLUDED.margin_pct,
-                 adoption_depth = EXCLUDED.adoption_depth,
-                 active_days = EXCLUDED.active_days`,
-              values,
-            )
-            .catch((err) =>
-              console.error("Health snapshot insert error:", err),
-            );
         }
 
         res.json({ customers, summary, totals });

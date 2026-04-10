@@ -65,7 +65,11 @@ function setCachedConfig(key: string, config: ResolvedConfig): void {
 
 // ── Route factory ────────────────────────────────────────────────────────────
 
-export function createGatewayRoutes(pool: Pool, ensureVisitor: any) {
+export function createGatewayRoutes(
+  pool: Pool,
+  ensureVisitor: any,
+  deps: { apiLimiter: ReturnType<typeof import("express-rate-limit").default> },
+) {
   const router = Router();
 
   // ── Helpers ──────────────────────────────────────────────────────────────
@@ -397,6 +401,7 @@ export function createGatewayRoutes(pool: Pool, ensureVisitor: any) {
 
   router.post(
     "/v1/gateway/chat/completions",
+    deps.apiLimiter,
     async (req: Request, res: Response) => {
       try {
         const observeKey =

@@ -39,29 +39,37 @@ export function createEnsureVisitor(pool: Pool) {
         req.accountId = req.session.accountId;
         req.accountEmail = req.session.accountEmail;
 
-        // Logged-in users should never see sample data — always clean on first request per session
+        // Logged-in users should never see sample data — clean once per session
         if (!req.session._sampleCleared) {
-          await pool.query(
-            "DELETE FROM observe_events WHERE user_id = $1 AND source = 'sample'",
-            [req.visitorId],
-          );
-          await pool.query(
-            "DELETE FROM customers WHERE user_id = $1 AND customer_id IN ('acme_saas','tidewater_ai','neondata','circleops','blazeml','quantumhr')",
-            [req.visitorId],
-          );
-          await pool.query(
-            "DELETE FROM subscriptions WHERE user_id = $1 AND subscription_id IN ('sub_acme','sub_acme_addon','sub_tidewater','sub_neon','sub_neon_addon','sub_circle','sub_blaze','sub_quantum')",
-            [req.visitorId],
-          );
-          await pool.query(
-            "DELETE FROM plans WHERE user_id = $1 AND plan_id IN ('starter', 'pro', 'enterprise')",
-            [req.visitorId],
-          );
-          await pool.query(
-            "UPDATE user_data_status SET data_mode = CASE WHEN data_mode = 'sample' THEN 'none' ELSE data_mode END WHERE user_id = $1",
-            [req.visitorId],
-          );
+          // Mark cleared first so transient DB errors don't brick the session
           req.session._sampleCleared = true;
+          try {
+            await pool.query(
+              "DELETE FROM observe_events WHERE user_id = $1 AND source = 'sample'",
+              [req.visitorId],
+            );
+            await pool.query(
+              "DELETE FROM customers WHERE user_id = $1 AND customer_id IN ('acme_saas','tidewater_ai','neondata','circleops','blazeml','quantumhr')",
+              [req.visitorId],
+            );
+            await pool.query(
+              "DELETE FROM subscriptions WHERE user_id = $1 AND subscription_id IN ('sub_acme','sub_acme_addon','sub_tidewater','sub_neon','sub_neon_addon','sub_circle','sub_blaze','sub_quantum')",
+              [req.visitorId],
+            );
+            await pool.query(
+              "DELETE FROM plans WHERE user_id = $1 AND plan_id IN ('starter', 'pro', 'enterprise')",
+              [req.visitorId],
+            );
+            await pool.query(
+              "UPDATE user_data_status SET data_mode = CASE WHEN data_mode = 'sample' THEN 'none' ELSE data_mode END WHERE user_id = $1",
+              [req.visitorId],
+            );
+          } catch (cleanupErr) {
+            console.error(
+              "Sample data cleanup failed (non-fatal):",
+              cleanupErr,
+            );
+          }
         }
       }
       next();
@@ -452,32 +460,45 @@ export function createAuthRoutes(
           const resetUrl = `${appUrl}/reset-password?token=${token}`;
           const fromEmail = process.env.ALERT_FROM_EMAIL || "kat@tansohq.com";
 
-          await fetch("https://api.resend.com/emails", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${apiKey}`,
-            },
-            body: JSON.stringify({
-              from: fromEmail,
-              to: account.email,
-              subject: "Reset your password",
-              html: `
-              <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 480px; margin: 0 auto;">
-                <h2 style="font-size: 18px; margin-bottom: 8px;">Password reset</h2>
-                <p style="color: #666; margin-bottom: 16px;">
-                  Click the link below to reset your password. This link expires in 1 hour.
-                </p>
-                <a href="${resetUrl}" style="display: inline-block; background: #111; color: #fff; padding: 10px 20px; border-radius: 6px; text-decoration: none; font-size: 14px;">
-                  Reset password
-                </a>
-                <p style="color: #999; font-size: 12px; margin-top: 24px;">
-                  If you didn't request this, you can safely ignore this email.
-                </p>
-              </div>
-            `,
-            }),
-          }).catch((err) => console.error("Failed to send reset email:", err));
+          try {
+            const emailRes = await fetch("https://api.resend.com/emails", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${apiKey}`,
+              },
+              body: JSON.stringify({
+                from: fromEmail,
+                to: account.email,
+                subject: "Reset your password",
+                html: `
+                <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 480px; margin: 0 auto;">
+                  <h2 style="font-size: 18px; margin-bottom: 8px;">Password reset</h2>
+                  <p style="color: #666; margin-bottom: 16px;">
+                    Click the link below to reset your password. This link expires in 1 hour.
+                  </p>
+                  <a href="${resetUrl}" style="display: inline-block; background: #111; color: #fff; padding: 10px 20px; border-radius: 6px; text-decoration: none; font-size: 14px;">
+                    Reset password
+                  </a>
+                  <p style="color: #999; font-size: 12px; margin-top: 24px;">
+                    If you didn't request this, you can safely ignore this email.
+                  </p>
+                </div>
+              `,
+              }),
+            });
+            if (!emailRes.ok) {
+              console.error("Reset email send failed:", emailRes.status);
+              return res.status(500).json({
+                error: "Failed to send reset email. Please try again.",
+              });
+            }
+          } catch (emailErr) {
+            console.error("Failed to send reset email:", emailErr);
+            return res
+              .status(500)
+              .json({ error: "Failed to send reset email. Please try again." });
+          }
         } else {
           console.warn("RESEND_API_KEY not set, skipping password reset email");
         }
