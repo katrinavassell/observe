@@ -34,7 +34,7 @@ async function request<T>(
   const response = await fetch(`${API_BASE}${endpoint}`, {
     ...options,
     headers,
-    signal: options.signal ?? AbortSignal.timeout(10_000),
+    signal: options.signal ?? AbortSignal.timeout(30_000),
   });
 
   if (!response.ok) {

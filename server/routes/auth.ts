@@ -115,28 +115,6 @@ export function createAuthRoutes(
 ) {
   const router = Router();
 
-  // Temporary diagnostic — remove after debugging production auth
-  router.get("/auth/debug", async (req, res) => {
-    const authHeader = req.headers.authorization;
-    let getUserResult = null;
-    if (authHeader?.startsWith("Bearer ")) {
-      const token = authHeader.slice(7);
-      const { data, error } = await supabase.auth.getUser(token);
-      getUserResult = error
-        ? { error: error.message }
-        : { userId: data.user?.id, email: data.user?.email };
-    }
-    res.json({
-      hasSupabaseUrl: !!process.env.SUPABASE_URL,
-      hasServiceRoleKey: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
-      hasSecretKey: !!process.env.SUPABASE_SECRET_KEY,
-      serviceKeyPrefix: supabaseServiceKey?.slice(0, 20),
-      hasAuthHeader: !!authHeader,
-      authHeaderPrefix: authHeader?.slice(0, 15),
-      getUserResult,
-    });
-  });
-
   // POST /auth/signup — called after Supabase client-side signup to create local account row
   router.post(
     "/auth/signup-complete",
