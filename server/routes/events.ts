@@ -691,7 +691,17 @@ export function createEventsRoutes(
            GROUP BY agent_id ORDER BY total_cost DESC`,
           [req.visitorId],
         );
-        res.json(result.rows);
+        res.json(
+          result.rows.map((r) => ({
+            agent_id: r.agent_id,
+            event_count: parseInt(r.event_count) || 0,
+            total_cost: parseFloat(r.total_cost) || 0,
+            total_revenue: parseFloat(r.total_revenue) || 0,
+            total_usage: parseFloat(r.total_usage) || 0,
+            margin_pct: r.margin_pct !== null ? parseFloat(r.margin_pct) : null,
+            last_seen: r.last_seen,
+          })),
+        );
       } catch (error) {
         console.error("Get events/by-agent error:", error);
         res.status(500).json({ error: "Failed to get agent aggregations" });
@@ -882,16 +892,19 @@ export function createEventsRoutes(
   );
 
   // GET /events/by-cost-type — cost breakdown by type
-  router.get("/events/by-cost-type", async (req: Request, res: Response) => {
-    try {
-      const authReq = req as AuthRequest;
-      const userId = authReq.session?.visitorId || authReq.visitorId;
-      if (!userId) {
-        return res.status(401).json({ error: "Authentication required" });
-      }
-      const days = parseInt(req.query.days as string) || 30;
-      const result = await pool.query(
-        `SELECT COALESCE(cost_type, 'llm') as cost_type,
+  router.get(
+    "/events/by-cost-type",
+    ensureVisitor,
+    async (req: Request, res: Response) => {
+      try {
+        const authReq = req as AuthRequest;
+        const userId = authReq.visitorId;
+        if (!userId) {
+          return res.status(401).json({ error: "Authentication required" });
+        }
+        const days = parseInt(req.query.days as string) || 30;
+        const result = await pool.query(
+          `SELECT COALESCE(cost_type, 'llm') as cost_type,
            COUNT(*) as event_count,
            COALESCE(SUM(cost_amount), 0) as total_cost,
            COALESCE(SUM(revenue_amount), 0) as total_revenue,
@@ -900,22 +913,23 @@ export function createEventsRoutes(
            WHERE user_id = $1 AND timestamp >= NOW() - make_interval(days => $2)
            GROUP BY COALESCE(cost_type, 'llm')
            ORDER BY total_cost DESC`,
-        [userId, days],
-      );
-      res.json({
-        breakdown: result.rows.map((r) => ({
-          cost_type: r.cost_type,
-          event_count: parseInt(r.event_count),
-          total_cost: parseFloat(r.total_cost),
-          total_revenue: parseFloat(r.total_revenue),
-          total_usage: parseFloat(r.total_usage),
-        })),
-      });
-    } catch (error) {
-      console.error("GET /events/by-cost-type error:", error);
-      res.status(500).json({ error: "Failed to fetch cost type breakdown" });
-    }
-  });
+          [userId, days],
+        );
+        res.json({
+          breakdown: result.rows.map((r) => ({
+            cost_type: r.cost_type,
+            event_count: parseInt(r.event_count),
+            total_cost: parseFloat(r.total_cost),
+            total_revenue: parseFloat(r.total_revenue),
+            total_usage: parseFloat(r.total_usage),
+          })),
+        });
+      } catch (error) {
+        console.error("GET /events/by-cost-type error:", error);
+        res.status(500).json({ error: "Failed to fetch cost type breakdown" });
+      }
+    },
+  );
 
   // GET /events/:id — single event detail with request/response bodies
   router.get(
