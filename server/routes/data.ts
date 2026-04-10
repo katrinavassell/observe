@@ -1389,6 +1389,13 @@ export function createDataRoutes(
         }
         const { customers, plans, subscriptions } = parseResult.data;
 
+        if (!customers?.length && !plans?.length && !subscriptions?.length) {
+          return res.status(400).json({
+            error:
+              "Upload must include at least one customer, plan, or subscription.",
+          });
+        }
+
         await client.query("BEGIN");
 
         // Clear existing revenue data

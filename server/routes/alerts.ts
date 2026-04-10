@@ -118,11 +118,11 @@ async function sendAlertEmail(
   to: string,
   rule: { name: string; metric: string; operator: string; threshold: number },
   currentValue: number,
-) {
+): Promise<boolean> {
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) {
     console.warn("RESEND_API_KEY not set, skipping alert email");
-    return;
+    return false;
   }
 
   const fromEmail = process.env.ALERT_FROM_EMAIL || "alerts@example.com";
@@ -167,9 +167,12 @@ async function sendAlertEmail(
     if (!res.ok) {
       const err = await res.text();
       console.error("Resend email failed:", res.status, err);
+      return false;
     }
+    return true;
   } catch (err) {
     console.error("Failed to send alert email:", err);
+    return false;
   }
 }
 
@@ -181,30 +184,40 @@ export async function checkAlerts(pool: Pool, userId: string) {
     );
 
     for (const rule of rules) {
-      // Check cooldown
-      if (rule.last_triggered_at) {
-        const cooldownMs = (rule.cooldown_minutes || 60) * 60 * 1000;
-        if (
-          Date.now() - new Date(rule.last_triggered_at).getTime() <
-          cooldownMs
-        )
-          continue;
-      }
+      try {
+        // Check cooldown
+        if (rule.last_triggered_at) {
+          const cooldownMs = (rule.cooldown_minutes || 60) * 60 * 1000;
+          if (
+            Date.now() - new Date(rule.last_triggered_at).getTime() <
+            cooldownMs
+          )
+            continue;
+        }
 
-      const query = METRIC_QUERIES[rule.metric];
-      if (!query) continue;
+        const query = METRIC_QUERIES[rule.metric];
+        if (!query) continue;
 
-      const { rows } = await pool.query(query, [userId]);
-      const currentValue = parseFloat(rows[0]?.value) || 0;
-      const operatorFn = OPERATOR_FNS[rule.operator];
-      if (!operatorFn) continue;
+        const { rows } = await pool.query(query, [userId]);
+        const currentValue = parseFloat(rows[0]?.value) || 0;
+        const operatorFn = OPERATOR_FNS[rule.operator];
+        if (!operatorFn) continue;
 
-      if (operatorFn(currentValue, parseFloat(rule.threshold))) {
-        await sendAlertEmail(rule.email, rule, currentValue);
-        await pool.query(
-          "UPDATE alert_rules SET last_triggered_at = NOW() WHERE id = $1",
-          [rule.id],
-        );
+        if (operatorFn(currentValue, parseFloat(rule.threshold))) {
+          const emailSent = await sendAlertEmail(
+            rule.email,
+            rule,
+            currentValue,
+          );
+          if (emailSent) {
+            await pool.query(
+              "UPDATE alert_rules SET last_triggered_at = NOW() WHERE id = $1",
+              [rule.id],
+            );
+          }
+        }
+      } catch (ruleErr) {
+        console.error(`checkAlerts rule ${rule.id} error:`, ruleErr);
       }
     }
   } catch (err) {

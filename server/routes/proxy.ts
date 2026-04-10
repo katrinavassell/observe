@@ -412,6 +412,14 @@ export function createProxyRoutes(
         }
       }
 
+      // Streaming not supported — reject early with clear message
+      if (req.body.stream) {
+        return res.status(400).json({
+          error:
+            "Streaming is not supported through the Observe proxy. Set stream: false or use the provider directly for streaming.",
+        });
+      }
+
       // Forward to OpenAI
       const proxyStart = Date.now();
       const openaiResponse = await fetch(

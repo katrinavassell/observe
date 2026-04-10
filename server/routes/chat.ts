@@ -255,8 +255,12 @@ Only include action blocks when the user explicitly asks you to do something. Fo
         if (actionMatch) {
           try {
             action = JSON.parse(actionMatch[1]);
-          } catch {
-            // Malformed action JSON, ignore
+          } catch (parseErr) {
+            console.error(
+              "Malformed action JSON from LLM:",
+              actionMatch[1],
+              parseErr,
+            );
           }
         }
 
@@ -326,7 +330,7 @@ Only include action blocks when the user explicitly asks you to do something. Fo
             }
             const configId = configResult.rows[0].id;
 
-            // Find or suggest target
+            // Find target — require a valid target_id
             let targetId = null;
             if (action.target_provider && action.target_model) {
               const targetResult = await pool.query(
@@ -336,6 +340,13 @@ Only include action blocks when the user explicitly asks you to do something. Fo
               if (targetResult.rows.length > 0) {
                 targetId = targetResult.rows[0].id;
               }
+            }
+
+            if (!targetId) {
+              return res.json({
+                success: false,
+                message: `No matching target found for ${action.target_provider || "unknown"}/${action.target_model || "unknown"}. Add a target in /routing first.`,
+              });
             }
 
             await pool.query(

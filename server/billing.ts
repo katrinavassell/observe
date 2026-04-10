@@ -300,15 +300,28 @@ export async function handleWebhook(
         : null;
 
       if (visitorId) {
-        await pool.query(
-          `UPDATE accounts SET stripe_plan = 'growth', stripe_customer_id = $1 WHERE visitor_id = $2`,
+        const result = await pool.query(
+          `UPDATE accounts SET stripe_plan = 'growth', stripe_customer_id = $1 WHERE visitor_id = $2 RETURNING id`,
           [customerId, visitorId],
         );
+        if (result.rowCount === 0) {
+          console.error(
+            `checkout.session.completed: no account found for visitor_id=${visitorId}, stripe_customer=${customerId}`,
+          );
+        }
       } else if (customerId) {
-        // Fallback: find by customer ID
-        await pool.query(
-          `UPDATE accounts SET stripe_plan = 'growth' WHERE stripe_customer_id = $1`,
+        const result = await pool.query(
+          `UPDATE accounts SET stripe_plan = 'growth' WHERE stripe_customer_id = $1 RETURNING id`,
           [customerId],
+        );
+        if (result.rowCount === 0) {
+          console.error(
+            `checkout.session.completed: no account found for stripe_customer=${customerId}, no visitor_id in metadata`,
+          );
+        }
+      } else {
+        console.error(
+          "checkout.session.completed: no visitor_id or customer_id in session",
         );
       }
       break;
