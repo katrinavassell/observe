@@ -29,6 +29,14 @@ export async function initialize() {
         } catch {
           // Account row may not exist yet (first login)
         }
+      } else {
+        // Anonymous visitor — use localStorage-backed ID
+        let anonId = localStorage.getItem("observe_visitor_id");
+        if (!anonId) {
+          anonId = crypto.randomUUID();
+          localStorage.setItem("observe_visitor_id", anonId);
+        }
+        visitorId.value = anonId;
       }
 
       // Listen for auth state changes (login, logout, token refresh)

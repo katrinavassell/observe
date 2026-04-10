@@ -44,6 +44,13 @@ async function request<T>(
 
   if (session?.access_token) {
     headers["Authorization"] = `Bearer ${session.access_token}`;
+  } else {
+    let anonId = localStorage.getItem("observe_visitor_id");
+    if (!anonId) {
+      anonId = crypto.randomUUID();
+      localStorage.setItem("observe_visitor_id", anonId);
+    }
+    headers["x-visitor-id"] = anonId;
   }
 
   const response = await fetch(url, {

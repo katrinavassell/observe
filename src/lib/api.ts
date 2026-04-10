@@ -2,6 +2,16 @@ import { supabase } from "@/lib/supabase";
 
 const API_BASE = "/api";
 
+// Anonymous visitor ID — persisted in localStorage so sample data survives page reloads
+function getAnonVisitorId(): string {
+  let id = localStorage.getItem("observe_visitor_id");
+  if (!id) {
+    id = crypto.randomUUID();
+    localStorage.setItem("observe_visitor_id", id);
+  }
+  return id;
+}
+
 async function request<T>(
   endpoint: string,
   options: RequestInit = {},
@@ -17,6 +27,8 @@ async function request<T>(
 
   if (session?.access_token) {
     headers["Authorization"] = `Bearer ${session.access_token}`;
+  } else {
+    headers["x-visitor-id"] = getAnonVisitorId();
   }
 
   const response = await fetch(`${API_BASE}${endpoint}`, {

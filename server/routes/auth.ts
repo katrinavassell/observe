@@ -21,39 +21,44 @@ export function createEnsureVisitor(pool: Pool) {
   ) {
     try {
       const authHeader = req.headers.authorization;
-      if (!authHeader?.startsWith("Bearer ")) {
-        return res
-          .status(401)
-          .json({ error: "Missing or invalid authorization header" });
+
+      if (authHeader?.startsWith("Bearer ")) {
+        // Authenticated user — verify Supabase JWT
+        const token = authHeader.slice(7);
+        const {
+          data: { user },
+          error,
+        } = await supabase.auth.getUser(token);
+
+        if (!error && user) {
+          req.visitorId = user.id;
+          req.accountEmail = user.email;
+
+          // Look up local account row for accountId (used by billing, team features)
+          const accountResult = await pool.query(
+            "SELECT id FROM accounts WHERE visitor_id = $1",
+            [user.id],
+          );
+          if (accountResult.rows[0]) {
+            req.accountId = accountResult.rows[0].id;
+          }
+        }
       }
 
-      const token = authHeader.slice(7);
-      const {
-        data: { user },
-        error,
-      } = await supabase.auth.getUser(token);
-
-      if (error || !user) {
-        return res.status(401).json({ error: "Invalid or expired token" });
-      }
-
-      // Use Supabase user ID as the visitor ID (maps to user_id across all tables)
-      req.visitorId = user.id;
-      req.accountEmail = user.email;
-
-      // Look up local account row for accountId (used by billing, team features)
-      const accountResult = await pool.query(
-        "SELECT id FROM accounts WHERE visitor_id = $1",
-        [user.id],
-      );
-      if (accountResult.rows[0]) {
-        req.accountId = accountResult.rows[0].id;
+      // Anonymous visitor — generate a temporary visitor ID via cookie
+      if (!req.visitorId) {
+        const crypto = await import("crypto");
+        let anonId = req.headers["x-visitor-id"] as string | undefined;
+        if (!anonId) {
+          anonId = crypto.randomUUID();
+        }
+        req.visitorId = anonId;
       }
 
       // Ensure user_data_status row exists
       await pool.query(
         "INSERT INTO user_data_status (user_id, data_mode) VALUES ($1, $2) ON CONFLICT DO NOTHING",
-        [user.id, "none"],
+        [req.visitorId, "none"],
       );
 
       next();
