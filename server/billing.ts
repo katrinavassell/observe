@@ -20,7 +20,7 @@ export const OBSERVE_PLANS: Record<string, PlanConfig> = {
   free: {
     name: "Free",
     features: {
-      ai_insights: { limit: 25, reset: "monthly" },
+      ai_insights: { limit: 50, reset: "monthly" },
       event_ingest: { limit: 10000, reset: "monthly" },
       cost_alerts: { limit: 1 },
       csv_upload: { limit: null },

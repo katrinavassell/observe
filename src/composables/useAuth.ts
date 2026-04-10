@@ -23,6 +23,8 @@ export async function initialize() {
 
       if (session?.user) {
         visitorId.value = session.user.id;
+        // Clear anonymous visitor ID — prevents stale data leaks
+        localStorage.removeItem("observe_visitor_id");
         try {
           const me = await api.getMe();
           if (me.account) {
