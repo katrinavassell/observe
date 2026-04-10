@@ -286,6 +286,23 @@ Only include action blocks when the user explicitly asks you to do something. Fo
           )
           .catch((err) => console.error("Chat usage logging failed:", err));
 
+        // Count against AI message quota (ai_insights table is what billing checks)
+        pool
+          .query(
+            `INSERT INTO ai_insights (user_id, insight_type, title, description, tokens_used, cost_usd)
+           VALUES ($1, 'chat', 'Chat message', $2, $3, $4)`,
+            [
+              req.visitorId,
+              content.slice(0, 200),
+              (usage?.prompt_tokens || 0) + (usage?.completion_tokens || 0),
+              (
+                (usage?.prompt_tokens || 0) * 0.00000015 +
+                (usage?.completion_tokens || 0) * 0.0000006
+              ).toFixed(6),
+            ],
+          )
+          .catch((err) => console.error("Chat insight logging failed:", err));
+
         res.json({
           message: content,
           action,
