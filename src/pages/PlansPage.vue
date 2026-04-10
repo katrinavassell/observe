@@ -106,14 +106,10 @@ const plans = [
     price: "$0",
     interval: "forever",
     features: [
-      "10,000 events per month",
-      "50 AI messages per month",
-      "Unlimited team members",
+      "10,000 events/month",
+      "50 AI messages/month",
       "90-day data retention",
       "1 cost alert",
-      "SDK & Proxy tracking",
-      "Stripe, OpenAI & Anthropic integrations",
-      "Per-feature margin analysis",
     ],
   },
   {
@@ -121,14 +117,12 @@ const plans = [
     name: "Growth",
     price: "$29",
     interval: "/month",
-    highlight: true,
     features: [
       "Unlimited events",
-      "500 AI messages per month",
+      "500 AI messages/month",
       "1-year data retention",
       "Unlimited cost alerts",
       "Proactive alerts & weekly digest",
-      "Everything in Free",
     ],
   },
   {
@@ -138,14 +132,22 @@ const plans = [
     interval: "/month",
     features: [
       "Unlimited AI messages",
+      "Unlimited data retention",
       "Full AI agent workforce",
       "Auto cost optimization & routing",
-      "Unlimited data retention",
-      "1:1 onboarding call with a founder",
+      "1:1 onboarding with a founder",
       "Quarterly strategy review",
-      "Everything in Growth",
     ],
   },
+];
+
+// Features included in ALL plans (shown below the plan cards)
+const sharedFeatures = [
+  "Unlimited team members",
+  "SDK & Proxy tracking",
+  "Stripe, OpenAI & Anthropic integrations",
+  "Per-feature margin analysis",
+  "CSV upload",
 ];
 
 const repoUrl = "https://github.com/katrinalaszlo/observe";
@@ -180,57 +182,98 @@ const repoUrl = "https://github.com/katrinalaszlo/observe";
 
     <!-- Plans tab -->
     <template v-if="activeTab === 'plans'">
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl">
+      <div
+        class="grid grid-cols-1 md:grid-cols-3 gap-4 max-w-4xl items-stretch"
+      >
         <Card
           v-for="plan in plans"
           :key="plan.key"
           :class="[
-            'relative',
-            billing?.plan === plan.key ? 'border-primary' : '',
+            'relative flex flex-col',
+            plan.key === 'growth'
+              ? 'border-primary shadow-md ring-1 ring-primary/20'
+              : '',
+            billing?.plan === plan.key && plan.key !== 'growth'
+              ? 'border-primary'
+              : '',
           ]"
         >
-          <CardContent class="p-6 space-y-4">
-            <div class="flex items-center justify-between">
-              <h3 class="text-lg font-semibold">{{ plan.name }}</h3>
-              <span
-                v-if="billing?.plan === plan.key"
-                class="text-[10px] font-medium bg-primary/10 text-primary px-2 py-0.5 rounded-full"
-              >
-                Current plan
-              </span>
-              <span
-                v-else-if="plan.key === 'growth'"
-                class="text-[10px] font-medium bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full"
-              >
-                Most popular
-              </span>
-              <span
-                v-else-if="plan.key === 'pro'"
-                class="text-[10px] font-medium bg-violet-100 text-violet-700 px-2 py-0.5 rounded-full"
-              >
-                AI + Human
-              </span>
+          <!-- Recommended banner -->
+          <div
+            v-if="plan.key === 'growth'"
+            class="bg-primary text-primary-foreground text-center text-xs font-medium py-1.5 rounded-t-lg -mx-px -mt-px"
+          >
+            Recommended
+          </div>
+
+          <CardContent class="p-6 flex flex-col flex-1">
+            <div class="space-y-4 flex-1">
+              <div>
+                <div class="flex items-center gap-2">
+                  <h3 class="text-lg font-semibold">{{ plan.name }}</h3>
+                  <span
+                    v-if="billing?.plan === plan.key"
+                    class="text-[10px] font-medium bg-primary/10 text-primary px-2 py-0.5 rounded-full"
+                  >
+                    Current
+                  </span>
+                  <span
+                    v-else-if="plan.key === 'pro'"
+                    class="text-[10px] font-medium bg-violet-100 text-violet-700 px-2 py-0.5 rounded-full"
+                  >
+                    AI + Human
+                  </span>
+                </div>
+                <p class="text-xs text-muted-foreground mt-1">
+                  {{
+                    plan.key === "free"
+                      ? "Get started with core analytics"
+                      : plan.key === "growth"
+                        ? "For teams scaling AI features"
+                        : "Full AI workforce + strategy sessions"
+                  }}
+                </p>
+              </div>
+
+              <div class="pb-2">
+                <span class="text-3xl font-bold tracking-tight">{{
+                  plan.price
+                }}</span>
+                <span class="text-muted-foreground text-sm ml-1">{{
+                  plan.interval
+                }}</span>
+              </div>
+
+              <div class="border-t pt-4">
+                <p
+                  class="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3"
+                >
+                  {{
+                    plan.key === "free"
+                      ? "Includes"
+                      : plan.key === "growth"
+                        ? "Everything in Free, plus"
+                        : "Everything in Growth, plus"
+                  }}
+                </p>
+                <ul class="space-y-2.5">
+                  <li
+                    v-for="feature in plan.features.filter(
+                      (f) =>
+                        f !== 'Everything in Free' &&
+                        f !== 'Everything in Growth',
+                    )"
+                    :key="feature"
+                    class="flex items-start gap-2 text-sm"
+                  >
+                    <Check class="h-4 w-4 text-emerald-500 mt-0.5 shrink-0" />
+                    <span>{{ feature }}</span>
+                  </li>
+                </ul>
+              </div>
             </div>
 
-            <div>
-              <span class="text-3xl font-bold">{{ plan.price }}</span>
-              <span class="text-muted-foreground text-sm ml-1">{{
-                plan.interval
-              }}</span>
-            </div>
-
-            <ul class="space-y-2">
-              <li
-                v-for="feature in plan.features"
-                :key="feature"
-                class="flex items-start gap-2 text-sm"
-              >
-                <Check class="h-4 w-4 text-success mt-0.5 shrink-0" />
-                <span>{{ feature }}</span>
-              </li>
-            </ul>
-
-            <div class="pt-2">
+            <div class="pt-6 mt-auto">
               <Button
                 v-if="
                   billing?.plan === plan.key &&
@@ -251,8 +294,7 @@ const repoUrl = "https://github.com/katrinalaszlo/observe";
                 :disabled="isUpgrading"
                 @click="handleUpgrade('growth')"
               >
-                <Sparkles class="h-4 w-4 mr-2" />
-                {{ isUpgrading ? "Redirecting..." : "Upgrade to Growth" }}
+                {{ isUpgrading ? "Redirecting..." : "Get Growth" }}
               </Button>
               <Button
                 v-else-if="
@@ -262,23 +304,44 @@ const repoUrl = "https://github.com/katrinalaszlo/observe";
                     billing.plan === 'growth')
                 "
                 class="w-full"
+                variant="outline"
                 :disabled="isUpgrading"
                 @click="handleUpgrade('pro')"
               >
-                <Sparkles class="h-4 w-4 mr-2" />
-                {{ isUpgrading ? "Redirecting..." : "Upgrade to Pro" }}
+                {{ isUpgrading ? "Redirecting..." : "Get Pro" }}
               </Button>
               <div
                 v-else-if="
                   plan.key === 'free' && (!billing || billing.plan === 'free')
                 "
-                class="text-center text-sm text-muted-foreground"
+                class="text-center"
               >
-                Your current plan
+                <Button variant="ghost" class="w-full" disabled>
+                  Current plan
+                </Button>
               </div>
             </div>
           </CardContent>
         </Card>
+      </div>
+
+      <!-- Shared features -->
+      <div class="max-w-4xl">
+        <p
+          class="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3"
+        >
+          Included in every plan
+        </p>
+        <div class="flex flex-wrap gap-x-6 gap-y-2">
+          <span
+            v-for="feature in sharedFeatures"
+            :key="feature"
+            class="flex items-center gap-1.5 text-sm text-muted-foreground"
+          >
+            <Check class="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+            {{ feature }}
+          </span>
+        </div>
       </div>
 
       <div class="max-w-4xl text-sm text-muted-foreground">
