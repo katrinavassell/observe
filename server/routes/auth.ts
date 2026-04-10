@@ -270,7 +270,11 @@ export function createAuthRoutes(
         });
       } catch (error: any) {
         console.error("Signup complete error:", error);
-        res.status(500).json({ error: "Failed to complete signup" });
+        res.status(500).json({
+          error: "Failed to complete signup",
+          detail: error?.message || String(error),
+          code: error?.code,
+        });
       }
     },
   );
