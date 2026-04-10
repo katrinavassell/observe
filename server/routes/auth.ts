@@ -2,10 +2,11 @@ import { Router, Request, Response, NextFunction } from "express";
 import type { Pool } from "pg";
 import { createClient } from "@supabase/supabase-js";
 
-const supabase = createClient(
-  process.env.SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-);
+const supabaseServiceKey =
+  process.env.SUPABASE_SERVICE_ROLE_KEY ||
+  process.env.SUPABASE_SECRET_KEY ||
+  "";
+const supabase = createClient(process.env.SUPABASE_URL!, supabaseServiceKey);
 
 export interface AuthRequest extends Request {
   visitorId?: string;
@@ -34,6 +35,9 @@ export function createEnsureVisitor(pool: Pool) {
           error,
         } = await supabase.auth.getUser(token);
 
+        if (error) {
+          console.error("Supabase getUser failed:", error.message);
+        }
         if (!error && user) {
           req.visitorId = user.id;
           req.accountEmail = user.email;
