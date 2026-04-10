@@ -1,5 +1,5 @@
 import { ref, computed } from "vue";
-import { supabase } from "@/lib/supabase";
+import { supabase, authReady } from "@/lib/supabase";
 import * as api from "@/lib/api";
 import type { Account } from "@/lib/api";
 import { logger } from "@/lib/logger";
@@ -17,6 +17,9 @@ export async function initialize() {
 
   initPromise = (async () => {
     try {
+      // Wait for OAuth PKCE code exchange to complete before reading session
+      await authReady;
+
       const {
         data: { session },
       } = await supabase.auth.getSession();

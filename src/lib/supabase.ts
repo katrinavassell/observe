@@ -16,16 +16,15 @@ export const supabase = createClient(supabaseUrl, supabaseKey, {
   },
 });
 
-// Handle OAuth PKCE callback — exchange code for session before app renders
+// Handle OAuth PKCE callback — must complete before app reads session
 const params = new URLSearchParams(window.location.search);
 const code = params.get("code");
-if (code) {
-  supabase.auth.exchangeCodeForSession(code).then(({ error }) => {
-    if (error) {
-      console.error("OAuth code exchange failed:", error.message);
-    } else {
-      // Clean URL after successful exchange
-      window.history.replaceState({}, "", window.location.pathname);
-    }
-  });
-}
+export const authReady: Promise<void> = code
+  ? supabase.auth.exchangeCodeForSession(code).then(({ error }) => {
+      if (error) {
+        console.error("OAuth code exchange failed:", error.message);
+      } else {
+        window.history.replaceState({}, "", window.location.pathname);
+      }
+    })
+  : Promise.resolve();
