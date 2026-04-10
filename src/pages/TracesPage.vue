@@ -3,7 +3,7 @@ import { ref, computed } from "vue";
 import { useQuery } from "@tanstack/vue-query";
 import { useRouter } from "vue-router";
 import { getTraces, getTrace } from "@/lib/api";
-import { Activity, ChevronLeft, Layers } from "lucide-vue-next";
+import { Activity, ChevronLeft, Layers, Plug } from "lucide-vue-next";
 import { Card, Button, Skeleton } from "@/components/ui";
 
 const _router = useRouter();
@@ -150,11 +150,19 @@ const maxDuration = computed(() => {
       >
         <Activity class="h-10 w-10 text-muted-foreground/40 mb-3" />
         <p class="text-sm font-medium mb-1">No traces yet</p>
-        <p class="text-xs text-muted-foreground">
-          Use <code class="bg-muted px-1 rounded">Observe.startTrace()</code> or
-          pass <code class="bg-muted px-1 rounded">traceId</code> in SDK events
-          to group multi-step agent flows.
+        <p class="text-xs text-muted-foreground mb-4">
+          Pass a
+          <code class="bg-muted px-1 rounded text-[11px]">traceId</code> in SDK
+          events to group multi-step agent flows with cost breakdown.
         </p>
+        <Button
+          size="sm"
+          variant="outline"
+          @click="$router.push('/data-sources')"
+        >
+          <Plug class="h-3.5 w-3.5 mr-1.5" />
+          Data Sources
+        </Button>
       </div>
 
       <div

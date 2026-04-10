@@ -599,14 +599,14 @@ const insightCategories = [
       class="flex flex-col items-center justify-center py-16 text-center max-w-md mx-auto"
     >
       <Plug class="h-10 w-10 text-muted-foreground/40 mb-3" />
-      <p class="text-sm font-medium mb-1">Connect your data</p>
+      <p class="text-sm font-medium mb-1">No analytics data yet</p>
       <p class="text-xs text-muted-foreground mb-4">
-        Point your OpenAI or Anthropic SDK at Observe to see cost, revenue, and
-        margin breakdowns by feature, model, and customer.
+        Connect your OpenAI or Anthropic SDK to see cost, revenue, and margin
+        breakdowns by feature, model, and customer.
       </p>
-      <Button size="sm" @click="router.push('/data-sources')">
+      <Button size="sm" variant="outline" @click="router.push('/data-sources')">
         <Plug class="h-3.5 w-3.5 mr-1.5" />
-        Go to Data Sources
+        Data Sources
       </Button>
     </div>
 

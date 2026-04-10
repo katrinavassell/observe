@@ -627,10 +627,14 @@ async function handleDelete(id: number) {
     >
       <Bell class="h-10 w-10 text-muted-foreground/40 mb-3" />
       <p class="text-sm font-medium mb-1">No alerts configured</p>
-      <p class="text-xs text-muted-foreground">
+      <p class="text-xs text-muted-foreground mb-4">
         Set up alerts for margin drops, usage spikes, pricing gaps, and
-        concentration risks. Use the button above to get started.
+        concentration risks.
       </p>
+      <Button size="sm" variant="outline" @click="showForm = true">
+        <Plus class="h-3.5 w-3.5 mr-1.5" />
+        New Alert
+      </Button>
     </div>
   </div>
 </template>

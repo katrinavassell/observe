@@ -353,10 +353,14 @@ function copyEndpoint() {
       >
         <GitBranch class="h-10 w-10 text-muted-foreground/40 mb-3" />
         <p class="text-sm font-medium mb-1">No routing configs yet</p>
-        <p class="text-xs text-muted-foreground">
-          Create a routing config to define provider targets, fallback chains,
-          and conditional routing rules. Use the button above to get started.
+        <p class="text-xs text-muted-foreground mb-4">
+          Define provider targets, fallback chains, and conditional routing
+          rules for your LLM requests.
         </p>
+        <Button size="sm" variant="outline" @click="showCreateForm = true">
+          <Plus class="h-3.5 w-3.5 mr-1.5" />
+          New Config
+        </Button>
       </div>
 
       <Card

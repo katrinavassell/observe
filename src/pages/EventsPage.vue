@@ -669,19 +669,18 @@ function marginForEvent(event: ObserveEvent): number | null {
                   />
                   <p class="text-sm font-medium mb-1">No events yet</p>
                   <p
-                    class="text-xs text-muted-foreground mb-3 max-w-sm mx-auto"
+                    class="text-xs text-muted-foreground mb-4 max-w-sm mx-auto"
                   >
-                    Events appear when you send data via the SDK, connect an AI
-                    provider, or upload CSVs. The fastest path: add 3 lines to
-                    your backend.
+                    Send data via the SDK, connect an AI provider, or upload
+                    CSVs to see your events here.
                   </p>
                   <Button
-                    variant="outline"
                     size="sm"
+                    variant="outline"
                     @click="router.push('/data-sources')"
                   >
                     <Plug class="h-3.5 w-3.5 mr-1.5" />
-                    Get Started
+                    Data Sources
                   </Button>
                 </template>
               </td>
