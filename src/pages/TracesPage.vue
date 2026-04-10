@@ -19,7 +19,11 @@ const {
   enabled: computed(() => !selectedTraceId.value),
 });
 
-const { data: traceDetail, isLoading: detailLoading } = useQuery({
+const {
+  data: traceDetail,
+  isLoading: detailLoading,
+  isError: detailError,
+} = useQuery({
   queryKey: ["trace", selectedTraceId],
   queryFn: () => getTrace(selectedTraceId.value!),
   enabled: computed(() => !!selectedTraceId.value),
@@ -140,9 +144,26 @@ const maxDuration = computed(() => {
         </Card>
       </div>
 
-      <Card v-else-if="tracesError" class="p-8 text-center">
-        <p class="text-sm text-destructive">Failed to load traces.</p>
-      </Card>
+      <div
+        v-else-if="tracesError"
+        class="flex flex-col items-center justify-center py-16 text-center max-w-md mx-auto"
+      >
+        <Activity class="h-10 w-10 text-muted-foreground/40 mb-3" />
+        <p class="text-sm font-medium mb-1">No traces yet</p>
+        <p class="text-xs text-muted-foreground mb-4">
+          Pass a
+          <code class="bg-muted px-1 rounded text-[11px]">traceId</code> in SDK
+          events to group multi-step agent flows with cost breakdown.
+        </p>
+        <Button
+          size="sm"
+          variant="outline"
+          @click="$router.push('/data-sources')"
+        >
+          <Plug class="h-3.5 w-3.5 mr-1.5" />
+          Data Sources
+        </Button>
+      </div>
 
       <div
         v-else-if="!tracesData?.traces.length"
@@ -243,7 +264,22 @@ const maxDuration = computed(() => {
         </Card>
       </div>
 
-      <template v-else-if="traceDetail">
+      <div
+        v-else-if="detailError || !traceDetail"
+        class="flex flex-col items-center justify-center py-16 text-center max-w-md mx-auto"
+      >
+        <Activity class="h-10 w-10 text-muted-foreground/40 mb-3" />
+        <p class="text-sm font-medium mb-1">Trace not found</p>
+        <p class="text-xs text-muted-foreground mb-4">
+          This trace may have been deleted or is no longer available.
+        </p>
+        <Button size="sm" variant="outline" @click="backToList">
+          <ChevronLeft class="h-3.5 w-3.5 mr-1.5" />
+          Back to traces
+        </Button>
+      </div>
+
+      <template v-else>
         <!-- Summary cards -->
         <div class="grid grid-cols-1 sm:grid-cols-4 gap-4">
           <Card class="p-4">

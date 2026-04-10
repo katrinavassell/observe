@@ -14,6 +14,9 @@ export const supabase = createClient(supabaseUrl, supabaseKey, {
     detectSessionInUrl: true,
     flowType: "pkce",
   },
+  realtime: {
+    autoConnect: false,
+  },
 });
 
 // Handle OAuth PKCE callback — must complete before app reads session

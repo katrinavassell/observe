@@ -56,6 +56,7 @@ async function request<T>(
   const response = await fetch(url, {
     ...options,
     headers,
+    signal: options.signal ?? AbortSignal.timeout(10_000),
   });
 
   if (!response.ok) {

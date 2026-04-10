@@ -994,8 +994,10 @@ function marginForEvent(event: ObserveEvent): number | null {
                         class="text-success"
                         >Cache HIT</span
                       >
-                      <span>Source: {{ eventDetails[event.id].source }}</span>
-                      <span
+                      <span v-if="eventDetails[event.id].source"
+                        >Source: {{ eventDetails[event.id].source }}</span
+                      >
+                      <span v-if="eventDetails[event.id].feature_key"
                         >Feature: {{ eventDetails[event.id].feature_key }}</span
                       >
                     </div>

@@ -548,6 +548,15 @@ export function createBillingApiRoutes(
 
         res.json({ success: true, synced: syncResult });
       } catch (err) {
+        if (
+          err instanceof Error &&
+          err.message.includes("No Stripe integration found")
+        ) {
+          res.status(400).json({
+            error: "Stripe is not connected. Connect Stripe first.",
+          });
+          return;
+        }
         console.error("Stripe sync error:", err);
         res.status(500).json({ error: "Failed to sync Stripe data" });
       }

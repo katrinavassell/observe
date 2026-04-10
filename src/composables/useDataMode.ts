@@ -58,7 +58,7 @@ export function useDataMode() {
   );
   const lastSyncAt = computed(() => dataStatus.value?.last_sync_at ?? null);
 
-  async function refetch(retries = 5) {
+  async function refetch(retries = 2) {
     isLoading.value = true;
     for (let attempt = 0; attempt < retries; attempt++) {
       try {
@@ -67,7 +67,7 @@ export function useDataMode() {
         return;
       } catch (error) {
         if (attempt < retries - 1) {
-          await sleep(1000);
+          await sleep(500);
         } else {
           logger.error("Failed to fetch data status", error);
           dataStatus.value = {
@@ -88,7 +88,7 @@ export function useDataMode() {
     isLoading.value = false;
   }
 
-  async function switchToSampleData(retries = 5) {
+  async function switchToSampleData(retries = 2) {
     isLoadingSample.value = true;
     let lastError: Error | null = null;
     for (let attempt = 0; attempt < retries; attempt++) {
@@ -104,7 +104,7 @@ export function useDataMode() {
       } catch (error) {
         lastError = error instanceof Error ? error : new Error(String(error));
         if (attempt < retries - 1) {
-          await sleep(1000);
+          await sleep(500);
         } else {
           logger.error("Failed to load sample data", error);
         }

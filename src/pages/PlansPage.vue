@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from "vue";
+import { ref, computed } from "vue";
 import { useRouter } from "vue-router";
 import { useQuery } from "@tanstack/vue-query";
 import { toast } from "vue-sonner";
@@ -12,30 +12,27 @@ import {
   getUsageLimits,
 } from "@/lib/api";
 import { useAuth } from "@/composables/useAuth";
-import type { BillingStatus } from "@/lib/api";
 
 const router = useRouter();
 const { isLoggedIn } = useAuth();
 
 const activeTab = ref<"plans" | "usage">("plans");
-
-const billing = ref<BillingStatus | null>(null);
-const isLoading = ref(true);
 const isUpgrading = ref(false);
 
-onMounted(async () => {
-  try {
-    billing.value = await getBillingStatus();
-  } catch {
-    console.error("Failed to load billing status");
-  } finally {
-    isLoading.value = false;
-  }
+const {
+  data: billing,
+  isLoading,
+  isError: billingError,
+} = useQuery({
+  queryKey: ["billing-status"],
+  queryFn: getBillingStatus,
+  enabled: isLoggedIn,
 });
 
 const { data: usageLimits, isError: usageLimitsError } = useQuery({
   queryKey: ["usage-limits"],
   queryFn: getUsageLimits,
+  enabled: isLoggedIn,
 });
 
 const usageItems = computed(() => {
@@ -232,7 +229,9 @@ const repoUrl = "https://github.com/katrinalaszlo/observe";
                 {{ isUpgrading ? "Redirecting..." : "Upgrade to Growth" }}
               </Button>
               <div
-                v-else-if="billing?.plan === plan.key && plan.key === 'free'"
+                v-else-if="
+                  plan.key === 'free' && (!billing || billing.plan === 'free')
+                "
                 class="text-center text-sm text-muted-foreground"
               >
                 Your current plan
@@ -306,10 +305,16 @@ const repoUrl = "https://github.com/katrinalaszlo/observe";
             </div>
 
             <div
-              v-if="usageLimitsError"
-              class="text-sm text-destructive text-center py-4"
+              v-if="!isLoggedIn"
+              class="text-sm text-muted-foreground text-center py-4"
             >
-              Failed to load usage data.
+              Sign up to track your usage.
+            </div>
+            <div
+              v-else-if="usageLimitsError || billingError"
+              class="text-sm text-muted-foreground text-center py-4"
+            >
+              Unable to load usage data. Please try again later.
             </div>
             <div
               v-else-if="!usageItems.length"
