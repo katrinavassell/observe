@@ -3,7 +3,7 @@ import { ref, computed, nextTick } from "vue";
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
 import { useRouter } from "vue-router";
 import { toast } from "vue-sonner";
-import { Loader2, Check, Send, Bot, User, X } from "lucide-vue-next";
+import { Loader2, Check, Send, Bot, User, X, Plus } from "lucide-vue-next";
 import {
   DialogRoot,
   DialogPortal,
@@ -162,11 +162,25 @@ function renderMarkdown(text: string): string {
 <template>
   <div class="flex flex-col h-[calc(100vh-theme(spacing.6)*2)]">
     <!-- Header -->
-    <div class="shrink-0 pb-4">
-      <h1 class="text-2xl font-semibold tracking-tight">Insights</h1>
-      <p class="text-sm text-muted-foreground mt-1">
-        Ask questions, get recommendations, and take action
-      </p>
+    <div class="shrink-0 pb-4 flex items-start justify-between">
+      <div>
+        <h1 class="text-2xl font-semibold tracking-tight">Insights</h1>
+        <p class="text-sm text-muted-foreground mt-1">
+          Ask questions, get recommendations, and take action
+        </p>
+      </div>
+      <Button
+        v-if="hasMessages"
+        size="sm"
+        variant="outline"
+        @click="
+          chatMessages = [];
+          chatInput = '';
+        "
+      >
+        <Plus class="h-3.5 w-3.5 mr-1.5" />
+        New Chat
+      </Button>
     </div>
 
     <!-- Chat area -->
