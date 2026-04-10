@@ -308,7 +308,11 @@ export function createBillingApiRoutes(
         res.json({ url });
       } catch (error) {
         console.error("POST /api/billing/create-checkout error:", error);
-        res.status(500).json({
+        const status =
+          error instanceof Error && error.message === "Account not found"
+            ? 400
+            : 500;
+        res.status(status).json({
           error:
             error instanceof Error
               ? error.message
@@ -328,7 +332,13 @@ export function createBillingApiRoutes(
         res.json({ url });
       } catch (error) {
         console.error("POST /api/billing/portal error:", error);
-        res.status(500).json({
+        const status =
+          error instanceof Error &&
+          error.message ===
+            "No Stripe customer found. Subscribe to a plan first."
+            ? 400
+            : 500;
+        res.status(status).json({
           error:
             error instanceof Error
               ? error.message
@@ -346,7 +356,7 @@ export function createBillingApiRoutes(
       const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
       if (!webhookSecret) {
         console.error("STRIPE_WEBHOOK_SECRET not configured");
-        res.status(500).json({ error: "Webhook not configured" });
+        res.status(503).json({ error: "Webhook not configured" });
         return;
       }
 

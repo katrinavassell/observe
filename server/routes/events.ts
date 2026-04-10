@@ -986,7 +986,17 @@ export function createEventsRoutes(
         res.json({ key: rawKey, prefix: keyPrefix, name });
       } catch (error) {
         console.error("POST /sdk-keys error:", error);
-        res.status(500).json({ error: "Failed to create API key" });
+        const isConstraint =
+          error instanceof Error &&
+          (error.message.includes("unique") ||
+            error.message.includes("violates") ||
+            error.message.includes("duplicate") ||
+            error.message.includes("validation"));
+        res
+          .status(isConstraint ? 400 : 500)
+          .json({
+            error: isConstraint ? error.message : "Failed to create API key",
+          });
       }
     },
   );

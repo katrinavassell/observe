@@ -33,7 +33,7 @@ onMounted(async () => {
   }
 });
 
-const { data: usageLimits } = useQuery({
+const { data: usageLimits, isError: usageLimitsError } = useQuery({
   queryKey: ["usage-limits"],
   queryFn: getUsageLimits,
 });
@@ -306,7 +306,13 @@ const repoUrl = "https://github.com/katrinalaszlo/observe";
             </div>
 
             <div
-              v-if="!usageItems.length"
+              v-if="usageLimitsError"
+              class="text-sm text-destructive text-center py-4"
+            >
+              Failed to load usage data.
+            </div>
+            <div
+              v-else-if="!usageItems.length"
               class="text-sm text-muted-foreground text-center py-4"
             >
               Usage data loading...
