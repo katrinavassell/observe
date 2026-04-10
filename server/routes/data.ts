@@ -431,23 +431,16 @@ export function createDataRoutes(
     "/data/sample",
     ensureVisitor,
     async (req: AuthRequest, res: Response) => {
+      // Authenticated users never get sample data — it's for anonymous window-shoppers only
+      if (req.headers.authorization?.startsWith("Bearer ")) {
+        return res.status(403).json({
+          error:
+            "Sample data is only available for anonymous browsing. Sign out to explore with sample data.",
+        });
+      }
+
       const client = await pool.connect();
       try {
-        // Don't wipe real data — only load sample if user has no non-sample events
-        if (req.accountId) {
-          const realEvents = await client.query(
-            "SELECT 1 FROM observe_events WHERE user_id = $1 AND source != 'sample' LIMIT 1",
-            [req.visitorId],
-          );
-          if (realEvents.rows.length > 0) {
-            client.release();
-            return res.status(409).json({
-              error:
-                "You already have real data. Sample data cannot be loaded over existing data.",
-            });
-          }
-        }
-
         await client.query("BEGIN");
 
         await client.query("DELETE FROM ai_insights WHERE user_id = $1", [
