@@ -448,6 +448,7 @@ const SOURCE_PRIORITY_CTE = `
     FROM observe_events oe
     LEFT JOIN user_data_status uds ON uds.user_id = oe.user_id
     WHERE oe.user_id = $1
+      AND oe.timestamp >= NOW() - INTERVAL '90 days'
       AND (oe.source != 'sample' OR COALESCE(uds.data_mode, 'none') = 'sample')
   ),
   deduped AS (SELECT * FROM ranked WHERE _src_rank = 1)

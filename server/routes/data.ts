@@ -433,6 +433,21 @@ export function createDataRoutes(
     async (req: AuthRequest, res: Response) => {
       const client = await pool.connect();
       try {
+        // Don't wipe real data — only load sample if user has no non-sample events
+        if (req.session.accountId) {
+          const realEvents = await client.query(
+            "SELECT 1 FROM observe_events WHERE user_id = $1 AND source != 'sample' LIMIT 1",
+            [req.visitorId],
+          );
+          if (realEvents.rows.length > 0) {
+            client.release();
+            return res.status(409).json({
+              error:
+                "You already have real data. Sample data cannot be loaded over existing data.",
+            });
+          }
+        }
+
         await client.query("BEGIN");
 
         await client.query("DELETE FROM ai_insights WHERE user_id = $1", [
