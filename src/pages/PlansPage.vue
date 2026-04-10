@@ -108,7 +108,7 @@ const plans = [
     features: [
       "10,000 events per month",
       "50 AI messages per month",
-      "Up to 20 team members",
+      "Unlimited team members",
       "90-day data retention",
       "1 cost alert",
       "SDK & Proxy tracking",
@@ -125,7 +125,6 @@ const plans = [
     features: [
       "Unlimited events",
       "500 AI messages per month",
-      "Unlimited team members",
       "1-year data retention",
       "Unlimited cost alerts",
       "Proactive alerts & weekly digest",
@@ -263,15 +262,11 @@ const repoUrl = "https://github.com/katrinalaszlo/observe";
                     billing.plan === 'growth')
                 "
                 class="w-full"
-                variant="outline"
-                @click="
-                  window.open(
-                    'https://cal.com/katrina-laszlo/meeting',
-                    '_blank',
-                  )
-                "
+                :disabled="isUpgrading"
+                @click="handleUpgrade"
               >
-                Contact us
+                <Sparkles class="h-4 w-4 mr-2" />
+                {{ isUpgrading ? "Redirecting..." : "Upgrade to Pro" }}
               </Button>
               <div
                 v-else-if="
