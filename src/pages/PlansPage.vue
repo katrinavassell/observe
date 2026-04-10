@@ -107,7 +107,7 @@ const plans = [
     interval: "forever",
     features: [
       "10,000 events per month",
-      "25 AI messages per month",
+      "50 AI messages per month",
       "Up to 20 team members",
       "90-day data retention",
       "1 cost alert",
@@ -121,14 +121,30 @@ const plans = [
     name: "Growth",
     price: "$29",
     interval: "/month",
+    highlight: true,
     features: [
       "Unlimited events",
       "500 AI messages per month",
       "Unlimited team members",
       "1-year data retention",
       "Unlimited cost alerts",
+      "Proactive alerts & weekly digest",
       "Everything in Free",
-      "Priority support",
+    ],
+  },
+  {
+    key: "pro",
+    name: "Pro",
+    price: "$99",
+    interval: "/month",
+    features: [
+      "Unlimited AI messages",
+      "Full AI agent workforce",
+      "Auto cost optimization & routing",
+      "Unlimited data retention",
+      "1:1 onboarding call with a founder",
+      "Quarterly strategy review",
+      "Everything in Growth",
     ],
   },
 ];
@@ -165,7 +181,7 @@ const repoUrl = "https://github.com/katrinalaszlo/observe";
 
     <!-- Plans tab -->
     <template v-if="activeTab === 'plans'">
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-2xl">
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl">
         <Card
           v-for="plan in plans"
           :key="plan.key"
@@ -189,6 +205,12 @@ const repoUrl = "https://github.com/katrinalaszlo/observe";
               >
                 Most popular
               </span>
+              <span
+                v-else-if="plan.key === 'pro'"
+                class="text-[10px] font-medium bg-violet-100 text-violet-700 px-2 py-0.5 rounded-full"
+              >
+                AI + Human
+              </span>
             </div>
 
             <div>
@@ -211,7 +233,10 @@ const repoUrl = "https://github.com/katrinalaszlo/observe";
 
             <div class="pt-2">
               <Button
-                v-if="billing?.plan === plan.key && plan.key === 'growth'"
+                v-if="
+                  billing?.plan === plan.key &&
+                  (plan.key === 'growth' || plan.key === 'pro')
+                "
                 variant="outline"
                 class="w-full"
                 @click="handleManage"
@@ -220,13 +245,33 @@ const repoUrl = "https://github.com/katrinalaszlo/observe";
                 Manage subscription
               </Button>
               <Button
-                v-else-if="billing?.plan !== plan.key && plan.key === 'growth'"
+                v-else-if="
+                  plan.key === 'growth' && (!billing || billing.plan === 'free')
+                "
                 class="w-full"
                 :disabled="isUpgrading"
                 @click="handleUpgrade"
               >
                 <Sparkles class="h-4 w-4 mr-2" />
                 {{ isUpgrading ? "Redirecting..." : "Upgrade to Growth" }}
+              </Button>
+              <Button
+                v-else-if="
+                  plan.key === 'pro' &&
+                  (!billing ||
+                    billing.plan === 'free' ||
+                    billing.plan === 'growth')
+                "
+                class="w-full"
+                variant="outline"
+                @click="
+                  window.open(
+                    'https://cal.com/katrina-laszlo/meeting',
+                    '_blank',
+                  )
+                "
+              >
+                Contact us
               </Button>
               <div
                 v-else-if="
@@ -241,7 +286,7 @@ const repoUrl = "https://github.com/katrinalaszlo/observe";
         </Card>
       </div>
 
-      <div class="max-w-2xl text-sm text-muted-foreground">
+      <div class="max-w-4xl text-sm text-muted-foreground">
         <p>
           Observe is free and open source. Self-host for free with no limits, or
           use our hosted version above.
