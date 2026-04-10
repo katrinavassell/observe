@@ -122,21 +122,6 @@ const plans = [
       "500 AI messages/month",
       "1-year data retention",
       "Unlimited cost alerts",
-      "Proactive alerts & weekly digest",
-    ],
-  },
-  {
-    key: "pro",
-    name: "Pro",
-    price: "$99",
-    interval: "/month",
-    features: [
-      "Unlimited AI messages",
-      "Unlimited data retention",
-      "Full AI agent workforce",
-      "Auto cost optimization & routing",
-      "1:1 onboarding with a founder",
-      "Quarterly strategy review",
     ],
   },
 ];
@@ -183,7 +168,7 @@ const repoUrl = "https://github.com/katrinalaszlo/observe";
     <!-- Plans tab -->
     <template v-if="activeTab === 'plans'">
       <div
-        class="grid grid-cols-1 md:grid-cols-3 gap-4 max-w-4xl items-stretch"
+        class="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-4xl items-stretch"
       >
         <Card
           v-for="plan in plans"
@@ -228,9 +213,7 @@ const repoUrl = "https://github.com/katrinalaszlo/observe";
                   {{
                     plan.key === "free"
                       ? "Get started with core analytics"
-                      : plan.key === "growth"
-                        ? "For teams scaling AI features"
-                        : "Full AI workforce + strategy sessions"
+                      : "For teams scaling AI features"
                   }}
                 </p>
               </div>
