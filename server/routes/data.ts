@@ -434,7 +434,7 @@ export function createDataRoutes(
       const client = await pool.connect();
       try {
         // Don't wipe real data — only load sample if user has no non-sample events
-        if (req.session.accountId) {
+        if (req.accountId) {
           const realEvents = await client.query(
             "SELECT 1 FROM observe_events WHERE user_id = $1 AND source != 'sample' LIMIT 1",
             [req.visitorId],

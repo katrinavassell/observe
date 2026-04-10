@@ -1,4 +1,5 @@
 import { ref, computed } from "vue";
+import { supabase } from "@/lib/supabase";
 import * as api from "@/lib/api";
 import type { Account } from "@/lib/api";
 import { logger } from "@/lib/logger";
@@ -8,38 +9,78 @@ const isLoading = ref(true);
 const visitorId = ref<string | null>(null);
 const account = ref<Account | null>(null);
 
-async function sleep(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
 let initPromise: Promise<void> | null = null;
 
-export async function initialize(retries = 10, delay = 1000) {
+export async function initialize() {
   if (isInitialized.value && visitorId.value) return;
   if (initPromise) return initPromise;
 
   initPromise = (async () => {
-    for (let attempt = 0; attempt < retries; attempt++) {
-      try {
-        const result = await api.initSession();
-        visitorId.value = result.visitorId;
-        if (result.account) {
-          account.value = result.account;
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (session?.user) {
+        visitorId.value = session.user.id;
+        try {
+          const me = await api.getMe();
+          if (me.account) {
+            account.value = me.account;
+          } else {
+            // First login (OAuth) — create local account row
+            const result = await api.signupComplete(
+              session.user.user_metadata?.full_name ||
+                session.user.user_metadata?.name,
+            );
+            account.value = result.account;
+          }
+        } catch {
+          // Account row may not exist yet (first login)
         }
-        isInitialized.value = true;
-        isLoading.value = false;
-        return;
-      } catch (error) {
-        if (attempt < retries - 1) {
-          await sleep(delay);
-        } else {
-          logger.error("Failed to initialize session after all retries", error);
-          initPromise = null;
+      } else {
+        // Anonymous visitor — use localStorage-backed ID
+        let anonId = localStorage.getItem("observe_visitor_id");
+        if (!anonId) {
+          anonId = crypto.randomUUID();
+          localStorage.setItem("observe_visitor_id", anonId);
         }
+        visitorId.value = anonId;
       }
+
+      // Listen for auth state changes (login, logout, token refresh)
+      supabase.auth.onAuthStateChange(async (event, session) => {
+        if (session?.user) {
+          visitorId.value = session.user.id;
+          if (event === "SIGNED_IN") {
+            // Try to fetch existing account, create if missing (OAuth users)
+            try {
+              const me = await api.getMe();
+              if (me.account) {
+                account.value = me.account;
+              } else {
+                const result = await api.signupComplete(
+                  session.user.user_metadata?.full_name ||
+                    session.user.user_metadata?.name,
+                );
+                account.value = result.account;
+              }
+            } catch {
+              // Will be created on next request
+            }
+          }
+        } else {
+          visitorId.value = null;
+          account.value = null;
+        }
+      });
+
+      isInitialized.value = true;
+    } catch (error) {
+      logger.error("Failed to initialize auth session", error);
+      initPromise = null;
     }
     isLoading.value = false;
-    isInitialized.value = true;
   })();
 
   return initPromise;
@@ -49,32 +90,55 @@ export function useAuth() {
   const isLoggedIn = computed(() => !!account.value);
 
   async function login(email: string, password: string) {
-    const result = await api.login(email, password);
-    account.value = result.account;
-    if (result.account && window.posthog) {
-      window.posthog.identify(result.account.id, {
-        email: result.account.email,
-        name: result.account.name,
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+    if (error) throw new Error(error.message);
+
+    visitorId.value = data.user.id;
+
+    // Fetch local account
+    const me = await api.getMe();
+    account.value = me.account;
+
+    if (account.value && window.posthog) {
+      window.posthog.identify(account.value.id, {
+        email: account.value.email,
+        name: account.value.name,
       });
       window.posthog.capture("user_logged_in", {
-        email: result.account.email,
+        email: account.value.email,
       });
     }
-    return result;
+
+    return { account: account.value };
   }
 
   async function signup(email: string, password: string, name?: string) {
-    const result = await api.signup(email, password, name);
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+    });
+    if (error) throw new Error(error.message);
+    if (!data.user) throw new Error("Signup failed — no user returned");
+
+    visitorId.value = data.user.id;
+
+    // Create local account row + SDK key
+    const result = await api.signupComplete(name);
     account.value = result.account;
-    if (result.account && window.posthog) {
-      window.posthog.identify(result.account.id, {
-        email: result.account.email,
-        name: result.account.name,
+
+    if (account.value && window.posthog) {
+      window.posthog.identify(account.value.id, {
+        email: account.value.email,
+        name: account.value.name,
       });
       window.posthog.capture("user_signed_up", {
-        email: result.account.email,
+        email: account.value.email,
       });
     }
+
     return result;
   }
 
@@ -83,12 +147,51 @@ export function useAuth() {
       window.posthog.capture("user_logged_out");
       window.posthog.reset();
     }
-    await api.logout();
+    await supabase.auth.signOut();
     account.value = null;
     visitorId.value = null;
     isInitialized.value = false;
     initPromise = null;
     window.location.href = "/login";
+  }
+
+  async function forgotPassword(email: string) {
+    const appUrl = window.location.origin;
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${appUrl}/reset-password`,
+    });
+    if (error) throw new Error(error.message);
+  }
+
+  async function resetPassword(newPassword: string) {
+    const { error } = await supabase.auth.updateUser({
+      password: newPassword,
+    });
+    if (error) throw new Error(error.message);
+  }
+
+  async function signInWithGoogle() {
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo: `${window.location.origin}/` },
+    });
+    if (error) throw new Error(error.message);
+  }
+
+  async function signInWithGithub() {
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "github",
+      options: { redirectTo: `${window.location.origin}/` },
+    });
+    if (error) throw new Error(error.message);
+  }
+
+  async function signInWithMagicLink(email: string) {
+    const { error } = await supabase.auth.signInWithOtp({
+      email,
+      options: { emailRedirectTo: `${window.location.origin}/` },
+    });
+    if (error) throw new Error(error.message);
   }
 
   return {
@@ -101,5 +204,10 @@ export function useAuth() {
     login,
     signup,
     logout,
+    forgotPassword,
+    resetPassword,
+    signInWithGoogle,
+    signInWithGithub,
+    signInWithMagicLink,
   };
 }

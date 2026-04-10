@@ -410,7 +410,7 @@ function isActive(path: string) {
               <LogOut class="h-4 w-4" />
             </button>
           </div>
-          <!-- Feedback & Discord -->
+          <!-- Feedback -->
           <div class="flex items-center gap-1 px-2 pt-1">
             <button
               v-if="isLoggedIn"
@@ -420,14 +420,6 @@ function isActive(path: string) {
               <MessageSquare class="h-3 w-3" />
               Feedback
             </button>
-            <a
-              href="https://discord.gg/6GHcsaQTy7"
-              target="_blank"
-              rel="noopener noreferrer"
-              class="flex items-center gap-1.5 px-2 py-1 text-xs text-sidebar-foreground/40 hover:text-sidebar-foreground hover:bg-sidebar-accent/50 transition-all duration-150 rounded-md"
-            >
-              Discord
-            </a>
           </div>
         </div>
       </div>

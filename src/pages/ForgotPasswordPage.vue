@@ -3,6 +3,9 @@ import { ref } from "vue";
 import { Mail, Loader2, ArrowLeft } from "lucide-vue-next";
 import { Card, CardContent, Button } from "@/components/ui";
 import { toast } from "vue-sonner";
+import { useAuth } from "@/composables/useAuth";
+
+const { forgotPassword } = useAuth();
 
 const email = ref("");
 const isLoading = ref(false);
@@ -12,15 +15,7 @@ async function handleSubmit() {
   if (!email.value) return;
   isLoading.value = true;
   try {
-    const res = await fetch("/api/auth/forgot-password", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: email.value }),
-    });
-    if (!res.ok) {
-      const data = await res.json();
-      throw new Error(data.error || "Something went wrong");
-    }
+    await forgotPassword(email.value);
     submitted.value = true;
     window.posthog?.capture("forgot_password_requested");
   } catch (err: any) {
