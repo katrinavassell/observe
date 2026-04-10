@@ -73,11 +73,19 @@ async function handleSubmit() {
           <span>Earn <strong>5 bonus messages</strong> for your feedback</span>
         </div>
 
-        <textarea
-          v-model="message"
-          placeholder="What's working? What could be better? Feature requests?"
-          class="w-full h-28 rounded-md border bg-background px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring"
-        />
+        <div class="space-y-1">
+          <textarea
+            v-model="message"
+            placeholder="What's working? What could be better? Feature requests?"
+            class="w-full h-28 rounded-md border bg-background px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring"
+          />
+          <p
+            v-if="message.length > 0 && message.trim().length < 10"
+            class="text-xs text-muted-foreground"
+          >
+            At least 10 characters required
+          </p>
+        </div>
 
         <div class="flex justify-end gap-2">
           <Button variant="outline" size="sm" @click="emit('close')">
