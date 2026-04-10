@@ -25,7 +25,16 @@ export async function initialize() {
         visitorId.value = session.user.id;
         try {
           const me = await api.getMe();
-          account.value = me.account;
+          if (me.account) {
+            account.value = me.account;
+          } else {
+            // First login (OAuth) — create local account row
+            const result = await api.signupComplete(
+              session.user.user_metadata?.full_name ||
+                session.user.user_metadata?.name,
+            );
+            account.value = result.account;
+          }
         } catch {
           // Account row may not exist yet (first login)
         }
