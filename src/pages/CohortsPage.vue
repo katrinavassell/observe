@@ -775,8 +775,18 @@ const excludedCount = computed(() => {
                   <template v-for="col in visibleColumns" :key="col.id">
                     <!-- Customer -->
                     <td v-if="col.id === 'customer'" class="p-3">
-                      <div class="flex items-center gap-2">
-                        <span class="font-medium">{{ c.customer_name }}</span>
+                      <div
+                        class="flex items-center gap-2"
+                        :title="c.customer_id"
+                      >
+                        <span v-if="c.customer_email" class="font-medium">{{
+                          c.customer_email
+                        }}</span>
+                        <code
+                          v-else
+                          class="font-mono text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded"
+                          >{{ c.customer_id }}</code
+                        >
                         <span
                           class="inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium"
                           :class="cohortMeta[c.cohort].color"

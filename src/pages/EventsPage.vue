@@ -736,9 +736,20 @@ function marginForEvent(event: ObserveEvent): number | null {
 
                   <!-- Customer -->
                   <td v-else-if="col.id === 'customer'" class="px-4 py-3">
-                    <span v-if="event.customer_id" class="text-sm">
-                      {{ event.customer_name || event.customer_id }}
+                    <span
+                      v-if="
+                        event.customer_name &&
+                        event.customer_name !== event.customer_id
+                      "
+                      class="text-sm"
+                    >
+                      {{ event.customer_name }}
                     </span>
+                    <code
+                      v-else-if="event.customer_id"
+                      class="font-mono text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded"
+                      >{{ event.customer_id }}</code
+                    >
                     <span v-else class="text-muted-foreground text-sm">—</span>
                   </td>
 

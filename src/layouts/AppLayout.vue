@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
-import { useRoute } from "vue-router";
-import { useQueryClient } from "@tanstack/vue-query";
+import { useRoute, useRouter } from "vue-router";
+import { useQuery, useQueryClient } from "@tanstack/vue-query";
+import { getUsageLimits } from "@/lib/api";
 import {
   BarChart3,
   Plug,
@@ -31,6 +32,7 @@ import { useAuth } from "@/composables/useAuth";
 import { useDataMode } from "@/composables/useDataMode";
 
 const route = useRoute();
+const router = useRouter();
 const { isViewer, fetchTeamInfo } = useTeam();
 const { account, isLoggedIn, logout } = useAuth();
 const {
@@ -163,6 +165,49 @@ const adminNavItem = computed(() =>
 );
 
 const allNavItems = computed(() => [...navItems.value, ...adminNavItem.value]);
+
+// Usage meter
+const { data: usageLimits } = useQuery({
+  queryKey: ["usage-limits"],
+  queryFn: getUsageLimits,
+  enabled: isLoggedIn,
+  refetchInterval: 60000,
+});
+
+const usageMeters = computed(() => {
+  if (!usageLimits.value) return [];
+  const meters: Array<{
+    label: string;
+    used: number;
+    limit: number;
+    pct: number;
+  }> = [];
+  const ev = usageLimits.value.event_ingest?.usage;
+  if (ev?.limit) {
+    meters.push({
+      label: "Events",
+      used: ev.used,
+      limit: ev.limit,
+      pct: Math.min(100, Math.round((ev.used / ev.limit) * 100)),
+    });
+  }
+  const ai = usageLimits.value.ai_insights?.usage;
+  if (ai?.limit) {
+    meters.push({
+      label: "Messages",
+      used: ai.used,
+      limit: ai.limit,
+      pct: Math.min(100, Math.round((ai.used / ai.limit) * 100)),
+    });
+  }
+  return meters;
+});
+
+function meterColor(pct: number): string {
+  if (pct >= 100) return "bg-red-500";
+  if (pct >= 80) return "bg-amber-500";
+  return "bg-emerald-500";
+}
 
 const sidebarOpen = ref(false);
 
@@ -303,6 +348,32 @@ function isActive(path: string) {
             </template>
           </div>
         </nav>
+
+        <!-- Usage meter -->
+        <div
+          v-if="isLoggedIn && usageMeters.length > 0"
+          class="border-t border-sidebar-border px-4 py-3 space-y-2 cursor-pointer hover:bg-sidebar-accent/30 transition-colors"
+          @click="router.push('/plans')"
+          title="View plan & usage"
+        >
+          <div v-for="m in usageMeters" :key="m.label" class="space-y-1">
+            <div class="flex items-center justify-between text-[10px]">
+              <span class="text-sidebar-foreground/50">{{ m.label }}</span>
+              <span class="text-sidebar-foreground/50"
+                >{{ m.used.toLocaleString() }}/{{
+                  m.limit.toLocaleString()
+                }}</span
+              >
+            </div>
+            <div class="h-1 rounded-full bg-sidebar-accent overflow-hidden">
+              <div
+                class="h-full rounded-full transition-all duration-300"
+                :class="meterColor(m.pct)"
+                :style="{ width: `${Math.max(2, m.pct)}%` }"
+              />
+            </div>
+          </div>
+        </div>
 
         <!-- Bottom section: Account & Team Settings -->
         <div class="border-t border-sidebar-border px-3 py-4 space-y-1">

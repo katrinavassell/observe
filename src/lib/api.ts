@@ -908,6 +908,7 @@ export async function setCustomerInternal(
 export interface CohortCustomer {
   customer_id: string;
   customer_name: string;
+  customer_email: string | null;
   segment: string | null;
   is_internal: boolean;
   total_revenue: number;

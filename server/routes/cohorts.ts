@@ -170,6 +170,7 @@ export function createCohortsRoutes(pool: Pool, ensureVisitor: any) {
           pool.query(
             `SELECT oe.customer_id,
                     COALESCE(c.name, oe.customer_id) AS customer_name,
+                    c.email AS customer_email,
                     c.segment,
                     c.is_internal,
                     COALESCE(SUM(oe.revenue_amount), 0) AS total_revenue,
@@ -182,7 +183,7 @@ export function createCohortsRoutes(pool: Pool, ensureVisitor: any) {
              FROM observe_events oe
              LEFT JOIN customers c ON oe.user_id = c.user_id AND oe.customer_id = c.customer_id
              WHERE oe.user_id = $1 AND oe.customer_id IS NOT NULL ${internalFilter}
-             GROUP BY oe.customer_id, c.name, c.segment, c.is_internal`,
+             GROUP BY oe.customer_id, c.name, c.email, c.segment, c.is_internal`,
             [userId],
           ),
           // 2. Total distinct features
@@ -442,6 +443,7 @@ export function createCohortsRoutes(pool: Pool, ensureVisitor: any) {
           return {
             customer_id: row.customer_id,
             customer_name: row.customer_name,
+            customer_email: row.customer_email || null,
             segment: row.segment || null,
             is_internal: row.is_internal || false,
             total_revenue: totalRevenue,
