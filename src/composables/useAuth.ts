@@ -25,20 +25,29 @@ export async function initialize() {
         visitorId.value = session.user.id;
         // Clear anonymous visitor ID — prevents stale data leaks
         localStorage.removeItem("observe_visitor_id");
-        try {
-          const me = await api.getMe();
-          if (me.account) {
-            account.value = me.account;
-          } else {
-            // First login (OAuth) — create local account row
-            const result = await api.signupComplete(
-              session.user.user_metadata?.full_name ||
-                session.user.user_metadata?.name,
+        for (let attempt = 0; attempt < 3; attempt++) {
+          try {
+            const me = await api.getMe();
+            if (me.account) {
+              account.value = me.account;
+              break;
+            } else {
+              const result = await api.signupComplete(
+                session.user.user_metadata?.full_name ||
+                  session.user.user_metadata?.name,
+              );
+              account.value = result.account;
+              break;
+            }
+          } catch (err) {
+            logger.error(
+              `Account setup failed on init (attempt ${attempt + 1}/3)`,
+              err,
             );
-            account.value = result.account;
+            if (attempt < 2) {
+              await new Promise((r) => setTimeout(r, 1000));
+            }
           }
-        } catch {
-          // Account row may not exist yet (first login)
         }
       } else {
         // Anonymous visitor — use localStorage-backed ID
@@ -54,21 +63,34 @@ export async function initialize() {
       supabase.auth.onAuthStateChange(async (event, session) => {
         if (session?.user) {
           visitorId.value = session.user.id;
-          if (event === "SIGNED_IN") {
-            // Try to fetch existing account, create if missing (OAuth users)
-            try {
-              const me = await api.getMe();
-              if (me.account) {
-                account.value = me.account;
-              } else {
-                const result = await api.signupComplete(
-                  session.user.user_metadata?.full_name ||
-                    session.user.user_metadata?.name,
-                );
-                account.value = result.account;
+          localStorage.removeItem("observe_visitor_id");
+          if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
+            // Ensure local account row exists — retry up to 3 times
+            if (!account.value) {
+              for (let attempt = 0; attempt < 3; attempt++) {
+                try {
+                  const me = await api.getMe();
+                  if (me.account) {
+                    account.value = me.account;
+                    break;
+                  } else {
+                    const result = await api.signupComplete(
+                      session.user.user_metadata?.full_name ||
+                        session.user.user_metadata?.name,
+                    );
+                    account.value = result.account;
+                    break;
+                  }
+                } catch (err) {
+                  logger.error(
+                    `Account setup failed (attempt ${attempt + 1}/3)`,
+                    err,
+                  );
+                  if (attempt < 2) {
+                    await new Promise((r) => setTimeout(r, 1000));
+                  }
+                }
               }
-            } catch {
-              // Will be created on next request
             }
           }
         } else {
