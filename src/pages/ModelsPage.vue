@@ -354,7 +354,7 @@ function goToModel(model: string) {
         with a model field.
       </p>
       <Button size="sm" variant="outline" @click="router.push('/data-sources')">
-        <Plug class="h-4 w-4 mr-2" />
+        <Plug class="h-3.5 w-3.5 mr-1.5" />
         Data Sources
       </Button>
     </div>
