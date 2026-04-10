@@ -69,16 +69,16 @@ const usageItems = computed(() => {
   return items;
 });
 
-async function handleUpgrade() {
+async function handleUpgrade(plan: string = "growth") {
   if (!isLoggedIn.value) {
-    window.posthog?.capture("upgrade_clicked_logged_out");
+    window.posthog?.capture("upgrade_clicked_logged_out", { plan });
     router.push("/signup");
     return;
   }
-  window.posthog?.capture("upgrade_clicked");
+  window.posthog?.capture("upgrade_clicked", { plan });
   isUpgrading.value = true;
   try {
-    const { url } = await createCheckout();
+    const { url } = await createCheckout(plan);
     window.location.href = url;
   } catch (error) {
     toast.error("Failed to start checkout", {
@@ -249,7 +249,7 @@ const repoUrl = "https://github.com/katrinalaszlo/observe";
                 "
                 class="w-full"
                 :disabled="isUpgrading"
-                @click="handleUpgrade"
+                @click="handleUpgrade('growth')"
               >
                 <Sparkles class="h-4 w-4 mr-2" />
                 {{ isUpgrading ? "Redirecting..." : "Upgrade to Growth" }}
@@ -263,7 +263,7 @@ const repoUrl = "https://github.com/katrinalaszlo/observe";
                 "
                 class="w-full"
                 :disabled="isUpgrading"
-                @click="handleUpgrade"
+                @click="handleUpgrade('pro')"
               >
                 <Sparkles class="h-4 w-4 mr-2" />
                 {{ isUpgrading ? "Redirecting..." : "Upgrade to Pro" }}

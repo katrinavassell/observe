@@ -1097,8 +1097,13 @@ export async function getBillingStatus(): Promise<BillingStatus> {
   return request("/billing/status");
 }
 
-export async function createCheckout(): Promise<{ url: string }> {
-  return request("/billing/create-checkout", { method: "POST" });
+export async function createCheckout(
+  plan: string = "growth",
+): Promise<{ url: string }> {
+  return request("/billing/create-checkout", {
+    method: "POST",
+    body: JSON.stringify({ plan }),
+  });
 }
 
 export async function createPortalSession(): Promise<{ url: string }> {

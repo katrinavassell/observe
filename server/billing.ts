@@ -44,6 +44,20 @@ export const OBSERVE_PLANS: Record<string, PlanConfig> = {
       data_retention_days: { limit: null },
     },
   },
+  pro: {
+    name: "Pro",
+    stripePriceId: process.env.STRIPE_PRO_PRICE_ID || "",
+    features: {
+      ai_insights: { limit: null },
+      event_ingest: { limit: null },
+      cost_alerts: { limit: null },
+      csv_upload: { limit: null },
+      stripe_connection: { limit: null },
+      ai_provider_connection: { limit: null },
+      team_members: { limit: null },
+      data_retention_days: { limit: null },
+    },
+  },
 };
 
 // =============================================================================
@@ -206,11 +220,16 @@ export async function trackUsage(
 export async function createCheckoutSession(
   pool: Pool,
   visitorId: string,
+  plan: string = "growth",
 ): Promise<{ url: string }> {
   const stripe = await getUncachableStripeClient();
-  const priceId = OBSERVE_PLANS.growth.stripePriceId;
+  const planConfig = OBSERVE_PLANS[plan];
+  if (!planConfig) {
+    throw new Error(`Unknown plan: ${plan}`);
+  }
+  const priceId = planConfig.stripePriceId;
   if (!priceId) {
-    throw new Error("STRIPE_GROWTH_PRICE_ID not configured");
+    throw new Error(`Stripe price not configured for ${plan} plan`);
   }
 
   // Get or create Stripe customer

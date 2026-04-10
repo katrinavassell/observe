@@ -304,7 +304,8 @@ export function createBillingApiRoutes(
     ensureVisitor,
     async (req: AuthRequest, res: Response) => {
       try {
-        const { url } = await createCheckoutSession(pool, req.visitorId!);
+        const plan = req.body?.plan || "growth";
+        const { url } = await createCheckoutSession(pool, req.visitorId!, plan);
         res.json({ url });
       } catch (error) {
         console.error("POST /api/billing/create-checkout error:", error);
