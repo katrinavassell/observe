@@ -162,7 +162,7 @@ const router = createRouter({
   ],
 });
 
-// Initialize session once on app load — no auth guard, anonymous browsing is allowed
+// Initialize Supabase auth session once on app load
 import { initialize } from "@/composables/useAuth";
 let initialized = false;
 router.beforeEach(async () => {

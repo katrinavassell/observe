@@ -1,14 +1,6 @@
 import "dotenv/config";
 import express, { Request, Response, NextFunction } from "express";
-import session from "express-session";
-import pgSession from "connect-pg-simple";
 import Pg from "pg";
-import { Pool as NeonPool } from "@neondatabase/serverless";
-
-const Pool =
-  process.env.DB_DRIVER === "pg"
-    ? Pg.Pool
-    : (NeonPool as unknown as typeof Pg.Pool);
 import { createAuthRoutes, createEnsureVisitor } from "./routes/auth.js";
 import { checkFeatureAccess } from "./billing.js";
 
@@ -40,14 +32,12 @@ import {
 
 const app = express();
 
-const pool = new Pool({
+const pool = new Pg.Pool({
   connectionString: process.env.DATABASE_URL,
   max: 20,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 5000,
 });
-
-const PgStore = pgSession(session);
 
 // Parse JSON for all routes except the Stripe webhook (which needs raw body)
 app.use((req, res, next) => {
@@ -109,7 +99,11 @@ app.use(async (_req: Request, _res: Response, next: NextFunction) => {
 });
 
 // Validate required env vars at startup
-const requiredEnvVars = ["SESSION_SECRET", "DATABASE_URL"] as const;
+const requiredEnvVars = [
+  "DATABASE_URL",
+  "SUPABASE_URL",
+  "SUPABASE_SERVICE_ROLE_KEY",
+] as const;
 for (const envVar of requiredEnvVars) {
   if (!process.env[envVar]) {
     throw new Error(`${envVar} environment variable is required`);
@@ -118,27 +112,7 @@ for (const envVar of requiredEnvVars) {
 
 app.set("trust proxy", 1);
 
-app.use(
-  session({
-    store: new PgStore({
-      pool,
-      tableName: "sessions",
-      createTableIfMissing: true,
-    }),
-    secret: process.env.SESSION_SECRET,
-    resave: false,
-    saveUninitialized: false,
-    name: "pa.sid",
-    cookie: {
-      secure: process.env.NODE_ENV === "production",
-      httpOnly: true,
-      sameSite: "strict",
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-    },
-  }),
-);
-
-// Auth routes + middleware (extracted to routes/auth.ts)
+// Auth middleware — verifies Supabase JWT, sets req.visitorId
 const ensureVisitor = createEnsureVisitor(pool);
 app.use(createAuthRoutes(pool, ensureVisitor));
 
@@ -323,9 +297,6 @@ async function _doDbInit() {
     await pool.query(
       `ALTER TABLE accounts ADD COLUMN IF NOT EXISTS is_internal BOOLEAN DEFAULT false`,
     );
-    await pool.query(
-      `ALTER TABLE customers ADD COLUMN IF NOT EXISTS is_internal BOOLEAN DEFAULT false`,
-    );
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS feedback (
@@ -377,6 +348,10 @@ async function _doDbInit() {
         UNIQUE(user_id, customer_id)
       )
     `);
+
+    await pool.query(
+      `ALTER TABLE customers ADD COLUMN IF NOT EXISTS is_internal BOOLEAN DEFAULT false`,
+    );
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS subscriptions (

@@ -8,25 +8,42 @@
  * - Custom integration request form
  */
 
-import { ref } from 'vue'
-import { toast } from 'vue-sonner'
+import { ref } from "vue";
+import { toast } from "vue-sonner";
+import { Clock, Bell, Check, ArrowRight } from "lucide-vue-next";
 import {
-  Clock,
-  Bell,
-  Check,
-  ArrowRight,
-} from 'lucide-vue-next'
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, Button, Input } from '@/components/ui'
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+  Button,
+  Input,
+} from "@/components/ui";
+import { supabase } from "@/lib/supabase";
 
-const API_BASE = '/api'
+const API_BASE = "/api";
+
+async function getAuthHeaders(): Promise<Record<string, string>> {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+  if (session?.access_token) {
+    headers["Authorization"] = `Bearer ${session.access_token}`;
+  }
+  return headers;
+}
 
 /** Integrations that user has requested notifications for */
-const requestedIntegrations = ref<Set<string>>(new Set())
+const requestedIntegrations = ref<Set<string>>(new Set());
 
 /** Request form state */
-const showRequestForm = ref(false)
-const requestFormData = ref({ integration: '' })
-const isSubmittingRequest = ref(false)
+const showRequestForm = ref(false);
+const requestFormData = ref({ integration: "" });
+const isSubmittingRequest = ref(false);
 
 /**
  * Request notification when an integration becomes available.
@@ -34,19 +51,21 @@ const isSubmittingRequest = ref(false)
 async function handleNotifyMe(integration: string): Promise<void> {
   try {
     const response = await fetch(`${API_BASE}/integration-requests`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({ integration_name: integration, request_type: 'notify' }),
-    })
-    if (!response.ok) throw new Error('Failed')
+      method: "POST",
+      headers: await getAuthHeaders(),
+      body: JSON.stringify({
+        integration_name: integration,
+        request_type: "notify",
+      }),
+    });
+    if (!response.ok) throw new Error("Failed");
 
-    requestedIntegrations.value.add(integration)
-    toast.success('Got it!', {
+    requestedIntegrations.value.add(integration);
+    toast.success("Got it!", {
       description: `We'll let you know when ${integration} is ready.`,
-    })
+    });
   } catch {
-    toast.error('Failed to save request')
+    toast.error("Failed to save request");
   }
 }
 
@@ -55,42 +74,41 @@ async function handleNotifyMe(integration: string): Promise<void> {
  */
 async function submitRequestForm(): Promise<void> {
   if (!requestFormData.value.integration.trim()) {
-    toast.error('Please enter which integration you need')
-    return
+    toast.error("Please enter which integration you need");
+    return;
   }
 
-  isSubmittingRequest.value = true
+  isSubmittingRequest.value = true;
   try {
     const response = await fetch(`${API_BASE}/integration-requests`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
+      method: "POST",
+      headers: await getAuthHeaders(),
       body: JSON.stringify({
         integration_name: requestFormData.value.integration.trim(),
-        request_type: 'request',
+        request_type: "request",
       }),
-    })
-    if (!response.ok) throw new Error('Failed')
+    });
+    if (!response.ok) throw new Error("Failed");
 
-    requestedIntegrations.value.add('custom')
-    showRequestForm.value = false
-    requestFormData.value = { integration: '' }
-    toast.success('Request submitted!', {
-      description: 'We\'ll reach out to discuss your needs.',
-    })
+    requestedIntegrations.value.add("custom");
+    showRequestForm.value = false;
+    requestFormData.value = { integration: "" };
+    toast.success("Request submitted!", {
+      description: "We'll reach out to discuss your needs.",
+    });
   } catch {
-    toast.error('Failed to save request')
+    toast.error("Failed to save request");
   } finally {
-    isSubmittingRequest.value = false
+    isSubmittingRequest.value = false;
   }
 }
 
 /** List of coming soon integrations with their branding */
 const comingSoonIntegrations = [
-  { id: 'Salesforce', name: 'Salesforce', color: '#00A1E0' },
-  { id: 'HubSpot', name: 'HubSpot', color: '#FF7A59' },
-  { id: 'QuickBooks', name: 'QuickBooks', color: '#2CA01C' },
-]
+  { id: "Salesforce", name: "Salesforce", color: "#00A1E0" },
+  { id: "HubSpot", name: "HubSpot", color: "#FF7A59" },
+  { id: "QuickBooks", name: "QuickBooks", color: "#2CA01C" },
+];
 </script>
 
 <template>
@@ -147,7 +165,9 @@ const comingSoonIntegrations = [
             @click="showRequestForm = true"
           >
             Need something else?
-            <span class="text-primary font-medium group-hover:underline flex items-center gap-1">
+            <span
+              class="text-primary font-medium group-hover:underline flex items-center gap-1"
+            >
               Request integration
               <ArrowRight class="h-3.5 w-3.5" />
             </span>
@@ -172,13 +192,9 @@ const comingSoonIntegrations = [
               :disabled="isSubmittingRequest"
               @click="submitRequestForm"
             >
-              {{ isSubmittingRequest ? 'Submitting...' : 'Submit Request' }}
+              {{ isSubmittingRequest ? "Submitting..." : "Submit Request" }}
             </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              @click="showRequestForm = false"
-            >
+            <Button variant="ghost" size="sm" @click="showRequestForm = false">
               Cancel
             </Button>
           </div>

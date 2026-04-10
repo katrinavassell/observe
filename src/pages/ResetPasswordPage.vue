@@ -1,23 +1,34 @@
 <script setup lang="ts">
-import { ref } from "vue";
-import { useRoute, useRouter } from "vue-router";
+import { ref, onMounted } from "vue";
+import { useRouter } from "vue-router";
 import { Lock, Loader2 } from "lucide-vue-next";
 import { Card, CardContent, Button } from "@/components/ui";
 import { toast } from "vue-sonner";
+import { useAuth } from "@/composables/useAuth";
+import { supabase } from "@/lib/supabase";
 
-const route = useRoute();
 const router = useRouter();
-const token = route.query.token as string;
+const { resetPassword } = useAuth();
 
 const password = ref("");
 const confirmPassword = ref("");
 const isLoading = ref(false);
 const success = ref(false);
+const ready = ref(false);
 
-if (!token) {
-  toast.error("Invalid or missing reset token");
-  router.replace("/login");
-}
+onMounted(async () => {
+  // Supabase redirects here with tokens in the URL hash
+  // The client library picks them up automatically via onAuthStateChange
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  if (!session) {
+    toast.error("Invalid or expired reset link");
+    router.replace("/login");
+    return;
+  }
+  ready.value = true;
+});
 
 async function handleSubmit() {
   if (password.value.length < 8) {
@@ -31,15 +42,7 @@ async function handleSubmit() {
 
   isLoading.value = true;
   try {
-    const res = await fetch("/api/auth/reset-password", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ token, password: password.value }),
-    });
-    if (!res.ok) {
-      const data = await res.json();
-      throw new Error(data.error || "Reset failed");
-    }
+    await resetPassword(password.value);
     success.value = true;
     window.posthog?.capture("password_reset_completed");
     toast.success("Password reset successfully");
@@ -66,7 +69,11 @@ async function handleSubmit() {
           </p>
         </div>
 
-        <form v-if="!success" class="space-y-4" @submit.prevent="handleSubmit">
+        <form
+          v-if="!success && ready"
+          class="space-y-4"
+          @submit.prevent="handleSubmit"
+        >
           <div class="space-y-2">
             <label class="text-sm font-medium" for="password"
               >New password</label
@@ -113,10 +120,14 @@ async function handleSubmit() {
           </Button>
         </form>
 
-        <div v-else class="text-center">
+        <div v-else-if="success" class="text-center">
           <router-link to="/login">
             <Button class="w-full">Sign in with new password</Button>
           </router-link>
+        </div>
+
+        <div v-else class="flex items-center justify-center py-4">
+          <Loader2 class="h-6 w-6 animate-spin text-muted-foreground" />
         </div>
       </CardContent>
     </Card>

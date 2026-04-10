@@ -38,10 +38,17 @@ interface AdminUsageResponse {
 }
 
 async function fetchAdminUsage(): Promise<AdminUsageResponse> {
-  const response = await fetch("/api/admin/usage", {
-    credentials: "include",
-    headers: { "Content-Type": "application/json" },
-  });
+  const { supabase } = await import("@/lib/supabase");
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+  if (session?.access_token) {
+    headers["Authorization"] = `Bearer ${session.access_token}`;
+  }
+  const response = await fetch("/api/admin/usage", { headers });
   if (!response.ok) {
     if (response.status === 403) {
       throw new Error("FORBIDDEN");

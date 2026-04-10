@@ -1,16 +1,27 @@
+import { supabase } from "@/lib/supabase";
+
 const API_BASE = "/api";
 
 async function request<T>(
   endpoint: string,
   options: RequestInit = {},
 ): Promise<T> {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...(options.headers as Record<string, string>),
+  };
+
+  if (session?.access_token) {
+    headers["Authorization"] = `Bearer ${session.access_token}`;
+  }
+
   const response = await fetch(`${API_BASE}${endpoint}`, {
     ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...options.headers,
-    },
-    credentials: "include",
+    headers,
   });
 
   if (!response.ok) {
@@ -27,15 +38,6 @@ async function request<T>(
   }
 
   return response.json();
-}
-
-export interface SessionResponse {
-  visitorId: string;
-  account: Account | null;
-}
-
-export async function initSession(): Promise<SessionResponse> {
-  return request("/session/init");
 }
 
 export interface DataStatus {
@@ -1117,29 +1119,13 @@ export interface Account {
   name: string | null;
 }
 
-export async function signup(
-  email: string,
-  password: string,
+export async function signupComplete(
   name?: string,
-): Promise<{ account: Account }> {
-  return request("/auth/signup", {
+): Promise<{ account: Account; sdkKey?: string }> {
+  return request("/auth/signup-complete", {
     method: "POST",
-    body: JSON.stringify({ email, password, name }),
+    body: JSON.stringify({ name }),
   });
-}
-
-export async function login(
-  email: string,
-  password: string,
-): Promise<{ account: Account }> {
-  return request("/auth/login", {
-    method: "POST",
-    body: JSON.stringify({ email, password }),
-  });
-}
-
-export async function logout(): Promise<{ success: boolean }> {
-  return request("/auth/logout", { method: "POST" });
 }
 
 export async function getMe(): Promise<{ account: Account | null }> {
