@@ -11,6 +11,9 @@ import {
   RotateCcw,
   ChevronUp,
   ChevronDown,
+  DollarSign,
+  Search,
+  X,
 } from "lucide-vue-next";
 import MarginBadge from "@/components/shared/MarginBadge.vue";
 import { Skeleton, Button, Card, CardContent } from "@/components/ui";
@@ -173,6 +176,52 @@ const costByProvider = computed(() => {
 function goToModel(model: string) {
   router.push({ path: "/events", query: { model } });
 }
+
+// ── Pricing table ───────────────────────────────────────────────────────────
+const showPricingTable = ref(false);
+const pricingSearch = ref("");
+const pricingProviderFilter = ref("all");
+
+const { data: pricingData } = useQuery({
+  queryKey: ["model-pricing"],
+  queryFn: async () => {
+    const res = await fetch("/api/pricing/models");
+    if (!res.ok) throw new Error("Failed to fetch pricing");
+    return res.json() as Promise<{
+      models: Array<{
+        model: string;
+        provider: string;
+        input_cost_per_million: number;
+        output_cost_per_million: number;
+      }>;
+    }>;
+  },
+  enabled: showPricingTable,
+});
+
+const pricingProviders = computed(() => {
+  if (!pricingData.value) return [];
+  return [...new Set(pricingData.value.models.map((m) => m.provider))].sort();
+});
+
+const filteredPricing = computed(() => {
+  if (!pricingData.value) return [];
+  return pricingData.value.models
+    .filter((m) => {
+      if (
+        pricingProviderFilter.value !== "all" &&
+        m.provider !== pricingProviderFilter.value
+      )
+        return false;
+      if (
+        pricingSearch.value &&
+        !m.model.toLowerCase().includes(pricingSearch.value.toLowerCase())
+      )
+        return false;
+      return true;
+    })
+    .sort((a, b) => a.model.localeCompare(b.model));
+});
 </script>
 
 <template>
@@ -185,65 +234,78 @@ function goToModel(model: string) {
         </p>
       </div>
 
-      <!-- Column settings -->
-      <div class="relative">
+      <div class="flex items-center gap-2">
+        <!-- Pricing Table button -->
         <Button
           variant="outline"
           size="sm"
-          class="h-9 px-2.5"
-          @click="showColumnSettings = !showColumnSettings"
+          class="h-9"
+          @click="showPricingTable = true"
         >
-          <Settings2 class="h-4 w-4" />
+          <DollarSign class="h-4 w-4 mr-1.5" />
+          Pricing Table
         </Button>
 
-        <div
-          v-if="showColumnSettings"
-          class="absolute right-0 top-full mt-1 z-50 w-64 rounded-lg border bg-card shadow-lg"
-        >
-          <div
-            class="flex items-center justify-between px-3 py-2 border-b text-xs font-medium text-muted-foreground"
+        <!-- Column settings -->
+        <div class="relative">
+          <Button
+            variant="outline"
+            size="sm"
+            class="h-9 px-2.5"
+            @click="showColumnSettings = !showColumnSettings"
           >
-            <span>Columns</span>
-            <button
-              class="flex items-center gap-1 hover:text-foreground transition-colors"
-              @click="resetColumns"
-            >
-              <RotateCcw class="h-3 w-3" />
-              Reset
-            </button>
-          </div>
-          <div class="max-h-80 overflow-y-auto py-1">
+            <Settings2 class="h-4 w-4" />
+          </Button>
+
+          <div
+            v-if="showColumnSettings"
+            class="absolute right-0 top-full mt-1 z-50 w-64 rounded-lg border bg-card shadow-lg"
+          >
             <div
-              v-for="(col, idx) in columns"
-              :key="col.id"
-              class="flex items-center gap-2 px-3 py-1.5 hover:bg-muted/50 text-sm"
+              class="flex items-center justify-between px-3 py-2 border-b text-xs font-medium text-muted-foreground"
             >
-              <input
-                type="checkbox"
-                :checked="col.visible"
-                class="h-3.5 w-3.5 rounded border-input accent-primary"
-                @change="toggleColumn(col.id)"
-              />
-              <span
-                class="flex-1"
-                :class="!col.visible && 'text-muted-foreground'"
-                >{{ col.label }}</span
+              <span>Columns</span>
+              <button
+                class="flex items-center gap-1 hover:text-foreground transition-colors"
+                @click="resetColumns"
               >
-              <div class="flex gap-0.5">
-                <button
-                  class="p-0.5 text-muted-foreground/50 hover:text-foreground disabled:opacity-20"
-                  :disabled="idx === 0"
-                  @click="moveColumn(idx, -1)"
+                <RotateCcw class="h-3 w-3" />
+                Reset
+              </button>
+            </div>
+            <div class="max-h-80 overflow-y-auto py-1">
+              <div
+                v-for="(col, idx) in columns"
+                :key="col.id"
+                class="flex items-center gap-2 px-3 py-1.5 hover:bg-muted/50 text-sm"
+              >
+                <input
+                  type="checkbox"
+                  :checked="col.visible"
+                  class="h-3.5 w-3.5 rounded border-input accent-primary"
+                  @change="toggleColumn(col.id)"
+                />
+                <span
+                  class="flex-1"
+                  :class="!col.visible && 'text-muted-foreground'"
+                  >{{ col.label }}</span
                 >
-                  <ChevronUp class="h-3 w-3" />
-                </button>
-                <button
-                  class="p-0.5 text-muted-foreground/50 hover:text-foreground disabled:opacity-20"
-                  :disabled="idx === columns.length - 1"
-                  @click="moveColumn(idx, 1)"
-                >
-                  <ChevronDown class="h-3 w-3" />
-                </button>
+                <div class="flex gap-0.5">
+                  <button
+                    class="p-0.5 text-muted-foreground/50 hover:text-foreground disabled:opacity-20"
+                    :disabled="idx === 0"
+                    @click="moveColumn(idx, -1)"
+                  >
+                    <ChevronUp class="h-3 w-3" />
+                  </button>
+                  <button
+                    class="p-0.5 text-muted-foreground/50 hover:text-foreground disabled:opacity-20"
+                    :disabled="idx === columns.length - 1"
+                    @click="moveColumn(idx, 1)"
+                  >
+                    <ChevronDown class="h-3 w-3" />
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -257,6 +319,126 @@ function goToModel(model: string) {
       class="fixed inset-0 z-40"
       @click="showColumnSettings = false"
     />
+
+    <!-- Pricing Table Dialog -->
+    <Teleport to="body">
+      <div
+        v-if="showPricingTable"
+        class="fixed inset-0 z-50 flex items-start justify-end bg-background/80 backdrop-blur-sm"
+        @click.self="showPricingTable = false"
+      >
+        <div
+          class="w-full max-w-lg h-full border-l bg-card shadow-xl flex flex-col"
+        >
+          <div class="flex items-center justify-between px-4 py-3 border-b">
+            <div class="flex items-center gap-2">
+              <DollarSign class="h-4 w-4" />
+              <h3 class="font-semibold text-sm">Model Pricing</h3>
+            </div>
+            <button
+              class="p-1 rounded-md text-muted-foreground hover:text-foreground"
+              @click="showPricingTable = false"
+            >
+              <X class="h-4 w-4" />
+            </button>
+          </div>
+
+          <p class="px-4 py-2 text-xs text-muted-foreground border-b">
+            Per-token rates used for auto-cost calculation when you don't send
+            costAmount. Updated regularly.
+          </p>
+
+          <!-- Filters -->
+          <div class="px-4 py-2 border-b space-y-2">
+            <div class="relative">
+              <Search
+                class="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground"
+              />
+              <input
+                v-model="pricingSearch"
+                type="text"
+                placeholder="Search models..."
+                class="w-full h-8 rounded-md border bg-background pl-8 pr-3 text-xs focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+            </div>
+            <div class="flex gap-1 flex-wrap">
+              <button
+                class="px-2 py-1 rounded text-xs font-medium transition-colors"
+                :class="
+                  pricingProviderFilter === 'all'
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-muted text-muted-foreground hover:text-foreground'
+                "
+                @click="pricingProviderFilter = 'all'"
+              >
+                All
+              </button>
+              <button
+                v-for="p in pricingProviders"
+                :key="p"
+                class="px-2 py-1 rounded text-xs font-medium transition-colors capitalize"
+                :class="
+                  pricingProviderFilter === p
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-muted text-muted-foreground hover:text-foreground'
+                "
+                @click="pricingProviderFilter = p"
+              >
+                {{ p }}
+              </button>
+            </div>
+          </div>
+
+          <!-- Table -->
+          <div class="flex-1 overflow-y-auto">
+            <table class="w-full text-xs">
+              <thead class="sticky top-0 bg-card border-b">
+                <tr>
+                  <th
+                    class="text-left font-medium text-muted-foreground px-4 py-2"
+                  >
+                    Model
+                  </th>
+                  <th
+                    class="text-right font-medium text-muted-foreground px-4 py-2"
+                  >
+                    Input / 1M
+                  </th>
+                  <th
+                    class="text-right font-medium text-muted-foreground px-4 py-2"
+                  >
+                    Output / 1M
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr
+                  v-for="m in filteredPricing"
+                  :key="`${m.provider}-${m.model}`"
+                  class="border-b last:border-0 hover:bg-muted/50"
+                >
+                  <td class="px-4 py-2 font-mono">{{ m.model }}</td>
+                  <td class="px-4 py-2 text-right">
+                    ${{ m.input_cost_per_million.toFixed(2) }}
+                  </td>
+                  <td class="px-4 py-2 text-right">
+                    ${{ m.output_cost_per_million.toFixed(2) }}
+                  </td>
+                </tr>
+                <tr v-if="filteredPricing.length === 0">
+                  <td
+                    colspan="3"
+                    class="px-4 py-8 text-center text-muted-foreground"
+                  >
+                    No models found
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </Teleport>
 
     <!-- Summary -->
     <div
