@@ -115,6 +115,17 @@ export function createAuthRoutes(
 ) {
   const router = Router();
 
+  // Temporary diagnostic — remove after debugging production auth
+  router.get("/auth/debug", async (_req, res) => {
+    res.json({
+      hasSupabaseUrl: !!process.env.SUPABASE_URL,
+      hasServiceRoleKey: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
+      hasSecretKey: !!process.env.SUPABASE_SECRET_KEY,
+      supabaseUrlPrefix: process.env.SUPABASE_URL?.slice(0, 30),
+      serviceKeyPrefix: supabaseServiceKey?.slice(0, 20),
+    });
+  });
+
   // POST /auth/signup — called after Supabase client-side signup to create local account row
   router.post(
     "/auth/signup-complete",
