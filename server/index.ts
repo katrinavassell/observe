@@ -216,6 +216,29 @@ app.use(createInferenceRoutes(pool, ensureVisitor));
 app.use(createA2ARoutes(pool, ensureVisitor));
 app.use(createCloudCostRoutes(pool, ensureVisitor));
 
+// ─── Weekly digest (cloud-only, manual trigger for admin) ───────────────────
+import { runWeeklyDigest } from "./digest.js";
+app.post("/admin/digest", ensureVisitor, async (req: any, res: any) => {
+  const adminEmails = (
+    process.env.ADMIN_EMAILS ||
+    process.env.ADMIN_EMAIL ||
+    ""
+  ).toLowerCase();
+  if (
+    !req.accountEmail ||
+    !adminEmails.includes(req.accountEmail.toLowerCase())
+  ) {
+    return res.status(403).json({ error: "Admin only" });
+  }
+  try {
+    await runWeeklyDigest(pool);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("Manual digest error:", err);
+    res.status(500).json({ error: "Digest failed" });
+  }
+});
+
 // ─── Database initialization ────────────────────────────────────────────────
 
 async function clearSampleData(

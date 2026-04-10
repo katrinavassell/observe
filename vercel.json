@@ -6,9 +6,20 @@
     "api/index.ts": {
       "maxDuration": 30,
       "includeFiles": "server/**"
+    },
+    "api/cron/weekly-digest.ts": {
+      "maxDuration": 60,
+      "includeFiles": "server/**"
     }
   },
+  "crons": [
+    {
+      "path": "/api/cron/weekly-digest",
+      "schedule": "0 14 * * 0"
+    }
+  ],
   "rewrites": [
+    { "source": "/api/cron/(.*)", "destination": "/api/cron/$1" },
     { "source": "/api/(.*)", "destination": "/api" },
     { "source": "/((?!api).*)", "destination": "/index.html" }
   ]
