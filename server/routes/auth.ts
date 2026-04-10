@@ -158,14 +158,26 @@ export function createAuthRoutes(
             .json({ error: "Could not determine email for account" });
         }
 
-        // Create local account row (idempotent)
-        const result = await pool.query(
-          `INSERT INTO accounts (email, password_hash, name, visitor_id)
-           VALUES ($1, $2, $3, $4)
-           ON CONFLICT (visitor_id) DO UPDATE SET email = $1, name = COALESCE($3, accounts.name), updated_at = NOW()
-           RETURNING id, email, name`,
-          [email, "supabase-managed", name?.trim() || null, userId],
+        // Create or update local account row (handles both email and visitor_id conflicts)
+        const existing = await pool.query(
+          "SELECT id FROM accounts WHERE email = $1 OR visitor_id = $2 LIMIT 1",
+          [email, userId],
         );
+        let result;
+        if (existing.rows.length > 0) {
+          result = await pool.query(
+            `UPDATE accounts SET email = $1, visitor_id = $2, name = COALESCE($3, name), password_hash = 'supabase-managed', updated_at = NOW()
+             WHERE id = $4 RETURNING id, email, name`,
+            [email, userId, name?.trim() || null, existing.rows[0].id],
+          );
+        } else {
+          result = await pool.query(
+            `INSERT INTO accounts (email, password_hash, name, visitor_id)
+             VALUES ($1, 'supabase-managed', $2, $3)
+             RETURNING id, email, name`,
+            [email, name?.trim() || null, userId],
+          );
+        }
         const account = result.rows[0];
 
         // Clear any leftover sample/demo data
