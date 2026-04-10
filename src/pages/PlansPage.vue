@@ -326,6 +326,42 @@ const repoUrl = "https://github.com/katrinalaszlo/observe";
         </div>
       </div>
 
+      <!-- Platform teaser -->
+      <div class="max-w-4xl">
+        <div
+          class="rounded-lg border border-dashed border-muted-foreground/25 p-6"
+        >
+          <div class="flex items-start justify-between">
+            <div class="space-y-2">
+              <p
+                class="text-xs font-medium text-muted-foreground uppercase tracking-wider"
+              >
+                Also by Tanso
+              </p>
+              <h3 class="text-base font-semibold">Tanso Platform</h3>
+              <p class="text-sm text-muted-foreground max-w-md">
+                Enforce entitlements, meter usage, and bill customers directly
+                from your request path. Plans, credits, subscriptions, and
+                invoices — all in one place.
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              @click="
+                window.open(
+                  'https://cal.com/katrina-laszlo/30-minute-meeting?duration=30',
+                  '_blank',
+                )
+              "
+            >
+              Learn more
+              <ExternalLink class="h-3 w-3 ml-1.5" />
+            </Button>
+          </div>
+        </div>
+      </div>
+
       <div class="max-w-4xl text-sm text-muted-foreground">
         <p>
           Observe is free and open source. Self-host for free with no limits, or
