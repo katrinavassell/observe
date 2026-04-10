@@ -13,6 +13,10 @@ export interface AuthRequest extends Request {
   accountEmail?: string;
 }
 
+// Track which users have had sample data cleared this server lifetime
+// Prevents running cleanup queries on every request
+const sampleClearedUsers = new Set<string>();
+
 export function createEnsureVisitor(pool: Pool) {
   return async function ensureVisitor(
     req: AuthRequest,
@@ -41,6 +45,38 @@ export function createEnsureVisitor(pool: Pool) {
           );
           if (accountResult.rows[0]) {
             req.accountId = accountResult.rows[0].id;
+          }
+
+          // Logged-in users must never see sample data — clear once then mark clean
+          if (!sampleClearedUsers.has(user.id)) {
+            sampleClearedUsers.add(user.id);
+            try {
+              await pool.query(
+                "DELETE FROM observe_events WHERE user_id = $1 AND source = 'sample'",
+                [user.id],
+              );
+              await pool.query(
+                "DELETE FROM customers WHERE user_id = $1 AND customer_id IN ('acme_saas','tidewater_ai','neondata','circleops','blazeml','quantumhr')",
+                [user.id],
+              );
+              await pool.query(
+                "DELETE FROM subscriptions WHERE user_id = $1 AND subscription_id IN ('sub_acme','sub_acme_addon','sub_tidewater','sub_neon','sub_neon_addon','sub_circle','sub_blaze','sub_quantum')",
+                [user.id],
+              );
+              await pool.query(
+                "DELETE FROM plans WHERE user_id = $1 AND plan_id IN ('starter', 'pro', 'enterprise')",
+                [user.id],
+              );
+              await pool.query(
+                "UPDATE user_data_status SET data_mode = CASE WHEN data_mode = 'sample' THEN 'none' ELSE data_mode END WHERE user_id = $1",
+                [user.id],
+              );
+            } catch (cleanupErr) {
+              console.error(
+                "Sample data cleanup failed (non-fatal):",
+                cleanupErr,
+              );
+            }
           }
         }
       }
