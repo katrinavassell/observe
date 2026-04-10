@@ -216,6 +216,301 @@ export async function computeRecommendations(
         );
       }
     }
+    // 4. Feature underpricing — features where cost > 80% of revenue
+    const featurePricingResult = await pool.query(
+      `SELECT feature_key,
+        COUNT(*) as event_count,
+        SUM(cost_amount) as total_cost,
+        SUM(revenue_amount) as total_revenue,
+        CASE WHEN COUNT(*) > 0 THEN SUM(cost_amount) / COUNT(*) ELSE 0 END as cost_per_call,
+        CASE WHEN COUNT(*) > 0 THEN SUM(revenue_amount) / COUNT(*) ELSE 0 END as revenue_per_call
+       FROM observe_events
+       WHERE user_id = $1 AND timestamp > NOW() - INTERVAL '30 days'
+         AND feature_key IS NOT NULL AND feature_key != 'unknown'
+         AND cost_amount > 0
+       GROUP BY feature_key
+       HAVING SUM(revenue_amount) > 0 AND COUNT(*) >= 20`,
+      [userId],
+    );
+
+    for (const row of featurePricingResult.rows) {
+      const costPerCall = parseFloat(row.cost_per_call);
+      const revenuePerCall = parseFloat(row.revenue_per_call);
+      if (revenuePerCall <= 0 || costPerCall / revenuePerCall < 0.8) continue;
+
+      const existing = await pool.query(
+        `SELECT id FROM recommendations
+         WHERE user_id = $1 AND type = 'feature_underpricing'
+           AND status = 'pending'
+           AND context->>'feature_key' = $2`,
+        [userId, row.feature_key],
+      );
+      if (existing.rows.length > 0) continue;
+
+      const totalCost = parseFloat(row.total_cost);
+      const totalRevenue = parseFloat(row.total_revenue);
+      const loss = totalCost - totalRevenue;
+      const marginPct = (
+        ((totalRevenue - totalCost) / totalRevenue) *
+        100
+      ).toFixed(1);
+
+      await pool.query(
+        `INSERT INTO recommendations (user_id, type, title, description, severity, action_type, action_payload, context)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [
+          userId,
+          "feature_underpricing",
+          `"${row.feature_key}" costs more than it earns (${marginPct}% margin)`,
+          `This feature costs $${costPerCall.toFixed(4)}/call but earns $${revenuePerCall.toFixed(4)}/call. Over ${row.event_count} calls last month, you ${loss > 0 ? "lost" : "barely broke even on"} $${Math.abs(loss).toFixed(2)}.`,
+          loss > 0 ? "critical" : "warning",
+          "adjust_pricing",
+          JSON.stringify({
+            feature_key: row.feature_key,
+            suggested_price_per_call: (costPerCall * 1.4).toFixed(4),
+          }),
+          JSON.stringify({
+            feature_key: row.feature_key,
+            cost_per_call: costPerCall,
+            revenue_per_call: revenuePerCall,
+            event_count: parseInt(row.event_count),
+            margin_pct: parseFloat(marginPct),
+          }),
+        ],
+      );
+    }
+
+    // 5. Revenue leakage — customers with cost > 0 but revenue = 0
+    const leakageResult = await pool.query(
+      `SELECT customer_id,
+        COUNT(*) as event_count,
+        SUM(cost_amount) as total_cost
+       FROM observe_events
+       WHERE user_id = $1 AND timestamp > NOW() - INTERVAL '30 days'
+         AND customer_id IS NOT NULL AND customer_id != 'default' AND customer_id != 'unknown'
+         AND cost_amount > 0
+       GROUP BY customer_id
+       HAVING SUM(revenue_amount) = 0 AND SUM(cost_amount) > 1`,
+      [userId],
+    );
+
+    for (const row of leakageResult.rows) {
+      const existing = await pool.query(
+        `SELECT id FROM recommendations
+         WHERE user_id = $1 AND type = 'revenue_leakage'
+           AND status = 'pending'
+           AND context->>'customer_id' = $2`,
+        [userId, row.customer_id],
+      );
+      if (existing.rows.length > 0) continue;
+
+      const totalCost = parseFloat(row.total_cost);
+
+      await pool.query(
+        `INSERT INTO recommendations (user_id, type, title, description, severity, action_type, action_payload, context)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [
+          userId,
+          "revenue_leakage",
+          `${row.customer_id} has $${totalCost.toFixed(2)} in costs but $0 revenue`,
+          `This customer made ${row.event_count} API calls costing $${totalCost.toFixed(2)} in the last 30 days with no revenue attached. They may be unbilled, internal, or on a free trial.`,
+          totalCost > 50 ? "critical" : "warning",
+          "tag_customer",
+          JSON.stringify({ customer_id: row.customer_id }),
+          JSON.stringify({
+            customer_id: row.customer_id,
+            total_cost: totalCost,
+            event_count: parseInt(row.event_count),
+          }),
+        ],
+      );
+    }
+
+    // 6. Churn risk — customers with >50% usage decline over 4 weeks
+    const churnResult = await pool.query(
+      `WITH recent AS (
+        SELECT customer_id, COUNT(*) as recent_count
+        FROM observe_events
+        WHERE user_id = $1 AND timestamp > NOW() - INTERVAL '14 days'
+          AND customer_id IS NOT NULL AND customer_id != 'default' AND customer_id != 'unknown'
+        GROUP BY customer_id
+      ),
+      prior AS (
+        SELECT customer_id, COUNT(*) as prior_count
+        FROM observe_events
+        WHERE user_id = $1 AND timestamp BETWEEN NOW() - INTERVAL '28 days' AND NOW() - INTERVAL '14 days'
+          AND customer_id IS NOT NULL AND customer_id != 'default' AND customer_id != 'unknown'
+        GROUP BY customer_id
+      )
+      SELECT p.customer_id, p.prior_count, COALESCE(r.recent_count, 0) as recent_count,
+        CASE WHEN p.prior_count > 0
+          THEN ROUND(((p.prior_count - COALESCE(r.recent_count, 0))::numeric / p.prior_count) * 100, 1)
+          ELSE 0 END as decline_pct
+      FROM prior p
+      LEFT JOIN recent r ON p.customer_id = r.customer_id
+      WHERE p.prior_count >= 10
+        AND COALESCE(r.recent_count, 0) < p.prior_count * 0.5`,
+      [userId],
+    );
+
+    for (const row of churnResult.rows) {
+      const existing = await pool.query(
+        `SELECT id FROM recommendations
+         WHERE user_id = $1 AND type = 'churn_risk'
+           AND status = 'pending'
+           AND context->>'customer_id' = $2`,
+        [userId, row.customer_id],
+      );
+      if (existing.rows.length > 0) continue;
+
+      const declinePct = parseFloat(row.decline_pct);
+
+      await pool.query(
+        `INSERT INTO recommendations (user_id, type, title, description, severity, action_type, action_payload, context)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [
+          userId,
+          "churn_risk",
+          `${row.customer_id} usage down ${declinePct}% — churn risk`,
+          `This customer went from ${row.prior_count} events to ${row.recent_count} events over the last 2 weeks. Usage is declining significantly — consider reaching out.`,
+          declinePct > 75 ? "critical" : "warning",
+          "view_customer",
+          JSON.stringify({ customer_id: row.customer_id }),
+          JSON.stringify({
+            customer_id: row.customer_id,
+            prior_count: parseInt(row.prior_count),
+            recent_count: parseInt(row.recent_count),
+            decline_pct: declinePct,
+          }),
+        ],
+      );
+    }
+
+    // 7. Expansion signal — customers with >50% usage growth MoM
+    const expansionResult = await pool.query(
+      `WITH recent AS (
+        SELECT customer_id, COUNT(*) as recent_count
+        FROM observe_events
+        WHERE user_id = $1 AND timestamp > NOW() - INTERVAL '14 days'
+          AND customer_id IS NOT NULL AND customer_id != 'default' AND customer_id != 'unknown'
+        GROUP BY customer_id
+      ),
+      prior AS (
+        SELECT customer_id, COUNT(*) as prior_count
+        FROM observe_events
+        WHERE user_id = $1 AND timestamp BETWEEN NOW() - INTERVAL '28 days' AND NOW() - INTERVAL '14 days'
+          AND customer_id IS NOT NULL AND customer_id != 'default' AND customer_id != 'unknown'
+        GROUP BY customer_id
+      )
+      SELECT r.customer_id, COALESCE(p.prior_count, 0) as prior_count, r.recent_count,
+        CASE WHEN COALESCE(p.prior_count, 0) > 0
+          THEN ROUND(((r.recent_count - COALESCE(p.prior_count, 0))::numeric / COALESCE(p.prior_count, 1)) * 100, 1)
+          ELSE 100 END as growth_pct
+      FROM recent r
+      LEFT JOIN prior p ON r.customer_id = p.customer_id
+      WHERE r.recent_count >= 20
+        AND r.recent_count > COALESCE(p.prior_count, 0) * 1.5`,
+      [userId],
+    );
+
+    for (const row of expansionResult.rows) {
+      const existing = await pool.query(
+        `SELECT id FROM recommendations
+         WHERE user_id = $1 AND type = 'expansion_signal'
+           AND status = 'pending'
+           AND context->>'customer_id' = $2`,
+        [userId, row.customer_id],
+      );
+      if (existing.rows.length > 0) continue;
+
+      const growthPct = parseFloat(row.growth_pct);
+
+      await pool.query(
+        `INSERT INTO recommendations (user_id, type, title, description, severity, action_type, action_payload, context)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [
+          userId,
+          "expansion_signal",
+          `${row.customer_id} usage up ${growthPct}% — expansion opportunity`,
+          `This customer went from ${row.prior_count} to ${row.recent_count} events over the last 2 weeks. Growing usage signals they may be ready for a higher tier or increased limits.`,
+          "info",
+          "view_customer",
+          JSON.stringify({ customer_id: row.customer_id }),
+          JSON.stringify({
+            customer_id: row.customer_id,
+            prior_count: parseInt(row.prior_count),
+            recent_count: parseInt(row.recent_count),
+            growth_pct: growthPct,
+          }),
+        ],
+      );
+    }
+
+    // 8. Cost anomaly — features with cost spike > 3x their 7-day average
+    const anomalyResult = await pool.query(
+      `WITH daily_costs AS (
+        SELECT feature_key,
+          DATE(timestamp) as day,
+          SUM(cost_amount) as daily_cost
+        FROM observe_events
+        WHERE user_id = $1 AND timestamp > NOW() - INTERVAL '7 days'
+          AND feature_key IS NOT NULL AND feature_key != 'unknown'
+          AND cost_amount > 0
+        GROUP BY feature_key, DATE(timestamp)
+      ),
+      averages AS (
+        SELECT feature_key,
+          AVG(daily_cost) as avg_daily_cost,
+          MAX(daily_cost) as max_daily_cost
+        FROM daily_costs
+        GROUP BY feature_key
+        HAVING COUNT(*) >= 3
+      )
+      SELECT feature_key, avg_daily_cost, max_daily_cost,
+        ROUND((max_daily_cost / NULLIF(avg_daily_cost, 0))::numeric, 1) as spike_ratio
+      FROM averages
+      WHERE max_daily_cost > avg_daily_cost * 3 AND avg_daily_cost > 0.5`,
+      [userId],
+    );
+
+    for (const row of anomalyResult.rows) {
+      const existing = await pool.query(
+        `SELECT id FROM recommendations
+         WHERE user_id = $1 AND type = 'cost_anomaly'
+           AND status = 'pending'
+           AND context->>'feature_key' = $2`,
+        [userId, row.feature_key],
+      );
+      if (existing.rows.length > 0) continue;
+
+      const avgCost = parseFloat(row.avg_daily_cost);
+      const maxCost = parseFloat(row.max_daily_cost);
+      const spikeRatio = parseFloat(row.spike_ratio);
+
+      await pool.query(
+        `INSERT INTO recommendations (user_id, type, title, description, severity, action_type, action_payload, context)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [
+          userId,
+          "cost_anomaly",
+          `"${row.feature_key}" cost spiked ${spikeRatio}x above average`,
+          `This feature's daily cost hit $${maxCost.toFixed(2)} vs the 7-day average of $${avgCost.toFixed(2)}. Investigate if this is a legitimate usage increase or an anomaly.`,
+          spikeRatio > 5 ? "critical" : "warning",
+          "create_alert",
+          JSON.stringify({
+            metric: "daily_cost",
+            feature_key: row.feature_key,
+            threshold: avgCost * 2,
+          }),
+          JSON.stringify({
+            feature_key: row.feature_key,
+            avg_daily_cost: avgCost,
+            max_daily_cost: maxCost,
+            spike_ratio: spikeRatio,
+          }),
+        ],
+      );
+    }
   } catch (err) {
     console.error("computeRecommendations error:", err);
   }
