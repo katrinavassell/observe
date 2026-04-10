@@ -35,6 +35,7 @@ export async function initialize() {
               const result = await api.signupComplete(
                 session.user.user_metadata?.full_name ||
                   session.user.user_metadata?.name,
+                session.user.email,
               );
               account.value = result.account;
               break;
@@ -150,7 +151,7 @@ export function useAuth() {
     visitorId.value = data.user.id;
 
     // Create local account row + SDK key
-    const result = await api.signupComplete(name);
+    const result = await api.signupComplete(name, email);
     account.value = result.account;
 
     if (account.value && window.posthog) {

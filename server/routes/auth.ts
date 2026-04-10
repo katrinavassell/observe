@@ -118,8 +118,19 @@ export function createAuthRoutes(
     async (req: AuthRequest, res: Response) => {
       try {
         const userId = req.visitorId!;
-        const email = req.accountEmail!;
-        const { name } = req.body;
+        const { name, email: bodyEmail } = req.body;
+
+        // Get email from JWT user, request body, or Supabase admin API
+        let email = req.accountEmail || bodyEmail;
+        if (!email) {
+          const { data } = await supabase.auth.admin.getUserById(userId);
+          email = data?.user?.email;
+        }
+        if (!email) {
+          return res
+            .status(400)
+            .json({ error: "Could not determine email for account" });
+        }
 
         // Create local account row (idempotent)
         const result = await pool.query(

@@ -1133,10 +1133,11 @@ export interface Account {
 
 export async function signupComplete(
   name?: string,
+  email?: string,
 ): Promise<{ account: Account; sdkKey?: string }> {
   return request("/auth/signup-complete", {
     method: "POST",
-    body: JSON.stringify({ name }),
+    body: JSON.stringify({ name, email }),
   });
 }
 
