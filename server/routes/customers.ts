@@ -1381,8 +1381,11 @@ export function createCustomersRoutes(
         res.json({ success: true, message: "Sample data loaded" });
       } catch (error) {
         await client.query("ROLLBACK");
+        const msg = error instanceof Error ? error.message : String(error);
         console.error("Load sample data error:", error);
-        res.status(500).json({ error: "Failed to load sample data" });
+        res
+          .status(500)
+          .json({ error: "Failed to load sample data", detail: msg });
       } finally {
         client.release();
       }
