@@ -44,11 +44,20 @@ export async function initialize() {
         if (session?.user) {
           visitorId.value = session.user.id;
           if (event === "SIGNED_IN") {
+            // Try to fetch existing account, create if missing (OAuth users)
             try {
               const me = await api.getMe();
-              account.value = me.account;
+              if (me.account) {
+                account.value = me.account;
+              } else {
+                const result = await api.signupComplete(
+                  session.user.user_metadata?.full_name ||
+                    session.user.user_metadata?.name,
+                );
+                account.value = result.account;
+              }
             } catch {
-              // Will be created via signup-complete
+              // Will be created on next request
             }
           }
         } else {
@@ -152,6 +161,30 @@ export function useAuth() {
     if (error) throw new Error(error.message);
   }
 
+  async function signInWithGoogle() {
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo: `${window.location.origin}/` },
+    });
+    if (error) throw new Error(error.message);
+  }
+
+  async function signInWithGithub() {
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "github",
+      options: { redirectTo: `${window.location.origin}/` },
+    });
+    if (error) throw new Error(error.message);
+  }
+
+  async function signInWithMagicLink(email: string) {
+    const { error } = await supabase.auth.signInWithOtp({
+      email,
+      options: { emailRedirectTo: `${window.location.origin}/` },
+    });
+    if (error) throw new Error(error.message);
+  }
+
   return {
     visitorId,
     isLoading,
@@ -164,5 +197,8 @@ export function useAuth() {
     logout,
     forgotPassword,
     resetPassword,
+    signInWithGoogle,
+    signInWithGithub,
+    signInWithMagicLink,
   };
 }
