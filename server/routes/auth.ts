@@ -60,11 +60,11 @@ export function createEnsureVisitor(pool: Pool) {
                 [user.id],
               );
               await pool.query(
-                "DELETE FROM customers WHERE user_id = $1 AND customer_id IN ('acme_saas','tidewater_ai','neondata','circleops','blazeml','quantumhr')",
+                "DELETE FROM customers WHERE user_id = $1 AND customer_id IN ('cus_001','cus_002','cus_003','cus_004','cus_005','acme_saas','tidewater_ai','neondata','circleops','blazeml','quantumhr')",
                 [user.id],
               );
               await pool.query(
-                "DELETE FROM subscriptions WHERE user_id = $1 AND subscription_id IN ('sub_acme','sub_acme_addon','sub_tidewater','sub_neon','sub_neon_addon','sub_circle','sub_blaze','sub_quantum')",
+                "DELETE FROM subscriptions WHERE user_id = $1 AND subscription_id IN ('sub_001','sub_002','sub_003','sub_004','sub_005','sub_acme','sub_acme_addon','sub_tidewater','sub_neon','sub_neon_addon','sub_circle','sub_blaze','sub_quantum')",
                 [user.id],
               );
               await pool.query(
@@ -115,28 +115,6 @@ export function createAuthRoutes(
 ) {
   const router = Router();
 
-  // Temporary diagnostic — remove after debugging production auth
-  router.get("/auth/debug", async (req, res) => {
-    const authHeader = req.headers.authorization;
-    let getUserResult = null;
-    if (authHeader?.startsWith("Bearer ")) {
-      const token = authHeader.slice(7);
-      const { data, error } = await supabase.auth.getUser(token);
-      getUserResult = error
-        ? { error: error.message }
-        : { userId: data.user?.id, email: data.user?.email };
-    }
-    res.json({
-      hasSupabaseUrl: !!process.env.SUPABASE_URL,
-      hasServiceRoleKey: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
-      hasSecretKey: !!process.env.SUPABASE_SECRET_KEY,
-      serviceKeyPrefix: supabaseServiceKey?.slice(0, 20),
-      hasAuthHeader: !!authHeader,
-      authHeaderPrefix: authHeader?.slice(0, 15),
-      getUserResult,
-    });
-  });
-
   // POST /auth/signup — called after Supabase client-side signup to create local account row
   router.post(
     "/auth/signup-complete",
@@ -186,11 +164,11 @@ export function createAuthRoutes(
           [userId, "sample"],
         );
         await pool.query(
-          "DELETE FROM customers WHERE user_id = $1 AND customer_id IN ('acme_saas','tidewater_ai','neondata','circleops','blazeml','quantumhr')",
+          "DELETE FROM customers WHERE user_id = $1 AND customer_id IN ('cus_001','cus_002','cus_003','cus_004','cus_005','acme_saas','tidewater_ai','neondata','circleops','blazeml','quantumhr')",
           [userId],
         );
         await pool.query(
-          "DELETE FROM subscriptions WHERE user_id = $1 AND subscription_id IN ('sub_acme','sub_acme_addon','sub_tidewater','sub_neon','sub_neon_addon','sub_circle','sub_blaze','sub_quantum')",
+          "DELETE FROM subscriptions WHERE user_id = $1 AND subscription_id IN ('sub_001','sub_002','sub_003','sub_004','sub_005','sub_acme','sub_acme_addon','sub_tidewater','sub_neon','sub_neon_addon','sub_circle','sub_blaze','sub_quantum')",
           [userId],
         );
         await pool.query(
