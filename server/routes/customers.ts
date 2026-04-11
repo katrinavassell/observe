@@ -1371,12 +1371,23 @@ export function createCustomersRoutes(
           if (props?.span_id && !ev.span_id) {
             ev.span_id = props.span_id as string;
           }
+          if (!ev.duration_ms) {
+            const base =
+              ev.feature_key === "search"
+                ? 200
+                : ev.feature_key === "code_review"
+                  ? 8000
+                  : ev.feature_key === "content_generation"
+                    ? 5000
+                    : 1500;
+            ev.duration_ms = Math.round(base + Math.random() * base * 0.6);
+          }
         }
 
         for (const ev of sampleEvents as Array<Record<string, unknown>>) {
           await client.query(
-            `INSERT INTO observe_events (user_id, customer_id, feature_key, event_name, timestamp, cost_amount, cost_unit, revenue_amount, usage_units, model, model_provider, source, granularity, properties, request_body, response_body, agent_id, cost_type, trace_id, span_id)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'event', $13, $14, $15, $16, $17, $18, $19)`,
+            `INSERT INTO observe_events (user_id, customer_id, feature_key, event_name, timestamp, cost_amount, cost_unit, revenue_amount, usage_units, model, model_provider, source, granularity, properties, request_body, response_body, agent_id, cost_type, trace_id, span_id, duration_ms)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'event', $13, $14, $15, $16, $17, $18, $19, $20)`,
             [
               req.visitorId,
               ev.customer_id,
@@ -1397,6 +1408,7 @@ export function createCustomersRoutes(
               ev.cost_type || null,
               ev.trace_id || null,
               ev.span_id || null,
+              ev.duration_ms || null,
             ],
           );
         }
