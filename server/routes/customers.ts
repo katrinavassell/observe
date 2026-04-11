@@ -49,11 +49,11 @@ async function clearSampleData(
     [userId],
   );
   await db.query(
-    "DELETE FROM subscriptions WHERE user_id = $1 AND subscription_id IN ('sub_001','sub_002','sub_003','sub_004','sub_005')",
+    "DELETE FROM subscriptions WHERE user_id = $1 AND subscription_id IN ('sub_001','sub_002','sub_003','sub_004','sub_005','sub_acme','sub_acme_addon','sub_tidewater','sub_neon','sub_neon_addon','sub_circle','sub_blaze','sub_quantum')",
     [userId],
   );
   await db.query(
-    "DELETE FROM customers WHERE user_id = $1 AND customer_id IN ('cus_001','cus_002','cus_003','cus_004','cus_005')",
+    "DELETE FROM customers WHERE user_id = $1 AND customer_id IN ('cus_001','cus_002','cus_003','cus_004','cus_005','acme_saas','tidewater_ai','neondata','circleops','blazeml','quantumhr')",
     [userId],
   );
   await db.query(
@@ -803,7 +803,7 @@ export function createCustomersRoutes(
             customer_id: "quantumhr",
             feature_key: "chat_assistant",
             event_name: "chat_completion",
-            ts: daysAgo(22),
+            ts: daysAgo(42),
             cost: 0.18,
             cost_unit: "usd",
             revenue: 0.7,
@@ -923,7 +923,7 @@ export function createCustomersRoutes(
             customer_id: "quantumhr",
             feature_key: "document_qa",
             event_name: "question_answered",
-            ts: daysAgo(2),
+            ts: daysAgo(38),
             cost: 0.28,
             cost_unit: "usd",
             revenue: 1.1,
@@ -1082,7 +1082,7 @@ export function createCustomersRoutes(
             customer_id: "quantumhr",
             feature_key: "content_generation",
             event_name: "content_created",
-            ts: daysAgo(6),
+            ts: daysAgo(45),
             cost: 0.4,
             cost_unit: "usd",
             revenue: 1.1,
@@ -1210,7 +1210,7 @@ export function createCustomersRoutes(
             customer_id: "quantumhr",
             feature_key: "search",
             event_name: "search_query",
-            ts: daysAgo(16),
+            ts: daysAgo(50),
             cost: 0.004,
             cost_unit: "usd",
             revenue: 0.06,
@@ -1268,7 +1268,7 @@ export function createCustomersRoutes(
             customer_id: "quantumhr",
             feature_key: "summarization",
             event_name: "summary_generated",
-            ts: daysAgo(6),
+            ts: daysAgo(55),
             cost: 0.25,
             cost_unit: "usd",
             revenue: 1.0,
@@ -1320,6 +1320,36 @@ export function createCustomersRoutes(
             source: "sample",
             properties: {},
           },
+          // --- circleops: moderate cost overruns → negative margin but not extreme ---
+          ...Array.from({ length: 5 }, (_, i) => ({
+            customer_id: "circleops",
+            feature_key: "ai_summarization",
+            event_name: "summary_generated",
+            ts: daysAgo(i * 5 + 2),
+            cost: 4.5,
+            cost_unit: "usd",
+            revenue: 0.5,
+            usage: 3000,
+            model: "gpt-4",
+            provider: "openai",
+            source: "sample" as const,
+            properties: {},
+          })),
+          // --- tidewater_ai: moderate cost pressure → thin margins ---
+          ...Array.from({ length: 5 }, (_, i) => ({
+            customer_id: "tidewater_ai",
+            feature_key: "code_review",
+            event_name: "review_completed",
+            ts: daysAgo(i * 5 + 2),
+            cost: 3.0,
+            cost_unit: "usd",
+            revenue: 3.15,
+            usage: 2000,
+            model: "claude-opus-4-6",
+            provider: "anthropic",
+            source: "sample" as const,
+            properties: {},
+          })),
         ];
 
         // Enrich sample events with cost_type and agent_id
