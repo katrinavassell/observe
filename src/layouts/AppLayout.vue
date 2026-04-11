@@ -416,10 +416,10 @@ function isActive(path: string) {
 
     <!-- Main Content -->
     <main class="flex-1 min-h-screen overflow-x-hidden pt-14 md:pt-0 md:ml-64">
-      <!-- Guest banner -->
+      <!-- Guest banner (desktop only — mobile uses sticky bottom bar) -->
       <div
         v-if="!isLoggedIn && isSampleMode"
-        class="flex items-center justify-between px-4 py-2 bg-blue-50 text-blue-700 border-b border-blue-200 text-sm"
+        class="hidden md:flex items-center justify-between px-4 py-2 bg-blue-50 text-blue-700 border-b border-blue-200 text-sm"
       >
         <div class="flex items-center gap-2">
           <Database class="h-4 w-4" />
@@ -429,12 +429,26 @@ function isActive(path: string) {
           Sign up to connect your data
         </router-link>
       </div>
-      <div class="p-6">
+      <div class="p-6 pb-24 md:pb-6">
         <ErrorBoundary>
           <slot />
         </ErrorBoundary>
       </div>
     </main>
+
+    <!-- Mobile sticky bottom CTA for guests -->
+    <div
+      v-if="!isLoggedIn"
+      class="fixed bottom-0 left-0 right-0 z-50 md:hidden border-t bg-background/95 backdrop-blur-sm px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
+    >
+      <router-link
+        to="/signup"
+        class="flex items-center justify-center gap-2 w-full rounded-lg bg-primary text-primary-foreground px-4 py-2.5 text-sm font-medium transition-all hover:opacity-90"
+      >
+        <LogIn class="h-4 w-4" />
+        Sign Up Free
+      </router-link>
+    </div>
 
     <FeedbackModal
       :open="feedbackOpen"

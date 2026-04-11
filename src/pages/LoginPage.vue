@@ -78,7 +78,7 @@ async function handleMagicLink() {
   }
 }
 const isLoading = ref(false);
-const isRegisterMode = ref(route.path === "/signup");
+const isRegisterMode = ref(route.path !== "/login");
 
 onMounted(() => {
   window.posthog?.capture(
