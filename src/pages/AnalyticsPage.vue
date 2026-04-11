@@ -16,7 +16,7 @@ import {
   getSourceBreakdown,
 } from "@/lib/api";
 import type {} from "@/lib/api";
-import { AlertCircle, AlertTriangle, Plug, Sparkles } from "lucide-vue-next";
+import { AlertCircle, Plug, Sparkles } from "lucide-vue-next";
 import { useDataMode } from "@/composables/useDataMode";
 import { useAuth } from "@/composables/useAuth";
 import Sheet from "@/components/ui/sheet.vue";
@@ -626,21 +626,6 @@ const insightCategories = [
 
     <!-- Data loaded -->
     <template v-else>
-      <!-- Negative margin alert -->
-      <div
-        v-if="negativeMarginsInfo"
-        class="flex items-center gap-3 rounded-lg border border-warning/30 bg-warning/10 px-4 py-3"
-      >
-        <AlertTriangle class="h-5 w-5 text-warning shrink-0" />
-        <span class="text-sm font-medium text-warning-foreground">
-          {{ negativeMarginsInfo.count }} feature{{
-            negativeMarginsInfo.count === 1 ? "" : "s"
-          }}
-          {{ negativeMarginsInfo.count === 1 ? "has" : "have" }} negative margin
-          totaling {{ fmt(negativeMarginsInfo.totalLoss) }} in losses
-        </span>
-      </div>
-
       <!-- KPI cards -->
       <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <Card class="p-6">
