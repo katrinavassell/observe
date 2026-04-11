@@ -72,6 +72,20 @@ async function handleGenerate() {
   }
 }
 
+function marginBarClass(margin_pct: number | null): string {
+  if (margin_pct == null) return "bg-foreground";
+  if (margin_pct < 0) return "bg-destructive";
+  if (margin_pct < 40) return "bg-amber-500";
+  return "bg-emerald-500";
+}
+
+function marginTextClass(margin_pct: number | null): string {
+  if (margin_pct == null) return "text-muted-foreground";
+  if (margin_pct < 0) return "text-destructive";
+  if (margin_pct < 40) return "text-amber-600";
+  return "text-success";
+}
+
 function severityColor(severity: string) {
   switch (severity) {
     case "critical":
@@ -654,11 +668,7 @@ const insightCategories = [
           </div>
           <div
             class="text-3xl font-bold tabular-nums mt-1"
-            :class="
-              netMarginPct != null && netMarginPct >= 0
-                ? 'text-success'
-                : 'text-destructive'
-            "
+            :class="marginTextClass(netMarginPct)"
           >
             {{ netMarginPct != null ? fmtPct(netMarginPct) : "—" }}
           </div>
@@ -737,11 +747,7 @@ const insightCategories = [
           <div class="flex-1 h-3 bg-muted rounded-full overflow-hidden">
             <div
               class="h-full rounded-full"
-              :class="
-                f.margin_pct != null && f.margin_pct < 0
-                  ? 'bg-destructive'
-                  : 'bg-foreground'
-              "
+              :class="marginBarClass(f.margin_pct)"
               :style="{ width: `${(f.total_cost / maxFeatureCost) * 100}%` }"
             />
           </div>
@@ -754,11 +760,7 @@ const insightCategories = [
           >
           <span
             class="w-16 text-right text-sm tabular-nums font-medium"
-            :class="
-              f.margin_pct != null && f.margin_pct < 0
-                ? 'text-destructive'
-                : 'text-success'
-            "
+            :class="marginTextClass(f.margin_pct)"
           >
             {{ f.margin_pct != null ? fmtPct(f.margin_pct) : "—" }}
           </span>
@@ -800,11 +802,7 @@ const insightCategories = [
           >
           <span
             class="w-16 text-right text-sm tabular-nums font-medium"
-            :class="
-              m.margin_pct != null && m.margin_pct < 0
-                ? 'text-destructive'
-                : 'text-success'
-            "
+            :class="marginTextClass(m.margin_pct)"
           >
             {{ m.margin_pct != null ? fmtPct(m.margin_pct) : "—" }}
           </span>
@@ -846,11 +844,7 @@ const insightCategories = [
           <div class="flex-1 h-3 bg-muted rounded-full overflow-hidden">
             <div
               class="h-full rounded-full"
-              :class="
-                c.margin_pct != null && c.margin_pct < 0
-                  ? 'bg-destructive'
-                  : 'bg-foreground'
-              "
+              :class="marginBarClass(c.margin_pct)"
               :style="{ width: `${(c.total_cost / maxCustomerCost) * 100}%` }"
             />
           </div>
@@ -863,11 +857,7 @@ const insightCategories = [
           >
           <span
             class="w-16 text-right text-sm tabular-nums font-medium"
-            :class="
-              c.margin_pct != null && c.margin_pct < 0
-                ? 'text-destructive'
-                : 'text-success'
-            "
+            :class="marginTextClass(c.margin_pct)"
           >
             {{ c.margin_pct != null ? fmtPct(c.margin_pct) : "—" }}
           </span>
@@ -906,11 +896,7 @@ const insightCategories = [
           <div class="flex-1 h-3 bg-muted rounded-full overflow-hidden">
             <div
               class="h-full rounded-full"
-              :class="
-                a.margin_pct != null && a.margin_pct < 0
-                  ? 'bg-destructive'
-                  : 'bg-foreground'
-              "
+              :class="marginBarClass(a.margin_pct)"
               :style="{
                 width: `${sortedAgents.length ? (a.total_cost / sortedAgents[0].total_cost) * 100 : 0}%`,
               }"
@@ -925,11 +911,7 @@ const insightCategories = [
           >
           <span
             class="w-16 text-right text-sm tabular-nums font-medium"
-            :class="
-              a.margin_pct != null && a.margin_pct < 0
-                ? 'text-destructive'
-                : 'text-success'
-            "
+            :class="marginTextClass(a.margin_pct)"
           >
             {{ a.margin_pct != null ? fmtPct(a.margin_pct) : "—" }}
           </span>
