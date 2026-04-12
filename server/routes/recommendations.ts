@@ -22,12 +22,55 @@ interface Recommendation {
 
 // ── Recommendation Compute Engine ────────────────────────────────────────────
 
+// Model families we consider comparable for cost swap recommendations.
+// Comparing a chat model's cost/event against an embedding or image model is
+// meaningless — you can't substitute text-embedding-ada-002 for gpt-4o.
+function isChatCompletionModel(model: string): boolean {
+  const m = model.toLowerCase();
+  if (m.includes("embedding")) return false;
+  if (m.includes("dall-e") || m.includes("whisper") || m.includes("tts"))
+    return false;
+  if (m.includes("image") || m.includes("speech")) return false;
+  return true;
+}
+
+// Recent dismissals act as a cooldown so dismissed suggestions don't reappear.
+// Keyed by (type, scope_key) where scope_key is the canonical context field.
+async function isRecentlyDismissed(
+  pool: Pool,
+  userId: string,
+  type: string,
+  scopeField: string,
+  scopeValue: string,
+): Promise<boolean> {
+  const result = await pool.query(
+    `SELECT 1 FROM recommendations
+     WHERE user_id = $1 AND type = $2 AND status = 'dismissed'
+       AND dismissed_at > NOW() - INTERVAL '30 days'
+       AND context->>$3 = $4
+     LIMIT 1`,
+    [userId, type, scopeField, scopeValue],
+  );
+  return result.rows.length > 0;
+}
+
+// Each rule runs in its own try block. A failure in one rule must not
+// silently skip the remaining rules — they are independent and users
+// depend on all of them.
+async function runRule(name: string, fn: () => Promise<void>): Promise<void> {
+  try {
+    await fn();
+  } catch (err) {
+    console.error(`computeRecommendations: rule "${name}" failed:`, err);
+  }
+}
+
 export async function computeRecommendations(
   pool: Pool,
   userId: string,
 ): Promise<void> {
-  try {
-    // 1. Find customers with negative margins (routing_cost_optimization)
+  // 1. Find customers with negative margins (routing_cost_optimization)
+  await runRule("customer_margin", async () => {
     const marginResult = await pool.query(
       `SELECT customer_id,
         SUM(cost_amount) as total_cost,
@@ -47,6 +90,17 @@ export async function computeRecommendations(
     for (const row of marginResult.rows) {
       const marginPct = parseFloat(row.margin_pct);
       if (isNaN(marginPct) || marginPct >= 20) continue;
+
+      if (
+        await isRecentlyDismissed(
+          pool,
+          userId,
+          "routing_cost_optimization",
+          "customer_id",
+          row.customer_id,
+        )
+      )
+        continue;
 
       // Check if we already have a pending recommendation for this customer
       const existing = await pool.query(
@@ -86,8 +140,12 @@ export async function computeRecommendations(
         ],
       );
     }
+  });
 
-    // 2. Find expensive models that could be swapped (routing_model_swap)
+  // 2. Find expensive models that could be swapped (routing_model_swap)
+  // Only compare within the same modality — suggesting an embedding model as
+  // a replacement for a chat model is nonsense.
+  await runRule("model_swap", async () => {
     const modelResult = await pool.query(
       `SELECT model, model_provider,
         COUNT(*) as event_count,
@@ -102,19 +160,27 @@ export async function computeRecommendations(
       [userId],
     );
 
-    // Check for models that have significantly cheaper alternatives
+    // Only consider chat/completion models for this rule. Cost/event is only
+    // a sound comparison within a single modality.
     const expensiveModels = modelResult.rows.filter(
-      (r) => parseFloat(r.avg_cost_per_event) > 0.01,
+      (r) =>
+        parseFloat(r.avg_cost_per_event) > 0.01 &&
+        isChatCompletionModel(r.model),
     );
 
     for (const model of expensiveModels) {
-      // Find cheaper models from the same or different provider
+      // Find cheaper chat models the user already uses. Enforce same-modality
+      // filtering in SQL so we never cross chat ↔ embedding ↔ image.
       const cheaperResult = await pool.query(
         `SELECT DISTINCT model, model_provider, AVG(cost_amount) as avg_cost
          FROM observe_events
          WHERE user_id = $1 AND timestamp > NOW() - INTERVAL '30 days'
            AND model IS NOT NULL AND cost_amount > 0
            AND model != $2
+           AND model NOT ILIKE '%embedding%'
+           AND model NOT ILIKE 'dall-e%'
+           AND model NOT ILIKE '%whisper%'
+           AND model NOT ILIKE '%tts%'
          GROUP BY model, model_provider
          HAVING AVG(cost_amount) < $3 * 0.5
          ORDER BY avg_cost ASC
@@ -125,6 +191,17 @@ export async function computeRecommendations(
       if (cheaperResult.rows.length === 0) continue;
 
       const cheaper = cheaperResult.rows[0];
+
+      if (
+        await isRecentlyDismissed(
+          pool,
+          userId,
+          "routing_model_swap",
+          "current_model",
+          model.model,
+        )
+      )
+        continue;
       const existing = await pool.query(
         `SELECT id FROM recommendations
          WHERE user_id = $1 AND type = 'routing_model_swap'
@@ -167,8 +244,10 @@ export async function computeRecommendations(
         ],
       );
     }
+  });
 
-    // 3. Detect provider concentration risk
+  // 3. Detect provider concentration risk
+  await runRule("provider_concentration", async () => {
     const providerResult = await pool.query(
       `SELECT model_provider, COUNT(*) as event_count,
         SUM(cost_amount) as total_cost
@@ -202,11 +281,9 @@ export async function computeRecommendations(
             "info",
             "create_routing_config",
             JSON.stringify({
-              suggested_fallback_providers: [
-                "openai",
-                "anthropic",
-                "togetherai",
-              ].filter((p) => p !== provider.model_provider),
+              suggested_fallback_providers: ["openai", "anthropic"].filter(
+                (p) => p !== provider.model_provider,
+              ),
             }),
             JSON.stringify({
               sole_provider: provider.model_provider,
@@ -216,7 +293,10 @@ export async function computeRecommendations(
         );
       }
     }
-    // 4. Feature underpricing — features where cost > 80% of revenue
+  });
+
+  // 4. Feature underpricing — features where cost > 80% of revenue
+  await runRule("feature_underpricing", async () => {
     const featurePricingResult = await pool.query(
       `SELECT feature_key,
         COUNT(*) as event_count,
@@ -279,8 +359,10 @@ export async function computeRecommendations(
         ],
       );
     }
+  });
 
-    // 5. Revenue leakage — customers with cost > 0 but revenue = 0
+  // 5. Revenue leakage — customers with cost > 0 but revenue = 0
+  await runRule("revenue_leakage", async () => {
     const leakageResult = await pool.query(
       `SELECT customer_id,
         COUNT(*) as event_count,
@@ -325,8 +407,10 @@ export async function computeRecommendations(
         ],
       );
     }
+  });
 
-    // 6. Churn risk — customers with >50% usage decline over 4 weeks
+  // 6. Churn risk — customers with >50% usage decline over 4 weeks
+  await runRule("churn_risk", async () => {
     const churnResult = await pool.query(
       `WITH recent AS (
         SELECT customer_id, COUNT(*) as recent_count
@@ -385,8 +469,10 @@ export async function computeRecommendations(
         ],
       );
     }
+  });
 
-    // 7. Expansion signal — customers with >50% usage growth MoM
+  // 7. Expansion signal — customers with >50% usage growth MoM
+  await runRule("expansion_signal", async () => {
     const expansionResult = await pool.query(
       `WITH recent AS (
         SELECT customer_id, COUNT(*) as recent_count
@@ -445,8 +531,10 @@ export async function computeRecommendations(
         ],
       );
     }
+  });
 
-    // 8. Cost anomaly — features with cost spike > 3x their 7-day average
+  // 8. Cost anomaly — features with cost spike > 3x their 7-day average
+  await runRule("cost_anomaly", async () => {
     const anomalyResult = await pool.query(
       `WITH daily_costs AS (
         SELECT feature_key,
@@ -511,9 +599,7 @@ export async function computeRecommendations(
         ],
       );
     }
-  } catch (err) {
-    console.error("computeRecommendations error:", err);
-  }
+  });
 }
 
 // ── Route factory ────────────────────────────────────────────────────────────
