@@ -49,16 +49,77 @@ export const ANTHROPIC_PRICING: Record<
   },
 };
 
-export function inferModelProvider(model: string | undefined): string | null {
+// Detect provider from a model string.
+//
+// Strategy (matches LiteLLM / Helicone / OpenRouter convention):
+//   1. `provider/model` slug prefix wins (e.g. "openai/gpt-4o")
+//   2. Exact lookup against known model keys (derived from pricing maps)
+//   3. Keyword scan with word boundaries — order-independent, so
+//      "open-ai-gpt-o3" and "o3-open-ai-gpt" both match openai
+//   4. null if nothing matches — callers must handle, never default silently
+
+const KNOWN_PROVIDER_PREFIXES = new Set([
+  "openai",
+  "anthropic",
+  "google",
+  "mistral",
+  "meta",
+  "meta-llama",
+  "cohere",
+  "azure",
+  "bedrock",
+  "vertex_ai",
+  "vertex",
+]);
+
+const PROVIDER_PREFIX_ALIASES: Record<string, string> = {
+  "meta-llama": "meta",
+  azure: "openai",
+  vertex_ai: "google",
+  vertex: "google",
+};
+
+const KNOWN_MODELS: Record<string, string> = {
+  ...Object.fromEntries(
+    Object.keys(OPENAI_PRICING).map((k) => [k.toLowerCase(), "openai"]),
+  ),
+  "dall-e-3": "openai",
+  "dall-e-2": "openai",
+  ...Object.fromEntries(
+    Object.keys(ANTHROPIC_PRICING).map((k) => [k.toLowerCase(), "anthropic"]),
+  ),
+};
+
+const PROVIDER_KEYWORDS: Array<[RegExp, string]> = [
+  [/\b(anthropic|claude)\b/i, "anthropic"],
+  [/\b(openai|gpt|dall-e|text-embedding|o1|o3|o4)\b/i, "openai"],
+  [/\b(google|gemini|palm|bison)\b/i, "google"],
+  [/\b(mistral|mixtral|codestral)\b/i, "mistral"],
+  [/\b(meta|llama)\b/i, "meta"],
+  [/\b(cohere|command)\b/i, "cohere"],
+];
+
+export function inferModelProvider(
+  model: string | undefined | null,
+): string | null {
   if (!model) return null;
-  const m = model.toLowerCase();
-  if (m.startsWith("claude-")) return "anthropic";
-  if (m.startsWith("gpt-")) return "openai";
-  if (m.startsWith("dall-e-")) return "openai";
-  if (m.startsWith("text-embedding-")) return "openai";
-  if (m.startsWith("gemini-")) return "google";
-  if (m.startsWith("mistral-") || m.startsWith("mixtral-")) return "mistral";
-  if (m.startsWith("llama-")) return "meta";
-  if (m.startsWith("command-")) return "cohere";
+  const raw = model.trim();
+  if (!raw) return null;
+
+  const slashIdx = raw.indexOf("/");
+  if (slashIdx > 0) {
+    const prefix = raw.slice(0, slashIdx).toLowerCase();
+    if (KNOWN_PROVIDER_PREFIXES.has(prefix)) {
+      return PROVIDER_PREFIX_ALIASES[prefix] ?? prefix;
+    }
+  }
+
+  const lower = raw.toLowerCase();
+  if (KNOWN_MODELS[lower]) return KNOWN_MODELS[lower];
+
+  for (const [re, provider] of PROVIDER_KEYWORDS) {
+    if (re.test(lower)) return provider;
+  }
+
   return null;
 }

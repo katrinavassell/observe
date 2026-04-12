@@ -7,6 +7,7 @@ import { encryptApiKey, decryptApiKey } from "../stripe-client.js";
 import { calculateCostFromTokens as calcCostFromDb } from "../model-pricing.js";
 import { checkAlerts } from "./alerts.js";
 import { checkFeatureAccess } from "../billing.js";
+import { inferModelProvider } from "../lib/models.js";
 
 type ComputeInferenceProfilesFn = (userId: string) => Promise<number>;
 
@@ -453,25 +454,6 @@ const SOURCE_PRIORITY_CTE = `
   ),
   deduped AS (SELECT * FROM ranked WHERE _src_rank = 1)
 `;
-
-function inferModelProvider(model: string | undefined): string | null {
-  if (!model) return null;
-  const m = model.toLowerCase();
-  if (m.startsWith("claude-")) return "anthropic";
-  if (
-    m.startsWith("gpt-") ||
-    m.startsWith("o1") ||
-    m.startsWith("o3") ||
-    m.startsWith("o4") ||
-    m.startsWith("text-embedding-")
-  )
-    return "openai";
-  if (m.startsWith("dall-e-")) return "openai";
-  if (m.startsWith("gemini-")) return "google";
-  if (m.startsWith("mistral-") || m.startsWith("codestral")) return "mistral";
-  if (m.startsWith("llama-")) return "meta";
-  return null;
-}
 
 // In-memory dedup: tracks which usage alerts have already been sent this month
 const usageAlertsSent = new Set<string>();
@@ -992,11 +974,9 @@ export function createEventsRoutes(
             error.message.includes("violates") ||
             error.message.includes("duplicate") ||
             error.message.includes("validation"));
-        res
-          .status(isConstraint ? 400 : 500)
-          .json({
-            error: isConstraint ? error.message : "Failed to create API key",
-          });
+        res.status(isConstraint ? 400 : 500).json({
+          error: isConstraint ? error.message : "Failed to create API key",
+        });
       }
     },
   );

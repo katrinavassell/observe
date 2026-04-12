@@ -50,4 +50,17 @@ describe("inferModelProvider", () => {
     expect(inferModelProvider("GPT-4o")).toBe("openai");
     expect(inferModelProvider("Claude-3-5-sonnet-20241022")).toBe("anthropic");
   });
+
+  it("is order-independent for keyword fallback", () => {
+    expect(inferModelProvider("open-ai-gpt-o3")).toBe("openai");
+    expect(inferModelProvider("o3-open-ai-gpt")).toBe("openai");
+  });
+
+  it("handles provider/model slug convention", () => {
+    expect(inferModelProvider("openai/gpt-4o")).toBe("openai");
+    expect(inferModelProvider("anthropic/claude-3-opus")).toBe("anthropic");
+    expect(inferModelProvider("meta-llama/llama-3")).toBe("meta");
+    expect(inferModelProvider("azure/gpt-4")).toBe("openai");
+    expect(inferModelProvider("vertex_ai/gemini-1.5-pro")).toBe("google");
+  });
 });
