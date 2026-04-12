@@ -95,6 +95,73 @@ export function inferModelProvider(
   return null;
 }
 
+// Structured parse: vendor → family → version. Matches Doug's chained
+// detection approach — isolate vendor first, then match within that vendor's
+// known families, then take the remainder as version. Less ambiguous than
+// flat matching when you need to reason about the model's tier or pricing.
+//
+// Family ordering matters: list more-specific families first so
+// "text-embedding-3-small" matches "text-embedding" before any "o" family.
+
+export interface ParsedModel {
+  vendor: string;
+  family: string | null;
+  version: string | null;
+}
+
+const VENDOR_FAMILIES: Record<string, string[]> = {
+  openai: [
+    "text-embedding",
+    "dall-e",
+    "whisper",
+    "tts",
+    "gpt",
+    "o1",
+    "o3",
+    "o4",
+  ],
+  anthropic: ["claude"],
+  google: ["gemini", "palm", "bison"],
+  mistral: ["codestral", "mixtral", "mistral"],
+  meta: ["llama"],
+  cohere: ["command"],
+};
+
+function extractFamily(
+  vendor: string,
+  bare: string,
+): { family: string; versionStart: number } | null {
+  const families = VENDOR_FAMILIES[vendor];
+  if (!families) return null;
+  for (const fam of families) {
+    const idx = bare.indexOf(fam);
+    if (idx >= 0) return { family: fam, versionStart: idx + fam.length };
+  }
+  return null;
+}
+
+export function parseModel(
+  model: string | undefined | null,
+): ParsedModel | null {
+  if (!model) return null;
+  const raw = model.trim();
+  if (!raw) return null;
+
+  const vendor = inferModelProvider(raw);
+  if (!vendor) return null;
+
+  // Strip `provider/` slug if present so family matching sees the bare model.
+  const slashIdx = raw.indexOf("/");
+  const bare = (slashIdx > 0 ? raw.slice(slashIdx + 1) : raw).toLowerCase();
+
+  const familyMatch = extractFamily(vendor, bare);
+  if (!familyMatch) return { vendor, family: null, version: null };
+
+  const version =
+    bare.slice(familyMatch.versionStart).replace(/^[-_.]/, "") || null;
+  return { vendor, family: familyMatch.family, version };
+}
+
 // Confidence score for inference profiles, based on sample count.
 // Smooth curve in [0.3, 0.95] — replaces the previous 0.4/0.65/0.85 step function
 // which could never report confidence above 0.85 or below 0.4.

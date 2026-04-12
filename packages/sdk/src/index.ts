@@ -1,6 +1,7 @@
 export { Observe } from "./observe.js";
 export { TansoObserve } from "./client.js";
-export { inferModelProvider } from "./providers.js";
+export { inferModelProvider, parseModel } from "./providers.js";
+export type { ParsedModel } from "./providers.js";
 export type {
   ClientOptions,
   IngestEvent,

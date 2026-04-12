@@ -123,3 +123,66 @@ export function inferModelProvider(
 
   return null;
 }
+
+// Structured parse: vendor → family → version. Returns a typed triple so
+// callers can reason about pricing tier, model family, and version
+// separately. Less ambiguous than flat provider detection when you need
+// same-family model swap recommendations or version-specific pricing.
+
+export interface ParsedModel {
+  vendor: string;
+  family: string | null;
+  version: string | null;
+}
+
+const VENDOR_FAMILIES: Record<string, string[]> = {
+  openai: [
+    "text-embedding",
+    "dall-e",
+    "whisper",
+    "tts",
+    "gpt",
+    "o1",
+    "o3",
+    "o4",
+  ],
+  anthropic: ["claude"],
+  google: ["gemini", "palm", "bison"],
+  mistral: ["codestral", "mixtral", "mistral"],
+  meta: ["llama"],
+  cohere: ["command"],
+};
+
+function extractFamily(
+  vendor: string,
+  bare: string,
+): { family: string; versionStart: number } | null {
+  const families = VENDOR_FAMILIES[vendor];
+  if (!families) return null;
+  for (const fam of families) {
+    const idx = bare.indexOf(fam);
+    if (idx >= 0) return { family: fam, versionStart: idx + fam.length };
+  }
+  return null;
+}
+
+export function parseModel(
+  model: string | undefined | null,
+): ParsedModel | null {
+  if (!model) return null;
+  const raw = model.trim();
+  if (!raw) return null;
+
+  const vendor = inferModelProvider(raw);
+  if (!vendor) return null;
+
+  const slashIdx = raw.indexOf("/");
+  const bare = (slashIdx > 0 ? raw.slice(slashIdx + 1) : raw).toLowerCase();
+
+  const familyMatch = extractFamily(vendor, bare);
+  if (!familyMatch) return { vendor, family: null, version: null };
+
+  const version =
+    bare.slice(familyMatch.versionStart).replace(/^[-_.]/, "") || null;
+  return { vendor, family: familyMatch.family, version };
+}
