@@ -19,11 +19,7 @@ const { isLoggedIn } = useAuth();
 const activeTab = ref<"plans" | "usage">("plans");
 const isUpgrading = ref(false);
 
-const {
-  data: billing,
-  isLoading,
-  isError: billingError,
-} = useQuery({
+const { data: billing, isError: billingError } = useQuery({
   queryKey: ["billing-status"],
   queryFn: getBillingStatus,
   enabled: isLoggedIn,
