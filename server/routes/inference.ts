@@ -2,25 +2,7 @@ import { Router, Response } from "express";
 import type { Pool } from "pg";
 import { z } from "zod";
 import { type AuthRequest } from "./auth.js";
-
-function inferModelProvider(model: string | undefined): string | null {
-  if (!model) return null;
-  const m = model.toLowerCase();
-  if (m.startsWith("claude-")) return "anthropic";
-  if (
-    m.startsWith("gpt-") ||
-    m.startsWith("o1") ||
-    m.startsWith("o3") ||
-    m.startsWith("o4") ||
-    m.startsWith("text-embedding-")
-  )
-    return "openai";
-  if (m.startsWith("dall-e-")) return "openai";
-  if (m.startsWith("gemini-")) return "google";
-  if (m.startsWith("mistral-") || m.startsWith("codestral")) return "mistral";
-  if (m.startsWith("llama-")) return "meta";
-  return null;
-}
+import { inferModelProvider, inferenceConfidence } from "../lib/models.js";
 
 export async function computeInferenceProfiles(
   pool: Pool,
@@ -99,12 +81,6 @@ export async function computeInferenceProfiles(
   return profilesUpdated;
 }
 
-function getConfidence(sampleCount: number): number {
-  if (sampleCount >= 50) return 0.85;
-  if (sampleCount >= 10) return 0.65;
-  return 0.4;
-}
-
 async function applyInference(
   pool: Pool,
   userId: string,
@@ -159,7 +135,7 @@ async function applyInference(
       const featureKeys = Object.keys(distribution);
       if (featureKeys.length === 0) continue;
 
-      const confidence = getConfidence(profile.sample_count);
+      const confidence = inferenceConfidence(profile.sample_count);
       const originalCost = parseFloat(row.cost_amount) || 0;
       const originalRevenue = parseFloat(row.revenue_amount) || 0;
       const originalUsage = parseFloat(row.usage_units) || 0;

@@ -2,6 +2,7 @@ import { Router, Response } from "express";
 import type { Pool } from "pg";
 import { type AuthRequest } from "./auth.js";
 import { getAllPricing } from "../model-pricing.js";
+import { inferModelProvider } from "../lib/models.js";
 
 type CohortLabel =
   | "unprofitable"
@@ -17,25 +18,6 @@ type MrrMovementCategory =
   | "contraction"
   | "churned"
   | "stable";
-
-function inferModelProvider(model: string | undefined): string | null {
-  if (!model) return null;
-  const m = model.toLowerCase();
-  if (m.startsWith("claude-")) return "anthropic";
-  if (
-    m.startsWith("gpt-") ||
-    m.startsWith("o1") ||
-    m.startsWith("o3") ||
-    m.startsWith("o4") ||
-    m.startsWith("text-embedding-")
-  )
-    return "openai";
-  if (m.startsWith("dall-e-")) return "openai";
-  if (m.startsWith("gemini-")) return "google";
-  if (m.startsWith("mistral-") || m.startsWith("codestral")) return "mistral";
-  if (m.startsWith("llama-")) return "meta";
-  return null;
-}
 
 // ── Rule evaluation for dynamic cohorts ─────────────────────────────────────
 

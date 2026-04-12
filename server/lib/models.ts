@@ -1,62 +1,11 @@
-export const OPENAI_PRICING: Record<string, { input: number; output: number }> =
-  {
-    "gpt-4o": { input: 2.5 / 1_000_000, output: 10.0 / 1_000_000 },
-    "gpt-4o-mini": { input: 0.15 / 1_000_000, output: 0.6 / 1_000_000 },
-    "gpt-4-turbo": { input: 10.0 / 1_000_000, output: 30.0 / 1_000_000 },
-    "gpt-4": { input: 30.0 / 1_000_000, output: 60.0 / 1_000_000 },
-    "gpt-3.5-turbo": { input: 0.5 / 1_000_000, output: 1.5 / 1_000_000 },
-    o1: { input: 15.0 / 1_000_000, output: 60.0 / 1_000_000 },
-    "o1-mini": { input: 3.0 / 1_000_000, output: 12.0 / 1_000_000 },
-    "o1-pro": { input: 150.0 / 1_000_000, output: 600.0 / 1_000_000 },
-    o3: { input: 10.0 / 1_000_000, output: 40.0 / 1_000_000 },
-    "o3-mini": { input: 1.1 / 1_000_000, output: 4.4 / 1_000_000 },
-    "o4-mini": { input: 1.1 / 1_000_000, output: 4.4 / 1_000_000 },
-    "text-embedding-3-small": { input: 0.02 / 1_000_000, output: 0 },
-    "text-embedding-3-large": { input: 0.13 / 1_000_000, output: 0 },
-    "text-embedding-ada-002": { input: 0.1 / 1_000_000, output: 0 },
-  };
-
-export const ANTHROPIC_PRICING: Record<
-  string,
-  { input: number; output: number }
-> = {
-  "claude-sonnet-4-5": { input: 3.0 / 1_000_000, output: 15.0 / 1_000_000 },
-  "claude-opus-4": { input: 15.0 / 1_000_000, output: 75.0 / 1_000_000 },
-  "claude-sonnet-4": { input: 3.0 / 1_000_000, output: 15.0 / 1_000_000 },
-  "claude-sonnet-4-20250514": {
-    input: 3.0 / 1_000_000,
-    output: 15.0 / 1_000_000,
-  },
-  "claude-haiku-4-20250414": {
-    input: 0.8 / 1_000_000,
-    output: 4.0 / 1_000_000,
-  },
-  "claude-3-5-sonnet-20241022": {
-    input: 3.0 / 1_000_000,
-    output: 15.0 / 1_000_000,
-  },
-  "claude-3-5-haiku-20241022": {
-    input: 0.8 / 1_000_000,
-    output: 4.0 / 1_000_000,
-  },
-  "claude-3-opus-20240229": {
-    input: 15.0 / 1_000_000,
-    output: 75.0 / 1_000_000,
-  },
-  "claude-3-haiku-20240307": {
-    input: 0.25 / 1_000_000,
-    output: 1.25 / 1_000_000,
-  },
-};
-
-// Detect provider from a model string.
+// Shared model → provider detection. Used by SDK and server routes.
 //
 // Strategy (matches LiteLLM / Helicone / OpenRouter convention):
 //   1. `provider/model` slug prefix wins (e.g. "openai/gpt-4o")
-//   2. Exact lookup against known model keys (derived from pricing maps)
-//   3. Keyword scan with word boundaries — order-independent, so
-//      "open-ai-gpt-o3" and "o3-open-ai-gpt" both match openai
-//   4. null if nothing matches — callers must handle, never default silently
+//   2. Exact lookup against known model keys
+//   3. Keyword scan with word boundaries — order-independent
+//      (handles "open-ai-gpt-o3" and "o3-open-ai-gpt" the same way)
+//   4. null if nothing matches — caller must handle, never default silently
 
 const KNOWN_PROVIDER_PREFIXES = new Set([
   "openai",
@@ -79,17 +28,39 @@ const PROVIDER_PREFIX_ALIASES: Record<string, string> = {
   vertex: "google",
 };
 
-const KNOWN_MODELS: Record<string, string> = {
-  ...Object.fromEntries(
-    Object.keys(OPENAI_PRICING).map((k) => [k.toLowerCase(), "openai"]),
-  ),
+export const KNOWN_MODELS: Record<string, string> = {
+  // OpenAI
+  "gpt-4o": "openai",
+  "gpt-4o-mini": "openai",
+  "gpt-4-turbo": "openai",
+  "gpt-4": "openai",
+  "gpt-3.5-turbo": "openai",
+  o1: "openai",
+  "o1-mini": "openai",
+  "o1-pro": "openai",
+  o3: "openai",
+  "o3-mini": "openai",
+  "o4-mini": "openai",
+  "text-embedding-3-small": "openai",
+  "text-embedding-3-large": "openai",
+  "text-embedding-ada-002": "openai",
   "dall-e-3": "openai",
   "dall-e-2": "openai",
-  ...Object.fromEntries(
-    Object.keys(ANTHROPIC_PRICING).map((k) => [k.toLowerCase(), "anthropic"]),
-  ),
+
+  // Anthropic
+  "claude-sonnet-4-5": "anthropic",
+  "claude-opus-4": "anthropic",
+  "claude-sonnet-4": "anthropic",
+  "claude-sonnet-4-20250514": "anthropic",
+  "claude-haiku-4-20250414": "anthropic",
+  "claude-3-5-sonnet-20241022": "anthropic",
+  "claude-3-5-haiku-20241022": "anthropic",
+  "claude-3-opus-20240229": "anthropic",
+  "claude-3-haiku-20240307": "anthropic",
 };
 
+// Keyword-based fallback. Word boundaries (\b) make this order-independent:
+// "open-ai-gpt-o3" and "o3-open-ai-gpt" both match openai.
 const PROVIDER_KEYWORDS: Array<[RegExp, string]> = [
   [/\b(anthropic|claude)\b/i, "anthropic"],
   [/\b(openai|gpt|dall-e|text-embedding|o1|o3|o4)\b/i, "openai"],
@@ -124,10 +95,13 @@ export function inferModelProvider(
   return null;
 }
 
-// Structured parse: vendor → family → version. Returns a typed triple so
-// callers can reason about pricing tier, model family, and version
-// separately. Less ambiguous than flat provider detection when you need
-// same-family model swap recommendations or version-specific pricing.
+// Structured parse: vendor → family → version. Matches Doug's chained
+// detection approach — isolate vendor first, then match within that vendor's
+// known families, then take the remainder as version. Less ambiguous than
+// flat matching when you need to reason about the model's tier or pricing.
+//
+// Family ordering matters: list more-specific families first so
+// "text-embedding-3-small" matches "text-embedding" before any "o" family.
 
 export interface ParsedModel {
   vendor: string;
@@ -176,6 +150,7 @@ export function parseModel(
   const vendor = inferModelProvider(raw);
   if (!vendor) return null;
 
+  // Strip `provider/` slug if present so family matching sees the bare model.
   const slashIdx = raw.indexOf("/");
   const bare = (slashIdx > 0 ? raw.slice(slashIdx + 1) : raw).toLowerCase();
 
@@ -185,4 +160,18 @@ export function parseModel(
   const version =
     bare.slice(familyMatch.versionStart).replace(/^[-_.]/, "") || null;
   return { vendor, family: familyMatch.family, version };
+}
+
+// Confidence score for inference profiles, based on sample count.
+// Smooth curve in [0.3, 0.95] — replaces the previous 0.4/0.65/0.85 step function
+// which could never report confidence above 0.85 or below 0.4.
+//   n=1   → 0.35
+//   n=10  → 0.46
+//   n=50  → 0.65
+//   n=100 → 0.80
+//   n=200 → 0.95 (cap)
+export function inferenceConfidence(sampleCount: number): number {
+  if (sampleCount <= 0) return 0.3;
+  const raw = 0.3 + Math.sqrt(sampleCount) / 20;
+  return Math.min(0.95, Math.round(raw * 100) / 100);
 }
