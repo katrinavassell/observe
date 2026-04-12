@@ -7,6 +7,7 @@ import {
   type ProviderRequest,
   type ProviderResponse,
 } from "../providers/index.js";
+import type { StreamSink } from "../providers/types.js";
 import { calculateCostFromTokens } from "../model-pricing.js";
 import { decryptApiKey, encryptApiKey } from "../stripe-client.js";
 import { checkAlerts } from "./alerts.js";
@@ -436,6 +437,161 @@ export function createGatewayRoutes(
     };
   }
 
+  // Wrap an Express response as a StreamSink. First write() triggers the
+  // SSE headers (200 + text/event-stream). Adapters only see the sink
+  // interface and don't need to know about Express.
+  function createExpressStreamSink(res: Response): StreamSink {
+    let committed = false;
+    return {
+      write(chunk: Uint8Array): void {
+        if (!committed) {
+          committed = true;
+          res.status(200);
+          res.set("Content-Type", "text/event-stream");
+          res.set("Cache-Control", "no-cache, no-transform");
+          res.set("Connection", "keep-alive");
+          res.set("X-Accel-Buffering", "no"); // disable proxy buffering
+          res.flushHeaders?.();
+        }
+        // Node's Response inherits from Writable — Buffer.from covers
+        // Uint8Array without a copy.
+        res.write(Buffer.from(chunk));
+      },
+      end(): void {
+        if (!res.writableEnded) res.end();
+      },
+      get committed(): boolean {
+        return committed;
+      },
+    };
+  }
+
+  // ── Stream execution ───────────────────────────────────────────────────
+  // Streaming path has a hard asymmetry: once any byte has been written to
+  // the client, we can't fall back to a different target — headers are
+  // committed. So fallback only applies before the first byte.
+
+  async function executeStreamWithFallback(
+    targets: RoutingTarget[],
+    request: ProviderRequest,
+    sink: StreamSink,
+    budgetMs: number,
+  ): Promise<{
+    response: ProviderResponse;
+    target: RoutingTarget;
+    attempts: number;
+  }> {
+    const startTime = Date.now();
+    let lastError: ProviderResponse | null = null;
+    let attempts = 0;
+    const MIN_ATTEMPT_HEADROOM_MS = 3000;
+
+    for (const target of targets) {
+      const elapsed = Date.now() - startTime;
+      const remaining = budgetMs - elapsed;
+      if (remaining < MIN_ATTEMPT_HEADROOM_MS) break;
+
+      const adapter = getProvider(target.provider);
+      if (!adapter) {
+        console.error(`Unknown provider: ${target.provider}`);
+        continue;
+      }
+      if (!adapter.sendStream) {
+        // Adapter doesn't support streaming yet. Record as a target-level
+        // miss (not a failure — don't cool the target down for this) and
+        // try the next one.
+        lastError = {
+          ok: false,
+          status: 501,
+          model: target.model,
+          inputTokens: 0,
+          outputTokens: 0,
+          body: {
+            error: {
+              message: `Provider '${target.provider}' does not support streaming`,
+              type: "unsupported",
+            },
+          },
+          durationMs: 0,
+          error: "streaming not supported",
+        };
+        continue;
+      }
+
+      let apiKey: string;
+      try {
+        if (!target.encrypted_api_key) {
+          lastError = {
+            ok: false,
+            status: 500,
+            model: target.model,
+            inputTokens: 0,
+            outputTokens: 0,
+            body: {},
+            durationMs: 0,
+            error: `No API key configured for target ${target.id}`,
+          };
+          continue;
+        }
+        apiKey = decryptApiKey(target.encrypted_api_key);
+      } catch (err) {
+        console.error(
+          `Failed to decrypt API key for target ${target.id}:`,
+          err,
+        );
+        continue;
+      }
+
+      const timeoutMs = Math.min(target.timeout_ms, remaining - 1000);
+      const providerRequest: ProviderRequest = {
+        ...request,
+        model: target.model,
+      };
+
+      attempts++;
+      const response = await adapter.sendStream(
+        providerRequest,
+        apiKey,
+        sink,
+        target.api_base_url || undefined,
+        timeoutMs,
+      );
+
+      if (response.ok) {
+        recordTargetSuccess(target.id);
+        return { response, target, attempts };
+      }
+
+      // If we've already committed bytes, we cannot fall back. Surface
+      // whatever error happened and stop.
+      if (sink.committed) {
+        recordTargetFailure(target.id);
+        return { response, target, attempts };
+      }
+
+      // Pre-commit failure — cool the target if it's 5xx, try next.
+      if (response.status >= 500 || response.status === 0) {
+        recordTargetFailure(target.id);
+      }
+      lastError = response;
+    }
+
+    return {
+      response: lastError || {
+        ok: false,
+        status: 502,
+        model: request.model,
+        inputTokens: 0,
+        outputTokens: 0,
+        body: {},
+        durationMs: Date.now() - startTime,
+        error: "All stream targets exhausted",
+      },
+      target: targets[targets.length - 1],
+      attempts,
+    };
+  }
+
   // ── Event logging ──────────────────────────────────────────────────────
 
   async function logGatewayEvent(
@@ -606,6 +762,76 @@ export function createGatewayRoutes(
           max_tokens: req.body.max_tokens,
           stream: req.body.stream,
         };
+
+        const wantsStream = req.body.stream === true;
+
+        if (wantsStream) {
+          // SSE path. Headers are committed on first write, so pre-commit
+          // fallback is the only kind available.
+          const sink = createExpressStreamSink(res);
+          const { response, target, attempts } =
+            await executeStreamWithFallback(
+              orderedTargets,
+              providerRequest,
+              sink,
+              27_000,
+            );
+
+          if (!sink.committed) {
+            // Nothing was written — we can still return a JSON error.
+            res.set("X-Observe-Provider", target.provider);
+            res.set("X-Observe-Model", response.model);
+            res.set("X-Observe-Attempts", String(attempts));
+            res.status(response.status || 502).json(
+              response.body && Object.keys(response.body).length > 0
+                ? response.body
+                : {
+                    error: {
+                      message: response.error || "Stream failed",
+                      type: "stream_error",
+                    },
+                  },
+            );
+          } else if (!res.writableEnded) {
+            // Committed but adapter didn't close — defensive.
+            res.end();
+          }
+
+          if (userId && response.ok) {
+            const cost = await calculateCostFromTokens(
+              pool,
+              response.model,
+              response.inputTokens,
+              response.outputTokens,
+            );
+            logGatewayEvent(
+              userId,
+              response.model,
+              response.inputTokens,
+              response.outputTokens,
+              cost,
+              customerId,
+              featureKey,
+              target.provider,
+              {
+                ...properties,
+                routing_config: configName,
+                routing_attempts: String(attempts),
+                routing_mode: "stream",
+              },
+              req.body,
+              null, // streaming responses aren't captured as JSON bodies
+              agentId,
+              traceId,
+              spanId,
+              parentSpanId,
+              response.durationMs,
+            ).catch((err) =>
+              console.error("Gateway event logging failed:", err),
+            );
+          }
+          return;
+        }
 
         // Execute with 27s budget (leave headroom for Vercel 30s limit)
         const { response, target, attempts } = await executeWithFallback(
