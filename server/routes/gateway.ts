@@ -63,6 +63,82 @@ function setCachedConfig(key: string, config: ResolvedConfig): void {
   configCache.set(key, { config, expiresAt: Date.now() + CONFIG_CACHE_TTL });
 }
 
+// Per-user cache invalidation. Global configCache.clear() was evicting every
+// user's cache on any CRUD op, causing unnecessary DB round-trips under load.
+function invalidateUserCache(userId: string): void {
+  const prefix = `${userId}:`;
+  for (const key of configCache.keys()) {
+    if (key.startsWith(prefix)) configCache.delete(key);
+  }
+}
+
+// ── Target cooldown tracking ─────────────────────────────────────────────────
+// When a target fails repeatedly, park it for a cooldown window so subsequent
+// requests don't keep hitting the same dead endpoint. This is the reliability
+// pattern LiteLLM uses (cooldown + Redis in multi-instance deploys). We keep
+// it in-memory for now — acceptable for single-instance, would need Redis for
+// horizontal scale.
+const COOLDOWN_FAILURE_THRESHOLD = 3;
+const COOLDOWN_DURATION_MS = 30_000;
+
+interface CooldownState {
+  consecutiveFailures: number;
+  cooldownUntil: number;
+  retryAfterUntil: number; // respects provider Retry-After headers
+}
+
+const targetCooldowns = new Map<number, CooldownState>();
+
+function getCooldown(targetId: number): CooldownState {
+  let state = targetCooldowns.get(targetId);
+  if (!state) {
+    state = { consecutiveFailures: 0, cooldownUntil: 0, retryAfterUntil: 0 };
+    targetCooldowns.set(targetId, state);
+  }
+  return state;
+}
+
+function isTargetCooling(targetId: number): boolean {
+  const state = targetCooldowns.get(targetId);
+  if (!state) return false;
+  const now = Date.now();
+  return now < state.cooldownUntil || now < state.retryAfterUntil;
+}
+
+function recordTargetFailure(targetId: number, retryAfterMs?: number): void {
+  const state = getCooldown(targetId);
+  state.consecutiveFailures += 1;
+  if (retryAfterMs && retryAfterMs > 0) {
+    state.retryAfterUntil = Date.now() + retryAfterMs;
+  }
+  if (state.consecutiveFailures >= COOLDOWN_FAILURE_THRESHOLD) {
+    state.cooldownUntil = Date.now() + COOLDOWN_DURATION_MS;
+  }
+}
+
+function recordTargetSuccess(targetId: number): void {
+  const state = targetCooldowns.get(targetId);
+  if (!state) return;
+  state.consecutiveFailures = 0;
+  state.cooldownUntil = 0;
+  state.retryAfterUntil = 0;
+}
+
+// Parses Retry-After header value (either delta-seconds or HTTP-date) to ms.
+function parseRetryAfterMs(header: string | undefined): number | undefined {
+  if (!header) return undefined;
+  const seconds = Number(header);
+  if (Number.isFinite(seconds) && seconds > 0) {
+    return Math.min(seconds * 1000, 60_000);
+  }
+  const dateMs = Date.parse(header);
+  if (!Number.isNaN(dateMs)) {
+    const delta = dateMs - Date.now();
+    if (delta > 0) return Math.min(delta, 60_000);
+  }
+  return undefined;
+}
+
 // ── Route factory ────────────────────────────────────────────────────────────
 
 export function createGatewayRoutes(
@@ -171,21 +247,61 @@ export function createGatewayRoutes(
 
   // ── Target selection (priority + weighted random) ──────────────────────
 
+  // Weighted shuffle: pick items one at a time with probability proportional
+  // to their weight, without replacement. Produces a correctly-weighted
+  // ordering of the group — higher-weight targets land earlier on average.
+  // The previous implementation used a sort comparator built from Math.random
+  // calls, which was not a valid weighted sampler.
+  function weightedShuffle(group: RoutingTarget[]): RoutingTarget[] {
+    const pool = [...group];
+    const result: RoutingTarget[] = [];
+    while (pool.length > 0) {
+      const totalWeight = pool.reduce((s, t) => s + Math.max(t.weight, 0), 0);
+      if (totalWeight <= 0) {
+        // All weights zero — fall back to random order to avoid bias.
+        result.push(...pool.sort(() => Math.random() - 0.5));
+        break;
+      }
+      let r = Math.random() * totalWeight;
+      let idx = 0;
+      for (let i = 0; i < pool.length; i++) {
+        r -= Math.max(pool[i].weight, 0);
+        if (r <= 0) {
+          idx = i;
+          break;
+        }
+      }
+      result.push(pool[idx]);
+      pool.splice(idx, 1);
+    }
+    return result;
+  }
+
   function selectTargets(
     targets: RoutingTarget[],
     pinnedTargetId: number | null,
   ): RoutingTarget[] {
+    // Filter out targets currently in cooldown before any other ordering,
+    // but keep them as a last-resort tail so we never end up with zero
+    // candidates if every target is cooling.
+    const live = targets.filter((t) => !isTargetCooling(t.id));
+    const cooling = targets.filter((t) => isTargetCooling(t.id));
+    const usable = live.length > 0 ? live : targets;
+
     if (pinnedTargetId !== null) {
-      const pinned = targets.find((t) => t.id === pinnedTargetId);
+      const pinned = usable.find((t) => t.id === pinnedTargetId);
       if (pinned) {
-        // Pinned target first, then remaining as fallbacks
-        return [pinned, ...targets.filter((t) => t.id !== pinnedTargetId)];
+        return [
+          pinned,
+          ...usable.filter((t) => t.id !== pinnedTargetId),
+          ...(live.length > 0 ? cooling : []),
+        ];
       }
     }
 
-    // Group by priority, weighted random within each group
+    // Group by priority, weighted shuffle within each group
     const grouped = new Map<number, RoutingTarget[]>();
-    for (const t of targets) {
+    for (const t of usable) {
       const group = grouped.get(t.priority) || [];
       group.push(t);
       grouped.set(t.priority, group);
@@ -198,17 +314,10 @@ export function createGatewayRoutes(
       if (group.length === 1) {
         result.push(group[0]);
       } else {
-        // Weighted random selection for load balancing
-        const totalWeight = group.reduce((s, t) => s + t.weight, 0);
-        const shuffled = [...group].sort(
-          (a, b) =>
-            Math.random() * totalWeight -
-            a.weight -
-            (Math.random() * totalWeight - b.weight),
-        );
-        result.push(...shuffled);
+        result.push(...weightedShuffle(group));
       }
     }
+    if (live.length > 0) result.push(...cooling);
     return result;
   }
 
@@ -227,10 +336,15 @@ export function createGatewayRoutes(
     let lastError: ProviderResponse | null = null;
     let attempts = 0;
 
+    // Minimum headroom per attempt: need enough for network RTT + small
+    // provider processing. 3s floor prevents the "1000ms timeout, doomed
+    // call" footgun in the old budget math.
+    const MIN_ATTEMPT_HEADROOM_MS = 3000;
+
     for (const target of targets) {
       const elapsed = Date.now() - startTime;
       const remaining = budgetMs - elapsed;
-      if (remaining < 2000) break; // not enough time for another attempt
+      if (remaining < MIN_ATTEMPT_HEADROOM_MS) break;
 
       const adapter = getProvider(target.provider);
       if (!adapter) {
@@ -278,16 +392,27 @@ export function createGatewayRoutes(
         );
 
         if (response.ok) {
+          recordTargetSuccess(target.id);
           return { response, target, attempts };
         }
 
-        // Don't retry on 4xx (client errors)
+        // 4xx client errors: don't retry on the same target, but also don't
+        // mark it as failing (the client is wrong, not the target).
         if (response.status >= 400 && response.status < 500) {
+          // 429 is the exception: it's a rate limit, target-side throttling.
+          if (response.status === 429) {
+            const retryAfterMs = parseRetryAfterMs(
+              (response as ProviderResponse & { retryAfter?: string })
+                .retryAfter,
+            );
+            recordTargetFailure(target.id, retryAfterMs);
+          }
           lastError = response;
           break;
         }
 
         lastError = response;
+        recordTargetFailure(target.id);
         // Only retry on 5xx / network errors
         if (retry < target.max_retries) {
           await new Promise((r) => setTimeout(r, 200 * (retry + 1)));
@@ -643,7 +768,7 @@ export function createGatewayRoutes(
           return res.status(404).json({ error: "Config not found" });
         }
         // Invalidate cache
-        configCache.clear();
+        invalidateUserCache(req.visitorId!);
         res.json(result.rows[0]);
       } catch (error) {
         console.error("PUT /gateway/configs/:id error:", error);
@@ -665,7 +790,7 @@ export function createGatewayRoutes(
         if (result.rows.length === 0) {
           return res.status(404).json({ error: "Config not found" });
         }
-        configCache.clear();
+        invalidateUserCache(req.visitorId!);
         res.json({ deleted: true });
       } catch (error) {
         console.error("DELETE /gateway/configs/:id error:", error);
@@ -723,7 +848,7 @@ export function createGatewayRoutes(
             weight ?? 100,
           ],
         );
-        configCache.clear();
+        invalidateUserCache(req.visitorId!);
         res.status(201).json(result.rows[0]);
       } catch (error) {
         console.error("POST /gateway/configs/:id/targets error:", error);
@@ -811,7 +936,7 @@ export function createGatewayRoutes(
         if (result.rows.length === 0) {
           return res.status(404).json({ error: "Target not found" });
         }
-        configCache.clear();
+        invalidateUserCache(req.visitorId!);
         res.json(result.rows[0]);
       } catch (error) {
         console.error(
@@ -844,7 +969,7 @@ export function createGatewayRoutes(
         if (result.rows.length === 0) {
           return res.status(404).json({ error: "Target not found" });
         }
-        configCache.clear();
+        invalidateUserCache(req.visitorId!);
         res.json({ deleted: true });
       } catch (error) {
         console.error("DELETE target error:", error);
@@ -887,7 +1012,7 @@ export function createGatewayRoutes(
             priority ?? 0,
           ],
         );
-        configCache.clear();
+        invalidateUserCache(req.visitorId!);
         res.status(201).json(result.rows[0]);
       } catch (error) {
         console.error("POST /gateway/configs/:id/rules error:", error);
@@ -917,7 +1042,7 @@ export function createGatewayRoutes(
         if (result.rows.length === 0) {
           return res.status(404).json({ error: "Rule not found" });
         }
-        configCache.clear();
+        invalidateUserCache(req.visitorId!);
         res.json({ deleted: true });
       } catch (error) {
         console.error("DELETE rule error:", error);
