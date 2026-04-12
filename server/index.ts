@@ -286,7 +286,7 @@ async function ensureDbInitialized() {
 async function _doDbInit() {
   try {
     await pool.query("SELECT 1");
-    console.log("Database connection verified");
+    console.warn("Database connection verified");
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS accounts (
@@ -932,7 +932,7 @@ async function _doDbInit() {
       );
       for (const row of contaminated.rows) {
         await clearSampleData(pool, row.user_id);
-        console.log(`Cleaned stale sample data for user ${row.user_id}`);
+        console.warn(`Cleaned stale sample data for user ${row.user_id}`);
       }
     } catch (err) {
       console.error("Sample data cleanup error (non-fatal):", err);
@@ -970,7 +970,7 @@ if (
 const port = parseInt(process.env.PORT || "3001", 10);
 if (process.env.NODE_ENV !== "production" || !process.env.VERCEL) {
   app.listen(port, () => {
-    console.log(`Server running on http://localhost:${port}`);
+    console.warn(`Server running on http://localhost:${port}`);
   });
 }
 

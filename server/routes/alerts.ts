@@ -228,7 +228,7 @@ export async function checkAlerts(pool: Pool, userId: string) {
 export function createAlertRoutes(
   pool: Pool,
   ensureVisitor: any,
-  deps: {
+  _deps: {
     checkTansoFeatureAccess: (
       visitorId: string,
       featureKey: string,
@@ -237,7 +237,6 @@ export function createAlertRoutes(
   },
 ) {
   const router = Router();
-  const { checkTansoFeatureAccess } = deps;
 
   // List alert rules (+ entitlement status)
   router.get(

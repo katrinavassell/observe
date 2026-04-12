@@ -88,14 +88,14 @@ export const logger = {
   debug(message: string, context?: Record<string, unknown>) {
     if (isDev) {
       const entry = createLogEntry('debug', message, context)
-      console.debug(formatLogEntry(entry))
+      console.warn(formatLogEntry(entry))
     }
   },
 
   info(message: string, context?: Record<string, unknown>) {
     if (isDev) {
       const entry = createLogEntry('info', message, context)
-      console.info(formatLogEntry(entry))
+      console.warn(formatLogEntry(entry))
     }
   },
 

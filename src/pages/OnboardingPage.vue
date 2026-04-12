@@ -216,7 +216,7 @@ async function generateKey() {
 }
 
 function copyFullClipboard(text: string, which: "proxy" | "snippet") {
-  window.window.navigator.clipboard.writeText(text);
+  navigator.clipboard.writeText(text);
   if (which === "proxy") {
     fullCopiedProxy.value = true;
     setTimeout(() => (fullCopiedProxy.value = false), 2000);
