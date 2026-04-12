@@ -2,7 +2,9 @@ import type {
   ProviderAdapter,
   ProviderRequest,
   ProviderResponse,
+  StreamSink,
 } from "./types.js";
+import { streamOpenAIFormat } from "./openai-stream.js";
 
 /**
  * Creates a provider adapter for any OpenAI-compatible API.
@@ -14,6 +16,23 @@ export function createOpenAICompatibleAdapter(
 ): ProviderAdapter {
   return {
     name,
+
+    async sendStream(
+      request: ProviderRequest,
+      apiKey: string,
+      sink: StreamSink,
+      baseUrl?: string,
+      timeoutMs = 25000,
+    ): Promise<ProviderResponse> {
+      const base = baseUrl || defaultBaseUrl;
+      return streamOpenAIFormat(
+        request,
+        apiKey,
+        sink,
+        `${base}/v1/chat/completions`,
+        timeoutMs,
+      );
+    },
 
     async send(
       request: ProviderRequest,
