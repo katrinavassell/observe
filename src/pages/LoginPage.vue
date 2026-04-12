@@ -36,7 +36,7 @@ const email = ref("");
 const password = ref("");
 const name = ref("");
 const magicLinkSent = ref(false);
-const isMagicLinkMode = ref(false);
+const _isMagicLinkMode = ref(false);
 
 async function handleGoogleSignIn() {
   try {
@@ -48,7 +48,7 @@ async function handleGoogleSignIn() {
   }
 }
 
-async function handleGithubSignIn() {
+async function _handleGithubSignIn() {
   try {
     await signInWithGithub();
   } catch (error) {

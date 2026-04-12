@@ -257,7 +257,7 @@ const netMarginPct = computed(() => {
   return ((totalRevenue.value - totalCost.value) / totalRevenue.value) * 100;
 });
 
-const negativeMarginsInfo = computed(() => {
+const _negativeMarginsInfo = computed(() => {
   if (!featureData.value) return null;
   const negative = featureData.value.filter(
     (f) => f.margin_pct !== null && f.margin_pct < 0,
