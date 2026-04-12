@@ -54,6 +54,28 @@ async function isRecentlyDismissed(
   return result.rows.length > 0;
 }
 
+// Heuristic confidence score for a recommendation. Bounded [0.3, 0.95].
+// This is NOT calibrated against ground truth — there's no OSS playbook for
+// retrospective LLM recommendation engines, so the best we can do is surface
+// a human-readable "how much signal is behind this" score so users can
+// sort by trust and dismiss low-confidence noise.
+//
+//   n=1,    info    → 0.33
+//   n=10,   warning → 0.49
+//   n=100,  warning → 0.71
+//   n=200,  warning → 0.78
+//   n=1000, critical → 0.85 (capped)
+function recommendationConfidence(
+  sampleCount: number,
+  severity: "critical" | "warning" | "info",
+): number {
+  if (sampleCount <= 0) return 0.3;
+  const base = 0.3 + Math.min(Math.sqrt(sampleCount) / 30, 0.4);
+  const severityBoost =
+    severity === "critical" ? 0.15 : severity === "warning" ? 0.08 : 0;
+  return Math.min(0.95, Math.round((base + severityBoost) * 100) / 100);
+}
+
 // Each rule runs in its own try block. A failure in one rule must not
 // silently skip the remaining rules — they are independent and users
 // depend on all of them.
@@ -136,6 +158,10 @@ export async function computeRecommendations(
             total_cost: totalCost,
             total_revenue: totalRevenue,
             event_count: parseInt(row.event_count),
+            confidence: recommendationConfidence(
+              parseInt(row.event_count),
+              marginPct < 0 ? "critical" : "warning",
+            ),
           }),
         ],
       );
@@ -240,6 +266,10 @@ export async function computeRecommendations(
             suggested_avg_cost: cheaperCost,
             savings_pct: savingsPct,
             total_monthly_savings: totalSavings,
+            confidence: recommendationConfidence(
+              parseInt(model.event_count),
+              savingsPct > 50 ? "critical" : "warning",
+            ),
           }),
         ],
       );
@@ -288,6 +318,10 @@ export async function computeRecommendations(
             JSON.stringify({
               sole_provider: provider.model_provider,
               event_count: parseInt(provider.event_count),
+              confidence: recommendationConfidence(
+                parseInt(provider.event_count),
+                "info",
+              ),
             }),
           ],
         );
@@ -355,6 +389,10 @@ export async function computeRecommendations(
             revenue_per_call: revenuePerCall,
             event_count: parseInt(row.event_count),
             margin_pct: parseFloat(marginPct),
+            confidence: recommendationConfidence(
+              parseInt(row.event_count),
+              loss > 0 ? "critical" : "warning",
+            ),
           }),
         ],
       );
@@ -403,6 +441,10 @@ export async function computeRecommendations(
             customer_id: row.customer_id,
             total_cost: totalCost,
             event_count: parseInt(row.event_count),
+            confidence: recommendationConfidence(
+              parseInt(row.event_count),
+              totalCost > 50 ? "critical" : "warning",
+            ),
           }),
         ],
       );
@@ -465,6 +507,10 @@ export async function computeRecommendations(
             prior_count: parseInt(row.prior_count),
             recent_count: parseInt(row.recent_count),
             decline_pct: declinePct,
+            confidence: recommendationConfidence(
+              parseInt(row.prior_count),
+              declinePct > 75 ? "critical" : "warning",
+            ),
           }),
         ],
       );
@@ -527,6 +573,10 @@ export async function computeRecommendations(
             prior_count: parseInt(row.prior_count),
             recent_count: parseInt(row.recent_count),
             growth_pct: growthPct,
+            confidence: recommendationConfidence(
+              parseInt(row.recent_count),
+              "info",
+            ),
           }),
         ],
       );
@@ -595,6 +645,11 @@ export async function computeRecommendations(
             avg_daily_cost: avgCost,
             max_daily_cost: maxCost,
             spike_ratio: spikeRatio,
+            // 7 days of daily costs is the sample signal here, not event count.
+            confidence: recommendationConfidence(
+              7,
+              spikeRatio > 5 ? "critical" : "warning",
+            ),
           }),
         ],
       );
@@ -728,14 +783,50 @@ export function createRecommendationsRoutes(pool: Pool, ensureVisitor: any) {
             break;
           }
           case "update_routing_target": {
-            // Just mark as applied — user needs to manually update the target model
+            // Find the first active target using the current model and swap
+            // it to the suggested model. Conservative: only updates one
+            // target per apply so users can review before cascading.
             const payload = recommendation.action_payload as {
               current_model: string;
               suggested_model: string;
+              suggested_provider: string;
             };
-            actionResult = {
-              note: `Update your routing target from ${payload.current_model} to ${payload.suggested_model}`,
-            };
+            const targetResult = await pool.query(
+              `SELECT rt.id, rt.config_id, rc.name as config_name
+               FROM routing_targets rt
+               JOIN routing_configs rc ON rc.id = rt.config_id
+               WHERE rc.user_id = $1
+                 AND rt.model = $2
+                 AND rt.enabled = true
+                 AND rc.is_active = true
+               ORDER BY rt.created_at ASC
+               LIMIT 1`,
+              [req.visitorId, payload.current_model],
+            );
+            if (targetResult.rows.length === 0) {
+              actionResult = {
+                error: `No active routing target found with model '${payload.current_model}'. Create a routing config first, or apply manually.`,
+              };
+            } else {
+              const {
+                id: targetId,
+                config_id: configId,
+                config_name: configName,
+              } = targetResult.rows[0];
+              await pool.query(
+                `UPDATE routing_targets
+                 SET model = $1, provider = $2
+                 WHERE id = $3`,
+                [payload.suggested_model, payload.suggested_provider, targetId],
+              );
+              actionResult = {
+                target_id: targetId,
+                config_id: configId,
+                config_name: configName,
+                updated_from: payload.current_model,
+                updated_to: payload.suggested_model,
+              };
+            }
             break;
           }
           case "create_routing_config": {
