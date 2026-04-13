@@ -213,7 +213,7 @@ defineExpose({ openDrawer });
 <template>
   <!-- Floating trigger -->
   <button
-    class="fixed bottom-6 right-6 z-40 flex h-12 items-center gap-2 rounded-full bg-foreground pl-3.5 pr-4 text-background shadow-xl hover:scale-[1.02] transition-transform focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
+    class="fixed bottom-24 right-6 z-40 flex h-12 items-center gap-2 rounded-full bg-foreground pl-3.5 pr-4 text-background shadow-xl hover:scale-[1.02] transition-transform focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
     aria-label="Ask Observe"
     @click="openDrawer"
   >

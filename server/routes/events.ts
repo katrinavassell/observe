@@ -11,420 +11,6 @@ import { inferModelProvider } from "../lib/models.js";
 
 type ComputeInferenceProfilesFn = (userId: string) => Promise<number>;
 
-// Sample trace data for guest users — shows LLM + non-LLM cost types
-function sampleTraces() {
-  const now = new Date();
-  const ago = (h: number) =>
-    new Date(now.getTime() - h * 3600000).toISOString();
-  return [
-    {
-      trace_id: "sample-trace-rag-pipeline",
-      start_time: ago(1),
-      span_count: 5,
-      total_cost: 0.423,
-      total_revenue: 1.2,
-      total_duration_ms: 3200,
-      root_event: "rag_query",
-      cost_types: ["llm", "embedding", "vector_db"],
-    },
-    {
-      trace_id: "sample-trace-content-gen",
-      start_time: ago(4),
-      span_count: 4,
-      total_cost: 0.85,
-      total_revenue: 2.0,
-      total_duration_ms: 5800,
-      root_event: "content_pipeline",
-      cost_types: ["llm", "compute", "api"],
-    },
-    {
-      trace_id: "sample-trace-code-review",
-      start_time: ago(8),
-      span_count: 6,
-      total_cost: 1.32,
-      total_revenue: 3.5,
-      total_duration_ms: 12400,
-      root_event: "code_review_agent",
-      cost_types: ["llm", "compute", "database", "api"],
-    },
-    {
-      trace_id: "sample-trace-data-extract",
-      start_time: ago(12),
-      span_count: 3,
-      total_cost: 0.18,
-      total_revenue: 0.5,
-      total_duration_ms: 2100,
-      root_event: "document_extraction",
-      cost_types: ["llm", "compute"],
-    },
-    {
-      trace_id: "sample-trace-search",
-      start_time: ago(18),
-      span_count: 4,
-      total_cost: 0.065,
-      total_revenue: 0.2,
-      total_duration_ms: 890,
-      root_event: "semantic_search",
-      cost_types: ["embedding", "vector_db"],
-    },
-  ];
-}
-
-function sampleTraceDetail(traceId: string) {
-  const now = new Date();
-  const ago = (m: number) => new Date(now.getTime() - m * 60000).toISOString();
-
-  const details: Record<string, { trace_id: string; spans: unknown[] }> = {
-    "sample-trace-rag-pipeline": {
-      trace_id: "sample-trace-rag-pipeline",
-      spans: [
-        {
-          id: 1,
-          event_name: "rag_query",
-          timestamp: ago(60),
-          cost_amount: 0,
-          revenue_amount: 1.2,
-          usage_units: 0,
-          model: null,
-          model_provider: null,
-          source: "sample",
-          cost_type: null,
-          span_id: "s1",
-          parent_span_id: null,
-          duration_ms: 3200,
-          customer_id: "acme-saas",
-          feature_key: "search",
-        },
-        {
-          id: 2,
-          event_name: "embed_query",
-          timestamp: ago(59),
-          cost_amount: 0.003,
-          revenue_amount: 0,
-          usage_units: 500,
-          model: "text-embedding-3-small",
-          model_provider: "openai",
-          source: "sample",
-          cost_type: "embedding",
-          span_id: "s2",
-          parent_span_id: "s1",
-          duration_ms: 180,
-        },
-        {
-          id: 3,
-          event_name: "vector_search",
-          timestamp: ago(58),
-          cost_amount: 0.02,
-          revenue_amount: 0,
-          usage_units: 0,
-          model: null,
-          model_provider: null,
-          source: "sample",
-          cost_type: "vector_db",
-          span_id: "s3",
-          parent_span_id: "s1",
-          duration_ms: 320,
-        },
-        {
-          id: 4,
-          event_name: "generate_answer",
-          timestamp: ago(57),
-          cost_amount: 0.35,
-          revenue_amount: 0,
-          usage_units: 2200,
-          model: "gpt-4o",
-          model_provider: "openai",
-          source: "sample",
-          cost_type: "llm",
-          span_id: "s4",
-          parent_span_id: "s1",
-          duration_ms: 2400,
-        },
-        {
-          id: 5,
-          event_name: "cache_result",
-          timestamp: ago(56),
-          cost_amount: 0.05,
-          revenue_amount: 0,
-          usage_units: 0,
-          model: null,
-          model_provider: null,
-          source: "sample",
-          cost_type: "compute",
-          span_id: "s5",
-          parent_span_id: "s1",
-          duration_ms: 150,
-        },
-      ],
-    },
-    "sample-trace-content-gen": {
-      trace_id: "sample-trace-content-gen",
-      spans: [
-        {
-          id: 10,
-          event_name: "content_pipeline",
-          timestamp: ago(240),
-          cost_amount: 0,
-          revenue_amount: 2.0,
-          usage_units: 0,
-          model: null,
-          source: "sample",
-          cost_type: null,
-          span_id: "s10",
-          parent_span_id: null,
-          duration_ms: 5800,
-        },
-        {
-          id: 11,
-          event_name: "fetch_context",
-          timestamp: ago(239),
-          cost_amount: 0.01,
-          revenue_amount: 0,
-          usage_units: 0,
-          model: null,
-          source: "sample",
-          cost_type: "api",
-          span_id: "s11",
-          parent_span_id: "s10",
-          duration_ms: 450,
-        },
-        {
-          id: 12,
-          event_name: "generate_draft",
-          timestamp: ago(238),
-          cost_amount: 0.72,
-          revenue_amount: 0,
-          usage_units: 3800,
-          model: "claude-sonnet-4-6",
-          model_provider: "anthropic",
-          source: "sample",
-          cost_type: "llm",
-          span_id: "s12",
-          parent_span_id: "s10",
-          duration_ms: 4200,
-        },
-        {
-          id: 13,
-          event_name: "render_output",
-          timestamp: ago(237),
-          cost_amount: 0.12,
-          revenue_amount: 0,
-          usage_units: 0,
-          model: null,
-          source: "sample",
-          cost_type: "compute",
-          span_id: "s13",
-          parent_span_id: "s10",
-          duration_ms: 800,
-        },
-      ],
-    },
-    "sample-trace-code-review": {
-      trace_id: "sample-trace-code-review",
-      spans: [
-        {
-          id: 20,
-          event_name: "code_review_agent",
-          timestamp: ago(480),
-          cost_amount: 0,
-          revenue_amount: 3.5,
-          usage_units: 0,
-          model: null,
-          source: "sample",
-          cost_type: null,
-          span_id: "s20",
-          parent_span_id: null,
-          duration_ms: 12400,
-        },
-        {
-          id: 21,
-          event_name: "fetch_diff",
-          timestamp: ago(479),
-          cost_amount: 0.005,
-          revenue_amount: 0,
-          usage_units: 0,
-          model: null,
-          source: "sample",
-          cost_type: "api",
-          span_id: "s21",
-          parent_span_id: "s20",
-          duration_ms: 320,
-        },
-        {
-          id: 22,
-          event_name: "load_codebase_context",
-          timestamp: ago(478),
-          cost_amount: 0.035,
-          revenue_amount: 0,
-          usage_units: 0,
-          model: null,
-          source: "sample",
-          cost_type: "database",
-          span_id: "s22",
-          parent_span_id: "s20",
-          duration_ms: 600,
-        },
-        {
-          id: 23,
-          event_name: "analyze_security",
-          timestamp: ago(477),
-          cost_amount: 0.48,
-          revenue_amount: 0,
-          usage_units: 4200,
-          model: "claude-opus-4-6",
-          model_provider: "anthropic",
-          source: "sample",
-          cost_type: "llm",
-          span_id: "s23",
-          parent_span_id: "s20",
-          duration_ms: 5400,
-        },
-        {
-          id: 24,
-          event_name: "analyze_style",
-          timestamp: ago(475),
-          cost_amount: 0.35,
-          revenue_amount: 0,
-          usage_units: 3000,
-          model: "gpt-4o",
-          model_provider: "openai",
-          source: "sample",
-          cost_type: "llm",
-          span_id: "s24",
-          parent_span_id: "s20",
-          duration_ms: 3800,
-        },
-        {
-          id: 25,
-          event_name: "generate_report",
-          timestamp: ago(473),
-          cost_amount: 0.45,
-          revenue_amount: 0,
-          usage_units: 0,
-          model: null,
-          source: "sample",
-          cost_type: "compute",
-          span_id: "s25",
-          parent_span_id: "s20",
-          duration_ms: 1200,
-        },
-      ],
-    },
-    "sample-trace-data-extract": {
-      trace_id: "sample-trace-data-extract",
-      spans: [
-        {
-          id: 30,
-          event_name: "document_extraction",
-          timestamp: ago(720),
-          cost_amount: 0,
-          revenue_amount: 0.5,
-          usage_units: 0,
-          model: null,
-          source: "sample",
-          cost_type: null,
-          span_id: "s30",
-          parent_span_id: null,
-          duration_ms: 2100,
-        },
-        {
-          id: 31,
-          event_name: "parse_pdf",
-          timestamp: ago(719),
-          cost_amount: 0.03,
-          revenue_amount: 0,
-          usage_units: 0,
-          model: null,
-          source: "sample",
-          cost_type: "compute",
-          span_id: "s31",
-          parent_span_id: "s30",
-          duration_ms: 600,
-        },
-        {
-          id: 32,
-          event_name: "extract_fields",
-          timestamp: ago(718),
-          cost_amount: 0.15,
-          revenue_amount: 0,
-          usage_units: 1200,
-          model: "gpt-4o-mini",
-          model_provider: "openai",
-          source: "sample",
-          cost_type: "llm",
-          span_id: "s32",
-          parent_span_id: "s30",
-          duration_ms: 1400,
-        },
-      ],
-    },
-    "sample-trace-search": {
-      trace_id: "sample-trace-search",
-      spans: [
-        {
-          id: 40,
-          event_name: "semantic_search",
-          timestamp: ago(1080),
-          cost_amount: 0,
-          revenue_amount: 0.2,
-          usage_units: 0,
-          model: null,
-          source: "sample",
-          cost_type: null,
-          span_id: "s40",
-          parent_span_id: null,
-          duration_ms: 890,
-        },
-        {
-          id: 41,
-          event_name: "embed_query",
-          timestamp: ago(1079),
-          cost_amount: 0.002,
-          revenue_amount: 0,
-          usage_units: 400,
-          model: "text-embedding-3-small",
-          model_provider: "openai",
-          source: "sample",
-          cost_type: "embedding",
-          span_id: "s41",
-          parent_span_id: "s40",
-          duration_ms: 120,
-        },
-        {
-          id: 42,
-          event_name: "vector_lookup",
-          timestamp: ago(1078),
-          cost_amount: 0.015,
-          revenue_amount: 0,
-          usage_units: 0,
-          model: null,
-          source: "sample",
-          cost_type: "vector_db",
-          span_id: "s42",
-          parent_span_id: "s40",
-          duration_ms: 280,
-        },
-        {
-          id: 43,
-          event_name: "rerank_results",
-          timestamp: ago(1077),
-          cost_amount: 0.048,
-          revenue_amount: 0,
-          usage_units: 800,
-          model: "gpt-4o-mini",
-          model_provider: "openai",
-          source: "sample",
-          cost_type: "llm",
-          span_id: "s43",
-          parent_span_id: "s40",
-          duration_ms: 450,
-        },
-      ],
-    },
-  };
-  return details[traceId] || null;
-}
-
 function coerceEventRow(row: Record<string, unknown>) {
   return {
     ...row,
@@ -786,7 +372,7 @@ export function createEventsRoutes(
         const authReq = req as AuthRequest;
         const userId = authReq.visitorId;
         if (!userId) {
-          return res.json({ traces: sampleTraces() });
+          return res.json({ traces: [] });
         }
         const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
         const offset = parseInt(req.query.offset as string) || 0;
@@ -800,21 +386,12 @@ export function createEventsRoutes(
            (array_agg(event_name ORDER BY timestamp ASC))[1] as root_event,
            (array_agg(DISTINCT cost_type))[1:5] as cost_types
            FROM observe_events
-           WHERE user_id = $1 AND trace_id IS NOT NULL
+           WHERE user_id = $1 AND trace_id IS NOT NULL AND source != 'sample'
            GROUP BY trace_id
            ORDER BY start_time DESC
            LIMIT $2 OFFSET $3`,
           [userId, limit, offset],
         );
-        if (
-          result.rows.length === 0 &&
-          offset === 0 &&
-          !authReq.session?.accountId &&
-          !authReq.accountId &&
-          !authReq.accountEmail
-        ) {
-          return res.json({ traces: sampleTraces() });
-        }
         res.json({
           traces: result.rows.map((r) => ({
             trace_id: r.trace_id,
@@ -845,14 +422,15 @@ export function createEventsRoutes(
         const authReq = req as AuthRequest;
         const userId = authReq.visitorId;
         if (!userId) {
-          const { traceId } = req.params;
-          const detail = sampleTraceDetail(traceId);
-          if (detail) return res.json(detail);
           return res.status(404).json({ error: "Trace not found" });
         }
         const { traceId } = req.params;
         if (!traceId) {
           return res.status(400).json({ error: "traceId is required" });
+        }
+        // Explicitly refuse sample trace IDs — defense in depth.
+        if (traceId.startsWith("sample-trace")) {
+          return res.status(404).json({ error: "Trace not found" });
         }
         const result = await pool.query(
           `SELECT id, customer_id, feature_key, event_name, timestamp,
@@ -860,19 +438,10 @@ export function createEventsRoutes(
            model, model_provider, source, properties, agent_id,
            trace_id, span_id, parent_span_id, duration_ms, cost_type
            FROM observe_events
-           WHERE user_id = $1 AND trace_id = $2
+           WHERE user_id = $1 AND trace_id = $2 AND source != 'sample'
            ORDER BY timestamp ASC`,
           [userId, traceId],
         );
-        if (
-          result.rows.length === 0 &&
-          !authReq.session?.accountId &&
-          !authReq.accountId &&
-          !authReq.accountEmail
-        ) {
-          const detail = sampleTraceDetail(traceId);
-          if (detail) return res.json(detail);
-        }
         res.json({ trace_id: traceId, spans: result.rows });
       } catch (error) {
         console.error("GET /events/trace/:traceId error:", error);
