@@ -35,12 +35,7 @@ const route = useRoute();
 const router = useRouter();
 const { isViewer, fetchTeamInfo } = useTeam();
 const { account, isLoggedIn, logout } = useAuth();
-const {
-  isSampleMode,
-  switchToSampleData,
-  hasData,
-  reset: resetDataMode,
-} = useDataMode();
+const { reset: resetDataMode } = useDataMode();
 
 // Reset data status when auth state changes (signup clears sample data)
 watch(isLoggedIn, (loggedIn) => {
@@ -64,16 +59,14 @@ function handleFeedbackCredited() {
   queryClient.invalidateQueries({ queryKey: ["usage-limits"] });
 }
 
-onMounted(async () => {
+onMounted(() => {
   fetchTeamInfo();
-  // Auto-load sample data for guests so they see a populated dashboard
-  if (!isLoggedIn.value && !hasData.value && !isSampleMode.value) {
-    try {
-      await switchToSampleData();
-    } catch {
-      // Non-critical — guest will see empty state
-    }
-  }
+  // NOTE: do NOT auto-load sample data here. Previously this fired during
+  // a brief window where isLoggedIn was false on first paint (before
+  // useAuth finished initializing). Result: sample rows got seeded under
+  // the real user's visitor_id and then leaked into their dashboard.
+  // Sample data is no longer auto-loaded for anyone — guests see empty
+  // state.
 });
 
 const navItems = computed(() => [
@@ -417,19 +410,6 @@ function isActive(path: string) {
 
     <!-- Main Content -->
     <main class="flex-1 min-h-screen overflow-x-hidden pt-14 md:pt-0 md:ml-64">
-      <!-- Guest banner (desktop only — mobile uses sticky bottom bar) -->
-      <div
-        v-if="!isLoggedIn && isSampleMode"
-        class="hidden md:flex items-center justify-between px-4 py-2 bg-blue-50 text-blue-700 border-b border-blue-200 text-sm"
-      >
-        <div class="flex items-center gap-2">
-          <Database class="h-4 w-4" />
-          <span>Browsing as guest with sample data</span>
-        </div>
-        <router-link to="/signup" class="font-medium hover:underline">
-          Sign up to connect your data
-        </router-link>
-      </div>
       <div class="p-6 pb-24 md:pb-6">
         <ErrorBoundary>
           <slot />

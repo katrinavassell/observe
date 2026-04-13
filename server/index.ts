@@ -288,6 +288,22 @@ async function _doDbInit() {
     await pool.query("SELECT 1");
     console.warn("Database connection verified");
 
+    // Defense-in-depth: nuke any sample-tagged event rows on every startup.
+    // The /data/sample seeder endpoint is gone, but if any old code path
+    // somewhere ever inserts a row with source='sample', this kills it.
+    try {
+      const wipeResult = await pool.query(
+        "DELETE FROM observe_events WHERE source = 'sample'",
+      );
+      if ((wipeResult.rowCount ?? 0) > 0) {
+        console.warn(
+          `Wiped ${wipeResult.rowCount} stale sample event rows on startup`,
+        );
+      }
+    } catch (wipeErr) {
+      console.error("Sample data startup wipe failed:", wipeErr);
+    }
+
     await pool.query(`
       CREATE TABLE IF NOT EXISTS accounts (
         id SERIAL PRIMARY KEY,
