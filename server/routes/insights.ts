@@ -395,8 +395,17 @@ Return ONLY the JSON array, no markdown or explanation.`;
         }>;
         let tokensUsed = 0;
         let costUsd = 0;
+        let llmRequestBody: Record<string, unknown> | null = null;
+        let llmResponseBody: Record<string, unknown> | null = null;
 
         if (openaiKey) {
+          const llmRequest = {
+            model: "gpt-4o",
+            messages: [{ role: "user", content: prompt }],
+            temperature: 0.3,
+            max_tokens: 3000,
+          };
+          llmRequestBody = llmRequest;
           const openaiResponse = await fetch(
             "https://api.openai.com/v1/chat/completions",
             {
@@ -405,12 +414,7 @@ Return ONLY the JSON array, no markdown or explanation.`;
                 "Content-Type": "application/json",
                 Authorization: `Bearer ${openaiKey}`,
               },
-              body: JSON.stringify({
-                model: "gpt-4o",
-                messages: [{ role: "user", content: prompt }],
-                temperature: 0.3,
-                max_tokens: 3000,
-              }),
+              body: JSON.stringify(llmRequest),
             },
           );
 
@@ -426,6 +430,7 @@ Return ONLY the JSON array, no markdown or explanation.`;
             choices: Array<{ message: { content: string } }>;
             usage?: { total_tokens: number };
           };
+          llmResponseBody = completion as Record<string, unknown>;
           const content = completion.choices[0]?.message?.content || "[]";
           tokensUsed = completion.usage?.total_tokens || 0;
           const promptTokens =
@@ -686,9 +691,20 @@ Return ONLY the JSON array, no markdown or explanation.`;
 
         // Log the generation as an observe_event
         await pool.query(
-          `INSERT INTO observe_events (user_id, customer_id, feature_key, event_name, cost_amount, cost_unit, source, granularity)
-         VALUES ($1, 'system', 'ai_insights', 'insight_generated', $2, 'usd', 'system', 'event')`,
-          [visitorId, costUsd],
+          `INSERT INTO observe_events
+             (user_id, customer_id, feature_key, event_name, timestamp,
+              cost_amount, cost_unit, usage_units, model, model_provider,
+              source, granularity, request_body, response_body)
+           VALUES ($1, 'system', 'ai_insights', 'insight_generated', NOW(),
+                   $2, 'usd', $3, 'gpt-4o', 'openai',
+                   'internal', 'event', $4, $5)`,
+          [
+            visitorId,
+            costUsd,
+            tokensUsed,
+            llmRequestBody ? JSON.stringify(llmRequestBody) : null,
+            llmResponseBody ? JSON.stringify(llmResponseBody) : null,
+          ],
         );
 
         // Track usage (insights are metered by counting ai_insights rows)
