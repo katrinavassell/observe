@@ -145,9 +145,15 @@ const navItems = computed(() => [
   },
 ]);
 
-const isAdmin = computed(
-  () => account.value?.email?.toLowerCase() === "tansoadmin@tansohq.com",
-);
+const ADMIN_EMAILS = [
+  "tansoadmin@tansohq.com",
+  "kat@tansohq.com",
+  "doug@tansohq.com",
+];
+const isAdmin = computed(() => {
+  const email = account.value?.email?.toLowerCase();
+  return !!email && ADMIN_EMAILS.includes(email);
+});
 
 const adminNavItem = computed(() =>
   isAdmin.value
