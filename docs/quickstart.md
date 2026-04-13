@@ -12,7 +12,7 @@ from openai import OpenAI
 client = OpenAI(
     api_key="sk-...",
     base_url="https://app.tanso.io/v1",     # your Observe instance
-    default_headers={"x-tanso-key": "sk_live_..."}, # SDK key from Data Sources
+    default_headers={"x-tanso-key": "obs_..."}, # SDK key from Data Sources
 )
 
 response = client.chat.completions.create(
@@ -30,7 +30,7 @@ import OpenAI from 'openai'
 const client = new OpenAI({
   apiKey: 'sk-...',
   baseURL: 'https://app.tanso.io/v1',
-  defaultHeaders: { 'x-tanso-key': 'sk_live_...' },
+  defaultHeaders: { 'x-tanso-key': 'obs_...' },
 })
 ```
 
@@ -42,7 +42,7 @@ import anthropic
 client = anthropic.Anthropic(
     api_key="sk-ant-...",
     base_url="https://app.tanso.io",
-    default_headers={"x-tanso-key": "sk_live_..."},
+    default_headers={"x-tanso-key": "obs_..."},
 )
 ```
 
@@ -59,7 +59,7 @@ client = OpenAI(
     api_key="sk-...",
     base_url="https://app.tanso.io/v1",
     default_headers={
-        "x-tanso-key":      "sk_live_...",
+        "x-tanso-key":      "obs_...",
         "x-tanso-customer": "cus_acme",      # your customer ID
         "x-tanso-feature":  "ai-assistant",   # which feature this is
     },
@@ -145,39 +145,31 @@ See the [SDK README](../packages/sdk/README.md) for full options.
 
 ## Tracing agent flows
 
-Track multi-step agent executions with cost attribution per step:
+Track multi-step agent executions with cost attribution per step. Use the `x-tanso-trace-id` and `x-tanso-span-id` headers on each gateway call to group them into a single trace:
 
 ```typescript
-import { TansoObserve, wrapTool } from "@tanso/observe"
+import { Observe } from "@tanso/observe"
+import OpenAI from "openai"
 
-const observe = new TansoObserve({ apiKey: "sk_live_..." })
-const trace = observe.startTrace()
+Observe.configure({ apiKey: process.env.OBSERVE_API_KEY! })
+const openai = Observe.wrap(new OpenAI())
 
-// LLM call as a traced span
-const answer = await observe.span(trace, {
-  eventName: "llm.plan",
-  featureKey: "research-agent",
-  customerReferenceId: "cus_acme",
-  costType: "llm",
-}, async () => {
-  return await openai.chat.completions.create({
-    model: "gpt-4o",
-    messages: [{ role: "user", content: "Plan a research strategy" }],
-  })
-})
+const traceId = crypto.randomUUID()
 
-// Non-LLM tool call (e.g., vector search)
-const search = wrapTool(observe, pineconeQuery, {
-  eventName: "tool.vector_search",
-  featureKey: "research-agent",
-  costType: "vector_db",
-  costAmount: 0.002,
-  traceContext: trace,
-})
-const results = await search({ query: "embeddings" })
+// Step 1 of a multi-step agent
+await openai.chat.completions.create(
+  { model: "gpt-4o", messages: [{ role: "user", content: "Plan the research" }] },
+  { headers: { "x-tanso-trace-id": traceId, "x-tanso-span-id": "plan" } },
+)
+
+// Step 2
+await openai.chat.completions.create(
+  { model: "gpt-4o-mini", messages: [{ role: "user", content: "Summarize" }] },
+  { headers: { "x-tanso-trace-id": traceId, "x-tanso-span-id": "summarize", "x-tanso-parent-span-id": "plan" } },
+)
 ```
 
-View traces at `/traces` in the dashboard -- each shows a waterfall of spans with cost, duration, and type.
+View traces at `/traces` in the dashboard — each shows a waterfall of spans with cost, duration, and type.
 
 ---
 

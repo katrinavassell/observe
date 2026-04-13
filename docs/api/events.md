@@ -312,7 +312,7 @@ POST /api/sdk-keys
 
 Body: `{ "name": "my-key" }` (optional)
 
-Response: `{ "key": "sk_live_...", "prefix": "sk_live_xxxx", "name": "my-key" }`
+Response: `{ "key": "obs_...", "prefix": "obs_xxxxxxxxxx", "name": "my-key" }`
 
 ### List Keys
 

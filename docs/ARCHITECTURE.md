@@ -225,7 +225,7 @@ Single Express app on port 3001, proxied by Vite at `/api/*`. The `/api` prefix 
 | Module | Purpose |
 |--------|---------|
 | `auth.ts` | Signup, login, logout, password reset, session init |
-| `data.ts` | CSV upload, sample data, Stripe sync, data status |
+| `data.ts` | CSV upload, Stripe sync, data status |
 | `billing-api.ts` | Billing status, Stripe checkout/portal/webhook, feature pricing, integrations, referrals |
 | `events.ts` | Event CRUD, aggregations (by-feature/customer/model/agent/cost-type), traces, SDK key management, batch ingestion with usage limit enforcement |
 | `alerts.ts` | Alert rule CRUD, threshold evaluation, email dispatch |

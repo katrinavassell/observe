@@ -87,7 +87,7 @@ Fetch all data for the pricing analyzer (plans, customers, subscriptions, usage,
 
 ### POST /data/sample
 
-Load sample dataset. Clears existing data first.
+(REMOVED) The sample-data endpoint has been deleted — guest preview is now client-side only.
 
 ### DELETE /data/clear
 

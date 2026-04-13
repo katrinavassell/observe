@@ -21,7 +21,7 @@ llm = ChatOpenAI(
     openai_api_key="sk-...",
     openai_api_base="http://localhost:3001/v1",  # Your Observe instance
     default_headers={
-        "x-tanso-key": "sk_live_...",           # SDK key from Data Sources
+        "x-tanso-key": "obs_...",           # SDK key from Data Sources
         "x-tanso-customer": "cus_acme",     # Attribute to a customer
         "x-tanso-feature": "langchain-chat", # Attribute to a feature
     },
@@ -40,7 +40,7 @@ embeddings = OpenAIEmbeddings(
     openai_api_key="sk-...",
     openai_api_base="http://localhost:3001/v1",
     default_headers={
-        "x-tanso-key": "sk_live_...",
+        "x-tanso-key": "obs_...",
         "x-tanso-customer": "cus_acme",
         "x-tanso-feature": "langchain-embeddings",
     },
@@ -114,7 +114,7 @@ class ObserveCallback(BaseCallbackHandler):
 Usage:
 
 ```python
-callback = ObserveCallback(api_key="sk_live_...")
+callback = ObserveCallback(api_key="obs_...")
 llm = ChatOpenAI(model="gpt-4o", callbacks=[callback])
 response = llm.invoke("Summarize this document.")
 ```
@@ -131,7 +131,7 @@ event per LLM invocation within the chain.
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 
-callback = ObserveCallback(api_key="sk_live_...")
+callback = ObserveCallback(api_key="obs_...")
 
 prompt = ChatPromptTemplate.from_template("Summarize: {text}")
 chain = prompt | llm | StrOutputParser()
@@ -166,7 +166,7 @@ def get_llm_for_customer(customer_id: str) -> ChatOpenAI:
         openai_api_key="sk-...",
         openai_api_base="http://localhost:3001/v1",
         default_headers={
-            "x-tanso-key": "sk_live_...",
+            "x-tanso-key": "obs_...",
             "x-tanso-customer": customer_id,
             "x-tanso-feature": "chat",
         },
@@ -213,7 +213,7 @@ class ObserveCallback(BaseCallbackHandler):
 
 
 # Create a callback per customer
-callback = ObserveCallback(api_key="sk_live_...", customer_id="cus_acme")
+callback = ObserveCallback(api_key="obs_...", customer_id="cus_acme")
 llm = ChatOpenAI(model="gpt-4o", callbacks=[callback])
 ```
 
@@ -231,7 +231,7 @@ llm = ChatOpenAI(
     openai_api_key="sk-...",
     openai_api_base="https://observe.yourcompany.com/v1",
     default_headers={
-        "x-tanso-key": "sk_live_...",
+        "x-tanso-key": "obs_...",
         "x-tanso-customer": "cus_acme",
         "x-tanso-feature": "chat",
     },
@@ -239,7 +239,7 @@ llm = ChatOpenAI(
 
 # Callback mode
 callback = ObserveCallback(
-    api_key="sk_live_...",
+    api_key="obs_...",
     base_url="https://observe.yourcompany.com",
 )
 ```

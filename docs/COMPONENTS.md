@@ -9,8 +9,8 @@ Vue components and composables in Observe.
 | `AnalyticsPage.vue` | `/` | Home page: revenue, costs, margin overview |
 | `EventsPage.vue` | `/events` | Filterable event stream |
 | `ModelsPage.vue` | `/models` | AI model cost breakdown |
-| `AlertsPage.vue` | `/alerts` | 17 alert types across 5 categories (cost, margin, abuse, pricing, concentration) -- free for all users |
-| `DataSourcesPage.vue` | `/data-sources` | CSV upload, integrations, sample data |
+| `AlertsPage.vue` | `/alerts` | 8 curated alert types (cost, margin, abuse, pricing, concentration) — free for all users |
+| `DataSourcesPage.vue` | `/data-sources` | CSV upload, integrations, API keys |
 | `PlansPage.vue` | `/plans` | Subscription plans and billing management |
 | `CheckoutSuccessPage.vue` | `/checkout/success` | Post-checkout confirmation |
 | `CohortsPage.vue` | `/cohorts` | Cohort retention analysis |
