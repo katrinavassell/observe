@@ -189,22 +189,32 @@ export function createAuthRoutes(
           [userId],
         );
 
-        // Auto-generate SDK key
+        // Auto-generate an SDK key on first signup-complete. If the user
+        // already has at least one key, skip — don't return a fresh raw
+        // key the server never stored (previous bug: ON CONFLICT DO
+        // NOTHING + always-return rawKey gave the user a "key" that was
+        // never actually inserted).
         let sdkKey: string | null = null;
         try {
-          const crypto = await import("crypto");
-          const rawKey = `obs_${crypto.randomBytes(24).toString("hex")}`;
-          const keyHash = crypto
-            .createHash("sha256")
-            .update(rawKey)
-            .digest("hex");
-          const keyPrefix = rawKey.slice(0, 11);
-          await pool.query(
-            `INSERT INTO sdk_api_keys (user_id, key_hash, key_prefix, name) VALUES ($1, $2, $3, $4)
-             ON CONFLICT DO NOTHING`,
-            [userId, keyHash, keyPrefix, "default"],
+          const existing = await pool.query(
+            "SELECT id FROM sdk_api_keys WHERE user_id = $1 AND revoked_at IS NULL LIMIT 1",
+            [userId],
           );
-          sdkKey = rawKey;
+          if (existing.rows.length === 0) {
+            const crypto = await import("crypto");
+            const rawKey = `obs_${crypto.randomBytes(24).toString("hex")}`;
+            const keyHash = crypto
+              .createHash("sha256")
+              .update(rawKey)
+              .digest("hex");
+            const keyPrefix = rawKey.slice(0, 11);
+            await pool.query(
+              `INSERT INTO sdk_api_keys (user_id, key_hash, key_prefix, name)
+               VALUES ($1, $2, $3, $4)`,
+              [userId, keyHash, keyPrefix, "default"],
+            );
+            sdkKey = rawKey;
+          }
         } catch (keyErr) {
           console.error("Auto SDK key generation failed (non-fatal):", keyErr);
         }
