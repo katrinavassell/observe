@@ -848,7 +848,11 @@ Return ONLY the JSON array, no markdown or explanation.`;
         }
 
         const data = await response.json();
-        res.json({ emails: data.data ?? [] });
+        const all = (data.data ?? []) as Array<{ from?: string }>;
+        const observeOnly = all.filter((e) =>
+          (e.from ?? "").toLowerCase().includes("observe"),
+        );
+        res.json({ emails: observeOnly });
       } catch (err) {
         console.error("GET /admin/emails error:", err);
         res.status(500).json({ error: "Failed to fetch emails" });
