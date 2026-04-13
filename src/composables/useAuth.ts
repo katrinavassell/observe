@@ -245,6 +245,16 @@ export function useAuth() {
     if (error) throw new Error(error.message);
   }
 
+  /** Resend the signup confirmation email for an unconfirmed user. */
+  async function resendConfirmationEmail(email: string) {
+    const { error } = await supabase.auth.resend({
+      type: "signup",
+      email,
+      options: { emailRedirectTo: `${window.location.origin}/` },
+    });
+    if (error) throw new Error(error.message);
+  }
+
   return {
     visitorId,
     isLoading,
@@ -260,5 +270,6 @@ export function useAuth() {
     signInWithGoogle,
     signInWithGithub,
     signInWithMagicLink,
+    resendConfirmationEmail,
   };
 }

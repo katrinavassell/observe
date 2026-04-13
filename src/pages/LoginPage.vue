@@ -26,7 +26,30 @@ const {
   signInWithGoogle,
   signInWithGithub,
   signInWithMagicLink,
+  resendConfirmationEmail,
 } = useAuth();
+
+// Tracks the "please confirm email" state so we can show a resend button
+const unconfirmedEmail = ref<string | null>(null);
+const isResending = ref(false);
+
+async function handleResendConfirmation() {
+  if (!unconfirmedEmail.value) return;
+  isResending.value = true;
+  try {
+    await resendConfirmationEmail(unconfirmedEmail.value);
+    toast.success("Confirmation email sent", {
+      description: `Check ${unconfirmedEmail.value} for a fresh link.`,
+      duration: 8000,
+    });
+  } catch (err) {
+    toast.error(
+      err instanceof Error ? err.message : "Couldn't send confirmation email",
+    );
+  } finally {
+    isResending.value = false;
+  }
+}
 
 if (isLoggedIn.value) {
   router.replace("/");
@@ -130,6 +153,7 @@ async function handleSubmit() {
         name.value.trim() || undefined,
       );
       if (result.needsEmailConfirmation) {
+        unconfirmedEmail.value = result.email;
         toast.success("Check your email", {
           description: `We sent a confirmation link to ${result.email}. Click it to finish signing up.`,
           duration: 8000,
@@ -149,6 +173,11 @@ async function handleSubmit() {
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Authentication failed";
+    // If the error is the "please confirm your email" one, surface the
+    // resend button by remembering the email.
+    if (message.toLowerCase().includes("confirm your email")) {
+      unconfirmedEmail.value = trimmedEmail;
+    }
     toast.error("Error", { description: message });
   } finally {
     isLoading.value = false;
@@ -393,6 +422,29 @@ const highlights = [
               <Loader2 v-if="isLoading" class="h-4 w-4 mr-2 animate-spin" />
               {{ isRegisterMode ? "Create account" : "Sign in" }}
             </Button>
+
+            <!-- Resend confirmation email — appears after signup or after
+                 an unconfirmed-email login attempt -->
+            <div
+              v-if="unconfirmedEmail"
+              class="rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 space-y-2"
+            >
+              <p>
+                We sent a confirmation link to
+                <strong>{{ unconfirmedEmail }}</strong
+                >. Click it to finish signing up — didn't get it?
+              </p>
+              <button
+                type="button"
+                class="inline-flex items-center gap-1.5 text-amber-900 font-semibold hover:underline disabled:opacity-50"
+                :disabled="isResending"
+                @click="handleResendConfirmation"
+              >
+                <Loader2 v-if="isResending" class="h-3 w-3 animate-spin" />
+                <Mail v-else class="h-3 w-3" />
+                {{ isResending ? "Sending…" : "Resend confirmation email" }}
+              </button>
+            </div>
 
             <div v-if="!isRegisterMode">
               <button
