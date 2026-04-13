@@ -1118,30 +1118,30 @@ Observe.identify({ <span class="text-sky-300">customerId</span>: user.stripeId }
                   </p>
                 </div>
               </div>
-              <div v-if="canEdit" class="flex items-center gap-1">
+              <div v-if="canEdit" class="flex items-center gap-2">
                 <Button
-                  variant="ghost"
+                  variant="outline"
                   size="sm"
-                  class="h-7 w-7 p-0 text-muted-foreground"
+                  class="h-8 text-xs"
                   :disabled="isSyncingStripe"
-                  title="Re-sync Stripe data"
                   @click="handleStripeSync"
                 >
                   <Loader2
                     v-if="isSyncingStripe"
-                    class="h-3 w-3 animate-spin"
+                    class="h-3 w-3 mr-1.5 animate-spin"
                   />
-                  <RefreshCw v-else class="h-3 w-3" />
+                  <RefreshCw v-else class="h-3 w-3 mr-1.5" />
+                  {{ isSyncingStripe ? "Syncing…" : "Sync" }}
                 </Button>
                 <Button
                   variant="ghost"
                   size="sm"
-                  class="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                  class="h-8 text-xs text-muted-foreground hover:text-destructive"
                   :disabled="isDisconnectingStripe"
-                  title="Disconnect Stripe"
                   @click="handleStripeDisconnect"
                 >
-                  <Unplug class="h-3 w-3" />
+                  <Unplug class="h-3 w-3 mr-1.5" />
+                  Disconnect
                 </Button>
               </div>
             </div>
@@ -1192,31 +1192,31 @@ Observe.identify({ <span class="text-sky-300">customerId</span>: user.stripeId }
                 </p>
               </div>
             </div>
-            <div v-if="canEdit" class="flex items-center gap-1">
+            <div v-if="canEdit" class="flex items-center gap-2">
               <template v-if="cloudProviderStatus('aws')?.connected">
                 <Button
-                  variant="ghost"
+                  variant="outline"
                   size="sm"
-                  class="h-7 w-7 p-0 text-muted-foreground"
+                  class="h-8 text-xs"
                   :disabled="isSyncingCloud === 'aws'"
-                  title="Sync AWS costs"
                   @click="handleSyncCloud('aws')"
                 >
                   <Loader2
                     v-if="isSyncingCloud === 'aws'"
-                    class="h-3 w-3 animate-spin"
+                    class="h-3 w-3 mr-1.5 animate-spin"
                   />
-                  <RefreshCw v-else class="h-3 w-3" />
+                  <RefreshCw v-else class="h-3 w-3 mr-1.5" />
+                  {{ isSyncingCloud === "aws" ? "Syncing…" : "Sync" }}
                 </Button>
                 <Button
                   variant="ghost"
                   size="sm"
-                  class="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                  class="h-8 text-xs text-muted-foreground hover:text-destructive"
                   :disabled="isDisconnectingCloud === 'aws'"
-                  title="Disconnect AWS"
                   @click="handleDisconnectCloud('aws')"
                 >
-                  <Unplug class="h-3 w-3" />
+                  <Unplug class="h-3 w-3 mr-1.5" />
+                  Disconnect
                 </Button>
               </template>
               <Button
@@ -1311,31 +1311,31 @@ Observe.identify({ <span class="text-sky-300">customerId</span>: user.stripeId }
                 </p>
               </div>
             </div>
-            <div v-if="canEdit" class="flex items-center gap-1">
+            <div v-if="canEdit" class="flex items-center gap-2">
               <template v-if="cloudProviderStatus('gcp')?.connected">
                 <Button
-                  variant="ghost"
+                  variant="outline"
                   size="sm"
-                  class="h-7 w-7 p-0 text-muted-foreground"
+                  class="h-8 text-xs"
                   :disabled="isSyncingCloud === 'gcp'"
-                  title="Sync GCP costs"
                   @click="handleSyncCloud('gcp')"
                 >
                   <Loader2
                     v-if="isSyncingCloud === 'gcp'"
-                    class="h-3 w-3 animate-spin"
+                    class="h-3 w-3 mr-1.5 animate-spin"
                   />
-                  <RefreshCw v-else class="h-3 w-3" />
+                  <RefreshCw v-else class="h-3 w-3 mr-1.5" />
+                  {{ isSyncingCloud === "gcp" ? "Syncing…" : "Sync" }}
                 </Button>
                 <Button
                   variant="ghost"
                   size="sm"
-                  class="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                  class="h-8 text-xs text-muted-foreground hover:text-destructive"
                   :disabled="isDisconnectingCloud === 'gcp'"
-                  title="Disconnect GCP"
                   @click="handleDisconnectCloud('gcp')"
                 >
-                  <Unplug class="h-3 w-3" />
+                  <Unplug class="h-3 w-3 mr-1.5" />
+                  Disconnect
                 </Button>
               </template>
               <Button
