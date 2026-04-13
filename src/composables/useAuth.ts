@@ -124,6 +124,15 @@ export function useAuth() {
     });
     if (error) throw new Error(error.message);
 
+    // Block unconfirmed users from logging in. Supabase's project-level
+    // "Confirm email" toggle may be off, so this is a defense-in-depth check.
+    if (!data.user.email_confirmed_at) {
+      await supabase.auth.signOut();
+      throw new Error(
+        "Please confirm your email before signing in. Check your inbox for the confirmation link.",
+      );
+    }
+
     visitorId.value = data.user.id;
 
     // Fetch local account
@@ -147,9 +156,23 @@ export function useAuth() {
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
+      options: {
+        emailRedirectTo: `${window.location.origin}/`,
+        data: name ? { full_name: name } : undefined,
+      },
     });
     if (error) throw new Error(error.message);
     if (!data.user) throw new Error("Signup failed — no user returned");
+
+    // If Supabase requires email confirmation, signUp returns user but no
+    // session. Don't create a local account row yet — wait until they
+    // click the confirm link and the auth-state-change listener fires.
+    if (!data.session) {
+      return {
+        needsEmailConfirmation: true as const,
+        email: data.user.email ?? email,
+      };
+    }
 
     visitorId.value = data.user.id;
 
@@ -167,7 +190,7 @@ export function useAuth() {
       });
     }
 
-    return result;
+    return { needsEmailConfirmation: false as const, ...result };
   }
 
   async function logout() {

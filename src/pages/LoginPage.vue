@@ -124,11 +124,19 @@ async function handleSubmit() {
 
   try {
     if (isRegisterMode.value) {
-      await signup(
+      const result = await signup(
         trimmedEmail,
         password.value,
         name.value.trim() || undefined,
       );
+      if (result.needsEmailConfirmation) {
+        toast.success("Check your email", {
+          description: `We sent a confirmation link to ${result.email}. Click it to finish signing up.`,
+          duration: 8000,
+        });
+        password.value = "";
+        return;
+      }
       toast.success("Account created!", {
         description: "You are now signed in.",
       });
