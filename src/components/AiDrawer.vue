@@ -1,22 +1,30 @@
 <script setup lang="ts">
 import { ref, nextTick, computed, onMounted, onBeforeUnmount } from "vue";
 import { useRoute } from "vue-router";
+import { useQuery } from "@tanstack/vue-query";
 import { toast } from "vue-sonner";
 import { Send, Loader2, Check, Sparkles, X, Trash2 } from "lucide-vue-next";
 import {
   DialogRoot,
   DialogPortal,
-  DialogOverlay,
   DialogContent,
   DialogClose,
 } from "radix-vue";
 import { useAuth } from "@/composables/useAuth";
 import { Button } from "@/components/ui";
-import { sendChatMessage, executeChatAction } from "@/lib/api";
+import { sendChatMessage, executeChatAction, getUsageLimits } from "@/lib/api";
 import type { ChatMessage, ChatAction } from "@/lib/api";
 
 const { isLoggedIn } = useAuth();
 const route = useRoute();
+
+const { data: usageLimits } = useQuery({
+  queryKey: ["usage-limits"],
+  queryFn: getUsageLimits,
+  enabled: isLoggedIn,
+});
+
+const messageUsage = computed(() => usageLimits.value?.ai_insights?.usage);
 
 const open = ref(false);
 const messages = ref<
@@ -220,13 +228,13 @@ defineExpose({ openDrawer });
     >
   </button>
 
-  <DialogRoot :open="open" @update:open="open = $event">
+  <DialogRoot :open="open" :modal="false" @update:open="open = $event">
     <DialogPortal>
-      <DialogOverlay
-        class="fixed inset-0 z-50 bg-black/30 backdrop-blur-sm data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0"
-      />
       <DialogContent
+        :trap-focus="false"
         class="fixed inset-y-0 right-0 z-50 flex h-full w-[480px] max-w-[92vw] flex-col border-l bg-background shadow-2xl data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right duration-200"
+        @interact-outside="(e: Event) => e.preventDefault()"
+        @pointer-down-outside="(e: Event) => e.preventDefault()"
       >
         <!-- Header -->
         <div class="shrink-0 flex items-center justify-between px-5 pt-5 pb-3">
@@ -238,8 +246,18 @@ defineExpose({ openDrawer });
             </div>
             <div>
               <h2 class="text-sm font-semibold leading-none">Ask Observe</h2>
-              <p class="mt-1 text-[11px] text-muted-foreground leading-none">
-                Context: {{ route.path }}
+              <p
+                v-if="messageUsage"
+                class="mt-1 text-[11px] text-muted-foreground leading-none"
+              >
+                {{ messageUsage.remaining }}/{{ messageUsage.limit }} messages
+                left this month
+              </p>
+              <p
+                v-else
+                class="mt-1 text-[11px] text-muted-foreground leading-none"
+              >
+                Press ⌘K to toggle
               </p>
             </div>
           </div>
