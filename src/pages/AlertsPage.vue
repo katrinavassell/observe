@@ -60,15 +60,6 @@ const METRICS = [
     defaultThreshold: 100,
     description: "Total cost in the last 24 hours",
   },
-  {
-    value: "cost_per_event",
-    label: "Avg cost per event ($)",
-    category: "cost",
-    unit: "$",
-    defaultOp: "gt",
-    defaultThreshold: 0.5,
-    description: "Average cost per event in the last 24 hours",
-  },
   // Margin
   {
     value: "margin_percent",
@@ -87,42 +78,6 @@ const METRICS = [
     defaultOp: "lt",
     defaultThreshold: 10,
     description: "Worst-performing customer's margin drops below threshold",
-  },
-  {
-    value: "feature_margin_trend",
-    label: "Feature margin trend (WoW pp)",
-    category: "margin",
-    unit: "pp",
-    defaultOp: "lt",
-    defaultThreshold: -5,
-    description: "Week-over-week change in average feature margin",
-  },
-  {
-    value: "customer_cost_vs_revenue",
-    label: "Customer cost/revenue (%)",
-    category: "margin",
-    unit: "%",
-    defaultOp: "gt",
-    defaultThreshold: 100,
-    description: "Worst customer's cost as percentage of their revenue",
-  },
-  {
-    value: "model_cost_spike",
-    label: "Model cost per request ($)",
-    category: "margin",
-    unit: "$",
-    defaultOp: "gt",
-    defaultThreshold: 1,
-    description: "Highest cost-per-request across all models",
-  },
-  {
-    value: "margin_compression",
-    label: "Margin compression (30d pp)",
-    category: "margin",
-    unit: "pp",
-    defaultOp: "lt",
-    defaultThreshold: -3,
-    description: "Margin change over the last 30 days vs prior 30 days",
   },
   // Abuse / runaway
   {
@@ -143,15 +98,6 @@ const METRICS = [
     defaultThreshold: 50,
     description: "Single customer's share of total infrastructure cost",
   },
-  {
-    value: "credit_burn_rate",
-    label: "Credit burn rate (hrs left)",
-    category: "abuse",
-    unit: "hrs",
-    defaultOp: "lt",
-    defaultThreshold: 24,
-    description: "Hours until a customer exhausts their credit balance",
-  },
   // Pricing
   {
     value: "top_customer_unprofitable",
@@ -161,15 +107,6 @@ const METRICS = [
     defaultOp: "gt",
     defaultThreshold: 0,
     description: "Number of top-10 customers (by cost) who are unprofitable",
-  },
-  {
-    value: "feature_cost_disparity",
-    label: "Feature cost disparity (ratio)",
-    category: "pricing",
-    unit: "x",
-    defaultOp: "gt",
-    defaultThreshold: 5,
-    description: "Ratio between most and least expensive features",
   },
   {
     value: "model_cost_increase",
@@ -190,41 +127,15 @@ const METRICS = [
     defaultThreshold: 40,
     description: "Top customer's share of total API cost",
   },
-  {
-    value: "provider_concentration",
-    label: "Provider concentration (%)",
-    category: "concentration",
-    unit: "%",
-    defaultOp: "gt",
-    defaultThreshold: 80,
-    description: "Top provider's share of total COGS",
-  },
-  {
-    value: "model_concentration",
-    label: "Model concentration (%)",
-    category: "concentration",
-    unit: "%",
-    defaultOp: "gt",
-    defaultThreshold: 70,
-    description: "Top model's share of total spend",
-  },
 ];
 
 const TANSO_UPSELLS: Record<string, string> = {
   customer_margin: "Want to cap unprofitable customers automatically?",
-  feature_margin_trend: "Want to route to cheaper models or restrict usage?",
-  customer_cost_vs_revenue: "Want to enforce spend limits per customer?",
-  model_cost_spike: "Want to auto-route to cheaper models?",
   usage_velocity: "Want to set velocity limits?",
   customer_cost_share: "Want to set usage caps per customer?",
-  credit_burn_rate: "Want to enforce a hard stop on credit exhaustion?",
   top_customer_unprofitable: "Want to reprice these customers automatically?",
-  feature_cost_disparity: "Want to adjust pricing per feature?",
   model_cost_increase: "Want to auto-switch to cost-effective models?",
-  margin_compression: "Want to auto-adjust pricing as costs change?",
   customer_concentration: "Want to set concentration risk limits?",
-  provider_concentration: "Want to diversify provider routing?",
-  model_concentration: "Want to balance model usage automatically?",
 };
 
 const filteredMetrics = computed(() => {
