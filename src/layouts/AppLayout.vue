@@ -78,12 +78,6 @@ onMounted(async () => {
 
 const navItems = computed(() => [
   {
-    path: "/insights",
-    label: "Insights",
-    icon: Sparkles,
-    description: "Recommendations and AI analysis",
-  },
-  {
     path: "/analytics",
     label: "Analytics",
     icon: BarChart3,

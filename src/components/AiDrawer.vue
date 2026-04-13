@@ -155,42 +155,47 @@ defineExpose({ openDrawer });
 
         <template v-for="(msg, i) in messages" :key="i">
           <div
-            class="text-sm leading-relaxed"
-            :class="
-              msg.role === 'user'
-                ? 'text-foreground font-medium'
-                : 'text-muted-foreground'
-            "
+            class="flex"
+            :class="msg.role === 'user' ? 'justify-end' : 'justify-start'"
           >
-            <div class="whitespace-pre-wrap">
-              {{ msg.content.replace(/```action[\s\S]*?```/g, "").trim() }}
-            </div>
+            <div
+              class="max-w-[85%] rounded-2xl px-3.5 py-2 text-sm leading-relaxed"
+              :class="
+                msg.role === 'user'
+                  ? 'bg-primary text-primary-foreground rounded-br-sm'
+                  : 'bg-muted text-foreground rounded-bl-sm'
+              "
+            >
+              <div class="whitespace-pre-wrap break-words">
+                {{ msg.content.replace(/```action[\s\S]*?```/g, "").trim() }}
+              </div>
 
-            <div
-              v-if="msg.action && !msg.actionExecuted"
-              class="mt-2 rounded-md border bg-muted/30 p-3"
-            >
-              <div class="text-[11px] text-muted-foreground mb-1.5">
-                Suggested action
-              </div>
-              <div class="text-xs font-medium mb-2">
-                {{ formatActionLabel(msg.action) }}
-              </div>
-              <Button
-                size="sm"
-                class="h-7 text-xs"
-                @click="handleExecuteAction(i)"
+              <div
+                v-if="msg.action && !msg.actionExecuted"
+                class="mt-2 rounded-md border bg-background p-2.5"
               >
-                <Check class="h-3 w-3 mr-1" />
-                Do it
-              </Button>
-            </div>
-            <div
-              v-if="msg.action && msg.actionExecuted"
-              class="mt-1.5 flex items-center gap-1 text-xs text-success"
-            >
-              <Check class="h-3 w-3" />
-              Done
+                <div class="text-[11px] text-muted-foreground mb-1">
+                  Suggested action
+                </div>
+                <div class="text-xs font-medium mb-2 text-foreground">
+                  {{ formatActionLabel(msg.action) }}
+                </div>
+                <Button
+                  size="sm"
+                  class="h-7 text-xs"
+                  @click="handleExecuteAction(i)"
+                >
+                  <Check class="h-3 w-3 mr-1" />
+                  Do it
+                </Button>
+              </div>
+              <div
+                v-if="msg.action && msg.actionExecuted"
+                class="mt-1.5 flex items-center gap-1 text-xs text-success"
+              >
+                <Check class="h-3 w-3" />
+                Done
+              </div>
             </div>
           </div>
         </template>

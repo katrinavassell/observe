@@ -5,7 +5,7 @@ const router = createRouter({
   routes: [
     {
       path: "/",
-      redirect: "/insights",
+      redirect: "/analytics",
     },
     {
       path: "/analytics",
@@ -54,12 +54,11 @@ const router = createRouter({
     },
     {
       path: "/insights",
-      name: "insights",
-      component: () => import("@/pages/InsightsPage.vue"),
+      redirect: "/analytics",
     },
     {
       path: "/chat",
-      redirect: "/insights",
+      redirect: "/analytics",
     },
     {
       path: "/alerts",
