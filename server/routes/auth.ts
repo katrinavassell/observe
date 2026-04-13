@@ -49,6 +49,53 @@ export function createEnsureVisitor(pool: Pool) {
           );
           if (accountResult.rows[0]) {
             req.accountId = accountResult.rows[0].id;
+          } else if (user.email) {
+            // Self-heal: authenticated user with no accounts row. This
+            // normally runs from /auth/signup-complete but may not have if
+            // the frontend retry loop exhausted. Create the row + SDK key
+            // inline so the user is never stuck without an account.
+            try {
+              const insertResult = await pool.query(
+                `INSERT INTO accounts (email, password_hash, name, visitor_id)
+                 VALUES ($1, 'supabase-managed', $2, $3)
+                 ON CONFLICT (email) DO UPDATE SET visitor_id = $3
+                 RETURNING id`,
+                [
+                  user.email,
+                  user.user_metadata?.full_name ||
+                    user.user_metadata?.name ||
+                    null,
+                  user.id,
+                ],
+              );
+              req.accountId = insertResult.rows[0]?.id;
+
+              // Ensure an SDK key exists
+              const existingKey = await pool.query(
+                "SELECT id FROM sdk_api_keys WHERE user_id = $1 AND revoked_at IS NULL LIMIT 1",
+                [user.id],
+              );
+              if (existingKey.rows.length === 0) {
+                const cryptoMod = await import("crypto");
+                const rawKey = `obs_${cryptoMod.randomBytes(24).toString("hex")}`;
+                const keyHash = cryptoMod
+                  .createHash("sha256")
+                  .update(rawKey)
+                  .digest("hex");
+                const keyPrefix = rawKey.slice(0, 11);
+                await pool.query(
+                  `INSERT INTO sdk_api_keys (user_id, key_hash, key_prefix, name)
+                   VALUES ($1, $2, $3, 'default')
+                   ON CONFLICT (user_id, name) WHERE revoked_at IS NULL DO NOTHING`,
+                  [user.id, keyHash, keyPrefix],
+                );
+              }
+            } catch (healErr) {
+              console.error(
+                "ensureVisitor self-heal failed — user will see errors until this clears:",
+                healErr,
+              );
+            }
           }
 
           // Logged-in users must never see sample data. Mark the in-memory
@@ -235,49 +282,46 @@ export function createAuthRoutes(
           }
         }
 
-        // Notify Kat of new signup
+        // Notify Kat of new signup + send welcome email.
+        // Both are AWAITED synchronously because Vercel serverless
+        // functions are killed immediately after the HTTP response
+        // returns. setTimeout callbacks are dropped, and fire-and-forget
+        // .catch() chains often race the lambda death and never actually
+        // send. Awaiting adds ~400ms to signup but guarantees delivery.
         const resendKey = process.env.RESEND_API_KEY;
         if (resendKey) {
-          fetch("https://api.resend.com/emails", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${resendKey}`,
-            },
-            body: JSON.stringify({
+          const resendPost = (body: Record<string, unknown>) =>
+            fetch("https://api.resend.com/emails", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${resendKey}`,
+              },
+              body: JSON.stringify(body),
+            }).then(async (r) => {
+              if (!r.ok) {
+                const errText = await r.text().catch(() => "");
+                console.error("Resend POST failed:", r.status, errText);
+              }
+            });
+
+          await Promise.allSettled([
+            resendPost({
               from: "Observe <kat@tansohq.com>",
               to: "kat@tansohq.com",
               subject: `New signup: ${email}`,
               html: `<p><strong>New user signed up for Observe</strong></p><p>Email: ${email}</p><p>Name: ${name?.trim() || "(not provided)"}</p><p>Time: ${new Date().toISOString()}</p>`,
             }),
-          }).catch((err: unknown) =>
-            console.error("Failed to send signup notification:", err),
-          );
-
-          // Welcome email (delayed 3 minutes)
-          setTimeout(
-            () => {
-              fetch("https://api.resend.com/emails", {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                  Authorization: `Bearer ${resendKey}`,
-                },
-                body: JSON.stringify({
-                  from: "Kat from Observe <kat@tansohq.com>",
-                  to: email,
-                  subject: "Welcome to Observe",
-                  html: `<p>Hey there!</p>
+            resendPost({
+              from: "Kat from Observe <kat@tansohq.com>",
+              to: email,
+              subject: "Welcome to Observe",
+              html: `<p>Hey there!</p>
 <p>Just wanted to say thank you for signing up for Observe by Tanso! Would love to learn about what you're building and what brought you to Observe.</p>
 <p>Feel free to reach out with any questions or feedback. Also down to hop on a quick call if that's easier: <a href="https://cal.com/katrina-laszlo/meeting">https://cal.com/katrina-laszlo/meeting</a></p>
 <p>Kat<br/>Co-founder, Tanso</p>`,
-                }),
-              }).catch((err: unknown) =>
-                console.error("Failed to send welcome email:", err),
-              );
-            },
-            3 * 60 * 1000,
-          );
+            }),
+          ]);
         }
 
         res.json({

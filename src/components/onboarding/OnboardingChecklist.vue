@@ -47,7 +47,7 @@ const expanded = ref(false);
 </script>
 
 <template>
-  <div v-if="!allDone" class="fixed bottom-6 right-6 z-50">
+  <div v-if="!allDone" class="fixed bottom-24 right-6 z-50">
     <!-- Expanded panel -->
     <div
       v-if="expanded"
