@@ -386,7 +386,7 @@ export function createEventsRoutes(
            (array_agg(event_name ORDER BY timestamp ASC))[1] as root_event,
            (array_agg(DISTINCT cost_type))[1:5] as cost_types
            FROM observe_events
-           WHERE user_id = $1 AND trace_id IS NOT NULL AND source != 'sample'
+           WHERE user_id = $1 AND trace_id IS NOT NULL AND source IS DISTINCT FROM 'sample'
            GROUP BY trace_id
            ORDER BY start_time DESC
            LIMIT $2 OFFSET $3`,
@@ -438,7 +438,7 @@ export function createEventsRoutes(
            model, model_provider, source, properties, agent_id,
            trace_id, span_id, parent_span_id, duration_ms, cost_type
            FROM observe_events
-           WHERE user_id = $1 AND trace_id = $2 AND source != 'sample'
+           WHERE user_id = $1 AND trace_id = $2 AND source IS DISTINCT FROM 'sample'
            ORDER BY timestamp ASC`,
           [userId, traceId],
         );

@@ -3,30 +3,45 @@ import { ref, computed } from "vue";
 import { useQuery } from "@tanstack/vue-query";
 import { useRouter } from "vue-router";
 import { getTraces, getTrace } from "@/lib/api";
+import { useAuth } from "@/composables/useAuth";
+import { GUEST_TRACES, getGuestTraceDetail } from "@/lib/guest-preview";
 import { Activity, ChevronLeft, Layers, Plug } from "lucide-vue-next";
 import { Card, Button, Skeleton } from "@/components/ui";
 
 const _router = useRouter();
+const { isLoggedIn } = useAuth();
 const selectedTraceId = ref<string | null>(null);
 
 const {
-  data: tracesData,
+  data: realTracesData,
   isLoading: tracesLoading,
   isError: tracesError,
 } = useQuery({
   queryKey: ["traces"],
   queryFn: () => getTraces(),
-  enabled: computed(() => !selectedTraceId.value),
+  enabled: computed(() => isLoggedIn.value && !selectedTraceId.value),
 });
 
+// Guests see hardcoded preview data; logged-in users see real data.
+// Sample data is client-side only — the server cannot serve or store it.
+const tracesData = computed(() =>
+  isLoggedIn.value ? realTracesData.value : { traces: GUEST_TRACES },
+);
+
 const {
-  data: traceDetail,
+  data: realTraceDetail,
   isLoading: detailLoading,
   isError: detailError,
 } = useQuery({
   queryKey: ["trace", selectedTraceId],
   queryFn: () => getTrace(selectedTraceId.value!),
-  enabled: computed(() => !!selectedTraceId.value),
+  enabled: computed(() => isLoggedIn.value && !!selectedTraceId.value),
+});
+
+const traceDetail = computed(() => {
+  if (!selectedTraceId.value) return undefined;
+  if (isLoggedIn.value) return realTraceDetail.value;
+  return getGuestTraceDetail(selectedTraceId.value) ?? undefined;
 });
 
 function selectTrace(traceId: string) {

@@ -51,9 +51,10 @@ export function createEnsureVisitor(pool: Pool) {
             req.accountId = accountResult.rows[0].id;
           }
 
-          // Logged-in users must never see sample data — clear once then mark clean
+          // Logged-in users must never see sample data. Mark the in-memory
+          // set AFTER the cleanup succeeds so a failed cleanup retries on
+          // the next request instead of silently persisting stale rows.
           if (!sampleClearedUsers.has(user.id)) {
-            sampleClearedUsers.add(user.id);
             try {
               await pool.query(
                 "DELETE FROM observe_events WHERE user_id = $1 AND source = 'sample'",
@@ -75,9 +76,11 @@ export function createEnsureVisitor(pool: Pool) {
                 "UPDATE user_data_status SET data_mode = CASE WHEN data_mode = 'sample' THEN 'none' ELSE data_mode END WHERE user_id = $1",
                 [user.id],
               );
+              sampleClearedUsers.add(user.id);
             } catch (cleanupErr) {
+              // Intentionally don't add to sampleClearedUsers so we retry.
               console.error(
-                "Sample data cleanup failed (non-fatal):",
+                "Sample data cleanup failed — will retry on next request:",
                 cleanupErr,
               );
             }
@@ -189,32 +192,42 @@ export function createAuthRoutes(
           [userId],
         );
 
-        // Auto-generate the "default" SDK key on first signup-complete.
-        // Race-safe: ON CONFLICT (user_id, name) DO NOTHING. If the insert
-        // was a no-op (concurrent request or existing key), return null
-        // so the frontend keeps showing whatever key the user already has
-        // rather than a ghost key the server didn't store.
+        // Every account gets an SDK key on signup. If the insert conflicts
+        // (user already has a "default"), confirm an active key exists and
+        // return null for rawKey — the existing key_prefix is already shown
+        // on Data Sources. If the insert fails for any other reason, or no
+        // active key exists after the attempt, FAIL THE REQUEST so the
+        // user doesn't land in a state where onboarding tells them to
+        // copy a key that doesn't exist.
         let sdkKey: string | null = null;
-        try {
-          const crypto = await import("crypto");
-          const rawKey = `obs_${crypto.randomBytes(24).toString("hex")}`;
-          const keyHash = crypto
-            .createHash("sha256")
-            .update(rawKey)
-            .digest("hex");
-          const keyPrefix = rawKey.slice(0, 11);
-          const insertResult = await pool.query(
-            `INSERT INTO sdk_api_keys (user_id, key_hash, key_prefix, name)
+        const crypto = await import("crypto");
+        const rawKey = `obs_${crypto.randomBytes(24).toString("hex")}`;
+        const keyHash = crypto
+          .createHash("sha256")
+          .update(rawKey)
+          .digest("hex");
+        const keyPrefix = rawKey.slice(0, 11);
+        const insertResult = await pool.query(
+          `INSERT INTO sdk_api_keys (user_id, key_hash, key_prefix, name)
              VALUES ($1, $2, $3, $4)
              ON CONFLICT (user_id, name) DO NOTHING
              RETURNING id`,
-            [userId, keyHash, keyPrefix, "default"],
+          [userId, keyHash, keyPrefix, "default"],
+        );
+        if (insertResult.rows.length > 0) {
+          sdkKey = rawKey;
+        } else {
+          // Verify an active key actually exists. If not, the insert
+          // silently failed for a non-conflict reason — fail loudly.
+          const existing = await pool.query(
+            "SELECT id FROM sdk_api_keys WHERE user_id = $1 AND revoked_at IS NULL LIMIT 1",
+            [userId],
           );
-          if (insertResult.rows.length > 0) {
-            sdkKey = rawKey;
+          if (existing.rows.length === 0) {
+            throw new Error(
+              "Failed to provision SDK key on signup — please retry.",
+            );
           }
-        } catch (keyErr) {
-          console.error("Auto SDK key generation failed (non-fatal):", keyErr);
         }
 
         // Notify Kat of new signup

@@ -288,24 +288,32 @@ async function _doDbInit() {
     await pool.query("SELECT 1");
     console.warn("Database connection verified");
 
-    // Hard-reject sample-tagged rows at the DB level. Cheaper and more
-    // reliable than a startup wipe or runtime filters in every read
-    // query. If this constraint ever fails to add because a row already
-    // violates it, the DELETE first then ADD would be the fallback —
-    // but the /data/sample seeder endpoints are gone, so new violations
-    // should be impossible.
+    // Hard-reject sample-tagged rows at the DB level. Cheaper than a
+    // runtime filter in every read query. On first install with legacy
+    // sample rows, we have to DELETE them before ADD CONSTRAINT or it
+    // errors out (23514).
     try {
-      await pool.query(
-        `ALTER TABLE observe_events
-           ADD CONSTRAINT observe_events_no_sample_source
-           CHECK (source IS NULL OR source != 'sample')`,
+      const existingConstraint = await pool.query(
+        `SELECT 1 FROM pg_constraint
+          WHERE conname = 'observe_events_no_sample_source'`,
       );
-    } catch (err: unknown) {
-      // 42710 = duplicate_object (constraint already exists) — expected.
-      const code = (err as { code?: string })?.code;
-      if (code !== "42710") {
-        console.error("CHECK constraint add failed:", err);
+      if (existingConstraint.rows.length === 0) {
+        const wipe = await pool.query(
+          "DELETE FROM observe_events WHERE source = 'sample'",
+        );
+        if ((wipe.rowCount ?? 0) > 0) {
+          console.warn(
+            `Wiped ${wipe.rowCount} legacy sample event rows before adding CHECK constraint`,
+          );
+        }
+        await pool.query(
+          `ALTER TABLE observe_events
+             ADD CONSTRAINT observe_events_no_sample_source
+             CHECK (source IS NULL OR source != 'sample')`,
+        );
       }
+    } catch (err: unknown) {
+      console.error("Sample CHECK constraint setup failed:", err);
     }
 
     await pool.query(`
