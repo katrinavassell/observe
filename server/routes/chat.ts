@@ -273,8 +273,8 @@ Only include action blocks when the user explicitly asks you to do something. Fo
           | undefined;
         pool
           .query(
-            `INSERT INTO observe_events (user_id, event_name, timestamp, cost_amount, cost_unit, usage_units, model, model_provider, source, granularity, is_inferred)
-           VALUES ($1, 'chat', NOW(), $2, 'usd', $3, 'gpt-4o-mini', 'openai', 'internal', 'event', false)`,
+            `INSERT INTO observe_events (user_id, feature_key, event_name, timestamp, cost_amount, cost_unit, usage_units, model, model_provider, source, granularity, is_inferred)
+           VALUES ($1, 'ai_chat', 'chat', NOW(), $2, 'usd', $3, 'gpt-4o-mini', 'openai', 'internal', 'event', false)`,
             [
               req.visitorId,
               (

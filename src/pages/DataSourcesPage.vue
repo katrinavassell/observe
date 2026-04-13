@@ -149,6 +149,37 @@ function copyKeyToClipboard() {
   }, 2000);
 }
 
+const aiInstallPromptCopied = ref(false);
+function buildAiInstallPrompt(apiKey: string) {
+  return `Install Observe by Tanso in this repo so every LLM call is tracked with cost, model, customer, and feature.
+
+Full instructions: https://observemetrics.com/llms.txt
+
+My Observe API key: ${apiKey}
+
+Steps:
+1. npm install @tanso/observe
+2. Add OBSERVE_API_KEY=${apiKey} to .env (and .env.example with a placeholder).
+3. At app startup, call Observe.configure({ apiKey: process.env.OBSERVE_API_KEY! }).
+4. At the start of each authenticated request, call Observe.identify({ customerId: <user's stripe customer id> }).
+5. Wrap every \`new OpenAI()\` and \`new Anthropic()\` with Observe.wrap(...). Do not replace them.
+6. For each user-facing AI feature, set Observe.feature('<feature_key>') or pass { headers: { 'x-tanso-feature': '<feature_key>' } } per call. Pick one feature key per product feature (e.g. ai_chat, summarize_email, code_autocomplete).
+7. Do not log the API key. Do not alter the existing provider (OpenAI/Anthropic) API key.
+8. After wiring it up, run the app once and confirm events appear in https://observemetrics.com/analytics.`;
+}
+
+function copyAiInstallPrompt() {
+  const key =
+    sdkKeys.value[0]?.full_key ||
+    sdkKeys.value[0]?.key_prefix + "..." ||
+    "YOUR_API_KEY";
+  window.navigator.clipboard.writeText(buildAiInstallPrompt(key));
+  aiInstallPromptCopied.value = true;
+  setTimeout(() => {
+    aiInstallPromptCopied.value = false;
+  }, 2000);
+}
+
 const apiKeyForSnippet = computed(() => {
   if (sdkKeys.value.length > 0) {
     return sdkKeys.value[0].full_key || sdkKeys.value[0].key_prefix + "...";
@@ -791,6 +822,32 @@ curl -X POST <span class="text-amber-300">'{{ proxyBaseUrl }}/google/generateCon
               <Plus class="h-3 w-3 mr-1" />
               {{ isGeneratingKey ? "Generating..." : "Generate Key" }}
             </Button>
+          </div>
+
+          <!-- AI-native install: one-click prompt for Cursor / Claude / Copilot -->
+          <div
+            v-if="sdkKeys.length > 0"
+            class="rounded-md border bg-gradient-to-br from-violet-500/10 to-blue-500/10 p-3 mb-3"
+          >
+            <div class="flex items-start justify-between gap-3">
+              <div class="flex-1 min-w-0">
+                <div class="text-xs font-semibold mb-0.5">
+                  Install with your AI agent
+                </div>
+                <p class="text-[11px] text-muted-foreground">
+                  Copy the prompt, paste it into Cursor, Claude Code, or Copilot
+                  — it will wire up Observe for you.
+                </p>
+              </div>
+              <Button
+                size="sm"
+                class="h-7 text-xs shrink-0"
+                @click="copyAiInstallPrompt"
+              >
+                <Copy class="h-3 w-3 mr-1" />
+                {{ aiInstallPromptCopied ? "Copied!" : "Copy prompt" }}
+              </Button>
+            </div>
           </div>
 
           <!-- Existing keys (compact) -->

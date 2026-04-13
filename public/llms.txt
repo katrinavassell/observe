@@ -1,0 +1,120 @@
+# Observe by Tanso
+
+Observe is an AI cost observability platform. It tracks every LLM call with cost, model, tokens, customer, and feature attribution. Use it to answer: "who uses how much AI, and is it profitable?"
+
+Docs: https://observemetrics.com
+SDK: @tanso/observe (npm)
+Signup: https://observemetrics.com/signup (free tier, no credit card)
+
+## What to install
+
+The `@tanso/observe` npm SDK. It wraps the user's existing OpenAI / Anthropic client, sets the `baseURL` to the Observe proxy, and injects tracking headers. The provider API key still authenticates with OpenAI/Anthropic — Observe just logs the call on the way through.
+
+Alternative: direct proxy (no SDK). Set `baseURL` to `https://observemetrics.com/v1` and add headers.
+
+## Quickstart — SDK (recommended)
+
+```bash
+npm install @tanso/observe
+```
+
+```ts
+import { Observe } from '@tanso/observe'
+import OpenAI from 'openai'
+
+// 1. Configure once at app startup
+Observe.configure({ apiKey: process.env.OBSERVE_API_KEY! })
+
+// 2. Identify the current customer (call once on login / at request start)
+Observe.identify({ customerId: user.stripeCustomerId })
+
+// 3. Wrap the OpenAI client — all calls are now auto-tracked
+const openai = Observe.wrap(new OpenAI())
+
+const res = await openai.chat.completions.create({
+  model: 'gpt-4o',
+  messages: [{ role: 'user', content: 'Hello' }],
+})
+```
+
+Anthropic works the same way:
+
+```ts
+import Anthropic from '@anthropic-ai/sdk'
+const anthropic = Observe.wrap(new Anthropic())
+```
+
+## Per-feature attribution
+
+Tag each call with the product feature it powers:
+
+```ts
+Observe.feature('ai_chat') // set default for this context
+
+// OR per-call override via native headers:
+await openai.chat.completions.create(
+  { model: 'gpt-4o', messages },
+  { headers: { 'x-tanso-feature': 'summarize_email' } }
+)
+```
+
+Recommended feature keys: one per user-facing AI feature. E.g. `ai_chat`, `summarize_email`, `code_autocomplete`, `research_agent`, `csv_importer`.
+
+## Direct proxy (no SDK)
+
+```ts
+import OpenAI from 'openai'
+
+const openai = new OpenAI({
+  baseURL: 'https://observemetrics.com/v1',
+  defaultHeaders: {
+    'x-tanso-key': process.env.OBSERVE_API_KEY!,
+    'x-tanso-customer': user.stripeCustomerId,
+    'x-tanso-feature': 'ai_chat',
+  },
+})
+```
+
+## Environment variables
+
+The user needs to add:
+
+```
+OBSERVE_API_KEY=obs_...   # get from https://observemetrics.com/data-sources
+```
+
+## Required per-call context
+
+- `customerId` — unique ID of the end user making the request. Stripe customer ID recommended. Set via `Observe.identify()` or `x-tanso-customer` header.
+- `feature` — the product feature the call powers. Set via `Observe.feature()` or `x-tanso-feature` header.
+
+## Multi-agent tracking
+
+For multi-agent systems, tag each agent:
+
+```ts
+Observe.agent('research-agent')
+const researchClient = Observe.wrap(new OpenAI())
+
+Observe.agent('summarization-agent')
+const summaryClient = Observe.wrap(new OpenAI())
+```
+
+## Checklist for an AI coding agent
+
+When implementing Observe in a user's codebase:
+
+1. Install `@tanso/observe`.
+2. Add `OBSERVE_API_KEY` to `.env` / env config.
+3. Call `Observe.configure({ apiKey: ... })` once at app startup.
+4. Identify the customer at the start of each authenticated request (`Observe.identify({ customerId })`).
+5. Wrap every `new OpenAI()` and `new Anthropic()` with `Observe.wrap()`.
+6. Tag each AI-powered feature with `Observe.feature('feature_key')` or a per-call header.
+7. Do NOT log or echo the API key. Keep it in env vars only.
+8. Do NOT remove the user's existing OpenAI API key — Observe proxies to OpenAI; it does not replace the provider.
+
+## What NOT to do
+
+- Do not replace OpenAI / Anthropic with anything else. Observe wraps the existing client, it does not substitute models.
+- Do not track end-user messages unless explicitly asked. Observe logs cost + metadata, not message content.
+- Do not hardcode the API key.
