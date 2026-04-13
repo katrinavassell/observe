@@ -1,14 +1,22 @@
 <script setup lang="ts">
 import { ref, nextTick, computed, onMounted, onBeforeUnmount } from "vue";
+import { useRoute } from "vue-router";
 import { toast } from "vue-sonner";
-import { Send, Loader2, Check, Sparkles } from "lucide-vue-next";
+import { Send, Loader2, Check, Sparkles, X, Trash2 } from "lucide-vue-next";
+import {
+  DialogRoot,
+  DialogPortal,
+  DialogOverlay,
+  DialogContent,
+  DialogClose,
+} from "radix-vue";
 import { useAuth } from "@/composables/useAuth";
 import { Button } from "@/components/ui";
-import Sheet from "@/components/ui/sheet.vue";
 import { sendChatMessage, executeChatAction } from "@/lib/api";
 import type { ChatMessage, ChatAction } from "@/lib/api";
 
 const { isLoggedIn } = useAuth();
+const route = useRoute();
 
 const open = ref(false);
 const messages = ref<
@@ -20,11 +28,76 @@ const feedRef = ref<HTMLElement | null>(null);
 
 const hasMessages = computed(() => messages.value.length > 0);
 
+// Route-adaptive starter prompts.
+const ROUTE_PROMPTS: Record<string, string[]> = {
+  "/analytics": [
+    "What's my overall margin and how can I improve it?",
+    "Which features are unprofitable right now?",
+    "Compare cost vs revenue by model this month",
+  ],
+  "/events": [
+    "Show me the 5 most expensive events this week",
+    "Which customer has the most events today?",
+    "What's the error rate on my gateway?",
+  ],
+  "/traces": [
+    "Which trace is costing the most and why?",
+    "Find traces longer than 10 seconds",
+    "Summarize the top 3 trace patterns",
+  ],
+  "/models": [
+    "Which model has the worst margin?",
+    "Switch my highest-cost customer to gpt-4o-mini",
+    "What's my cheapest embedding model in use?",
+  ],
+  "/cohorts": [
+    "Group my top 5 customers into a cohort",
+    "Which cohort is most profitable?",
+    "Create a cohort of customers over $50 cost",
+  ],
+  "/routing": [
+    "Route unprofitable customers to gpt-4o-mini",
+    "What routing rule would save the most?",
+    "Explain my current routing rules",
+  ],
+  "/alerts": [
+    "Create an alert when daily cost exceeds $50",
+    "Alert me when a customer's margin drops below 40%",
+    "What alerts have fired this week?",
+  ],
+  "/data-sources": [
+    "Am I tracking everything I should?",
+    "What data source is missing from my setup?",
+    "Why don't I see revenue for some events?",
+  ],
+  "/plans": [
+    "How close am I to my plan limits?",
+    "Should I upgrade to Growth?",
+    "What's included in Pro?",
+  ],
+};
+
+const DEFAULT_PROMPTS = [
+  "What's my overall margin?",
+  "Which customers are unprofitable?",
+  "How can I cut AI cost this month?",
+];
+
+const suggestions = computed(() => {
+  return ROUTE_PROMPTS[route.path] ?? DEFAULT_PROMPTS;
+});
+
+const placeholder = computed(() => {
+  if (route.path === "/analytics") return "Ask about margins, cost, revenue…";
+  if (route.path === "/traces") return "Ask about a trace or span…";
+  if (route.path === "/events") return "Ask about events, customers, models…";
+  return "Ask Observe anything…";
+});
+
 function openDrawer() {
   open.value = true;
   nextTick(() => {
-    const el = document.getElementById("ai-drawer-input");
-    el?.focus();
+    document.getElementById("ai-drawer-input")?.focus();
   });
 }
 
@@ -43,6 +116,11 @@ function onKeydown(e: KeyboardEvent) {
 onMounted(() => window.addEventListener("keydown", onKeydown));
 onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
 
+function useSuggestion(text: string) {
+  input.value = text;
+  handleSend();
+}
+
 async function handleSend() {
   const text = input.value.trim();
   if (!text || isLoading.value) return;
@@ -57,10 +135,14 @@ async function handleSend() {
 
   isLoading.value = true;
   try {
-    const chatMessages: ChatMessage[] = messages.value
+    const contextPrefix: ChatMessage = {
+      role: "system",
+      content: `The user is currently on the ${route.path} page.`,
+    };
+    const history: ChatMessage[] = messages.value
       .filter((m) => !("actionExecuted" in m))
       .map((m) => ({ role: m.role, content: m.content }));
-    const result = await sendChatMessage(chatMessages);
+    const result = await sendChatMessage([contextPrefix, ...history]);
     messages.value.push({
       role: "assistant",
       content: result.message,
@@ -94,6 +176,12 @@ function handleKeyPress(e: KeyboardEvent) {
   }
 }
 
+function clearChat() {
+  messages.value = [];
+  input.value = "";
+  nextTick(() => document.getElementById("ai-drawer-input")?.focus());
+}
+
 function scrollToBottom() {
   nextTick(() => {
     if (feedRef.value) {
@@ -119,119 +207,164 @@ defineExpose({ openDrawer });
 </script>
 
 <template>
-  <!-- Floating trigger button -->
+  <!-- Floating trigger -->
   <button
-    class="fixed bottom-6 right-6 z-40 flex h-12 w-12 items-center justify-center rounded-full bg-foreground text-background shadow-lg hover:scale-105 transition-transform focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
+    class="fixed bottom-6 right-6 z-40 flex h-12 items-center gap-2 rounded-full bg-foreground pl-3.5 pr-4 text-background shadow-xl hover:scale-[1.02] transition-transform focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
     aria-label="Ask Observe"
     @click="openDrawer"
   >
-    <Sparkles class="h-5 w-5" />
+    <Sparkles class="h-4 w-4" />
+    <span class="text-xs font-medium">Ask</span>
+    <span class="rounded bg-background/15 px-1.5 py-0.5 font-mono text-[10px]"
+      >⌘K</span
+    >
   </button>
 
-  <Sheet :open="open" side="right" @update:open="open = $event">
-    <div class="flex flex-col h-full">
-      <!-- Header -->
-      <div class="shrink-0 px-6 pt-6 pb-4 border-b">
-        <div class="flex items-center gap-2">
-          <Sparkles class="h-4 w-4 text-primary" />
-          <h2 class="text-base font-semibold">Ask Observe</h2>
-        </div>
-        <p class="text-xs text-muted-foreground mt-1">
-          Questions, recommendations, actions.
-          <span class="ml-1 rounded border px-1 py-0.5 font-mono text-[10px]"
-            >⌘K</span
-          >
-        </p>
-      </div>
-
-      <!-- Feed -->
-      <div ref="feedRef" class="flex-1 overflow-y-auto px-6 py-4 space-y-3">
-        <div
-          v-if="!hasMessages && !isLoading"
-          class="text-xs text-muted-foreground"
-        >
-          Ask anything about your costs, margins, customers, or models.
-        </div>
-
-        <template v-for="(msg, i) in messages" :key="i">
-          <div
-            class="flex"
-            :class="msg.role === 'user' ? 'justify-end' : 'justify-start'"
-          >
+  <DialogRoot :open="open" @update:open="open = $event">
+    <DialogPortal>
+      <DialogOverlay
+        class="fixed inset-0 z-50 bg-black/30 backdrop-blur-sm data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0"
+      />
+      <DialogContent
+        class="fixed inset-y-0 right-0 z-50 flex h-full w-[480px] max-w-[92vw] flex-col border-l bg-background shadow-2xl data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right duration-200"
+      >
+        <!-- Header -->
+        <div class="shrink-0 flex items-center justify-between px-5 pt-5 pb-3">
+          <div class="flex items-center gap-2">
             <div
-              class="max-w-[85%] rounded-2xl px-3.5 py-2 text-sm leading-relaxed"
-              :class="
-                msg.role === 'user'
-                  ? 'bg-primary text-primary-foreground rounded-br-sm'
-                  : 'bg-muted text-foreground rounded-bl-sm'
-              "
+              class="flex h-7 w-7 items-center justify-center rounded-full bg-primary/10"
             >
-              <div class="whitespace-pre-wrap break-words">
-                {{ msg.content.replace(/```action[\s\S]*?```/g, "").trim() }}
-              </div>
-
-              <div
-                v-if="msg.action && !msg.actionExecuted"
-                class="mt-2 rounded-md border bg-background p-2.5"
-              >
-                <div class="text-[11px] text-muted-foreground mb-1">
-                  Suggested action
-                </div>
-                <div class="text-xs font-medium mb-2 text-foreground">
-                  {{ formatActionLabel(msg.action) }}
-                </div>
-                <Button
-                  size="sm"
-                  class="h-7 text-xs"
-                  @click="handleExecuteAction(i)"
-                >
-                  <Check class="h-3 w-3 mr-1" />
-                  Do it
-                </Button>
-              </div>
-              <div
-                v-if="msg.action && msg.actionExecuted"
-                class="mt-1.5 flex items-center gap-1 text-xs text-success"
-              >
-                <Check class="h-3 w-3" />
-                Done
-              </div>
+              <Sparkles class="h-3.5 w-3.5 text-primary" />
+            </div>
+            <div>
+              <h2 class="text-sm font-semibold leading-none">Ask Observe</h2>
+              <p class="mt-1 text-[11px] text-muted-foreground leading-none">
+                Context: {{ route.path }}
+              </p>
             </div>
           </div>
-        </template>
-
-        <div
-          v-if="isLoading"
-          class="flex items-center gap-2 text-xs text-muted-foreground"
-        >
-          <Loader2 class="h-3 w-3 animate-spin" />
-          Thinking…
+          <div class="flex items-center gap-1">
+            <button
+              v-if="hasMessages"
+              class="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+              aria-label="Clear chat"
+              @click="clearChat"
+            >
+              <Trash2 class="h-3.5 w-3.5" />
+            </button>
+            <DialogClose
+              class="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+              aria-label="Close"
+            >
+              <X class="h-4 w-4" />
+            </DialogClose>
+          </div>
         </div>
-      </div>
 
-      <!-- Input -->
-      <div class="shrink-0 border-t p-4">
-        <div class="flex gap-2">
-          <input
-            id="ai-drawer-input"
-            v-model="input"
-            class="flex-1 rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
-            placeholder="Ask Observe…"
-            :disabled="isLoading || !isLoggedIn"
-            @keydown="handleKeyPress"
-          />
-          <Button
-            size="sm"
-            :disabled="isLoading || !input.trim() || !isLoggedIn"
-            @click="handleSend"
+        <!-- Feed -->
+        <div ref="feedRef" class="flex-1 overflow-y-auto px-5 py-3 space-y-3">
+          <!-- Empty state with route-adaptive starters -->
+          <div v-if="!hasMessages && !isLoading" class="space-y-4 pt-2">
+            <p class="text-xs text-muted-foreground">
+              Ask anything about what you're looking at, or pick a starter.
+            </p>
+            <div class="flex flex-col gap-1.5">
+              <button
+                v-for="prompt in suggestions"
+                :key="prompt"
+                class="text-left text-xs rounded-lg border bg-card px-3 py-2.5 hover:bg-muted/60 hover:border-foreground/20 transition-colors"
+                @click="useSuggestion(prompt)"
+              >
+                {{ prompt }}
+              </button>
+            </div>
+          </div>
+
+          <template v-for="(msg, i) in messages" :key="i">
+            <div
+              class="flex"
+              :class="msg.role === 'user' ? 'justify-end' : 'justify-start'"
+            >
+              <div
+                class="max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed"
+                :class="
+                  msg.role === 'user'
+                    ? 'bg-primary text-primary-foreground rounded-br-md'
+                    : 'bg-muted text-foreground rounded-bl-md'
+                "
+              >
+                <div class="whitespace-pre-wrap break-words">
+                  {{ msg.content.replace(/```action[\s\S]*?```/g, "").trim() }}
+                </div>
+
+                <div
+                  v-if="msg.action && !msg.actionExecuted"
+                  class="mt-2.5 rounded-md border border-foreground/10 bg-background/80 p-2.5"
+                >
+                  <div class="text-[11px] text-muted-foreground mb-1">
+                    Suggested action
+                  </div>
+                  <div class="text-xs font-medium mb-2 text-foreground">
+                    {{ formatActionLabel(msg.action) }}
+                  </div>
+                  <Button
+                    size="sm"
+                    class="h-7 text-xs"
+                    @click="handleExecuteAction(i)"
+                  >
+                    <Check class="h-3 w-3 mr-1" />
+                    Do it
+                  </Button>
+                </div>
+                <div
+                  v-if="msg.action && msg.actionExecuted"
+                  class="mt-1.5 flex items-center gap-1 text-xs text-success"
+                >
+                  <Check class="h-3 w-3" />
+                  Done
+                </div>
+              </div>
+            </div>
+          </template>
+
+          <div v-if="isLoading" class="flex justify-start">
+            <div
+              class="rounded-2xl rounded-bl-md bg-muted px-3.5 py-2.5 text-xs text-muted-foreground flex items-center gap-2"
+            >
+              <Loader2 class="h-3 w-3 animate-spin" />
+              Thinking…
+            </div>
+          </div>
+        </div>
+
+        <!-- Input -->
+        <div class="shrink-0 border-t bg-background/80 backdrop-blur-sm p-3">
+          <div class="flex items-end gap-2">
+            <input
+              id="ai-drawer-input"
+              v-model="input"
+              class="flex-1 h-10 rounded-lg border bg-background px-3.5 text-sm placeholder:text-muted-foreground/70 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/40"
+              :placeholder="placeholder"
+              :disabled="isLoading || !isLoggedIn"
+              @keydown="handleKeyPress"
+            />
+            <Button
+              size="sm"
+              class="h-10 w-10 p-0 shrink-0"
+              :disabled="isLoading || !input.trim() || !isLoggedIn"
+              @click="handleSend"
+            >
+              <Send class="h-3.5 w-3.5" />
+            </Button>
+          </div>
+          <p
+            v-if="!isLoggedIn"
+            class="mt-2 text-[11px] text-muted-foreground text-center"
           >
-            <Send class="h-3.5 w-3.5" />
-          </Button>
+            Sign in to ask Observe.
+          </p>
         </div>
-        <p v-if="!isLoggedIn" class="text-[11px] text-muted-foreground mt-2">
-          Sign in to ask Observe.
-        </p>
-      </div>
-    </div>
-  </Sheet>
+      </DialogContent>
+    </DialogPortal>
+  </DialogRoot>
 </template>
