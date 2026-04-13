@@ -1212,7 +1212,8 @@ export interface AlertRule {
     | "model_concentration";
   operator: "gt" | "lt" | "gte" | "lte";
   threshold: number;
-  email: string;
+  email: string | null;
+  webhook_url: string | null;
   enabled: boolean;
   cooldown_minutes: number;
   last_triggered_at: string | null;
@@ -1227,22 +1228,25 @@ export async function listAlertRules(): Promise<{
 }
 
 export async function createAlertRule(
-  rule: Pick<
-    AlertRule,
-    "name" | "metric" | "operator" | "threshold" | "email"
-  > & { cooldown_minutes?: number },
+  rule: Pick<AlertRule, "name" | "metric" | "operator" | "threshold"> & {
+    email?: string;
+    webhook_url?: string;
+    cooldown_minutes?: number;
+  },
 ): Promise<AlertRule> {
   return request("/alerts", { method: "POST", body: JSON.stringify(rule) });
 }
 
 export async function updateAlertRule(
   id: number,
-  updates: Partial<
-    Pick<
-      AlertRule,
-      "name" | "enabled" | "threshold" | "email" | "cooldown_minutes"
-    >
-  >,
+  updates: Partial<{
+    name: string;
+    enabled: boolean;
+    threshold: number;
+    email: string;
+    webhook_url: string;
+    cooldown_minutes: number;
+  }>,
 ): Promise<AlertRule> {
   return request(`/alerts/${id}`, {
     method: "PATCH",

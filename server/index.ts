@@ -838,13 +838,21 @@ async function _doDbInit() {
         metric TEXT NOT NULL,
         operator TEXT NOT NULL,
         threshold NUMERIC(12,4) NOT NULL,
-        email TEXT NOT NULL,
+        email TEXT,
+        webhook_url TEXT,
         enabled BOOLEAN DEFAULT true,
         cooldown_minutes INTEGER DEFAULT 60,
         last_triggered_at TIMESTAMPTZ,
         created_at TIMESTAMPTZ DEFAULT NOW()
       )
     `);
+    // Migrations for older deployments
+    await pool.query(
+      `ALTER TABLE alert_rules ADD COLUMN IF NOT EXISTS webhook_url TEXT`,
+    );
+    await pool.query(
+      `ALTER TABLE alert_rules ALTER COLUMN email DROP NOT NULL`,
+    );
 
     // Cloud provider integrations (AWS Cost Explorer, GCP Billing)
     await pool.query(`

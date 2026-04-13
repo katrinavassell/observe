@@ -21,7 +21,8 @@ const alertRuleSchema = z.object({
   ]),
   operator: z.enum(["gt", "lt", "gte", "lte"]),
   threshold: z.coerce.number(),
-  email: z.string().email(),
+  email: z.string().email().optional().or(z.literal("")),
+  webhook_url: z.string().url().optional().or(z.literal("")),
   cooldown_minutes: z.coerce.number().int().min(1).default(60),
 });
 
@@ -140,6 +141,64 @@ async function sendAlertEmail(
   }
 }
 
+async function sendAlertWebhook(
+  url: string,
+  rule: { name: string; metric: string; operator: string; threshold: number },
+  currentValue: number,
+): Promise<boolean> {
+  const metricLabel = METRIC_LABELS[rule.metric] || rule.metric;
+  const operatorLabel = OPERATOR_LABELS[rule.operator] || rule.operator;
+  const summary = `*${rule.name}*: ${metricLabel} ${operatorLabel} ${formatValue(rule.metric, rule.threshold)} — now ${formatValue(rule.metric, currentValue)}`;
+
+  // Slack-compatible payload (text + blocks). Generic webhooks that
+  // accept arbitrary JSON will still get the full structured payload.
+  const payload = {
+    text: summary,
+    blocks: [
+      {
+        type: "section",
+        text: { type: "mrkdwn", text: summary },
+      },
+      {
+        type: "context",
+        elements: [
+          {
+            type: "mrkdwn",
+            text: `Observe cost alert · \`${rule.metric}\``,
+          },
+        ],
+      },
+    ],
+    // Raw fields for non-Slack webhook consumers:
+    alert_name: rule.name,
+    metric: rule.metric,
+    operator: rule.operator,
+    threshold: rule.threshold,
+    current_value: currentValue,
+    triggered_at: new Date().toISOString(),
+  };
+
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      console.error(
+        "Alert webhook failed:",
+        res.status,
+        await res.text().catch(() => ""),
+      );
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error("Failed to send alert webhook:", err);
+    return false;
+  }
+}
+
 export async function checkAlerts(pool: Pool, userId: string) {
   try {
     const { rows: rules } = await pool.query(
@@ -168,12 +227,27 @@ export async function checkAlerts(pool: Pool, userId: string) {
         if (!operatorFn) continue;
 
         if (operatorFn(currentValue, parseFloat(rule.threshold))) {
-          const emailSent = await sendAlertEmail(
-            rule.email,
-            rule,
-            currentValue,
-          );
-          if (emailSent) {
+          let delivered = false;
+
+          // Email channel
+          if (rule.email) {
+            const ok = await sendAlertEmail(rule.email, rule, currentValue);
+            delivered = delivered || ok;
+          }
+
+          // Webhook channel (Slack-compatible JSON POST)
+          if (rule.webhook_url) {
+            const ok = await sendAlertWebhook(
+              rule.webhook_url,
+              rule,
+              currentValue,
+            );
+            delivered = delivered || ok;
+          }
+
+          // If at least one channel fired, record the trigger so we
+          // don't spam while cooldown is active.
+          if (delivered) {
             await pool.query(
               "UPDATE alert_rules SET last_triggered_at = NOW() WHERE id = $1",
               [rule.id],
@@ -227,16 +301,29 @@ export function createAlertRoutes(
     async (req: AuthRequest, res: Response) => {
       try {
         const parsed = alertRuleSchema.parse(req.body);
+        const email =
+          parsed.email && parsed.email.length > 0 ? parsed.email : null;
+        const webhookUrl =
+          parsed.webhook_url && parsed.webhook_url.length > 0
+            ? parsed.webhook_url
+            : null;
+        if (!email && !webhookUrl) {
+          return res.status(400).json({
+            error:
+              "Alert needs at least one delivery channel (email or webhook URL)",
+          });
+        }
         const { rows } = await pool.query(
-          `INSERT INTO alert_rules (user_id, name, metric, operator, threshold, email, cooldown_minutes)
-         VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+          `INSERT INTO alert_rules (user_id, name, metric, operator, threshold, email, webhook_url, cooldown_minutes)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
           [
             req.visitorId,
             parsed.name,
             parsed.metric,
             parsed.operator,
             parsed.threshold,
-            parsed.email,
+            email,
+            webhookUrl,
             parsed.cooldown_minutes,
           ],
         );
@@ -283,6 +370,7 @@ export function createAlertRoutes(
           "operator",
           "threshold",
           "email",
+          "webhook_url",
           "enabled",
           "cooldown_minutes",
         ] as const) {

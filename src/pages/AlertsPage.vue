@@ -38,6 +38,7 @@ const formMetric = ref<AlertRule["metric"]>("daily_cost");
 const formOperator = ref<AlertRule["operator"]>("gt");
 const formThreshold = ref<number>(0);
 const formEmail = ref("");
+const formWebhookUrl = ref("");
 const formCooldown = ref(60);
 
 const METRIC_CATEGORIES = [
@@ -204,13 +205,18 @@ function resetForm() {
   formOperator.value = "gt";
   formThreshold.value = 0;
   formEmail.value = "";
+  formWebhookUrl.value = "";
   formCooldown.value = 60;
   showForm.value = false;
 }
 
 async function handleCreate() {
-  if (!formName.value || !formEmail.value) {
-    toast.error("Name and email are required");
+  if (!formName.value) {
+    toast.error("Name is required");
+    return;
+  }
+  if (!formEmail.value && !formWebhookUrl.value) {
+    toast.error("Add at least one delivery channel (email or webhook URL)");
     return;
   }
   isSubmitting.value = true;
@@ -220,7 +226,8 @@ async function handleCreate() {
       metric: formMetric.value,
       operator: formOperator.value,
       threshold: formThreshold.value,
-      email: formEmail.value,
+      email: formEmail.value || undefined,
+      webhook_url: formWebhookUrl.value || undefined,
       cooldown_minutes: formCooldown.value,
     });
     queryClient.invalidateQueries({ queryKey: ["alert-rules"] });
@@ -383,39 +390,60 @@ async function handleDelete(id: number) {
           </div>
         </div>
 
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div>
-            <label
-              for="alert-email"
-              class="text-xs font-medium text-muted-foreground block mb-1"
-              >Send to</label
-            >
-            <input
-              id="alert-email"
-              v-model="formEmail"
-              type="email"
-              placeholder="you@company.com"
-              class="w-full h-9 rounded-md border bg-background px-3 pr-8 text-sm appearance-none bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2216%22%20height%3D%2216%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%2371717a%22%20stroke-width%3D%222%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22%2F%3E%3C%2Fsvg%3E')] bg-[length:16px] bg-[right_8px_center] bg-no-repeat"
-            />
-          </div>
-          <div>
-            <label
-              for="alert-cooldown"
-              class="text-xs font-medium text-muted-foreground block mb-1"
-              >Don't re-alert for</label
-            >
-            <div class="flex items-center gap-2">
-              <input
-                id="alert-cooldown"
-                v-model.number="formCooldown"
-                type="number"
-                min="1"
-                class="w-full h-9 rounded-md border bg-background px-3 pr-8 text-sm appearance-none bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2216%22%20height%3D%2216%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%2371717a%22%20stroke-width%3D%222%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22%2F%3E%3C%2Fsvg%3E')] bg-[length:16px] bg-[right_8px_center] bg-no-repeat"
-              />
-              <span class="text-xs text-muted-foreground shrink-0"
-                >minutes</span
+        <div>
+          <p class="text-xs font-medium text-muted-foreground mb-2">
+            Deliver to (add at least one)
+          </p>
+          <div class="space-y-2">
+            <div>
+              <label
+                for="alert-email"
+                class="text-[11px] text-muted-foreground block mb-1"
+                >Email</label
               >
+              <input
+                id="alert-email"
+                v-model="formEmail"
+                type="email"
+                placeholder="you@company.com"
+                class="w-full h-9 rounded-md border bg-background px-3 text-sm"
+              />
             </div>
+            <div>
+              <label
+                for="alert-webhook"
+                class="text-[11px] text-muted-foreground block mb-1"
+                >Webhook URL (Slack-compatible)</label
+              >
+              <input
+                id="alert-webhook"
+                v-model="formWebhookUrl"
+                type="url"
+                placeholder="https://hooks.slack.com/services/..."
+                class="w-full h-9 rounded-md border bg-background px-3 text-sm font-mono text-xs"
+              />
+              <p class="text-[11px] text-muted-foreground mt-1">
+                Slack incoming webhook or any endpoint that accepts JSON POST.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <label
+            for="alert-cooldown"
+            class="text-xs font-medium text-muted-foreground block mb-1"
+            >Don't re-alert for</label
+          >
+          <div class="flex items-center gap-2">
+            <input
+              id="alert-cooldown"
+              v-model.number="formCooldown"
+              type="number"
+              min="1"
+              class="w-32 h-9 rounded-md border bg-background px-3 text-sm"
+            />
+            <span class="text-xs text-muted-foreground">minutes</span>
           </div>
         </div>
 
@@ -433,8 +461,9 @@ async function handleDelete(id: number) {
             </p>
           </div>
           <a
-            :href="`https://cal.com/katrina-laszlo/30-minute-meeting`"
+            href="https://cal.com/katrina-laszlo/30-minute-meeting?duration=30"
             target="_blank"
+            rel="noopener noreferrer"
             class="shrink-0 inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-800 bg-emerald-200 hover:bg-emerald-300 px-3 py-1.5 rounded-md transition-colors"
           >
             Learn more
