@@ -24,7 +24,6 @@ export interface DataStatus {
 
 const dataStatus = ref<DataStatus | null>(null);
 const isLoading = ref(true);
-const isLoadingSample = ref(false);
 const isClearingSample = ref(false);
 
 const analyticsQueryKeys = [
@@ -88,32 +87,6 @@ export function useDataMode() {
     isLoading.value = false;
   }
 
-  async function switchToSampleData(retries = 2) {
-    isLoadingSample.value = true;
-    let lastError: Error | null = null;
-    for (let attempt = 0; attempt < retries; attempt++) {
-      try {
-        await api.loadSampleData();
-        window.posthog?.capture("sample_data_loaded");
-        await refetch();
-        for (const key of analyticsQueryKeys) {
-          queryClient.invalidateQueries({ queryKey: key });
-        }
-        isLoadingSample.value = false;
-        return;
-      } catch (error) {
-        lastError = error instanceof Error ? error : new Error(String(error));
-        if (attempt < retries - 1) {
-          await sleep(500);
-        } else {
-          logger.error("Failed to load sample data", error);
-        }
-      }
-    }
-    isLoadingSample.value = false;
-    if (lastError) throw lastError;
-  }
-
   async function clearSample() {
     isClearingSample.value = true;
     try {
@@ -156,11 +129,9 @@ export function useDataMode() {
     costsRecordCount,
     usageRecordCount,
     lastSyncAt,
-    switchToSampleData,
     clearSample,
     refetch,
     reset,
-    isLoadingSample: computed(() => isLoadingSample.value),
     isClearingSample: computed(() => isClearingSample.value),
   };
 }

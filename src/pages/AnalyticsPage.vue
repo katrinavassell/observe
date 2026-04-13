@@ -17,8 +17,6 @@ import {
 } from "@/lib/api";
 import type {} from "@/lib/api";
 import { AlertCircle, Plug, Sparkles } from "lucide-vue-next";
-import { useDataMode } from "@/composables/useDataMode";
-import { useAuth } from "@/composables/useAuth";
 import Sheet from "@/components/ui/sheet.vue";
 import { Card, Skeleton, Button } from "@/components/ui";
 import SourceBadge from "@/components/shared/SourceBadge.vue";
@@ -26,7 +24,6 @@ import { formatCurrency as fmt, formatPct as fmtPct } from "@/lib/format";
 
 const router = useRouter();
 const queryClient = useQueryClient();
-const { isSampleMode } = useDataMode();
 
 type Tab = "feature" | "model" | "customer" | "agent" | "cost_type" | "mrr";
 const activeTab = ref<Tab>("feature");
@@ -54,7 +51,6 @@ const insightsUsage = computed(
   () => usageLimits.value?.ai_insights?.usage ?? null,
 );
 
-const { isLoggedIn } = useAuth();
 async function handleGenerate() {
   isGenerating.value = true;
   generateError.value = null;
@@ -382,204 +378,127 @@ const insightCategories = [
           </p>
         </div>
 
-        <!-- DEMO MODE: hardcoded preview (guests only) -->
-        <template v-if="isSampleMode && !isLoggedIn">
+        <!-- Generated insights (show first when they exist) -->
+        <div v-if="insightsData && insightsData.length > 0" class="space-y-3">
           <div
-            class="rounded-lg bg-muted/50 border border-dashed px-3 py-2 text-xs text-muted-foreground"
+            v-for="insight in insightsData"
+            :key="insight.id"
+            class="rounded-lg border p-3 space-y-1.5"
+            :class="severityColor(insight.severity)"
           >
-            Preview mode. Connect your data to generate real insights.
+            <div class="flex items-center gap-2">
+              <span
+                class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium"
+                :class="severityBadge(insight.severity)"
+              >
+                {{ insight.severity }}
+              </span>
+              <span
+                class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium bg-primary/10 text-primary"
+              >
+                {{ insightTypeLabel(insight.insight_type) }}
+              </span>
+              <span
+                v-if="insight.feature_key"
+                class="font-mono text-[10px] bg-muted px-1.5 py-0.5 rounded"
+                >{{ insight.feature_key }}</span
+              >
+            </div>
+            <div class="text-sm font-medium">{{ insight.title }}</div>
+            <div class="text-xs text-muted-foreground">
+              {{ insight.description }}
+            </div>
           </div>
+        </div>
 
-          <div class="rounded-lg border bg-muted/30 p-3 space-y-2">
-            <div class="flex items-center justify-between text-sm">
-              <span class="text-muted-foreground">Data confidence</span>
-              <span class="font-medium text-success">High</span>
+        <!-- No insights yet: show categories -->
+        <div v-else-if="!isGenerating" class="space-y-2">
+          <div
+            class="text-xs font-semibold text-muted-foreground uppercase tracking-wider"
+          >
+            What you'll get
+          </div>
+          <div
+            v-for="(cat, i) in insightCategories"
+            :key="i"
+            class="flex gap-3 rounded-lg border p-3"
+          >
+            <div class="min-w-0">
+              <div class="text-sm font-medium">{{ cat.title }}</div>
+              <div class="text-xs text-muted-foreground">
+                {{ cat.description }}
+              </div>
             </div>
-            <div class="h-2 rounded-full bg-muted overflow-hidden">
-              <div class="h-full rounded-full bg-primary" style="width: 92%" />
+          </div>
+        </div>
+
+        <!-- Loading state -->
+        <div v-if="isGenerating" class="flex items-center gap-3 py-4">
+          <div
+            class="h-8 w-8 rounded-full border-2 border-primary border-t-transparent animate-spin"
+          />
+          <div>
+            <div class="text-sm font-medium">Analyzing your data...</div>
+            <div class="text-xs text-muted-foreground">
+              This usually takes 5-10 seconds
             </div>
-            <p class="text-[11px] text-muted-foreground">
-              2,847 events tracked. Strong dataset for reliable insights.
+          </div>
+        </div>
+
+        <!-- Generate button -->
+        <div class="space-y-3 border-t pt-4">
+          <div v-if="totalEvents >= 10">
+            <Button
+              class="w-full"
+              :disabled="isGenerating || !insightsAllowed"
+              @click="handleGenerate"
+            >
+              <Sparkles class="h-4 w-4 mr-2" />
+              {{ isGenerating ? "Analyzing..." : "Generate Insights" }}
+            </Button>
+            <p
+              v-if="!isGenerating && insightsAllowed"
+              class="text-xs text-muted-foreground text-center mt-1.5"
+            >
+              Uses 1 message
+            </p>
+          </div>
+          <div v-else class="rounded-lg border bg-muted/30 p-3 text-center">
+            <p class="text-sm font-medium mb-1">Upload more data to unlock</p>
+            <p class="text-xs text-muted-foreground">
+              AI Insights needs event data from your SDK or proxy integration to
+              analyze.
             </p>
           </div>
 
-          <div class="space-y-3">
-            <div
-              class="rounded-lg border p-3 space-y-1.5 border-destructive/30 bg-destructive/5"
-            >
-              <span
-                class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium bg-destructive/10 text-destructive"
-                >critical</span
+          <!-- Usage info -->
+          <div
+            v-if="insightsUsage && totalEvents >= 10"
+            class="text-xs text-muted-foreground text-center"
+          >
+            <template v-if="insightsUsage.used === 0">
+              {{ insightsUsage.limit }} free insight{{
+                insightsUsage.limit === 1 ? "" : "s"
+              }}
+              included
+            </template>
+            <template v-else-if="insightsUsage.remaining > 0">
+              {{ insightsUsage.used }} used,
+              {{ insightsUsage.remaining }} remaining
+            </template>
+            <template v-else>
+              All {{ insightsUsage.limit }} insights used.
+              <router-link to="/plans" class="text-primary hover:underline"
+                >Upgrade to Growth</router-link
               >
-              <div class="text-sm font-medium">
-                ai_summarization margin is -23%
-              </div>
-              <div class="text-xs text-muted-foreground">
-                This feature costs $0.82 per call but only earns $0.63. 5
-                customers used it 1,847 times last month. Switching from
-                claude-3-5-sonnet to claude-3-haiku for shorter inputs would cut
-                cost 80%.
-              </div>
-            </div>
-            <div
-              class="rounded-lg border p-3 space-y-1.5 border-warning/30 bg-warning/5"
-            >
-              <span
-                class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium bg-warning/10 text-warning"
-                >warning</span
-              >
-              <div class="text-sm font-medium">
-                Acme Corp costs 3x more than other enterprise accounts
-              </div>
-              <div class="text-xs text-muted-foreground">
-                Acme Corp generated $0.50 in revenue but $0.54 in AI costs last
-                month. Their image_generation usage is 4x the account average.
-                Consider usage-based pricing for this feature.
-              </div>
-            </div>
-            <div
-              class="rounded-lg border p-3 space-y-1.5 border-success/30 bg-success/5"
-            >
-              <span
-                class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium bg-success/10 text-success"
-                >opportunity</span
-              >
-              <div class="text-sm font-medium">
-                search feature has 78% margin with room to grow
-              </div>
-              <div class="text-xs text-muted-foreground">
-                text-embedding-3-small costs $0.002 per query but you charge
-                $0.01. Only 3 of 5 customers use it. Promoting this feature
-                could increase revenue with minimal cost impact.
-              </div>
-            </div>
+              for unlimited.
+            </template>
           </div>
-        </template>
+        </div>
 
-        <!-- REAL MODE -->
-        <template v-else>
-          <!-- Generated insights (show first when they exist) -->
-          <div v-if="insightsData && insightsData.length > 0" class="space-y-3">
-            <div
-              v-for="insight in insightsData"
-              :key="insight.id"
-              class="rounded-lg border p-3 space-y-1.5"
-              :class="severityColor(insight.severity)"
-            >
-              <div class="flex items-center gap-2">
-                <span
-                  class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium"
-                  :class="severityBadge(insight.severity)"
-                >
-                  {{ insight.severity }}
-                </span>
-                <span
-                  class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium bg-primary/10 text-primary"
-                >
-                  {{ insightTypeLabel(insight.insight_type) }}
-                </span>
-                <span
-                  v-if="insight.feature_key"
-                  class="font-mono text-[10px] bg-muted px-1.5 py-0.5 rounded"
-                  >{{ insight.feature_key }}</span
-                >
-              </div>
-              <div class="text-sm font-medium">{{ insight.title }}</div>
-              <div class="text-xs text-muted-foreground">
-                {{ insight.description }}
-              </div>
-            </div>
-          </div>
-
-          <!-- No insights yet: show categories -->
-          <div v-else-if="!isGenerating" class="space-y-2">
-            <div
-              class="text-xs font-semibold text-muted-foreground uppercase tracking-wider"
-            >
-              What you'll get
-            </div>
-            <div
-              v-for="(cat, i) in insightCategories"
-              :key="i"
-              class="flex gap-3 rounded-lg border p-3"
-            >
-              <div class="min-w-0">
-                <div class="text-sm font-medium">{{ cat.title }}</div>
-                <div class="text-xs text-muted-foreground">
-                  {{ cat.description }}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Loading state -->
-          <div v-if="isGenerating" class="flex items-center gap-3 py-4">
-            <div
-              class="h-8 w-8 rounded-full border-2 border-primary border-t-transparent animate-spin"
-            />
-            <div>
-              <div class="text-sm font-medium">Analyzing your data...</div>
-              <div class="text-xs text-muted-foreground">
-                This usually takes 5-10 seconds
-              </div>
-            </div>
-          </div>
-
-          <!-- Generate button -->
-          <div class="space-y-3 border-t pt-4">
-            <div v-if="totalEvents >= 10">
-              <Button
-                class="w-full"
-                :disabled="isGenerating || !insightsAllowed"
-                @click="handleGenerate"
-              >
-                <Sparkles class="h-4 w-4 mr-2" />
-                {{ isGenerating ? "Analyzing..." : "Generate Insights" }}
-              </Button>
-              <p
-                v-if="!isGenerating && insightsAllowed"
-                class="text-xs text-muted-foreground text-center mt-1.5"
-              >
-                Uses 1 message
-              </p>
-            </div>
-            <div v-else class="rounded-lg border bg-muted/30 p-3 text-center">
-              <p class="text-sm font-medium mb-1">Upload more data to unlock</p>
-              <p class="text-xs text-muted-foreground">
-                AI Insights needs event data from your SDK or proxy integration
-                to analyze.
-              </p>
-            </div>
-
-            <!-- Usage info -->
-            <div
-              v-if="insightsUsage && totalEvents >= 10"
-              class="text-xs text-muted-foreground text-center"
-            >
-              <template v-if="insightsUsage.used === 0">
-                {{ insightsUsage.limit }} free insight{{
-                  insightsUsage.limit === 1 ? "" : "s"
-                }}
-                included
-              </template>
-              <template v-else-if="insightsUsage.remaining > 0">
-                {{ insightsUsage.used }} used,
-                {{ insightsUsage.remaining }} remaining
-              </template>
-              <template v-else>
-                All {{ insightsUsage.limit }} insights used.
-                <router-link to="/plans" class="text-primary hover:underline"
-                  >Upgrade to Growth</router-link
-                >
-                for unlimited.
-              </template>
-            </div>
-          </div>
-
-          <div v-if="generateError" class="text-sm text-destructive">
-            {{ generateError }}
-          </div>
-        </template>
+        <div v-if="generateError" class="text-sm text-destructive">
+          {{ generateError }}
+        </div>
       </div>
     </Sheet>
 

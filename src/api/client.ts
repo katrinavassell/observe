@@ -512,28 +512,6 @@ export async function getDataStatus(): Promise<DataStatus> {
   return request("/data/status");
 }
 
-export interface SampleDataResult {
-  success: boolean;
-  message: string;
-  account_count?: number;
-  subscription_count?: number;
-  invoice_count?: number;
-}
-
-/**
- * Load sample demonstration data into the database.
- *
- * Creates realistic SaaS data including:
- * - 30 sample accounts across segments
- * - Subscription and invoice history
- * - Usage metrics
- *
- * @returns Success status with record counts
- */
-export async function loadSampleData(): Promise<SampleDataResult> {
-  return request("/data/sample", { method: "POST" });
-}
-
 export async function clearSampleData(): Promise<{
   success: boolean;
   message: string;

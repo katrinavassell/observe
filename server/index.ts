@@ -288,20 +288,24 @@ async function _doDbInit() {
     await pool.query("SELECT 1");
     console.warn("Database connection verified");
 
-    // Defense-in-depth: nuke any sample-tagged event rows on every startup.
-    // The /data/sample seeder endpoint is gone, but if any old code path
-    // somewhere ever inserts a row with source='sample', this kills it.
+    // Hard-reject sample-tagged rows at the DB level. Cheaper and more
+    // reliable than a startup wipe or runtime filters in every read
+    // query. If this constraint ever fails to add because a row already
+    // violates it, the DELETE first then ADD would be the fallback —
+    // but the /data/sample seeder endpoints are gone, so new violations
+    // should be impossible.
     try {
-      const wipeResult = await pool.query(
-        "DELETE FROM observe_events WHERE source = 'sample'",
+      await pool.query(
+        `ALTER TABLE observe_events
+           ADD CONSTRAINT observe_events_no_sample_source
+           CHECK (source IS NULL OR source != 'sample')`,
       );
-      if ((wipeResult.rowCount ?? 0) > 0) {
-        console.warn(
-          `Wiped ${wipeResult.rowCount} stale sample event rows on startup`,
-        );
+    } catch (err: unknown) {
+      // 42710 = duplicate_object (constraint already exists) — expected.
+      const code = (err as { code?: string })?.code;
+      if (code !== "42710") {
+        console.error("CHECK constraint add failed:", err);
       }
-    } catch (wipeErr) {
-      console.error("Sample data startup wipe failed:", wipeErr);
     }
 
     await pool.query(`
@@ -778,6 +782,18 @@ async function _doDbInit() {
     await pool.query(
       `ALTER TABLE sdk_api_keys ADD COLUMN IF NOT EXISTS encrypted_key TEXT`,
     );
+    // Race-protect SDK key auto-generation on /auth/signup-complete.
+    try {
+      await pool.query(
+        `ALTER TABLE sdk_api_keys
+           ADD CONSTRAINT sdk_api_keys_user_name_key UNIQUE (user_id, name)`,
+      );
+    } catch (err: unknown) {
+      const code = (err as { code?: string })?.code;
+      if (code !== "42710") {
+        console.error("sdk_api_keys unique constraint add failed:", err);
+      }
+    }
 
     // Proxy response cache table
     await pool.query(`

@@ -3,8 +3,7 @@ import { ref, nextTick, computed, onMounted, onBeforeUnmount } from "vue";
 import { useRoute } from "vue-router";
 import { useQuery } from "@tanstack/vue-query";
 import { toast } from "vue-sonner";
-import { Send, Loader2, Check, Sparkles, X, Trash2 } from "lucide-vue-next";
-import { DialogClose } from "radix-vue";
+import { Send, Loader2, Check, Sparkles, Trash2 } from "lucide-vue-next";
 import { useAuth } from "@/composables/useAuth";
 import { Button } from "@/components/ui";
 import Sheet from "@/components/ui/sheet.vue";
@@ -251,22 +250,14 @@ defineExpose({ openDrawer });
             </p>
           </div>
         </div>
-        <div class="flex items-center gap-1">
-          <button
-            v-if="hasMessages"
-            class="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-            aria-label="Clear chat"
-            @click="clearChat"
-          >
-            <Trash2 class="h-3.5 w-3.5" />
-          </button>
-          <DialogClose
-            class="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-            aria-label="Close"
-          >
-            <X class="h-4 w-4" />
-          </DialogClose>
-        </div>
+        <button
+          v-if="hasMessages"
+          class="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors mr-8"
+          aria-label="Clear chat"
+          @click="clearChat"
+        >
+          <Trash2 class="h-3.5 w-3.5" />
+        </button>
       </div>
 
       <!-- Feed -->

@@ -189,30 +189,28 @@ export function createAuthRoutes(
           [userId],
         );
 
-        // Auto-generate an SDK key on first signup-complete. If the user
-        // already has at least one key, skip — don't return a fresh raw
-        // key the server never stored (previous bug: ON CONFLICT DO
-        // NOTHING + always-return rawKey gave the user a "key" that was
-        // never actually inserted).
+        // Auto-generate the "default" SDK key on first signup-complete.
+        // Race-safe: ON CONFLICT (user_id, name) DO NOTHING. If the insert
+        // was a no-op (concurrent request or existing key), return null
+        // so the frontend keeps showing whatever key the user already has
+        // rather than a ghost key the server didn't store.
         let sdkKey: string | null = null;
         try {
-          const existing = await pool.query(
-            "SELECT id FROM sdk_api_keys WHERE user_id = $1 AND revoked_at IS NULL LIMIT 1",
-            [userId],
+          const crypto = await import("crypto");
+          const rawKey = `obs_${crypto.randomBytes(24).toString("hex")}`;
+          const keyHash = crypto
+            .createHash("sha256")
+            .update(rawKey)
+            .digest("hex");
+          const keyPrefix = rawKey.slice(0, 11);
+          const insertResult = await pool.query(
+            `INSERT INTO sdk_api_keys (user_id, key_hash, key_prefix, name)
+             VALUES ($1, $2, $3, $4)
+             ON CONFLICT (user_id, name) DO NOTHING
+             RETURNING id`,
+            [userId, keyHash, keyPrefix, "default"],
           );
-          if (existing.rows.length === 0) {
-            const crypto = await import("crypto");
-            const rawKey = `obs_${crypto.randomBytes(24).toString("hex")}`;
-            const keyHash = crypto
-              .createHash("sha256")
-              .update(rawKey)
-              .digest("hex");
-            const keyPrefix = rawKey.slice(0, 11);
-            await pool.query(
-              `INSERT INTO sdk_api_keys (user_id, key_hash, key_prefix, name)
-               VALUES ($1, $2, $3, $4)`,
-              [userId, keyHash, keyPrefix, "default"],
-            );
+          if (insertResult.rows.length > 0) {
             sdkKey = rawKey;
           }
         } catch (keyErr) {

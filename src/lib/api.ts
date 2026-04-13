@@ -70,13 +70,6 @@ export async function getDataStatus(): Promise<DataStatus> {
   return request("/data/status");
 }
 
-export async function loadSampleData(): Promise<{
-  success: boolean;
-  message: string;
-}> {
-  return request("/data/sample", { method: "POST" });
-}
-
 export async function clearData(): Promise<{ success: boolean }> {
   return request("/data/clear", { method: "DELETE" });
 }
