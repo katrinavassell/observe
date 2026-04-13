@@ -31,7 +31,14 @@ import {
 import MarginBadge from "@/components/shared/MarginBadge.vue";
 import SourceBadge from "@/components/shared/SourceBadge.vue";
 import { Select, Input, Button, Skeleton } from "@/components/ui";
+import { useAuth } from "@/composables/useAuth";
+import {
+  GUEST_EVENTS,
+  GUEST_EVENTS_BY_CUSTOMER,
+  GUEST_EVENTS_BY_MODEL,
+} from "@/lib/guest-preview";
 
+const { isLoggedIn } = useAuth();
 const router = useRouter();
 const route = useRoute();
 
@@ -258,28 +265,48 @@ const query = computed(() => ({
 }));
 
 const {
-  data: eventsData,
+  data: realEventsData,
   isLoading,
   isError,
 } = useQuery({
   queryKey: ["events", query],
   queryFn: () => getEvents(query.value),
+  enabled: computed(() => isLoggedIn.value),
 });
+const eventsData = computed(() =>
+  isLoggedIn.value
+    ? realEventsData.value
+    : {
+        events: GUEST_EVENTS,
+        total: GUEST_EVENTS.length,
+        limit: 20,
+        offset: 0,
+      },
+);
 
 const { data: features } = useQuery({
   queryKey: ["features"],
   queryFn: getFeatures,
+  enabled: computed(() => isLoggedIn.value),
 });
 
-const { data: customerAgg } = useQuery({
+const { data: realCustomerAgg } = useQuery({
   queryKey: ["events-by-customer"],
   queryFn: getEventsByCustomer,
+  enabled: computed(() => isLoggedIn.value),
 });
+const customerAgg = computed(() =>
+  isLoggedIn.value ? realCustomerAgg.value : GUEST_EVENTS_BY_CUSTOMER,
+);
 
-const { data: modelAgg } = useQuery({
+const { data: realModelAgg } = useQuery({
   queryKey: ["events-by-model"],
   queryFn: getEventsByModel,
+  enabled: computed(() => isLoggedIn.value),
 });
+const modelAgg = computed(() =>
+  isLoggedIn.value ? realModelAgg.value : GUEST_EVENTS_BY_MODEL,
+);
 
 const { data: usageLimits } = useQuery({
   queryKey: ["usage-limits"],

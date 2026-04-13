@@ -18,6 +18,9 @@ import type {
   EventsByFeature,
   EventsByCustomer,
   EventsByModel,
+  ObserveEvent,
+  ModelSummary,
+  Customer,
 } from "@/lib/api";
 
 const ISO = (offsetMinutes: number) =>
@@ -330,3 +333,154 @@ const SAMPLE_TRACE_DETAILS: Record<string, TraceDetail> = {
 export function getGuestTraceDetail(traceId: string): TraceDetail | null {
   return SAMPLE_TRACE_DETAILS[traceId] ?? null;
 }
+
+export const GUEST_EVENTS: ObserveEvent[] = Array.from({ length: 20 }, (_, i) => {
+  const features = [
+    "rag_query",
+    "code_review_agent",
+    "content_pipeline",
+    "document_extraction",
+    "semantic_search",
+    "email_draft",
+  ];
+  const customers = [
+    ["cus_acme", "Acme Corp"],
+    ["cus_tidewater", "Tidewater AI"],
+    ["cus_neondata", "NeonData"],
+    ["cus_circleops", "CircleOps"],
+    ["cus_blazeml", "BlazeML"],
+  ];
+  const models: Array<[string, string]> = [
+    ["gpt-4o", "openai"],
+    ["gpt-4o-mini", "openai"],
+    ["claude-3-5-sonnet", "anthropic"],
+    ["text-embedding-3-small", "openai"],
+  ];
+  const feature = features[i % features.length];
+  const [cid, cname] = customers[i % customers.length];
+  const [model, provider] = models[i % models.length];
+  const cost = Number((0.002 + Math.random() * 0.28).toFixed(4));
+  return {
+    id: 1000 + i,
+    user_id: "guest",
+    customer_id: cid,
+    customer_name: cname,
+    feature_key: feature,
+    event_name: feature,
+    timestamp: ISO(i * 7),
+    cost_amount: cost,
+    cost_unit: "usd",
+    revenue_amount: Number((cost * (1 + Math.random() * 2)).toFixed(4)),
+    usage_units: Math.floor(200 + Math.random() * 1800),
+    model,
+    model_provider: provider,
+    source: "sample",
+    granularity: "event",
+    is_inferred: false,
+    properties: null,
+    created_at: ISO(i * 7),
+    trace_id: null,
+    span_id: null,
+    parent_span_id: null,
+    duration_ms: Math.floor(120 + Math.random() * 1800),
+    cost_type: model.startsWith("text-embedding") ? "embedding" : "llm",
+  };
+});
+
+export const GUEST_MODELS: ModelSummary[] = [
+  {
+    model: "gpt-4o",
+    model_provider: "openai",
+    event_count: 2104,
+    customer_count: 5,
+    feature_count: 6,
+    total_cost: 96.3,
+    total_revenue: 280.0,
+    total_usage: 612_400,
+    avg_cost_per_event: 0.0458,
+    margin_pct: 65,
+    last_seen: ISO(2),
+  },
+  {
+    model: "gpt-4o-mini",
+    model_provider: "openai",
+    event_count: 8902,
+    customer_count: 5,
+    feature_count: 6,
+    total_cost: 18.7,
+    total_revenue: 82.0,
+    total_usage: 2_180_500,
+    avg_cost_per_event: 0.0021,
+    margin_pct: 77,
+    last_seen: ISO(1),
+  },
+  {
+    model: "claude-3-5-sonnet",
+    model_provider: "anthropic",
+    event_count: 1320,
+    customer_count: 3,
+    feature_count: 3,
+    total_cost: 44.0,
+    total_revenue: 110.0,
+    total_usage: 410_200,
+    avg_cost_per_event: 0.0333,
+    margin_pct: 60,
+    last_seen: ISO(6),
+  },
+  {
+    model: "text-embedding-3-small",
+    model_provider: "openai",
+    event_count: 5820,
+    customer_count: 4,
+    feature_count: 2,
+    total_cost: 3.4,
+    total_revenue: 16.0,
+    total_usage: 11_640_000,
+    avg_cost_per_event: 0.00058,
+    margin_pct: 79,
+    last_seen: ISO(4),
+  },
+];
+
+export const GUEST_CUSTOMERS: Customer[] = [
+  {
+    id: "cus_acme",
+    customer_id: "cus_acme",
+    name: "Acme Corp",
+    email: "ops@acme.example",
+    segment: "enterprise",
+    created_at: new Date(Date.now() - 180 * 86_400_000).toISOString(),
+  },
+  {
+    id: "cus_tidewater",
+    customer_id: "cus_tidewater",
+    name: "Tidewater AI",
+    email: "hello@tidewater.example",
+    segment: "growth",
+    created_at: new Date(Date.now() - 120 * 86_400_000).toISOString(),
+  },
+  {
+    id: "cus_neondata",
+    customer_id: "cus_neondata",
+    name: "NeonData",
+    email: "team@neondata.example",
+    segment: "growth",
+    created_at: new Date(Date.now() - 90 * 86_400_000).toISOString(),
+  },
+  {
+    id: "cus_circleops",
+    customer_id: "cus_circleops",
+    name: "CircleOps",
+    email: "accounts@circleops.example",
+    segment: "starter",
+    created_at: new Date(Date.now() - 60 * 86_400_000).toISOString(),
+  },
+  {
+    id: "cus_blazeml",
+    customer_id: "cus_blazeml",
+    name: "BlazeML",
+    email: "hello@blazeml.example",
+    segment: "starter",
+    created_at: new Date(Date.now() - 30 * 86_400_000).toISOString(),
+  },
+];

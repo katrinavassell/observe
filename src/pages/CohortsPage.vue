@@ -39,6 +39,7 @@ import { Card, Skeleton, Button } from "@/components/ui";
 import { formatCurrency as fmt, formatPct as fmtPct } from "@/lib/format";
 import { toast } from "vue-sonner";
 import { useAuth } from "@/composables/useAuth";
+import { GUEST_CUSTOMERS } from "@/lib/guest-preview";
 
 const queryClient = useQueryClient();
 const { isLoggedIn } = useAuth();
@@ -95,11 +96,14 @@ const COHORT_COLORS = [
   "#3b82f6",
 ];
 
-const { data: allCustomers } = useQuery({
+const { data: realAllCustomers } = useQuery({
   queryKey: ["customers"],
   queryFn: getCustomers,
   enabled: isLoggedIn,
 });
+const allCustomers = computed(() =>
+  isLoggedIn.value ? realAllCustomers.value : GUEST_CUSTOMERS,
+);
 
 const filteredCustomerList = computed(() => {
   const list = allCustomers.value ?? [];

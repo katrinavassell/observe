@@ -18,9 +18,12 @@ import {
 import MarginBadge from "@/components/shared/MarginBadge.vue";
 import { Skeleton, Button, Card, CardContent } from "@/components/ui";
 import { formatCurrency } from "@/lib/format";
+import { useAuth } from "@/composables/useAuth";
+import { GUEST_MODELS } from "@/lib/guest-preview";
 
 const router = useRouter();
 const queryClient = useQueryClient();
+const { isLoggedIn } = useAuth();
 
 // ── Column configuration ─────────────────────────────────────────────────────
 
@@ -120,13 +123,17 @@ function resetColumns() {
 }
 
 const {
-  data: models,
+  data: realModels,
   isLoading,
   isError,
 } = useQuery({
   queryKey: ["models"],
   queryFn: getModels,
+  enabled: computed(() => isLoggedIn.value),
 });
+const models = computed(() =>
+  isLoggedIn.value ? realModels.value : GUEST_MODELS,
+);
 
 function formatDate(ts: string) {
   return new Date(ts).toLocaleDateString();
