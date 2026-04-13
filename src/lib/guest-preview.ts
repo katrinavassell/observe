@@ -12,7 +12,164 @@
  * user signs in, the page falls back to real queries.
  */
 
-import type { TraceListItem, TraceDetail } from "@/lib/api";
+import type {
+  TraceListItem,
+  TraceDetail,
+  EventsByFeature,
+  EventsByCustomer,
+  EventsByModel,
+} from "@/lib/api";
+
+const ISO = (offsetMinutes: number) =>
+  new Date(Date.now() - offsetMinutes * 60_000).toISOString();
+
+export const GUEST_EVENTS_BY_FEATURE: EventsByFeature[] = [
+  {
+    feature_key: "rag_query",
+    event_count: 1247,
+    total_cost: 52.43,
+    total_revenue: 189.5,
+    total_usage: 1247,
+    margin_pct: 72,
+    last_seen: ISO(5),
+  },
+  {
+    feature_key: "code_review_agent",
+    event_count: 318,
+    total_cost: 48.11,
+    total_revenue: 120.0,
+    total_usage: 318,
+    margin_pct: 60,
+    last_seen: ISO(12),
+  },
+  {
+    feature_key: "content_pipeline",
+    event_count: 892,
+    total_cost: 31.2,
+    total_revenue: 76.6,
+    total_usage: 892,
+    margin_pct: 59,
+    last_seen: ISO(22),
+  },
+  {
+    feature_key: "document_extraction",
+    event_count: 2104,
+    total_cost: 19.8,
+    total_revenue: 42.3,
+    total_usage: 2104,
+    margin_pct: 53,
+    last_seen: ISO(41),
+  },
+  {
+    feature_key: "semantic_search",
+    event_count: 5820,
+    total_cost: 12.4,
+    total_revenue: 16.1,
+    total_usage: 5820,
+    margin_pct: 23,
+    last_seen: ISO(3),
+  },
+  {
+    feature_key: "email_draft",
+    event_count: 412,
+    total_cost: 14.0,
+    total_revenue: 8.2,
+    total_usage: 412,
+    margin_pct: -71,
+    last_seen: ISO(8),
+  },
+];
+
+export const GUEST_EVENTS_BY_CUSTOMER: EventsByCustomer[] = [
+  {
+    customer_id: "cus_acme",
+    customer_name: "Acme Corp",
+    event_count: 4201,
+    total_cost: 62.4,
+    total_revenue: 199.0,
+    margin_pct: 68,
+    last_seen: ISO(4),
+  },
+  {
+    customer_id: "cus_tidewater",
+    customer_name: "Tidewater AI",
+    event_count: 2810,
+    total_cost: 48.2,
+    total_revenue: 149.0,
+    margin_pct: 68,
+    last_seen: ISO(9),
+  },
+  {
+    customer_id: "cus_neondata",
+    customer_name: "NeonData",
+    event_count: 1902,
+    total_cost: 41.0,
+    total_revenue: 89.0,
+    margin_pct: 54,
+    last_seen: ISO(16),
+  },
+  {
+    customer_id: "cus_circleops",
+    customer_name: "CircleOps",
+    event_count: 640,
+    total_cost: 18.3,
+    total_revenue: 29.0,
+    margin_pct: 37,
+    last_seen: ISO(31),
+  },
+  {
+    customer_id: "cus_blazeml",
+    customer_name: "BlazeML",
+    event_count: 410,
+    total_cost: 22.0,
+    total_revenue: 9.0,
+    margin_pct: -144,
+    last_seen: ISO(48),
+  },
+];
+
+export const GUEST_EVENTS_BY_MODEL: EventsByModel[] = [
+  {
+    model: "gpt-4o",
+    model_provider: "openai",
+    event_count: 2104,
+    total_cost: 96.3,
+    total_revenue: 280.0,
+    total_usage: 612_400,
+    margin_pct: 65,
+    last_seen: ISO(2),
+  },
+  {
+    model: "gpt-4o-mini",
+    model_provider: "openai",
+    event_count: 8902,
+    total_cost: 18.7,
+    total_revenue: 82.0,
+    total_usage: 2_180_500,
+    margin_pct: 77,
+    last_seen: ISO(1),
+  },
+  {
+    model: "claude-3-5-sonnet",
+    model_provider: "anthropic",
+    event_count: 1320,
+    total_cost: 44.0,
+    total_revenue: 110.0,
+    total_usage: 410_200,
+    margin_pct: 60,
+    last_seen: ISO(6),
+  },
+  {
+    model: "text-embedding-3-small",
+    model_provider: "openai",
+    event_count: 5820,
+    total_cost: 3.4,
+    total_revenue: 16.0,
+    total_usage: 11_640_000,
+    margin_pct: 79,
+    last_seen: ISO(4),
+  },
+];
 
 export const GUEST_TRACES: TraceListItem[] = [
   {

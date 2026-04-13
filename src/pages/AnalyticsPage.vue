@@ -21,9 +21,16 @@ import Sheet from "@/components/ui/sheet.vue";
 import { Card, Skeleton, Button } from "@/components/ui";
 import SourceBadge from "@/components/shared/SourceBadge.vue";
 import { formatCurrency as fmt, formatPct as fmtPct } from "@/lib/format";
+import { useAuth } from "@/composables/useAuth";
+import {
+  GUEST_EVENTS_BY_FEATURE,
+  GUEST_EVENTS_BY_MODEL,
+  GUEST_EVENTS_BY_CUSTOMER,
+} from "@/lib/guest-preview";
 
 const router = useRouter();
 const queryClient = useQueryClient();
+const { isLoggedIn } = useAuth();
 
 type Tab = "feature" | "model" | "customer" | "agent" | "cost_type" | "mrr";
 const activeTab = ref<Tab>("feature");
@@ -142,33 +149,47 @@ const activeSources = computed(() => {
     .sort((a, b) => b.event_count - a.event_count);
 });
 
-// Analytics data
+// Analytics data — logged-in users hit the API, guests get hardcoded
+// client-side preview (see src/lib/guest-preview.ts). Sample data
+// cannot leak into a real account because the server never sees it.
 const {
-  data: featureData,
+  data: realFeatureData,
   isLoading: featuresLoading,
   isError: featuresError,
 } = useQuery({
   queryKey: ["events-by-feature"],
   queryFn: getEventsByFeature,
+  enabled: computed(() => isLoggedIn.value),
 });
+const featureData = computed(() =>
+  isLoggedIn.value ? realFeatureData.value : GUEST_EVENTS_BY_FEATURE,
+);
 
 const {
-  data: modelData,
+  data: realModelData,
   isLoading: modelsLoading,
   isError: modelsError,
 } = useQuery({
   queryKey: ["events-by-model"],
   queryFn: getEventsByModel,
+  enabled: computed(() => isLoggedIn.value),
 });
+const modelData = computed(() =>
+  isLoggedIn.value ? realModelData.value : GUEST_EVENTS_BY_MODEL,
+);
 
 const {
-  data: customerData,
+  data: realCustomerData,
   isLoading: customersLoading,
   isError: customersError,
 } = useQuery({
   queryKey: ["events-by-customer"],
   queryFn: getEventsByCustomer,
+  enabled: computed(() => isLoggedIn.value),
 });
+const customerData = computed(() =>
+  isLoggedIn.value ? realCustomerData.value : GUEST_EVENTS_BY_CUSTOMER,
+);
 
 const { data: agentData } = useQuery({
   queryKey: ["events-by-agent"],
