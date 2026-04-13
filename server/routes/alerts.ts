@@ -282,6 +282,9 @@ export function createAlertRoutes(
     ensureVisitor,
     async (req: AuthRequest, res: Response) => {
       try {
+        if (!req.accountEmail) {
+          return res.status(401).json({ error: "Authentication required" });
+        }
         const { rows } = await pool.query(
           "SELECT * FROM alert_rules WHERE user_id = $1 ORDER BY created_at DESC",
           [req.visitorId],
@@ -300,6 +303,9 @@ export function createAlertRoutes(
     ensureVisitor,
     async (req: AuthRequest, res: Response) => {
       try {
+        if (!req.accountEmail) {
+          return res.status(401).json({ error: "Authentication required" });
+        }
         const parsed = alertRuleSchema.parse(req.body);
         const email =
           parsed.email && parsed.email.length > 0 ? parsed.email : null;
@@ -348,6 +354,9 @@ export function createAlertRoutes(
     ensureVisitor,
     async (req: AuthRequest, res: Response) => {
       try {
+        if (!req.accountEmail) {
+          return res.status(401).json({ error: "Authentication required" });
+        }
         const id = parseInt(req.params.id);
 
         const parsed = alertPatchSchema.parse(req.body);
@@ -408,6 +417,9 @@ export function createAlertRoutes(
     ensureVisitor,
     async (req: AuthRequest, res: Response) => {
       try {
+        if (!req.accountEmail) {
+          return res.status(401).json({ error: "Authentication required" });
+        }
         const id = parseInt(req.params.id);
         const result = await pool.query(
           "DELETE FROM alert_rules WHERE id = $1 AND user_id = $2",
