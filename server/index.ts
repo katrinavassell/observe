@@ -791,16 +791,17 @@ async function _doDbInit() {
       `ALTER TABLE sdk_api_keys ADD COLUMN IF NOT EXISTS encrypted_key TEXT`,
     );
     // Race-protect SDK key auto-generation on /auth/signup-complete.
+    // PARTIAL unique index — only active (non-revoked) keys must have a
+    // unique (user_id, name). This lets /sdk-keys/:id/reset soft-delete
+    // the old row and insert a new one with the same name.
     try {
       await pool.query(
-        `ALTER TABLE sdk_api_keys
-           ADD CONSTRAINT sdk_api_keys_user_name_key UNIQUE (user_id, name)`,
+        `CREATE UNIQUE INDEX IF NOT EXISTS sdk_api_keys_user_name_active
+           ON sdk_api_keys (user_id, name)
+           WHERE revoked_at IS NULL`,
       );
     } catch (err: unknown) {
-      const code = (err as { code?: string })?.code;
-      if (code !== "42710") {
-        console.error("sdk_api_keys unique constraint add failed:", err);
-      }
+      console.error("sdk_api_keys partial unique index add failed:", err);
     }
 
     // Proxy response cache table

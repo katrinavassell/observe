@@ -522,37 +522,46 @@ export function createEventsRoutes(
     ensureVisitor,
     async (req: AuthRequest, res: Response) => {
       try {
+        if (!req.accountEmail) {
+          return res.status(401).json({ error: "Authentication required" });
+        }
         const userId = req.visitorId!;
-        const name =
-          typeof req.body?.name === "string"
-            ? req.body.name.trim().slice(0, 100)
-            : null;
+        const rawName =
+          typeof req.body?.name === "string" ? req.body.name.trim() : "";
+        const name = rawName.length > 0 ? rawName.slice(0, 100) : "default";
 
-        const rawKey = "sk_live_" + crypto.randomBytes(16).toString("hex");
+        const rawKey = "obs_" + crypto.randomBytes(24).toString("hex");
         const keyHash = crypto
           .createHash("sha256")
           .update(rawKey)
           .digest("hex");
-        const keyPrefix = rawKey.slice(0, 12);
+        const keyPrefix = rawKey.slice(0, 11);
         const encryptedKey = encryptApiKey(rawKey);
+
+        // Auto-disambiguate the name if (user_id, name) already exists —
+        // avoids leaking DB error messages back to the caller.
+        let finalName = name;
+        for (let attempt = 0; attempt < 10; attempt++) {
+          const candidate = attempt === 0 ? name : `${name}-${attempt + 1}`;
+          const conflict = await pool.query(
+            "SELECT 1 FROM sdk_api_keys WHERE user_id = $1 AND name = $2",
+            [userId, candidate],
+          );
+          if (conflict.rows.length === 0) {
+            finalName = candidate;
+            break;
+          }
+        }
 
         await pool.query(
           "INSERT INTO sdk_api_keys (user_id, key_hash, key_prefix, encrypted_key, name) VALUES ($1, $2, $3, $4, $5)",
-          [userId, keyHash, keyPrefix, encryptedKey, name],
+          [userId, keyHash, keyPrefix, encryptedKey, finalName],
         );
 
-        res.json({ key: rawKey, prefix: keyPrefix, name });
+        res.json({ key: rawKey, prefix: keyPrefix, name: finalName });
       } catch (error) {
         console.error("POST /sdk-keys error:", error);
-        const isConstraint =
-          error instanceof Error &&
-          (error.message.includes("unique") ||
-            error.message.includes("violates") ||
-            error.message.includes("duplicate") ||
-            error.message.includes("validation"));
-        res.status(isConstraint ? 400 : 500).json({
-          error: isConstraint ? error.message : "Failed to create API key",
-        });
+        res.status(500).json({ error: "Failed to create API key" });
       }
     },
   );
@@ -610,13 +619,14 @@ export function createEventsRoutes(
           [keyId, userId],
         );
 
-        // Generate new key
-        const rawKey = "sk_live_" + crypto.randomBytes(16).toString("hex");
+        // Generate new key (same name, unique constraint is partial on
+        // revoked_at IS NULL so the just-soft-deleted row doesn't block).
+        const rawKey = "obs_" + crypto.randomBytes(24).toString("hex");
         const keyHash = crypto
           .createHash("sha256")
           .update(rawKey)
           .digest("hex");
-        const keyPrefix = rawKey.slice(0, 12);
+        const keyPrefix = rawKey.slice(0, 11);
         const encryptedKey = encryptApiKey(rawKey);
 
         const result = await pool.query(

@@ -7,15 +7,10 @@ const IV_LENGTH = 16;
 // Tag is embedded in the encrypted output by getAuthTag()
 
 function getEncryptionKey(): Buffer {
-  const env = process.env.NODE_ENV;
-  const key =
-    process.env.INTEGRATION_ENCRYPTION_KEY ||
-    (env === "development" || env === "test"
-      ? "dev-encryption-key-not-for-production"
-      : "");
-  if (!key) {
+  const key = process.env.INTEGRATION_ENCRYPTION_KEY;
+  if (!key || key.length < 16) {
     throw new Error(
-      'INTEGRATION_ENCRYPTION_KEY environment variable is required (set NODE_ENV to "development" or "test" to use a dev fallback)',
+      "INTEGRATION_ENCRYPTION_KEY environment variable is required and must be at least 16 characters. Generate one with: openssl rand -hex 32",
     );
   }
   // Derive a 32-byte key from the secret

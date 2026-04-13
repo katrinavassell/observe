@@ -88,21 +88,25 @@ export function createEnsureVisitor(pool: Pool) {
         }
       }
 
-      // Anonymous visitor — generate a temporary visitor ID via cookie
+      // Anonymous visitor — generate a fresh UUID per request. We do NOT
+      // honor any client-sent x-visitor-id header: an attacker could
+      // otherwise set x-visitor-id: <victim-uuid> on an unauthenticated
+      // request and read/write the victim's data. Guests don't need
+      // persistent visitor IDs on the server anymore because their
+      // preview is rendered entirely client-side from src/lib/guest-preview.ts.
       if (!req.visitorId) {
         const crypto = await import("crypto");
-        let anonId = req.headers["x-visitor-id"] as string | undefined;
-        if (!anonId) {
-          anonId = crypto.randomUUID();
-        }
-        req.visitorId = anonId;
+        req.visitorId = crypto.randomUUID();
       }
 
-      // Ensure user_data_status row exists
-      await pool.query(
-        "INSERT INTO user_data_status (user_id, data_mode) VALUES ($1, $2) ON CONFLICT DO NOTHING",
-        [req.visitorId, "none"],
-      );
+      // Ensure user_data_status row exists (only for authenticated users;
+      // ephemeral guest UUIDs don't need persistent rows).
+      if (req.accountEmail) {
+        await pool.query(
+          "INSERT INTO user_data_status (user_id, data_mode) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+          [req.visitorId, "none"],
+        );
+      }
 
       next();
     } catch (error) {
@@ -124,20 +128,21 @@ export function createAuthRoutes(
     ensureVisitor,
     async (req: AuthRequest, res: Response) => {
       try {
+        // Require an authenticated Bearer token. Without this check, an
+        // anonymous attacker with just an x-visitor-id header (or body)
+        // could overwrite any victim's account email — an account takeover
+        // precondition. `req.accountEmail` is only populated when
+        // ensureVisitor successfully verifies the Supabase JWT.
+        if (!req.accountEmail) {
+          return res.status(401).json({ error: "Authentication required" });
+        }
         const userId = req.visitorId!;
-        const { name, email: bodyEmail } = req.body;
+        const { name } = req.body;
 
-        // Get email from JWT user, request body, or Supabase admin API
-        let email = req.accountEmail || bodyEmail;
-        if (!email) {
-          const { data } = await supabase.auth.admin.getUserById(userId);
-          email = data?.user?.email;
-        }
-        if (!email) {
-          return res
-            .status(400)
-            .json({ error: "Could not determine email for account" });
-        }
+        // Email is taken ONLY from the verified JWT — never from the body
+        // or admin lookup. This prevents a confused-deputy rewrite where
+        // a valid JWT for user A is used to overwrite account B's email.
+        const email = req.accountEmail;
 
         // Create or update local account row (handles both email and visitor_id conflicts)
         const existing = await pool.query(
@@ -279,13 +284,9 @@ export function createAuthRoutes(
           account: { id: account.id, email: account.email, name: account.name },
           sdkKey,
         });
-      } catch (error: any) {
+      } catch (error: unknown) {
         console.error("Signup complete error:", error);
-        res.status(500).json({
-          error: "Failed to complete signup",
-          detail: error?.message || String(error),
-          code: error?.code,
-        });
+        res.status(500).json({ error: "Failed to complete signup" });
       }
     },
   );
