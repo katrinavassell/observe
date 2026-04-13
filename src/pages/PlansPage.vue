@@ -341,19 +341,15 @@ const repoUrl = "https://github.com/katrinalaszlo/observe";
                 invoices — all in one place.
               </p>
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              @click="
-                window.open(
-                  'https://cal.com/katrina-laszlo/30-minute-meeting?duration=30',
-                  '_blank',
-                )
-              "
+            <a
+              href="https://cal.com/katrina-laszlo/30-minute-meeting?duration=30"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="inline-flex items-center h-8 px-3 text-xs rounded-md border bg-background hover:bg-muted transition-colors"
             >
               Learn more
               <ExternalLink class="h-3 w-3 ml-1.5" />
-            </Button>
+            </a>
           </div>
         </div>
       </div>
