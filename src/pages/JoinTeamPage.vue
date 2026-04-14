@@ -155,14 +155,6 @@ async function acceptInvite() {
             </p>
             <p class="text-lg font-semibold">{{ inviteInfo.org_name }}</p>
           </div>
-          <div>
-            <p
-              class="text-xs text-muted-foreground uppercase font-semibold tracking-wider"
-            >
-              Your role
-            </p>
-            <p class="capitalize font-medium">{{ inviteInfo.role }}</p>
-          </div>
           <div v-if="inviteInfo.invited_email">
             <p
               class="text-xs text-muted-foreground uppercase font-semibold tracking-wider"
@@ -174,15 +166,8 @@ async function acceptInvite() {
         </div>
 
         <div class="text-sm text-muted-foreground text-center">
-          <template v-if="inviteInfo.role === 'viewer'">
-            As a <strong>Viewer</strong>, you'll be able to see all the
-            workspace data: dashboards, customers, pricing, and analytics — but
-            cannot modify data or manage the team.
-          </template>
-          <template v-else>
-            As an <strong>Admin</strong>, you'll have full access to manage
-            data, invite teammates, and configure integrations.
-          </template>
+          You'll get full access to the workspace: data, integrations, and team
+          management.
         </div>
 
         <!-- Email-confirmation pending state -->

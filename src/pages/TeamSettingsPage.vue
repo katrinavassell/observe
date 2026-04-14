@@ -5,8 +5,7 @@ import {
   Users,
   UserPlus,
   Trash2,
-  Crown,
-  Eye,
+  User as UserIcon,
   Copy,
   Check,
   Pencil,
@@ -24,25 +23,20 @@ import {
   CardDescription,
   Input,
   Badge,
-  Select,
 } from "@/components/ui";
 
 const {
   isLoading,
   error,
-  myRole,
-  isAdmin,
   org,
   members,
   fetchTeamInfo,
   renameTeam,
   inviteMember,
-  changeRole,
   removeMember,
 } = useTeam();
 
 const inviteEmail = ref("");
-const inviteRole = ref<"admin" | "viewer">("viewer");
 const isInviting = ref(false);
 const inviteLink = ref("");
 const copiedLink = ref(false);
@@ -50,11 +44,6 @@ const copiedLink = ref(false);
 const editingName = ref(false);
 const nameInput = ref("");
 const isSavingName = ref(false);
-
-const roleItems = [
-  { value: "viewer", label: "Viewer" },
-  { value: "admin", label: "Admin" },
-];
 
 onMounted(() => {
   fetchTeamInfo();
@@ -83,14 +72,11 @@ async function handleInvite() {
   isInviting.value = true;
   inviteLink.value = "";
   try {
-    const result = await inviteMember(
-      inviteEmail.value.trim(),
-      inviteRole.value,
-    );
+    const result = await inviteMember(inviteEmail.value.trim());
     inviteLink.value = `${window.location.origin}/join/${result.invite_token}`;
     inviteEmail.value = "";
     toast.success("Invite link generated");
-    window.posthog?.capture("team_invite_sent", { role: inviteRole.value });
+    window.posthog?.capture("team_invite_sent");
     await fetchTeamInfo();
   } catch (e) {
     toast.error(e instanceof Error ? e.message : "Failed to create invite");
@@ -106,15 +92,6 @@ async function copyInviteLink() {
   setTimeout(() => {
     copiedLink.value = false;
   }, 2000);
-}
-
-async function handleRoleChange(member: OrgMember, role: string) {
-  try {
-    await changeRole(member.id, role as "admin" | "viewer");
-    toast.success("Role updated");
-  } catch (e) {
-    toast.error(e instanceof Error ? e.message : "Failed to change role");
-  }
 }
 
 async function handleRemove(member: OrgMember) {
@@ -167,7 +144,7 @@ function memberLabel(member: OrgMember) {
       <Card>
         <CardHeader class="pb-3">
           <CardTitle class="text-base">Workspace</CardTitle>
-          <CardDescription>Your team name and role</CardDescription>
+          <CardDescription>Your team name</CardDescription>
         </CardHeader>
         <CardContent>
           <div class="flex items-center gap-3">
@@ -192,7 +169,6 @@ function memberLabel(member: OrgMember) {
             <template v-else>
               <span class="text-lg font-semibold flex-1">{{ org.name }}</span>
               <Button
-                v-if="isAdmin"
                 variant="ghost"
                 size="icon"
                 title="Rename team"
@@ -202,16 +178,10 @@ function memberLabel(member: OrgMember) {
               </Button>
             </template>
           </div>
-          <p class="text-sm text-muted-foreground mt-2">
-            Your role:
-            <Badge variant="secondary" class="ml-1 capitalize">{{
-              myRole
-            }}</Badge>
-          </p>
         </CardContent>
       </Card>
 
-      <Card v-if="isAdmin">
+      <Card>
         <CardHeader class="pb-3">
           <CardTitle class="text-base flex items-center gap-2">
             <UserPlus class="h-4 w-4" />
@@ -229,12 +199,6 @@ function memberLabel(member: OrgMember) {
               placeholder="teammate@example.com (optional)"
               class="flex-1 min-w-[200px]"
               @keydown.enter="handleInvite"
-            />
-            <Select
-              :model-value="inviteRole"
-              :items="roleItems"
-              class="w-[110px]"
-              @update:model-value="inviteRole = $event as 'admin' | 'viewer'"
             />
             <Button
               size="sm"
@@ -269,15 +233,6 @@ function memberLabel(member: OrgMember) {
         </CardContent>
       </Card>
 
-      <div
-        v-if="!isAdmin"
-        class="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-800 p-4 text-sm text-amber-800 dark:text-amber-300"
-      >
-        You have <strong>Viewer</strong> access to this workspace. You can see
-        all data but cannot modify it, upload data, or invite teammates. Contact
-        your admin to change your role.
-      </div>
-
       <Card>
         <CardHeader class="pb-3">
           <div class="flex items-center justify-between">
@@ -309,11 +264,7 @@ function memberLabel(member: OrgMember) {
               <div
                 class="h-8 w-8 rounded-full bg-muted flex items-center justify-center shrink-0"
               >
-                <Crown
-                  v-if="member.role === 'admin'"
-                  class="h-4 w-4 text-muted-foreground"
-                />
-                <Eye v-else class="h-4 w-4 text-muted-foreground" />
+                <UserIcon class="h-4 w-4 text-muted-foreground" />
               </div>
 
               <div class="flex-1 min-w-0">
@@ -340,28 +291,15 @@ function memberLabel(member: OrgMember) {
                 </div>
               </div>
 
-              <template v-if="isAdmin">
-                <Select
-                  :model-value="member.role"
-                  :items="roleItems"
-                  class="w-[110px]"
-                  @update:model-value="handleRoleChange(member, $event)"
-                />
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  class="text-muted-foreground hover:text-destructive h-8 w-8"
-                  title="Remove member"
-                  @click="handleRemove(member)"
-                >
-                  <Trash2 class="h-4 w-4" />
-                </Button>
-              </template>
-              <template v-else>
-                <Badge variant="outline" class="capitalize">{{
-                  member.role
-                }}</Badge>
-              </template>
+              <Button
+                variant="ghost"
+                size="icon"
+                class="text-muted-foreground hover:text-destructive h-8 w-8"
+                title="Remove member"
+                @click="handleRemove(member)"
+              >
+                <Trash2 class="h-4 w-4" />
+              </Button>
             </li>
           </ul>
         </CardContent>
@@ -369,3 +307,4 @@ function memberLabel(member: OrgMember) {
     </template>
   </div>
 </template>
+</content>

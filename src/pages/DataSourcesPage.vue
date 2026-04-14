@@ -34,7 +34,6 @@ import OpenAIApiKeyModal from "@/components/integrations/OpenAIApiKeyModal.vue";
 import AnthropicApiKeyModal from "@/components/integrations/AnthropicApiKeyModal.vue";
 import { useDataMode } from "@/composables/useDataMode";
 import { useAuth } from "@/composables/useAuth";
-import { useTeam } from "@/composables/useTeam";
 import {
   clearCostData,
   clearUsageData,
@@ -65,10 +64,9 @@ import type { StripeStatus } from "@/api/client";
 const router = useRouter();
 const queryClient = useQueryClient();
 const { isLoggedIn } = useAuth();
-const { isViewer } = useTeam();
 
-/** True when the user can interact with data sources (logged in + not a viewer) */
-const canEdit = computed(() => isLoggedIn.value && !isViewer.value);
+/** True when the user can interact with data sources (logged in). */
+const canEdit = computed(() => isLoggedIn.value);
 
 // =============================================================================
 // STATE MANAGEMENT
@@ -158,7 +156,7 @@ Full instructions: https://observemetrics.com/llms.txt
 My Observe API key: ${apiKey}
 
 Steps:
-1. npm install @tanso/observe
+1. npm install @tansohq/observe
 2. Add OBSERVE_API_KEY=${apiKey} to .env (and .env.example with a placeholder).
 3. At app startup, call Observe.configure({ apiKey: process.env.OBSERVE_API_KEY! }).
 4. At the start of each authenticated request, call Observe.identify({ customerId: <user's stripe customer id> }).
@@ -659,18 +657,6 @@ watch(
       </p>
     </div>
 
-    <!-- Viewer notice -->
-    <div
-      v-if="isViewer"
-      class="flex items-start gap-3 rounded-lg border border-warning/30 bg-warning/10 p-4 text-sm text-warning-foreground"
-    >
-      <Eye class="h-4 w-4 mt-0.5 shrink-0" />
-      <div>
-        <strong>Viewer access</strong> — You can see your team's data but cannot
-        upload, modify, or clear data. Contact your team admin to make changes.
-      </div>
-    </div>
-
     <!-- ================================================================== -->
     <!-- HERO: One-line proxy integration                                    -->
     <!-- ================================================================== -->
@@ -806,7 +792,7 @@ curl -X POST <span class="text-amber-300">'{{ proxyBaseUrl }}/google/generateCon
             >Sign up to get started</Button
           >
         </div>
-        <div v-else-if="!isViewer">
+        <div v-else>
           <div class="flex items-center justify-between mb-2">
             <h3
               class="text-xs font-semibold text-muted-foreground uppercase tracking-wider"
@@ -997,7 +983,7 @@ curl -X POST <span class="text-amber-300">'{{ proxyBaseUrl }}/google/generateCon
             <div>
               <h4 class="text-xs font-semibold mb-2">SDK Wrapper</h4>
               <p class="text-[11px] text-muted-foreground mb-2">
-                <span class="font-mono">npm install @tanso/observe</span> —
+                <span class="font-mono">npm install @tansohq/observe</span> —
                 three calls, zero header plumbing.
               </p>
               <div
@@ -1005,7 +991,7 @@ curl -X POST <span class="text-amber-300">'{{ proxyBaseUrl }}/google/generateCon
               >
                 <pre
                   class="whitespace-pre text-zinc-100"
-                ><span class="text-emerald-400">import</span> { Observe } <span class="text-emerald-400">from</span> <span class="text-amber-300">'@tanso/observe'</span>
+                ><span class="text-emerald-400">import</span> { Observe } <span class="text-emerald-400">from</span> <span class="text-amber-300">'@tansohq/observe'</span>
 <span class="text-emerald-400">import</span> OpenAI <span class="text-emerald-400">from</span> <span class="text-amber-300">'openai'</span>
 
 Observe.configure({ <span class="text-sky-300">apiKey</span>: <span class="text-amber-300">'{{ apiKeyForSnippet }}'</span> })
