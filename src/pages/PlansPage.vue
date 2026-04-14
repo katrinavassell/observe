@@ -113,9 +113,24 @@ const plans = [
     price: "$29",
     interval: "/month",
     features: [
-      "Unlimited events",
-      "500 AI messages/month",
+      "500,000 events/month",
+      "10,000 AI messages/month",
       "1-year data retention",
+      "1 Pricing Strategy session / quarter",
+    ],
+  },
+  {
+    key: "enterprise",
+    name: "Enterprise",
+    price: "Custom",
+    interval: "",
+    features: [
+      "Unlimited events",
+      "Unlimited AI messages",
+      "Unlimited data retention",
+      "Monthly Pricing Strategy session",
+      "Priority support",
+      "Bespoke contract & SLA",
     ],
   },
 ];
@@ -163,7 +178,7 @@ const repoUrl = "https://github.com/katrinalaszlo/observe";
     <!-- Plans tab -->
     <template v-if="activeTab === 'plans'">
       <div
-        class="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-4xl items-stretch"
+        class="grid grid-cols-1 md:grid-cols-3 gap-4 max-w-5xl items-stretch"
       >
         <Card
           v-for="plan in plans"
@@ -198,17 +213,19 @@ const repoUrl = "https://github.com/katrinalaszlo/observe";
                     Current
                   </span>
                   <span
-                    v-else-if="plan.key === 'pro'"
+                    v-else-if="plan.key === 'enterprise'"
                     class="text-[10px] font-medium bg-violet-100 text-violet-700 px-2 py-0.5 rounded-full"
                   >
-                    AI + Human
+                    Bespoke
                   </span>
                 </div>
                 <p class="text-xs text-muted-foreground mt-1">
                   {{
                     plan.key === "free"
                       ? "Get started with core analytics"
-                      : "For teams scaling AI features"
+                      : plan.key === "growth"
+                        ? "For teams scaling AI features"
+                        : "Tailored to your organization"
                   }}
                 </p>
               </div>
@@ -236,11 +253,7 @@ const repoUrl = "https://github.com/katrinalaszlo/observe";
                 </p>
                 <ul class="space-y-2.5">
                   <li
-                    v-for="feature in plan.features.filter(
-                      (f) =>
-                        f !== 'Everything in Free' &&
-                        f !== 'Everything in Growth',
-                    )"
+                    v-for="feature in plan.features"
                     :key="feature"
                     class="flex items-start gap-2 text-sm"
                   >
@@ -253,10 +266,7 @@ const repoUrl = "https://github.com/katrinalaszlo/observe";
 
             <div class="pt-6 mt-auto">
               <Button
-                v-if="
-                  billing?.plan === plan.key &&
-                  (plan.key === 'growth' || plan.key === 'pro')
-                "
+                v-if="billing?.plan === plan.key && plan.key === 'growth'"
                 variant="outline"
                 class="w-full"
                 @click="handleManage"
@@ -274,20 +284,18 @@ const repoUrl = "https://github.com/katrinalaszlo/observe";
               >
                 {{ isUpgrading ? "Redirecting..." : "Get Growth" }}
               </Button>
-              <Button
-                v-else-if="
-                  plan.key === 'pro' &&
-                  (!billing ||
-                    billing.plan === 'free' ||
-                    billing.plan === 'growth')
-                "
-                class="w-full"
-                variant="outline"
-                :disabled="isUpgrading"
-                @click="handleUpgrade('pro')"
+              <a
+                v-else-if="plan.key === 'enterprise'"
+                href="https://cal.com/katrina-laszlo/30-minute-meeting?duration=30"
+                target="_blank"
+                rel="noopener"
+                class="block"
               >
-                {{ isUpgrading ? "Redirecting..." : "Get Pro" }}
-              </Button>
+                <Button variant="outline" class="w-full">
+                  <ExternalLink class="h-4 w-4 mr-2" />
+                  Talk to us
+                </Button>
+              </a>
               <div
                 v-else-if="
                   plan.key === 'free' && (!billing || billing.plan === 'free')
