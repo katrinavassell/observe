@@ -1,6 +1,55 @@
 import { Router, Response } from "express";
 import type { Pool } from "pg";
+import { readFileSync } from "fs";
+import { join } from "path";
 import { type AuthRequest } from "./auth.js";
+
+// ── Agent loader ─────────────────────────────────────────────────────────
+// Agent personas live in `files/agents/*.md` which is gitignored — the
+// OSS repo ships with sensible defaults and private deployments can drop
+// in their own prompts without leaking IP into the public repo.
+
+type AgentKey = "default" | "pricing" | "optimization" | "setup-qa";
+
+function loadAgentPrompt(key: AgentKey): string | null {
+  const candidates = [
+    join(process.cwd(), "files", "agents", `${key}.md`),
+    join(process.cwd(), "..", "files", "agents", `${key}.md`),
+  ];
+  for (const path of candidates) {
+    try {
+      return readFileSync(path, "utf-8");
+    } catch {
+      // File missing on this machine — try next candidate.
+    }
+  }
+  return null;
+}
+
+// Cached at module load. Null means "file missing — fall back to built-in".
+const AGENT_PROMPTS: Record<AgentKey, string | null> = {
+  default: loadAgentPrompt("default"),
+  pricing: loadAgentPrompt("pricing"),
+  optimization: loadAgentPrompt("optimization"),
+  "setup-qa": loadAgentPrompt("setup-qa"),
+};
+
+function pickAgentKey(route: string | undefined): AgentKey {
+  if (!route) return "default";
+  if (route.startsWith("/plans") || route.startsWith("/pricing"))
+    return "pricing";
+  if (route.startsWith("/data-sources") || route.startsWith("/onboarding"))
+    return "setup-qa";
+  if (
+    route.startsWith("/analytics") ||
+    route.startsWith("/models") ||
+    route.startsWith("/cohorts") ||
+    route.startsWith("/routing") ||
+    route.startsWith("/customers")
+  )
+    return "optimization";
+  return "default";
+}
 
 export function createChatRoutes(
   pool: Pool,
@@ -138,17 +187,24 @@ export function createChatRoutes(
   }
 
   // ── System prompt ──────────────────────────────────────────────────────
+  // Built-in fallback used when files/agents/default.md is missing (OSS users
+  // who don't have the private agent files). Keeps the chat functional out of
+  // the box.
 
-  const SYSTEM_PROMPT = `You are the Observe AI assistant. You help users understand their AI costs, optimize margins, and take action.
+  const BUILTIN_DEFAULT_PROMPT = `You are the Observe AI assistant. You help users understand their AI costs, optimize margins, and take action.
 
 You have access to the user's real-time data (provided below). When answering:
 - Be specific with numbers from their data
 - When suggesting actions, describe exactly what you'll do
-- For routing changes, specify the provider, model, and customer
-- For alerts, specify the metric, threshold, and condition
-- Keep responses concise and actionable
+- Keep responses concise and actionable`;
 
-Available actions you can suggest (the user can execute these with one click):
+  // Action contract is always appended to whichever persona is selected, so
+  // every agent can emit one-click actions without restating the schema.
+  const ACTION_CONTRACT = `
+
+## Action contract
+
+Available actions the user can execute with one click:
 - Create a routing rule to route specific customers to cheaper models
 - Create an alert for cost spikes or margin drops
 - Switch a routing target to a different model
@@ -181,6 +237,14 @@ Prefer dynamic cohorts when the user describes a condition (e.g. "unprofitable c
 
 Only include action blocks when the user explicitly asks you to do something. For analysis questions, just answer with text.`;
 
+  function buildSystemPrompt(agentKey: AgentKey): string {
+    const persona =
+      AGENT_PROMPTS[agentKey] ||
+      AGENT_PROMPTS.default ||
+      BUILTIN_DEFAULT_PROMPT;
+    return `${persona}${ACTION_CONTRACT}`;
+  }
+
   // ── Chat endpoint ──────────────────────────────────────────────────────
 
   router.post(
@@ -188,10 +252,30 @@ Only include action blocks when the user explicitly asks you to do something. Fo
     ensureVisitor,
     async (req: AuthRequest, res: Response) => {
       try {
-        const { messages } = req.body;
+        const { messages, route } = req.body as {
+          messages: Array<{ role: string; content: string }>;
+          route?: string;
+        };
         if (!Array.isArray(messages) || messages.length === 0) {
           return res.status(400).json({ error: "messages array is required" });
         }
+
+        // Route may come in the body directly, or embedded in a system
+        // prefix message ("The user is currently on the /analytics page.")
+        // sent by the drawer. Prefer the explicit body param when present.
+        let effectiveRoute = route;
+        if (!effectiveRoute) {
+          const prefix = messages.find(
+            (m) =>
+              m.role === "system" &&
+              /user is currently on the \S+ page/i.test(m.content || ""),
+          );
+          const match = prefix?.content.match(
+            /user is currently on the (\S+) page/i,
+          );
+          if (match) effectiveRoute = match[1];
+        }
+        const agentKey = pickAgentKey(effectiveRoute);
 
         // Check billing access
         const access = await deps.checkBillingFeatureAccess(
@@ -213,7 +297,7 @@ Only include action blocks when the user explicitly asks you to do something. Fo
         // Gather data context
         const dataContext = await gatherDataContext(req.visitorId!);
 
-        const systemMessage = `${SYSTEM_PROMPT}\n\n${dataContext}`;
+        const systemMessage = `${buildSystemPrompt(agentKey)}\n\n${dataContext}`;
 
         const response = await fetch(
           "https://api.openai.com/v1/chat/completions",

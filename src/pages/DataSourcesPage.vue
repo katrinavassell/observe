@@ -187,19 +187,20 @@ const apiKeyForSnippet = computed(() => {
   return "YOUR_API_KEY";
 });
 
-async function _handleResetKey(id: number) {
+async function handleResetKey(id: number) {
   if (
     !window.confirm(
-      "Reset this API key? The old key will stop working immediately.",
+      "Rotate this API key? The current key will stop working immediately — update your SDK with the new one.",
     )
   )
     return;
   try {
-    await resetSdkKey(id);
+    const result = await resetSdkKey(id);
     await loadSdkKeys();
-    toast.success("API key reset");
+    generatedKey.value = result.key;
+    toast.success("API key rotated — copy the new one now");
   } catch (error) {
-    toast.error("Failed to reset key", {
+    toast.error("Failed to rotate key", {
       description: error instanceof Error ? error.message : "Please try again.",
     });
   }
@@ -886,7 +887,17 @@ curl -X POST <span class="text-amber-300">'{{ proxyBaseUrl }}/google/generateCon
                 <Button
                   variant="ghost"
                   size="sm"
+                  class="h-6 w-6 p-0 text-muted-foreground hover:text-foreground"
+                  title="Rotate key"
+                  @click="handleResetKey(key.id)"
+                >
+                  <RefreshCw class="h-3 w-3" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
                   class="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
+                  title="Delete key"
                   @click="handleRevokeKey(key.id)"
                 >
                   <Trash2 class="h-3 w-3" />
