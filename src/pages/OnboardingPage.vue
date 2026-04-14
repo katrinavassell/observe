@@ -75,8 +75,8 @@ client = OpenAI(
 
 const quickStartSdkSnippet = computed(() => {
   const key = quickStartSdkKey.value ?? "obs_your_api_key";
-  return `import { TansoObserve } from '@tanso/observe'
-import { wrapOpenAI } from '@tanso/observe/openai'
+  return `import { TansoObserve } from '@tansohq/observe'
+import { wrapOpenAI } from '@tansohq/observe/openai'
 
 const observe = new TansoObserve({ apiKey: '${key}' })
 const openai = wrapOpenAI(new OpenAI(), observe)

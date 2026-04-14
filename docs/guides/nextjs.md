@@ -5,7 +5,7 @@ Observe tracks AI costs from your Next.js application. All tracking happens serv
 ## Install
 
 ```bash
-npm install @tanso/observe openai
+npm install @tansohq/observe openai
 ```
 
 ## Configure Once
@@ -15,7 +15,7 @@ Call `Observe.configure()` from a server-only module. In Next.js, `lib/observe.t
 ```typescript
 // lib/observe.ts
 import "server-only";
-import { Observe } from "@tanso/observe";
+import { Observe } from "@tansohq/observe";
 
 Observe.configure({
   apiKey: process.env.OBSERVE_API_KEY!,
@@ -32,7 +32,7 @@ Import this file wherever you need tracking (route handlers, server actions, mid
 // app/api/chat/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
-import { Observe } from "@tanso/observe";
+import { Observe } from "@tansohq/observe";
 import { auth } from "@/lib/auth";
 import "@/lib/observe"; // side-effect import ensures Observe.configure ran
 
@@ -64,7 +64,7 @@ Server actions run on the server, so they work the same way:
 "use server";
 
 import OpenAI from "openai";
-import { Observe } from "@tanso/observe";
+import { Observe } from "@tansohq/observe";
 import { auth } from "@/lib/auth";
 import "@/lib/observe";
 

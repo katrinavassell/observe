@@ -120,11 +120,11 @@ Go to **Data Sources** in the sidebar. Pick whichever fits:
 If you prefer fire-and-forget tracking from your backend instead of the proxy:
 
 ```bash
-npm install @tanso/observe
+npm install @tansohq/observe
 ```
 
 ```typescript
-import { Observe } from "@tanso/observe"
+import { Observe } from "@tansohq/observe"
 import OpenAI from "openai"
 
 Observe.configure({ apiKey: "obs_your_key" })
@@ -148,7 +148,7 @@ See the [SDK README](../packages/sdk/README.md) for full options.
 Track multi-step agent executions with cost attribution per step. Use the `x-tanso-trace-id` and `x-tanso-span-id` headers on each gateway call to group them into a single trace:
 
 ```typescript
-import { Observe } from "@tanso/observe"
+import { Observe } from "@tansohq/observe"
 import OpenAI from "openai"
 
 Observe.configure({ apiKey: process.env.OBSERVE_API_KEY! })

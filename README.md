@@ -151,11 +151,11 @@ client = anthropic.Anthropic(
 ## SDK (zero headers, zero-latency wrap)
 
 ```bash
-npm install @tanso/observe
+npm install @tansohq/observe
 ```
 
 ```typescript
-import { Observe } from '@tanso/observe'
+import { Observe } from '@tansohq/observe'
 import OpenAI from 'openai'
 
 // 1. Configure once at startup

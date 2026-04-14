@@ -1,5 +1,5 @@
 {
-  "name": "@observe/orchestrator",
+  "name": "@tansohq/orchestrator",
   "version": "0.1.0",
   "description": "Multi-agent orchestrator framework",
   "type": "module",
