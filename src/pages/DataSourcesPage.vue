@@ -26,6 +26,7 @@ import {
   Upload,
   Cloud,
   Database,
+  Zap,
 } from "lucide-vue-next";
 import { Card, CardContent, Button } from "@/components/ui";
 import { CostsSection, UsageSection } from "@/components/data-sources";
@@ -148,6 +149,11 @@ function copyKeyToClipboard() {
 }
 
 const aiInstallPromptCopied = ref(false);
+
+// Paste a Loom share URL here to enable the walkthrough video on the
+// Data Sources empty state. Leave empty string to hide the block.
+// Format: "https://www.loom.com/embed/<share-id>"
+const loomEmbedUrl = ref("");
 function buildAiInstallPrompt(apiKey: string) {
   return `Install Observe by Tanso in this repo so every LLM call is tracked with cost, model, customer, and feature.
 
@@ -166,13 +172,32 @@ Steps:
 8. After wiring it up, run the app once and confirm events appear in https://observemetrics.com/analytics.`;
 }
 
-function copyAiInstallPrompt() {
+async function copyAiInstallPrompt() {
+  // Auto-generate a key on first click so new users with zero keys still
+  // get a working prompt. One click, zero decisions.
+  if (sdkKeys.value.length === 0 && !generatedKey.value) {
+    try {
+      const result = await createSdkKey("default");
+      generatedKey.value = result.key;
+      await loadSdkKeys();
+      window.posthog?.capture("sdk_key_created", { source: "install_prompt" });
+    } catch (error) {
+      toast.error("Couldn't generate an API key", {
+        description:
+          error instanceof Error ? error.message : "Please try again.",
+      });
+      return;
+    }
+  }
+
   const key =
+    generatedKey.value ||
     sdkKeys.value[0]?.full_key ||
     sdkKeys.value[0]?.key_prefix + "..." ||
     "YOUR_API_KEY";
   window.navigator.clipboard.writeText(buildAiInstallPrompt(key));
   aiInstallPromptCopied.value = true;
+  window.posthog?.capture("install_prompt_copied");
   setTimeout(() => {
     aiInstallPromptCopied.value = false;
   }, 2000);
@@ -658,7 +683,68 @@ watch(
     </div>
 
     <!-- ================================================================== -->
-    <!-- HERO: One-line proxy integration                                    -->
+    <!-- PRIMARY HERO: one-click install prompt for your AI coding agent     -->
+    <!-- ================================================================== -->
+    <Card
+      v-if="isLoggedIn"
+      class="border-primary/40 bg-gradient-to-br from-violet-500/10 via-primary/5 to-blue-500/10"
+    >
+      <CardContent class="p-6">
+        <div class="flex items-start justify-between gap-6 flex-wrap">
+          <div class="flex-1 min-w-[260px] space-y-2">
+            <div class="flex items-center gap-2">
+              <Zap class="h-5 w-5 text-primary" />
+              <h2 class="font-semibold text-lg">
+                Install Observe in 30 seconds
+              </h2>
+            </div>
+            <p class="text-sm text-muted-foreground max-w-prose">
+              Copy this prompt and paste it into Cursor, Claude Code, or
+              Copilot. Your AI agent will wire up Observe in your repo — API key
+              included. No config to read, no boilerplate to copy.
+            </p>
+          </div>
+          <Button
+            size="lg"
+            class="shrink-0 min-w-[220px]"
+            @click="copyAiInstallPrompt"
+          >
+            <Copy class="h-4 w-4 mr-2" />
+            {{
+              aiInstallPromptCopied
+                ? "Copied — paste into your AI"
+                : "Copy install prompt"
+            }}
+          </Button>
+        </div>
+
+        <!-- Optional 90-second walkthrough. Drop a Loom share URL into
+             loomEmbedUrl to show it. Leave empty to hide the whole block. -->
+        <div
+          v-if="loomEmbedUrl && sdkKeys.length === 0"
+          class="mt-5 border-t border-primary/10 pt-5"
+        >
+          <p
+            class="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2"
+          >
+            Watch a 90-second walkthrough
+          </p>
+          <div
+            class="relative rounded-lg overflow-hidden border aspect-video max-w-2xl"
+          >
+            <iframe
+              :src="loomEmbedUrl"
+              frameborder="0"
+              allowfullscreen
+              class="absolute inset-0 w-full h-full"
+            />
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+
+    <!-- ================================================================== -->
+    <!-- SECONDARY: manual proxy integration for users who prefer code       -->
     <!-- ================================================================== -->
     <Card class="border-success/20">
       <CardContent class="p-6 space-y-5">
@@ -809,32 +895,6 @@ curl -X POST <span class="text-amber-300">'{{ proxyBaseUrl }}/google/generateCon
               <Plus class="h-3 w-3 mr-1" />
               {{ isGeneratingKey ? "Generating..." : "Generate Key" }}
             </Button>
-          </div>
-
-          <!-- AI-native install: one-click prompt for Cursor / Claude / Copilot -->
-          <div
-            v-if="sdkKeys.length > 0"
-            class="rounded-md border bg-gradient-to-br from-violet-500/10 to-blue-500/10 p-3 mb-3"
-          >
-            <div class="flex items-start justify-between gap-3">
-              <div class="flex-1 min-w-0">
-                <div class="text-xs font-semibold mb-0.5">
-                  Install with your AI agent
-                </div>
-                <p class="text-[11px] text-muted-foreground">
-                  Copy the prompt, paste it into Cursor, Claude Code, or Copilot
-                  — it will wire up Observe for you.
-                </p>
-              </div>
-              <Button
-                size="sm"
-                class="h-7 text-xs shrink-0"
-                @click="copyAiInstallPrompt"
-              >
-                <Copy class="h-3 w-3 mr-1" />
-                {{ aiInstallPromptCopied ? "Copied!" : "Copy prompt" }}
-              </Button>
-            </div>
           </div>
 
           <!-- Existing keys (compact) -->
