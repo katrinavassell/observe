@@ -307,4 +307,3 @@ function memberLabel(member: OrgMember) {
     </template>
   </div>
 </template>
-</content>
