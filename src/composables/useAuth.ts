@@ -152,12 +152,19 @@ export function useAuth() {
     return { account: account.value };
   }
 
-  async function signup(email: string, password: string, name?: string) {
+  async function signup(
+    email: string,
+    password: string,
+    name?: string,
+    redirectPath?: string,
+  ) {
+    const target =
+      redirectPath && redirectPath.startsWith("/") ? redirectPath : "/";
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
-        emailRedirectTo: `${window.location.origin}/`,
+        emailRedirectTo: `${window.location.origin}${target}`,
         data: name ? { full_name: name } : undefined,
       },
     });

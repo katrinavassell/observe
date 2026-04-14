@@ -1174,9 +1174,8 @@ Observe.identify({ <span class="text-sky-300">customerId</span>: user.stripeId }
                 <div class="flex items-center gap-2">
                   <p class="font-medium">AWS Cost Explorer</p>
                   <span
-                    v-if="cloudProviderStatus('aws')?.connected"
-                    class="text-[10px] font-medium bg-success/10 text-success px-2 py-0.5 rounded-full"
-                    >Connected</span
+                    class="text-[10px] font-medium bg-amber-500/10 text-amber-600 dark:text-amber-400 px-2 py-0.5 rounded-full"
+                    >Beta · Coming soon</span
                   >
                 </div>
                 <p class="text-xs text-muted-foreground">
@@ -1193,45 +1192,12 @@ Observe.identify({ <span class="text-sky-300">customerId</span>: user.stripeId }
               </div>
             </div>
             <div v-if="canEdit" class="flex items-center gap-2">
-              <template v-if="cloudProviderStatus('aws')?.connected">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  class="h-8 text-xs"
-                  :disabled="isSyncingCloud === 'aws'"
-                  @click="handleSyncCloud('aws')"
-                >
-                  <Loader2
-                    v-if="isSyncingCloud === 'aws'"
-                    class="h-3 w-3 mr-1.5 animate-spin"
-                  />
-                  <RefreshCw v-else class="h-3 w-3 mr-1.5" />
-                  {{ isSyncingCloud === "aws" ? "Syncing…" : "Sync" }}
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  class="h-8 text-xs text-muted-foreground hover:text-destructive"
-                  :disabled="isDisconnectingCloud === 'aws'"
-                  @click="handleDisconnectCloud('aws')"
-                >
-                  <Unplug class="h-3 w-3 mr-1.5" />
-                  Disconnect
-                </Button>
-              </template>
-              <Button
-                v-else
-                variant="outline"
-                size="sm"
-                @click="showAwsForm = !showAwsForm"
-              >
-                Connect
-              </Button>
+              <Button variant="outline" size="sm" disabled> Connect </Button>
             </div>
           </div>
 
           <!-- AWS credentials form (inline) -->
-          <div v-if="showAwsForm" class="mt-4 space-y-3 border-t pt-4">
+          <div v-if="false && showAwsForm" class="mt-4 space-y-3 border-t pt-4">
             <div class="space-y-2">
               <label class="text-xs font-medium">Access Key ID</label>
               <input
@@ -1293,9 +1259,8 @@ Observe.identify({ <span class="text-sky-300">customerId</span>: user.stripeId }
                 <div class="flex items-center gap-2">
                   <p class="font-medium">GCP Billing</p>
                   <span
-                    v-if="cloudProviderStatus('gcp')?.connected"
-                    class="text-[10px] font-medium bg-success/10 text-success px-2 py-0.5 rounded-full"
-                    >Connected</span
+                    class="text-[10px] font-medium bg-amber-500/10 text-amber-600 dark:text-amber-400 px-2 py-0.5 rounded-full"
+                    >Beta · Coming soon</span
                   >
                 </div>
                 <p class="text-xs text-muted-foreground">
@@ -1312,45 +1277,12 @@ Observe.identify({ <span class="text-sky-300">customerId</span>: user.stripeId }
               </div>
             </div>
             <div v-if="canEdit" class="flex items-center gap-2">
-              <template v-if="cloudProviderStatus('gcp')?.connected">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  class="h-8 text-xs"
-                  :disabled="isSyncingCloud === 'gcp'"
-                  @click="handleSyncCloud('gcp')"
-                >
-                  <Loader2
-                    v-if="isSyncingCloud === 'gcp'"
-                    class="h-3 w-3 mr-1.5 animate-spin"
-                  />
-                  <RefreshCw v-else class="h-3 w-3 mr-1.5" />
-                  {{ isSyncingCloud === "gcp" ? "Syncing…" : "Sync" }}
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  class="h-8 text-xs text-muted-foreground hover:text-destructive"
-                  :disabled="isDisconnectingCloud === 'gcp'"
-                  @click="handleDisconnectCloud('gcp')"
-                >
-                  <Unplug class="h-3 w-3 mr-1.5" />
-                  Disconnect
-                </Button>
-              </template>
-              <Button
-                v-else
-                variant="outline"
-                size="sm"
-                @click="showGcpForm = !showGcpForm"
-              >
-                Connect
-              </Button>
+              <Button variant="outline" size="sm" disabled> Connect </Button>
             </div>
           </div>
 
           <!-- GCP credentials form (inline) -->
-          <div v-if="showGcpForm" class="mt-4 space-y-3 border-t pt-4">
+          <div v-if="false && showGcpForm" class="mt-4 space-y-3 border-t pt-4">
             <div class="space-y-2">
               <label class="text-xs font-medium">Service Account JSON</label>
               <textarea

@@ -151,6 +151,7 @@ async function handleSubmit() {
         trimmedEmail,
         password.value,
         name.value.trim() || undefined,
+        (route.query.redirect as string) || undefined,
       );
       if (result.needsEmailConfirmation) {
         unconfirmedEmail.value = result.email;

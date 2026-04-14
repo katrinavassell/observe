@@ -235,6 +235,14 @@ export function createTeamRoutes(pool: Pool, ensureVisitor: any) {
     ensureVisitor,
     async (req: AuthRequest, res: Response) => {
       try {
+        // Must be a logged-in user — otherwise ensureVisitor would stamp the
+        // invite onto a throwaway anonymous UUID, consuming the token without
+        // ever attaching the real human to the org.
+        if (!req.accountEmail) {
+          return res
+            .status(401)
+            .json({ error: "You must be signed in to accept an invite" });
+        }
         const visitorId = req.visitorId!;
         const { token } = req.params;
 
@@ -253,6 +261,17 @@ export function createTeamRoutes(pool: Pool, ensureVisitor: any) {
         }
 
         const invite = result.rows[0];
+
+        // If the invite was addressed to a specific email, the accepting
+        // user's email must match — prevents anyone-with-the-link joins.
+        if (
+          invite.invited_email &&
+          invite.invited_email.toLowerCase() !== req.accountEmail.toLowerCase()
+        ) {
+          return res.status(403).json({
+            error: `This invite is for ${invite.invited_email}. Sign in with that email to accept.`,
+          });
+        }
 
         const client = await pool.connect();
         try {
