@@ -103,7 +103,7 @@ const plans = [
     interval: "forever",
     features: [
       "10,000 events/month",
-      "50 AI messages/month",
+      "1,000 AI messages/month",
       "90-day data retention",
     ],
   },
