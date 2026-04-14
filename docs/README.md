@@ -11,7 +11,6 @@ Developer docs for Observe -- AI cost observability for SaaS companies.
 ## Guides
 
 - [Connecting Data Sources](./data-sources.md) -- AI providers, Stripe, CSV uploads, SDK
-- [Feature Economics](./feature-economics.md) -- Understanding margins and the analytics dashboard
 - [Pricing Simulator](./simulator.md) -- Model pricing changes before you ship
 - [AI Insights](./ai-insights.md) -- AI-powered margin analysis
 
