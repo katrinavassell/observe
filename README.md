@@ -180,7 +180,7 @@ Per-call feature override:
 ```typescript
 await openai.chat.completions.create(
   { model: 'gpt-4o', messages },
-  { headers: { 'x-tanso-feature': 'summarize_email' } }
+  { headers: { 'Observe-Feature': 'summarize_email' } }
 )
 ```
 

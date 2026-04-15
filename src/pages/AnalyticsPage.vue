@@ -806,7 +806,7 @@ const insightCategories = [
           class="py-8 text-center text-sm text-muted-foreground"
         >
           No agent data yet. Use
-          <code class="bg-muted px-1 rounded">x-tanso-agent</code> header or
+          <code class="bg-muted px-1 rounded">Observe-Agent</code> header or
           <code class="bg-muted px-1 rounded">Observe.agent()</code> to tag
           calls.
         </div>

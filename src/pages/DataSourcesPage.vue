@@ -14,7 +14,6 @@ import { useRouter } from "vue-router";
 import { useQueryClient } from "@tanstack/vue-query";
 import { toast } from "vue-sonner";
 import {
-  Eye,
   Key,
   Copy,
   Trash2,
@@ -294,18 +293,6 @@ async function handleResetKey(id: number) {
   }
 }
 
-const keyCopiedId = ref<number | null>(null);
-const revealedKeyId = ref<number | null>(null);
-function copyFullKey(key: SdkKey) {
-  const text = key.full_key || key.key_prefix + "...";
-  window.navigator.clipboard.writeText(text);
-  keyCopiedId.value = key.id;
-  toast.success("API key copied");
-  setTimeout(() => {
-    keyCopiedId.value = null;
-  }, 2000);
-}
-
 const snippetCopied = ref(false);
 const curlCopied = ref(false);
 function _copyCurl() {
@@ -340,11 +327,6 @@ function _copySnippet() {
   setTimeout(() => {
     snippetCopied.value = false;
   }, 2000);
-}
-
-function dismissGeneratedKey() {
-  generatedKey.value = null;
-  showKeyGenerator.value = false;
 }
 
 function _scrollToStripe() {
@@ -629,6 +611,32 @@ onMounted(async () => {
     loadFeatureKeys(),
     loadCloudStatus(),
   ]);
+
+  // Doug's feedback: "I don't know where to get my api key / should already
+  // be generated." Three paths to make sure a working key is visible on
+  // first view:
+  //
+  // 1. Signup-complete stashed a fresh raw key in localStorage. Consume it.
+  // 2. Zero keys on record — auto-provision one now (covers users whose
+  //    signup-complete key gen failed, or who landed here via some other
+  //    path without going through signup).
+  // 3. Otherwise the masked prefix is shown + user can rotate to reveal.
+  const stashed = window.localStorage.getItem("observe:fresh_sdk_key");
+  if (stashed) {
+    generatedKey.value = stashed;
+    window.localStorage.removeItem("observe:fresh_sdk_key");
+  } else if (sdkKeys.value.length === 0) {
+    try {
+      const result = await createSdkKey("default");
+      generatedKey.value = result.key;
+      await loadSdkKeys();
+      window.posthog?.capture("sdk_key_created", {
+        source: "data_sources_mount",
+      });
+    } catch {
+      // Non-fatal — user can click "Generate Key" manually.
+    }
+  }
 });
 
 // =============================================================================
@@ -809,7 +817,169 @@ watch(
     </Card>
 
     <!-- ================================================================== -->
-    <!-- SECONDARY: manual proxy integration for users who prefer code       -->
+    <!-- API KEY: dedicated card, always visible (Doug: "should already be   -->
+    <!-- generated or have an entire section of its own")                    -->
+    <!-- ================================================================== -->
+    <Card v-if="isLoggedIn" class="border-primary/20">
+      <CardContent class="p-6 space-y-4">
+        <div class="flex items-start justify-between gap-4 flex-wrap">
+          <div class="flex items-center gap-2">
+            <Key class="h-5 w-5 text-primary" />
+            <h2 class="font-semibold text-lg">Your Observe API key</h2>
+          </div>
+          <Button
+            v-if="sdkKeys.length > 0"
+            variant="ghost"
+            size="sm"
+            class="h-8 text-xs text-muted-foreground"
+            @click="showKeyGenerator = true"
+          >
+            <Plus class="h-3 w-3 mr-1" />
+            Add another key
+          </Button>
+        </div>
+
+        <!-- Fresh key (just generated or just signed up) — show in full -->
+        <div
+          v-if="generatedKey"
+          class="rounded-lg border bg-muted/40 p-4 space-y-2"
+        >
+          <div class="flex items-center gap-2 text-xs font-medium text-success">
+            <Key class="h-3 w-3" />
+            Key ready — copy it now, you won't see it again
+          </div>
+          <div class="flex items-center gap-2">
+            <code
+              class="flex-1 text-sm font-mono bg-background border rounded px-3 py-2 select-all break-all"
+              >{{ generatedKey }}</code
+            >
+            <Button
+              variant="outline"
+              size="sm"
+              class="h-9 shrink-0"
+              @click="copyKeyToClipboard"
+            >
+              <Copy class="h-3 w-3 mr-1" />
+              {{ keyCopied ? "Copied!" : "Copy" }}
+            </Button>
+          </div>
+          <p class="text-[11px] text-muted-foreground">
+            Paste this into your <code class="font-mono">.env</code> as
+            <code class="font-mono">OBSERVE_API_KEY</code>. Observe will only
+            show it once — if you lose it, rotate the key to generate a new one.
+          </p>
+        </div>
+
+        <!-- Existing masked keys — user already has one but the full value
+             isn't recoverable. Show the prefix + a clear path to rotate. -->
+        <div v-else-if="sdkKeys.length > 0" class="space-y-2">
+          <div
+            v-for="key in sdkKeys"
+            :key="key.id"
+            class="rounded-md border bg-card px-3 py-2.5 flex items-center justify-between gap-3"
+          >
+            <div class="flex items-center gap-3 min-w-0">
+              <code class="font-mono text-sm text-muted-foreground truncate">{{
+                key.key_prefix + "…"
+              }}</code>
+              <span class="text-[11px] text-muted-foreground whitespace-nowrap"
+                >({{ key.name || "default" }})</span
+              >
+            </div>
+            <div class="flex items-center gap-1 shrink-0">
+              <Button
+                variant="outline"
+                size="sm"
+                class="h-8 text-xs"
+                title="Rotate — invalidates the old key and shows the new one"
+                @click="handleResetKey(key.id)"
+              >
+                <RefreshCw class="h-3 w-3 mr-1" />
+                Rotate
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                class="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
+                title="Delete key"
+                @click="handleRevokeKey(key.id)"
+              >
+                <Trash2 class="h-3 w-3" />
+              </Button>
+            </div>
+          </div>
+          <p class="text-[11px] text-muted-foreground">
+            The full key is only shown once, at creation. If you've lost it,
+            rotate — the old key stops working immediately and a new one is
+            displayed.
+          </p>
+        </div>
+
+        <!-- No keys at all (auto-gen failed) — manual generate button -->
+        <div v-else class="space-y-2">
+          <p class="text-sm text-muted-foreground">
+            No keys yet — generate one to start tracking.
+          </p>
+          <Button
+            size="sm"
+            :disabled="isGeneratingKey"
+            @click="handleGenerateKey"
+          >
+            <Key class="h-3 w-3 mr-1.5" />
+            {{ isGeneratingKey ? "Generating…" : "Generate API key" }}
+          </Button>
+        </div>
+
+        <!-- Secondary key generator (when adding an extra key) -->
+        <div
+          v-if="showKeyGenerator && !generatedKey"
+          class="rounded-lg border bg-muted/30 p-4 space-y-3"
+        >
+          <div class="flex gap-2">
+            <input
+              v-model="newKeyName"
+              type="text"
+              placeholder="Key name (e.g. 'production')"
+              class="flex-1 h-9 rounded-md border bg-background px-3 text-sm"
+              @keydown.enter="handleGenerateKey"
+            />
+            <Button
+              size="sm"
+              class="h-9"
+              :disabled="isGeneratingKey"
+              @click="handleGenerateKey"
+            >
+              <Key class="h-3 w-3 mr-1" />
+              {{ isGeneratingKey ? "Generating…" : "Generate" }}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              class="h-9"
+              @click="showKeyGenerator = false"
+              >Cancel</Button
+            >
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+
+    <!-- Signed-out sign-up nudge (only when not logged in) -->
+    <Card v-else class="border-dashed border-muted-foreground/30">
+      <CardContent class="p-6 text-center">
+        <Key class="h-5 w-5 text-muted-foreground mx-auto mb-2" />
+        <p class="text-sm text-muted-foreground mb-3">
+          Sign up to get your Observe API key — you'll see it here immediately
+          after.
+        </p>
+        <Button size="sm" @click="router.push('/signup')"
+          >Sign up to get started</Button
+        >
+      </CardContent>
+    </Card>
+
+    <!-- ================================================================== -->
+    <!-- LIVE TRACKING: direct ingest example (Path 1, the default)          -->
     <!-- ================================================================== -->
     <Card class="border-success/20">
       <CardContent class="p-6 space-y-5">
@@ -818,32 +988,50 @@ watch(
             <h2 class="font-semibold text-lg">Live tracking</h2>
             <span
               class="text-[10px] font-medium bg-sky-100 text-sky-700 px-2 py-0.5 rounded-full"
-              >Real-time, per-call</span
+              >Off critical path · body-only</span
             >
           </div>
           <p class="text-sm text-muted-foreground">
-            Route your AI calls through the Observe proxy. Every call is logged
-            with model, tokens, cost, customer, and feature — automatically.
+            Call OpenAI / Anthropic / anything else directly, then post one
+            event to Observe after the call returns. Observe never sits in front
+            of your LLM calls.
           </p>
         </div>
 
-        <!-- The one snippet that matters -->
+        <!-- The one snippet that matters — Path 1 direct ingest -->
         <div
           class="rounded-md bg-zinc-950 border border-zinc-800 p-4 font-mono text-xs leading-relaxed overflow-x-auto"
         >
           <pre
             class="whitespace-pre text-zinc-100"
-          ><span class="text-emerald-400">import</span> OpenAI <span class="text-emerald-400">from</span> <span class="text-amber-300">'openai'</span>
-
-<span class="text-emerald-400">const</span> openai = <span class="text-emerald-400">new</span> OpenAI({
-  <span class="text-sky-300">baseURL</span>: <span class="text-amber-300">'{{ proxyBaseUrl }}'</span>,
-  <span class="text-sky-300">defaultHeaders</span>: {
-    <span class="text-amber-300">'Observe-Key'</span>: <span class="text-amber-300">'{{ apiKeyForSnippet }}'</span>,
-    <span class="text-amber-300">'Observe-Customer'</span>: user.stripeId,    <span class="text-zinc-500">// Stripe customer ID (cus_...)</span>
-    <span class="text-amber-300">'Observe-Feature'</span>: <span class="text-amber-300">'ai_chat'</span>,          <span class="text-zinc-500">// which product feature</span>
-  },
+          ><span class="text-zinc-500">// 1. Call your provider directly — no wrapper, no baseURL change</span>
+<span class="text-emerald-400">const</span> started = Date.now()
+<span class="text-emerald-400">const</span> res = <span class="text-emerald-400">await</span> openai.chat.completions.create({
+  <span class="text-sky-300">model</span>: <span class="text-amber-300">'gpt-4o-mini'</span>,
+  <span class="text-sky-300">messages</span>,
 })
-<span class="text-zinc-500">// Every call is tracked with cost, model, customer, and feature.</span></pre>
+
+<span class="text-zinc-500">// 2. Log the event after the call returns (fire-and-forget)</span>
+fetch(<span class="text-amber-300">'{{ ingestUrl }}'</span>, {
+  <span class="text-sky-300">method</span>: <span class="text-amber-300">'POST'</span>,
+  <span class="text-sky-300">headers</span>: {
+    <span class="text-amber-300">'Authorization'</span>: <span class="text-amber-300">`Bearer {{ apiKeyForSnippet }}`</span>,
+    <span class="text-amber-300">'Content-Type'</span>: <span class="text-amber-300">'application/json'</span>,
+  },
+  <span class="text-sky-300">body</span>: JSON.stringify({
+    <span class="text-sky-300">events</span>: [{
+      <span class="text-sky-300">eventName</span>: <span class="text-amber-300">'chat'</span>,
+      <span class="text-sky-300">customerReferenceId</span>: user.stripeId,       <span class="text-zinc-500">// any stable user ID</span>
+      <span class="text-sky-300">featureKey</span>: <span class="text-amber-300">'ai_chat'</span>,                  <span class="text-zinc-500">// which product feature</span>
+      <span class="text-sky-300">model</span>: <span class="text-amber-300">'gpt-4o-mini'</span>,
+      <span class="text-sky-300">modelProvider</span>: <span class="text-amber-300">'openai'</span>,
+      <span class="text-sky-300">inputTokens</span>: res.usage?.prompt_tokens,
+      <span class="text-sky-300">outputTokens</span>: res.usage?.completion_tokens,
+      <span class="text-sky-300">durationMs</span>: Date.now() - started,
+      <span class="text-sky-300">idempotencyKey</span>: res.id,                   <span class="text-zinc-500">// safe retries</span>
+    }],
+  }),
+}).catch((err) => console.error(<span class="text-amber-300">'observe ingest failed:'</span>, err))</pre>
         </div>
         <p class="text-[11px] text-muted-foreground">
           Use your Stripe customer ID so Observe can automatically join costs
@@ -931,171 +1119,6 @@ curl -X POST <span class="text-amber-300">'{{ proxyBaseUrl }}/google/generateCon
           </div>
         </details>
 
-        <!-- API Key section — compact -->
-        <div
-          v-if="!isLoggedIn"
-          class="rounded-lg border border-dashed border-muted-foreground/30 p-4 text-center"
-        >
-          <p class="text-sm text-muted-foreground mb-2">
-            Sign up to generate an API key and start tracking.
-          </p>
-          <Button size="sm" @click="router.push('/signup')"
-            >Sign up to get started</Button
-          >
-        </div>
-        <div v-else>
-          <div class="flex items-center justify-between mb-2">
-            <h3
-              class="text-xs font-semibold text-muted-foreground uppercase tracking-wider"
-            >
-              Your API Key
-            </h3>
-            <Button
-              v-if="!showKeyGenerator && !generatedKey && sdkKeys.length === 0"
-              variant="outline"
-              size="sm"
-              class="h-7 text-xs"
-              @click="handleGenerateKey"
-            >
-              <Plus class="h-3 w-3 mr-1" />
-              {{ isGeneratingKey ? "Generating..." : "Generate Key" }}
-            </Button>
-          </div>
-
-          <!-- Existing keys (compact) -->
-          <div v-if="sdkKeys.length > 0" class="space-y-1.5 mb-3">
-            <div
-              v-for="key in sdkKeys"
-              :key="key.id"
-              class="rounded-md border bg-card px-3 py-2 text-xs flex items-center justify-between"
-            >
-              <div class="flex items-center gap-3">
-                <code class="font-mono text-muted-foreground select-all">{{
-                  revealedKeyId === key.id
-                    ? key.full_key || key.key_prefix + "..."
-                    : key.key_prefix + "..."
-                }}</code>
-                <button
-                  v-if="key.full_key"
-                  class="text-muted-foreground hover:text-foreground transition-colors"
-                  @click="
-                    revealedKeyId = revealedKeyId === key.id ? null : key.id
-                  "
-                >
-                  <Eye class="h-3 w-3" />
-                </button>
-              </div>
-              <div class="flex items-center gap-1">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  class="h-6 px-2 text-xs text-muted-foreground"
-                  @click="copyFullKey(key)"
-                >
-                  <Copy class="h-3 w-3 mr-1" />
-                  {{ keyCopiedId === key.id ? "Copied!" : "Copy" }}
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  class="h-6 w-6 p-0 text-muted-foreground hover:text-foreground"
-                  title="Rotate key"
-                  @click="handleResetKey(key.id)"
-                >
-                  <RefreshCw class="h-3 w-3" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  class="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
-                  title="Delete key"
-                  @click="handleRevokeKey(key.id)"
-                >
-                  <Trash2 class="h-3 w-3" />
-                </Button>
-              </div>
-            </div>
-          </div>
-
-          <!-- Key generator (only shown when manually triggered for additional keys) -->
-          <div
-            v-if="showKeyGenerator && !generatedKey"
-            class="rounded-lg border bg-muted/30 p-4 mb-3 space-y-3"
-          >
-            <div class="flex gap-2">
-              <input
-                v-model="newKeyName"
-                type="text"
-                placeholder="Key name (optional, e.g. 'production')"
-                class="flex-1 h-8 rounded-md border bg-background px-3 text-sm"
-                @keydown.enter="handleGenerateKey"
-              />
-              <Button
-                size="sm"
-                class="h-8"
-                :disabled="isGeneratingKey"
-                @click="handleGenerateKey"
-              >
-                <Key class="h-3 w-3 mr-1" />
-                {{ isGeneratingKey ? "Generating..." : "Generate" }}
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                class="h-8"
-                @click="showKeyGenerator = false"
-                >Cancel</Button
-              >
-            </div>
-          </div>
-
-          <!-- Generated key display -->
-          <div
-            v-if="generatedKey"
-            class="rounded-lg border bg-muted/40 p-4 mb-3 space-y-2"
-          >
-            <div
-              class="flex items-center gap-2 text-xs font-medium text-success"
-            >
-              <Key class="h-3 w-3" />
-              Key generated — copy it now, you won't see it again
-            </div>
-            <div class="flex items-center gap-2">
-              <code
-                class="flex-1 text-xs font-mono bg-background border rounded px-3 py-2 select-all break-all"
-                >{{ generatedKey }}</code
-              >
-              <Button
-                variant="outline"
-                size="sm"
-                class="h-8 shrink-0"
-                @click="copyKeyToClipboard"
-              >
-                <Copy class="h-3 w-3 mr-1" />
-                {{ keyCopied ? "Copied!" : "Copy" }}
-              </Button>
-            </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              class="h-7 text-xs"
-              @click="dismissGeneratedKey"
-              >Done</Button
-            >
-          </div>
-
-          <Button
-            v-if="sdkKeys.length > 0"
-            variant="ghost"
-            size="sm"
-            class="h-7 text-xs text-muted-foreground"
-            @click="showKeyGenerator = true"
-          >
-            <Plus class="h-3 w-3 mr-1" />
-            Add another key
-          </Button>
-        </div>
-
         <!-- Other integration methods (collapsed) -->
         <details class="group">
           <summary
@@ -1106,10 +1129,14 @@ curl -X POST <span class="text-amber-300">'{{ proxyBaseUrl }}/google/generateCon
           <div class="mt-3 space-y-4">
             <!-- SDK Wrapper -->
             <div>
-              <h4 class="text-xs font-semibold mb-2">SDK Wrapper</h4>
+              <h4 class="text-xs font-semibold mb-2">
+                Auto-instrumentation (SDK wrap)
+              </h4>
               <p class="text-[11px] text-muted-foreground mb-2">
                 <span class="font-mono">npm install @tansohq/observe</span> —
-                three calls, zero header plumbing.
+                wraps your provider client so every call is auto-tracked. Only
+                pick this if you accept that Observe sits in front of your LLM
+                calls (Observe outage = LLM outage).
               </p>
               <div
                 class="rounded-md bg-zinc-950 border border-zinc-800 p-4 font-mono text-xs leading-relaxed overflow-x-auto"

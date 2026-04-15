@@ -41,6 +41,9 @@ export async function initialize() {
                 session.user.email,
               );
               account.value = result.account;
+              if (result.sdkKey) {
+                localStorage.setItem("observe:fresh_sdk_key", result.sdkKey);
+              }
               break;
             }
           } catch (err) {
@@ -83,6 +86,12 @@ export async function initialize() {
                         session.user.user_metadata?.name,
                     );
                     account.value = result.account;
+                    if (result.sdkKey) {
+                      localStorage.setItem(
+                        "observe:fresh_sdk_key",
+                        result.sdkKey,
+                      );
+                    }
                     break;
                   }
                 } catch (err) {
@@ -186,6 +195,9 @@ export function useAuth() {
     // Create local account row + SDK key
     const result = await api.signupComplete(name, email);
     account.value = result.account;
+    if (result.sdkKey) {
+      localStorage.setItem("observe:fresh_sdk_key", result.sdkKey);
+    }
 
     if (account.value && window.posthog) {
       window.posthog.identify(account.value.id, {

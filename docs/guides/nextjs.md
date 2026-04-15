@@ -79,7 +79,7 @@ export async function summarize(text: string) {
       model: "gpt-4o",
       messages: [{ role: "user", content: `Summarize: ${text}` }],
     },
-    { headers: { "x-tanso-feature": "summarize_text" } }
+    { headers: { "Observe-Feature": "summarize_text" } }
   );
 
   return completion.choices[0].message.content;
@@ -108,7 +108,7 @@ Never expose `OBSERVE_API_KEY` to the browser. Keep it server-only (don't prefix
 
 ## Per-Request Attribution
 
-`Observe.identify({ customerId })` sets the customer context for the current async scope. Call it at the start of each authenticated request. Use `Observe.feature('ai_chat')` or a per-call `x-tanso-feature` header to tag the product feature that owns the call.
+`Observe.identify({ customerId })` sets the customer context for the current async scope. Call it at the start of each authenticated request. Use `Observe.feature('ai_chat')` or a per-call `Observe-Feature` header to tag the product feature that owns the call.
 
 ## Edge Runtime
 

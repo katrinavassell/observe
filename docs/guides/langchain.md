@@ -61,7 +61,7 @@ llm = ChatAnthropic(
 )
 ```
 
-Note: The Anthropic proxy does not currently support `x-tanso-*` headers for
+Note: The Anthropic proxy does not currently support `Observe-*` headers for
 attribution. Events are logged under the admin account.
 
 ### What the proxy does and does not do
@@ -155,7 +155,7 @@ In multi-tenant apps, set `customerReferenceId` dynamically per request.
 
 ### With the proxy
 
-Pass `x-tanso-customer` as a per-request header:
+Pass `Observe-Customer` as a per-request header:
 
 ```python
 from langchain_openai import ChatOpenAI

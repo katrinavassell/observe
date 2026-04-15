@@ -145,7 +145,7 @@ See the [SDK README](../packages/sdk/README.md) for full options.
 
 ## Tracing agent flows
 
-Track multi-step agent executions with cost attribution per step. Use the `x-tanso-trace-id` and `x-tanso-span-id` headers on each gateway call to group them into a single trace:
+Track multi-step agent executions with cost attribution per step. Use the `Observe-Trace-Id` and `Observe-Span-Id` headers on each gateway call to group them into a single trace:
 
 ```typescript
 import { Observe } from "@tansohq/observe"
@@ -159,13 +159,13 @@ const traceId = crypto.randomUUID()
 // Step 1 of a multi-step agent
 await openai.chat.completions.create(
   { model: "gpt-4o", messages: [{ role: "user", content: "Plan the research" }] },
-  { headers: { "x-tanso-trace-id": traceId, "x-tanso-span-id": "plan" } },
+  { headers: { "Observe-Trace-Id": traceId, "Observe-Span-Id": "plan" } },
 )
 
 // Step 2
 await openai.chat.completions.create(
   { model: "gpt-4o-mini", messages: [{ role: "user", content: "Summarize" }] },
-  { headers: { "x-tanso-trace-id": traceId, "x-tanso-span-id": "summarize", "x-tanso-parent-span-id": "plan" } },
+  { headers: { "Observe-Trace-Id": traceId, "Observe-Span-Id": "summarize", "Observe-Parent-Span-Id": "plan" } },
 )
 ```
 
