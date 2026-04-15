@@ -4,15 +4,9 @@ Technical reference for the Observe project's security architecture.
 
 ## Authentication
 
-- Email/password auth with bcrypt password hashing.
-- Sessions managed by `express-session` with `connect-pg-simple` — sessions are stored in a PostgreSQL `sessions` table.
-- Session cookie configuration:
-  - Name: `pa.sid`
-  - `httpOnly: true`
-  - `sameSite: "strict"`
-  - `secure: true` in production (requires HTTPS)
-  - `maxAge`: 7 days
-- Password reset uses time-limited tokens stored in the `password_reset_tokens` table.
+- Email/password auth is handled by Supabase Auth. The server verifies Supabase JWTs on each request via `supabase.auth.getUser(token)` in `ensureVisitor` middleware.
+- No local password hashing — the legacy `accounts.password_hash` column stores the literal `'supabase-managed'` for rows created after the Supabase migration.
+- Password reset is handled by Supabase.
 - Demo mode allows unauthenticated exploration with sample data (no account required).
 
 ## Data Isolation

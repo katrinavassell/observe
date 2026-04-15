@@ -95,8 +95,9 @@ function wrapStream(
                 outputTokens,
               },
             });
-          } catch (_) {
+          } catch (err) {
             // tracking failure should not break the caller's stream
+            console.warn("Observe: anthropic stream tracking failed", err);
           }
         }
         return result;
@@ -134,8 +135,9 @@ export function wrapAnthropic(
 
             try {
               trackMessage(observe, response, defaults);
-            } catch (_) {
+            } catch (err) {
               // tracking failure should not break the caller
+              console.warn("Observe: anthropic tracking failed", err);
             }
 
             return response;

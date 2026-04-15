@@ -92,7 +92,8 @@ function loadExclude(): string[] {
   if (!saved) return [];
   try {
     return JSON.parse(saved);
-  } catch {
+  } catch (err) {
+    console.warn("AdminPage: failed to parse saved exclude patterns", err);
     return [];
   }
 }

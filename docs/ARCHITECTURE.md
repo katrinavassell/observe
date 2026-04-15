@@ -254,7 +254,7 @@ Single Express app on port 3001, proxied by Vite at `/api/*`. The `/api` prefix 
 
 | Middleware | Purpose |
 |-----------|---------|
-| `express-session` + `connect-pg-simple` | Sessions stored in PostgreSQL |
+| `@supabase/supabase-js` | Auth (JWT-based; no server sessions) |
 | `ensureVisitor` | Creates visitor ID if not in session, ensures data isolation |
 | `helmet` | Security headers |
 | `cors` | Restrict origins to known frontends |
@@ -262,16 +262,19 @@ Single Express app on port 3001, proxied by Vite at `/api/*`. The `/api` prefix 
 
 ### Authentication Model
 
-Account-based auth with email/password:
+Supabase-managed email/password auth:
 
 ```
-1. Signup → account created, password hashed with bcrypt
+1. Signup → Supabase creates user; local `accounts` row linked by visitor_id
          │
          ▼
-2. Login → session cookie created with visitor ID
+2. Login → Supabase issues JWT; frontend sends it as a Bearer token
          │
          ▼
-3. All DB queries filter by user_id = visitorId
+3. `ensureVisitor` verifies JWT via supabase.auth.getUser and sets visitorId
+         │
+         ▼
+4. All DB queries filter by user_id = visitorId
 ```
 
 An auth guard redirects unauthenticated users to `/signup`.

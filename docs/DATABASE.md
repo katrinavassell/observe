@@ -98,7 +98,7 @@ User accounts for authentication.
 |--------|------|-------------|-------------|
 | `id` | SERIAL | PK | Internal ID |
 | `email` | TEXT | UNIQUE, NOT NULL | Email address |
-| `password_hash` | TEXT | NOT NULL | bcrypt hash |
+| `password_hash` | TEXT | NOT NULL | Legacy column; new rows store `'supabase-managed'` — auth is handled by Supabase |
 | `name` | TEXT | NULL | Display name |
 | `visitor_id` | TEXT | UNIQUE | Linked visitor session |
 | `created_at` | TIMESTAMPTZ | DEFAULT NOW() | Created |
