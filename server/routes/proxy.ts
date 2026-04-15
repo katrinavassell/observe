@@ -17,8 +17,9 @@ function parseProxyHeaders(req: Request): {
   spanId: string;
   parentSpanId: string;
 } {
-  // Auth: x-tanso-key > x-observe-key > Helicone-Auth
+  // Auth: Observe-Key (RFC 6648 preferred) > x-tanso-key > x-observe-key > Helicone-Auth
   let observeKey =
+    (req.headers["observe-key"] as string | undefined) ||
     (req.headers["x-tanso-key"] as string | undefined) ||
     (req.headers["x-observe-key"] as string | undefined);
   const heliconeAuth = req.headers["helicone-auth"] as string | undefined;
@@ -26,33 +27,50 @@ function parseProxyHeaders(req: Request): {
     observeKey = heliconeAuth.slice(7).trim();
   }
 
-  // Customer: x-tanso-customer > Helicone-User-Id > x-observe-customer > "default"
+  // Customer: Observe-Customer > x-tanso-customer > Helicone-User-Id > x-observe-customer > "default"
   const customerId =
+    (req.headers["observe-customer"] as string) ||
     (req.headers["x-tanso-customer"] as string) ||
     (req.headers["helicone-user-id"] as string) ||
     (req.headers["x-observe-customer"] as string) ||
     "default";
 
-  // Feature: x-tanso-feature > Helicone-Session-Id > x-observe-feature (auto-derived per endpoint)
+  // Feature: Observe-Feature > x-tanso-feature > Helicone-Session-Id > x-observe-feature
   const featureKey =
+    (req.headers["observe-feature"] as string) ||
     (req.headers["x-tanso-feature"] as string) ||
     (req.headers["helicone-session-id"] as string) ||
     (req.headers["x-observe-feature"] as string) ||
     "";
 
-  // Collect Helicone-Property-* headers as properties
+  // Collect Observe-Property-* and Helicone-Property-* headers as properties
   const properties: Record<string, string> = {};
   for (const [key, value] of Object.entries(req.headers)) {
-    if (key.startsWith("helicone-property-") && typeof value === "string") {
+    if (typeof value !== "string") continue;
+    if (key.startsWith("observe-property-")) {
+      properties[key.replace("observe-property-", "")] = value;
+    } else if (key.startsWith("helicone-property-")) {
       properties[key.replace("helicone-property-", "")] = value;
     }
   }
 
-  const agentId = (req.headers["x-tanso-agent"] as string) || "";
+  const agentId =
+    (req.headers["observe-agent"] as string) ||
+    (req.headers["x-tanso-agent"] as string) ||
+    "";
 
-  const traceId = (req.headers["x-tanso-trace-id"] as string) || "";
-  const spanId = (req.headers["x-tanso-span-id"] as string) || "";
-  const parentSpanId = (req.headers["x-tanso-parent-span-id"] as string) || "";
+  const traceId =
+    (req.headers["observe-trace-id"] as string) ||
+    (req.headers["x-tanso-trace-id"] as string) ||
+    "";
+  const spanId =
+    (req.headers["observe-span-id"] as string) ||
+    (req.headers["x-tanso-span-id"] as string) ||
+    "";
+  const parentSpanId =
+    (req.headers["observe-parent-span-id"] as string) ||
+    (req.headers["x-tanso-parent-span-id"] as string) ||
+    "";
 
   return {
     observeKey,
@@ -353,7 +371,7 @@ export function createProxyRoutes(
       if (!observeKey) {
         return res.status(401).json({
           error: {
-            message: "Missing observe key (x-tanso-key header)",
+            message: "Missing observe key (Observe-Key header)",
             type: "auth_error",
           },
         });
@@ -519,7 +537,7 @@ export function createProxyRoutes(
       if (!observeKey) {
         return res.status(401).json({
           error: {
-            message: "Missing observe key (x-tanso-key header)",
+            message: "Missing observe key (Observe-Key header)",
             type: "auth_error",
           },
         });
@@ -669,7 +687,7 @@ export function createProxyRoutes(
       if (!observeKey) {
         return res.status(401).json({
           error: {
-            message: "Missing observe key (x-tanso-key header)",
+            message: "Missing observe key (Observe-Key header)",
             type: "auth_error",
           },
         });
@@ -840,7 +858,7 @@ export function createProxyRoutes(
         if (!observeKey) {
           return res.status(401).json({
             error: {
-              message: "Missing observe key (x-tanso-key header)",
+              message: "Missing observe key (Observe-Key header)",
               type: "auth_error",
             },
           });
@@ -945,7 +963,7 @@ export function createProxyRoutes(
       if (!observeKey) {
         return res.status(401).json({
           error: {
-            message: "Missing observe key (x-tanso-key header)",
+            message: "Missing observe key (Observe-Key header)",
             type: "auth_error",
           },
         });
@@ -1043,7 +1061,7 @@ export function createProxyRoutes(
         if (!observeKey) {
           return res.status(401).json({
             error: {
-              message: "Missing observe key (x-tanso-key header)",
+              message: "Missing observe key (Observe-Key header)",
               type: "auth_error",
             },
           });

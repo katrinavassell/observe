@@ -14,7 +14,6 @@ import { useRouter } from "vue-router";
 import { useQueryClient } from "@tanstack/vue-query";
 import { toast } from "vue-sonner";
 import {
-  Eye,
   Key,
   Copy,
   Trash2,
@@ -26,6 +25,7 @@ import {
   Upload,
   Cloud,
   Database,
+  Zap,
 } from "lucide-vue-next";
 import { Card, CardContent, Button } from "@/components/ui";
 import { CostsSection, UsageSection } from "@/components/data-sources";
@@ -34,7 +34,6 @@ import OpenAIApiKeyModal from "@/components/integrations/OpenAIApiKeyModal.vue";
 import AnthropicApiKeyModal from "@/components/integrations/AnthropicApiKeyModal.vue";
 import { useDataMode } from "@/composables/useDataMode";
 import { useAuth } from "@/composables/useAuth";
-import { useTeam } from "@/composables/useTeam";
 import {
   clearCostData,
   clearUsageData,
@@ -65,10 +64,9 @@ import type { StripeStatus } from "@/api/client";
 const router = useRouter();
 const queryClient = useQueryClient();
 const { isLoggedIn } = useAuth();
-const { isViewer } = useTeam();
 
-/** True when the user can interact with data sources (logged in + not a viewer) */
-const canEdit = computed(() => isLoggedIn.value && !isViewer.value);
+/** True when the user can interact with data sources (logged in). */
+const canEdit = computed(() => isLoggedIn.value);
 
 // =============================================================================
 // STATE MANAGEMENT
@@ -150,31 +148,120 @@ function copyKeyToClipboard() {
 }
 
 const aiInstallPromptCopied = ref(false);
+
+// Paste a Loom share URL here to enable the walkthrough video on the
+// Data Sources empty state. Leave empty string to hide the block.
+// Format: "https://www.loom.com/embed/<share-id>"
+const loomEmbedUrl = ref("");
 function buildAiInstallPrompt(apiKey: string) {
   return `Install Observe by Tanso in this repo so every LLM call is tracked with cost, model, customer, and feature.
 
-Full instructions: https://observemetrics.com/llms.txt
+READ THIS FIRST — full reference: https://observemetrics.com/llms.txt
+It documents three integration paths and the full POST body schema. Use it as the source of truth; do not improvise.
 
 My Observe API key: ${apiKey}
 
-Steps:
-1. npm install @tanso/observe
-2. Add OBSERVE_API_KEY=${apiKey} to .env (and .env.example with a placeholder).
-3. At app startup, call Observe.configure({ apiKey: process.env.OBSERVE_API_KEY! }).
-4. At the start of each authenticated request, call Observe.identify({ customerId: <user's stripe customer id> }).
-5. Wrap every \`new OpenAI()\` and \`new Anthropic()\` with Observe.wrap(...). Do not replace them.
-6. For each user-facing AI feature, set Observe.feature('<feature_key>') or pass { headers: { 'x-tanso-feature': '<feature_key>' } } per call. Pick one feature key per product feature (e.g. ai_chat, summarize_email, code_autocomplete).
-7. Do not log the API key. Do not alter the existing provider (OpenAI/Anthropic) API key.
-8. After wiring it up, run the app once and confirm events appear in https://observemetrics.com/analytics.`;
+## Step 0 — detect the user's current setup before touching anything
+
+Grep the codebase for \`portkey-ai\`, \`litellm\`, \`helicone\`, \`openrouter\`, and any custom \`baseURL\` on \`new OpenAI()\` / \`new Anthropic()\`. If ANY of those exist, the user is on an AI gateway. Do NOT rip it out — use Path 2 (gateway headers) from llms.txt: add Observe headers to their existing gateway config. Ask the user before making structural gateway changes.
+
+If there is no gateway, use Path 1 (direct ingest) below. **Direct ingest is the default.** Do not install any package. Do not wrap the provider client. Do not change \`baseURL\`. Observe stays off the critical path of LLM calls.
+
+## Step 1 — environment
+
+Add \`OBSERVE_API_KEY=${apiKey}\` to \`.env\` and \`.env.example\` (placeholder in the example file). Do not hardcode it anywhere.
+
+## Step 2 — direct ingest (Path 1, the default)
+
+Find every place the app calls OpenAI / Anthropic / another LLM provider. After each call returns, POST a single event to Observe. Example:
+
+\`\`\`ts
+const started = Date.now()
+const res = await openai.chat.completions.create({ model: 'gpt-4o-mini', messages })
+
+fetch('https://observemetrics.com/api/events/ingest', {
+  method: 'POST',
+  headers: {
+    'Authorization': \`Bearer \${process.env.OBSERVE_API_KEY!}\`,
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({
+    events: [{
+      eventName: 'chat',
+      customerReferenceId: user.stripeCustomerId ?? user.id,
+      featureKey: 'ai_chat',
+      model: 'gpt-4o-mini',
+      modelProvider: 'openai',
+      inputTokens: res.usage?.prompt_tokens,
+      outputTokens: res.usage?.completion_tokens,
+      durationMs: Date.now() - started,
+      idempotencyKey: res.id,
+    }],
+  }),
+}).catch((err) => console.error('observe ingest failed:', err))
+\`\`\`
+
+Rules for Path 1:
+- Use the end-user's stable ID (Stripe customer ID preferred) as \`customerReferenceId\`. Never a hardcoded value.
+- Use one stable \`featureKey\` per user-facing AI feature — e.g. \`ai_chat\`, \`summarize_email\`, \`code_autocomplete\`. Not per model.
+- Include \`model\` + \`modelProvider\` + \`inputTokens\` + \`outputTokens\` whenever available so Observe computes cost automatically.
+- \`idempotencyKey\` (use the provider's request ID when possible) makes retries safe.
+- Fire-and-forget is fine. Catch + log the error; do not block the user request on Observe.
+- For non-LLM costs, skip \`model\` and pass \`costAmount\` + \`costUnit\` explicitly.
+- Full body schema in llms.txt under "POST /api/events/ingest — full body schema".
+
+## Step 3 — only if the user asks for auto-instrumentation (Path 3)
+
+**Do not do this by default.** Only install the SDK if the user explicitly says "I want auto-instrumentation" or "I don't want to add a fetch call to every call site" AND they accept that wrapping routes every LLM call through \`observemetrics.com\`.
+
+If they do:
+1. \`npm install @tansohq/observe\` — with the \`hq\`. The package \`@tanso/observe\` (no hq) does NOT exist on npm. If your install command fails to resolve, STOP and tell the user; do not substitute a similar-looking package.
+2. At app startup: \`Observe.configure({ apiKey: process.env.OBSERVE_API_KEY! })\`
+3. Per authenticated request: \`Observe.identify({ customerId: user.stripeCustomerId })\`
+4. Wrap \`new OpenAI()\` and \`new Anthropic()\` with \`Observe.wrap(...)\`. Do not replace the client, just wrap. Do not alter the existing provider API key.
+5. Tag each AI feature with \`Observe.feature('<feature_key>')\` or a per-call \`Observe-Feature\` header.
+
+## Do not
+
+- Do not install \`@tanso/observe\`. Correct name: \`@tansohq/observe\`.
+- Do not install \`@tansohq/observe\` unless the user explicitly asked for auto-instrumentation. Path 1 requires no SDK.
+- Do not replace OpenAI / Anthropic with anything else.
+- Do not change \`baseURL\` on an existing provider client unless the user explicitly chose Path 3.
+- Do not touch an existing AI gateway (Portkey, LiteLLM, etc.) without asking.
+- Do not add Stripe integration as part of Observe setup — Stripe is optional and the user can connect it later from Data Sources → Stripe.
+- Do not log the API key.
+
+## Verify
+
+After wiring up, run the app once, make one LLM call, and confirm the event appears at https://observemetrics.com/events.`;
 }
 
-function copyAiInstallPrompt() {
+async function copyAiInstallPrompt() {
+  // Auto-generate a key on first click so new users with zero keys still
+  // get a working prompt. One click, zero decisions.
+  if (sdkKeys.value.length === 0 && !generatedKey.value) {
+    try {
+      const result = await createSdkKey("default");
+      generatedKey.value = result.key;
+      await loadSdkKeys();
+      window.posthog?.capture("sdk_key_created", { source: "install_prompt" });
+    } catch (error) {
+      toast.error("Couldn't generate an API key", {
+        description:
+          error instanceof Error ? error.message : "Please try again.",
+      });
+      return;
+    }
+  }
+
   const key =
+    generatedKey.value ||
     sdkKeys.value[0]?.full_key ||
     sdkKeys.value[0]?.key_prefix + "..." ||
     "YOUR_API_KEY";
   window.navigator.clipboard.writeText(buildAiInstallPrompt(key));
   aiInstallPromptCopied.value = true;
+  window.posthog?.capture("install_prompt_copied");
   setTimeout(() => {
     aiInstallPromptCopied.value = false;
   }, 2000);
@@ -187,34 +274,23 @@ const apiKeyForSnippet = computed(() => {
   return "YOUR_API_KEY";
 });
 
-async function _handleResetKey(id: number) {
+async function handleResetKey(id: number) {
   if (
     !window.confirm(
-      "Reset this API key? The old key will stop working immediately.",
+      "Rotate this API key? The current key will stop working immediately — update your SDK with the new one.",
     )
   )
     return;
   try {
-    await resetSdkKey(id);
+    const result = await resetSdkKey(id);
     await loadSdkKeys();
-    toast.success("API key reset");
+    generatedKey.value = result.key;
+    toast.success("API key rotated — copy the new one now");
   } catch (error) {
-    toast.error("Failed to reset key", {
+    toast.error("Failed to rotate key", {
       description: error instanceof Error ? error.message : "Please try again.",
     });
   }
-}
-
-const keyCopiedId = ref<number | null>(null);
-const revealedKeyId = ref<number | null>(null);
-function copyFullKey(key: SdkKey) {
-  const text = key.full_key || key.key_prefix + "...";
-  window.navigator.clipboard.writeText(text);
-  keyCopiedId.value = key.id;
-  toast.success("API key copied");
-  setTimeout(() => {
-    keyCopiedId.value = null;
-  }, 2000);
 }
 
 const snippetCopied = ref(false);
@@ -251,11 +327,6 @@ function _copySnippet() {
   setTimeout(() => {
     snippetCopied.value = false;
   }, 2000);
-}
-
-function dismissGeneratedKey() {
-  generatedKey.value = null;
-  showKeyGenerator.value = false;
 }
 
 function _scrollToStripe() {
@@ -540,6 +611,32 @@ onMounted(async () => {
     loadFeatureKeys(),
     loadCloudStatus(),
   ]);
+
+  // Doug's feedback: "I don't know where to get my api key / should already
+  // be generated." Three paths to make sure a working key is visible on
+  // first view:
+  //
+  // 1. Signup-complete stashed a fresh raw key in localStorage. Consume it.
+  // 2. Zero keys on record — auto-provision one now (covers users whose
+  //    signup-complete key gen failed, or who landed here via some other
+  //    path without going through signup).
+  // 3. Otherwise the masked prefix is shown + user can rotate to reveal.
+  const stashed = window.localStorage.getItem("observe:fresh_sdk_key");
+  if (stashed) {
+    generatedKey.value = stashed;
+    window.localStorage.removeItem("observe:fresh_sdk_key");
+  } else if (sdkKeys.value.length === 0) {
+    try {
+      const result = await createSdkKey("default");
+      generatedKey.value = result.key;
+      await loadSdkKeys();
+      window.posthog?.capture("sdk_key_created", {
+        source: "data_sources_mount",
+      });
+    } catch {
+      // Non-fatal — user can click "Generate Key" manually.
+    }
+  }
 });
 
 // =============================================================================
@@ -658,20 +755,231 @@ watch(
       </p>
     </div>
 
-    <!-- Viewer notice -->
-    <div
-      v-if="isViewer"
-      class="flex items-start gap-3 rounded-lg border border-warning/30 bg-warning/10 p-4 text-sm text-warning-foreground"
+    <!-- ================================================================== -->
+    <!-- PRIMARY HERO: one-click install prompt for your AI coding agent     -->
+    <!-- ================================================================== -->
+    <Card
+      v-if="isLoggedIn"
+      class="border-primary/40 bg-gradient-to-br from-violet-500/10 via-primary/5 to-blue-500/10"
     >
-      <Eye class="h-4 w-4 mt-0.5 shrink-0" />
-      <div>
-        <strong>Viewer access</strong> — You can see your team's data but cannot
-        upload, modify, or clear data. Contact your team admin to make changes.
-      </div>
-    </div>
+      <CardContent class="p-6">
+        <div class="flex items-start justify-between gap-6 flex-wrap">
+          <div class="flex-1 min-w-[260px] space-y-2">
+            <div class="flex items-center gap-2">
+              <Zap class="h-5 w-5 text-primary" />
+              <h2 class="font-semibold text-lg">
+                Install Observe in 30 seconds
+              </h2>
+            </div>
+            <p class="text-sm text-muted-foreground max-w-prose">
+              Copy this prompt and paste it into Cursor, Claude Code, or
+              Copilot. Your AI agent will wire up Observe in your repo — API key
+              included. No config to read, no boilerplate to copy.
+            </p>
+          </div>
+          <Button
+            size="lg"
+            class="shrink-0 min-w-[220px]"
+            @click="copyAiInstallPrompt"
+          >
+            <Copy class="h-4 w-4 mr-2" />
+            {{
+              aiInstallPromptCopied
+                ? "Copied — paste into your AI"
+                : "Copy install prompt"
+            }}
+          </Button>
+        </div>
+
+        <!-- Optional 90-second walkthrough. Drop a Loom share URL into
+             loomEmbedUrl to show it. Leave empty to hide the whole block. -->
+        <div
+          v-if="loomEmbedUrl && sdkKeys.length === 0"
+          class="mt-5 border-t border-primary/10 pt-5"
+        >
+          <p
+            class="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2"
+          >
+            Watch a 90-second walkthrough
+          </p>
+          <div
+            class="relative rounded-lg overflow-hidden border aspect-video max-w-2xl"
+          >
+            <iframe
+              :src="loomEmbedUrl"
+              frameborder="0"
+              allowfullscreen
+              class="absolute inset-0 w-full h-full"
+            />
+          </div>
+        </div>
+      </CardContent>
+    </Card>
 
     <!-- ================================================================== -->
-    <!-- HERO: One-line proxy integration                                    -->
+    <!-- API KEY: dedicated card, always visible (Doug: "should already be   -->
+    <!-- generated or have an entire section of its own")                    -->
+    <!-- ================================================================== -->
+    <Card v-if="isLoggedIn" class="border-primary/20">
+      <CardContent class="p-6 space-y-4">
+        <div class="flex items-start justify-between gap-4 flex-wrap">
+          <div class="flex items-center gap-2">
+            <Key class="h-5 w-5 text-primary" />
+            <h2 class="font-semibold text-lg">Your Observe API key</h2>
+          </div>
+          <Button
+            v-if="sdkKeys.length > 0"
+            variant="ghost"
+            size="sm"
+            class="h-8 text-xs text-muted-foreground"
+            @click="showKeyGenerator = true"
+          >
+            <Plus class="h-3 w-3 mr-1" />
+            Add another key
+          </Button>
+        </div>
+
+        <!-- Fresh key (just generated or just signed up) — show in full -->
+        <div
+          v-if="generatedKey"
+          class="rounded-lg border bg-muted/40 p-4 space-y-2"
+        >
+          <div class="flex items-center gap-2 text-xs font-medium text-success">
+            <Key class="h-3 w-3" />
+            Key ready — copy it now, you won't see it again
+          </div>
+          <div class="flex items-center gap-2">
+            <code
+              class="flex-1 text-sm font-mono bg-background border rounded px-3 py-2 select-all break-all"
+              >{{ generatedKey }}</code
+            >
+            <Button
+              variant="outline"
+              size="sm"
+              class="h-9 shrink-0"
+              @click="copyKeyToClipboard"
+            >
+              <Copy class="h-3 w-3 mr-1" />
+              {{ keyCopied ? "Copied!" : "Copy" }}
+            </Button>
+          </div>
+          <p class="text-[11px] text-muted-foreground">
+            Paste this into your <code class="font-mono">.env</code> as
+            <code class="font-mono">OBSERVE_API_KEY</code>. Observe will only
+            show it once — if you lose it, rotate the key to generate a new one.
+          </p>
+        </div>
+
+        <!-- Existing masked keys — user already has one but the full value
+             isn't recoverable. Show the prefix + a clear path to rotate. -->
+        <div v-else-if="sdkKeys.length > 0" class="space-y-2">
+          <div
+            v-for="key in sdkKeys"
+            :key="key.id"
+            class="rounded-md border bg-card px-3 py-2.5 flex items-center justify-between gap-3"
+          >
+            <div class="flex items-center gap-3 min-w-0">
+              <code class="font-mono text-sm text-muted-foreground truncate">{{
+                key.key_prefix + "…"
+              }}</code>
+              <span class="text-[11px] text-muted-foreground whitespace-nowrap"
+                >({{ key.name || "default" }})</span
+              >
+            </div>
+            <div class="flex items-center gap-1 shrink-0">
+              <Button
+                variant="outline"
+                size="sm"
+                class="h-8 text-xs"
+                title="Rotate — invalidates the old key and shows the new one"
+                @click="handleResetKey(key.id)"
+              >
+                <RefreshCw class="h-3 w-3 mr-1" />
+                Rotate
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                class="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
+                title="Delete key"
+                @click="handleRevokeKey(key.id)"
+              >
+                <Trash2 class="h-3 w-3" />
+              </Button>
+            </div>
+          </div>
+          <p class="text-[11px] text-muted-foreground">
+            The full key is only shown once, at creation. If you've lost it,
+            rotate — the old key stops working immediately and a new one is
+            displayed.
+          </p>
+        </div>
+
+        <!-- No keys at all (auto-gen failed) — manual generate button -->
+        <div v-else class="space-y-2">
+          <p class="text-sm text-muted-foreground">
+            No keys yet — generate one to start tracking.
+          </p>
+          <Button
+            size="sm"
+            :disabled="isGeneratingKey"
+            @click="handleGenerateKey"
+          >
+            <Key class="h-3 w-3 mr-1.5" />
+            {{ isGeneratingKey ? "Generating…" : "Generate API key" }}
+          </Button>
+        </div>
+
+        <!-- Secondary key generator (when adding an extra key) -->
+        <div
+          v-if="showKeyGenerator && !generatedKey"
+          class="rounded-lg border bg-muted/30 p-4 space-y-3"
+        >
+          <div class="flex gap-2">
+            <input
+              v-model="newKeyName"
+              type="text"
+              placeholder="Key name (e.g. 'production')"
+              class="flex-1 h-9 rounded-md border bg-background px-3 text-sm"
+              @keydown.enter="handleGenerateKey"
+            />
+            <Button
+              size="sm"
+              class="h-9"
+              :disabled="isGeneratingKey"
+              @click="handleGenerateKey"
+            >
+              <Key class="h-3 w-3 mr-1" />
+              {{ isGeneratingKey ? "Generating…" : "Generate" }}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              class="h-9"
+              @click="showKeyGenerator = false"
+              >Cancel</Button
+            >
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+
+    <!-- Signed-out sign-up nudge (only when not logged in) -->
+    <Card v-else class="border-dashed border-muted-foreground/30">
+      <CardContent class="p-6 text-center">
+        <Key class="h-5 w-5 text-muted-foreground mx-auto mb-2" />
+        <p class="text-sm text-muted-foreground mb-3">
+          Sign up to get your Observe API key — you'll see it here immediately
+          after.
+        </p>
+        <Button size="sm" @click="router.push('/signup')"
+          >Sign up to get started</Button
+        >
+      </CardContent>
+    </Card>
+
+    <!-- ================================================================== -->
+    <!-- LIVE TRACKING: direct ingest example (Path 1, the default)          -->
     <!-- ================================================================== -->
     <Card class="border-success/20">
       <CardContent class="p-6 space-y-5">
@@ -680,32 +988,50 @@ watch(
             <h2 class="font-semibold text-lg">Live tracking</h2>
             <span
               class="text-[10px] font-medium bg-sky-100 text-sky-700 px-2 py-0.5 rounded-full"
-              >Real-time, per-call</span
+              >Off critical path · body-only</span
             >
           </div>
           <p class="text-sm text-muted-foreground">
-            Route your AI calls through the Observe proxy. Every call is logged
-            with model, tokens, cost, customer, and feature — automatically.
+            Call OpenAI / Anthropic / anything else directly, then post one
+            event to Observe after the call returns. Observe never sits in front
+            of your LLM calls.
           </p>
         </div>
 
-        <!-- The one snippet that matters -->
+        <!-- The one snippet that matters — Path 1 direct ingest -->
         <div
           class="rounded-md bg-zinc-950 border border-zinc-800 p-4 font-mono text-xs leading-relaxed overflow-x-auto"
         >
           <pre
             class="whitespace-pre text-zinc-100"
-          ><span class="text-emerald-400">import</span> OpenAI <span class="text-emerald-400">from</span> <span class="text-amber-300">'openai'</span>
-
-<span class="text-emerald-400">const</span> openai = <span class="text-emerald-400">new</span> OpenAI({
-  <span class="text-sky-300">baseURL</span>: <span class="text-amber-300">'{{ proxyBaseUrl }}'</span>,
-  <span class="text-sky-300">defaultHeaders</span>: {
-    <span class="text-amber-300">'x-tanso-key'</span>: <span class="text-amber-300">'{{ apiKeyForSnippet }}'</span>,
-    <span class="text-amber-300">'x-tanso-customer'</span>: user.stripeId,    <span class="text-zinc-500">// Stripe customer ID (cus_...)</span>
-    <span class="text-amber-300">'x-tanso-feature'</span>: <span class="text-amber-300">'ai_chat'</span>,          <span class="text-zinc-500">// which product feature</span>
-  },
+          ><span class="text-zinc-500">// 1. Call your provider directly — no wrapper, no baseURL change</span>
+<span class="text-emerald-400">const</span> started = Date.now()
+<span class="text-emerald-400">const</span> res = <span class="text-emerald-400">await</span> openai.chat.completions.create({
+  <span class="text-sky-300">model</span>: <span class="text-amber-300">'gpt-4o-mini'</span>,
+  <span class="text-sky-300">messages</span>,
 })
-<span class="text-zinc-500">// Every call is tracked with cost, model, customer, and feature.</span></pre>
+
+<span class="text-zinc-500">// 2. Log the event after the call returns (fire-and-forget)</span>
+fetch(<span class="text-amber-300">'{{ ingestUrl }}'</span>, {
+  <span class="text-sky-300">method</span>: <span class="text-amber-300">'POST'</span>,
+  <span class="text-sky-300">headers</span>: {
+    <span class="text-amber-300">'Authorization'</span>: <span class="text-amber-300">`Bearer {{ apiKeyForSnippet }}`</span>,
+    <span class="text-amber-300">'Content-Type'</span>: <span class="text-amber-300">'application/json'</span>,
+  },
+  <span class="text-sky-300">body</span>: JSON.stringify({
+    <span class="text-sky-300">events</span>: [{
+      <span class="text-sky-300">eventName</span>: <span class="text-amber-300">'chat'</span>,
+      <span class="text-sky-300">customerReferenceId</span>: user.stripeId,       <span class="text-zinc-500">// any stable user ID</span>
+      <span class="text-sky-300">featureKey</span>: <span class="text-amber-300">'ai_chat'</span>,                  <span class="text-zinc-500">// which product feature</span>
+      <span class="text-sky-300">model</span>: <span class="text-amber-300">'gpt-4o-mini'</span>,
+      <span class="text-sky-300">modelProvider</span>: <span class="text-amber-300">'openai'</span>,
+      <span class="text-sky-300">inputTokens</span>: res.usage?.prompt_tokens,
+      <span class="text-sky-300">outputTokens</span>: res.usage?.completion_tokens,
+      <span class="text-sky-300">durationMs</span>: Date.now() - started,
+      <span class="text-sky-300">idempotencyKey</span>: res.id,                   <span class="text-zinc-500">// safe retries</span>
+    }],
+  }),
+}).catch((err) => console.error(<span class="text-amber-300">'observe ingest failed:'</span>, err))</pre>
         </div>
         <p class="text-[11px] text-muted-foreground">
           Use your Stripe customer ID so Observe can automatically join costs
@@ -734,9 +1060,9 @@ watch(
 
 curl -X POST <span class="text-amber-300">'{{ proxyBaseUrl }}/google/generateContent'</span> \
   -H <span class="text-amber-300">'Authorization: Bearer YOUR_GOOGLE_API_KEY'</span> \
-  -H <span class="text-amber-300">'x-tanso-key: {{ apiKeyForSnippet }}'</span> \
-  -H <span class="text-amber-300">'x-tanso-customer: cus_123'</span> \
-  -H <span class="text-amber-300">'x-tanso-feature: ai_chat'</span> \
+  -H <span class="text-amber-300">'Observe-Key: {{ apiKeyForSnippet }}'</span> \
+  -H <span class="text-amber-300">'Observe-Customer: cus_123'</span> \
+  -H <span class="text-amber-300">'Observe-Feature: ai_chat'</span> \
   -H <span class="text-amber-300">'Content-Type: application/json'</span> \
   -d <span class="text-amber-300">'{"model":"gemini-2.5-flash","contents":[{"parts":[{"text":"Hello"}]}]}'</span></pre>
               </div>
@@ -756,13 +1082,13 @@ curl -X POST <span class="text-amber-300">'{{ proxyBaseUrl }}/google/generateCon
   <span class="text-sky-300">token</span>: <span class="text-amber-300">'YOUR_COHERE_KEY'</span>,
   <span class="text-sky-300">baseUrl</span>: <span class="text-amber-300">'{{ proxyBaseUrl }}/cohere'</span>,
 })
-<span class="text-zinc-500">// Add x-tanso-key, x-tanso-customer, x-tanso-feature via fetch override or headers.</span>
+<span class="text-zinc-500">// Add Observe-Key, Observe-Customer, Observe-Feature via fetch override or headers.</span>
 
 <span class="text-zinc-500">// Or use curl directly:</span>
 <span class="text-zinc-500">// curl -X POST '{{ proxyBaseUrl }}/cohere/chat' \</span>
 <span class="text-zinc-500">//   -H 'Authorization: Bearer YOUR_COHERE_KEY' \</span>
-<span class="text-zinc-500">//   -H 'x-tanso-key: {{ apiKeyForSnippet }}' \</span>
-<span class="text-zinc-500">//   -H 'x-tanso-customer: cus_123' \</span>
+<span class="text-zinc-500">//   -H 'Observe-Key: {{ apiKeyForSnippet }}' \</span>
+<span class="text-zinc-500">//   -H 'Observe-Customer: cus_123' \</span>
 <span class="text-zinc-500">//   -d '{"model":"command-r-plus","messages":[{"role":"user","content":"Hello"}]}'</span></pre>
               </div>
             </div>
@@ -780,199 +1106,18 @@ curl -X POST <span class="text-amber-300">'{{ proxyBaseUrl }}/google/generateCon
   <span class="text-sky-300">apiKey</span>: <span class="text-amber-300">'YOUR_MISTRAL_KEY'</span>,
   <span class="text-sky-300">serverURL</span>: <span class="text-amber-300">'{{ proxyBaseUrl }}/mistral'</span>,
 })
-<span class="text-zinc-500">// Add x-tanso-key, x-tanso-customer, x-tanso-feature via additionalHeaders.</span>
+<span class="text-zinc-500">// Add Observe-Key, Observe-Customer, Observe-Feature via additionalHeaders.</span>
 
 <span class="text-zinc-500">// Or use curl directly:</span>
 <span class="text-zinc-500">// curl -X POST '{{ proxyBaseUrl }}/mistral/chat/completions' \</span>
 <span class="text-zinc-500">//   -H 'Authorization: Bearer YOUR_MISTRAL_KEY' \</span>
-<span class="text-zinc-500">//   -H 'x-tanso-key: {{ apiKeyForSnippet }}' \</span>
-<span class="text-zinc-500">//   -H 'x-tanso-customer: cus_123' \</span>
+<span class="text-zinc-500">//   -H 'Observe-Key: {{ apiKeyForSnippet }}' \</span>
+<span class="text-zinc-500">//   -H 'Observe-Customer: cus_123' \</span>
 <span class="text-zinc-500">//   -d '{"model":"mistral-large-latest","messages":[{"role":"user","content":"Hello"}]}'</span></pre>
               </div>
             </div>
           </div>
         </details>
-
-        <!-- API Key section — compact -->
-        <div
-          v-if="!isLoggedIn"
-          class="rounded-lg border border-dashed border-muted-foreground/30 p-4 text-center"
-        >
-          <p class="text-sm text-muted-foreground mb-2">
-            Sign up to generate an API key and start tracking.
-          </p>
-          <Button size="sm" @click="router.push('/signup')"
-            >Sign up to get started</Button
-          >
-        </div>
-        <div v-else-if="!isViewer">
-          <div class="flex items-center justify-between mb-2">
-            <h3
-              class="text-xs font-semibold text-muted-foreground uppercase tracking-wider"
-            >
-              Your API Key
-            </h3>
-            <Button
-              v-if="!showKeyGenerator && !generatedKey && sdkKeys.length === 0"
-              variant="outline"
-              size="sm"
-              class="h-7 text-xs"
-              @click="handleGenerateKey"
-            >
-              <Plus class="h-3 w-3 mr-1" />
-              {{ isGeneratingKey ? "Generating..." : "Generate Key" }}
-            </Button>
-          </div>
-
-          <!-- AI-native install: one-click prompt for Cursor / Claude / Copilot -->
-          <div
-            v-if="sdkKeys.length > 0"
-            class="rounded-md border bg-gradient-to-br from-violet-500/10 to-blue-500/10 p-3 mb-3"
-          >
-            <div class="flex items-start justify-between gap-3">
-              <div class="flex-1 min-w-0">
-                <div class="text-xs font-semibold mb-0.5">
-                  Install with your AI agent
-                </div>
-                <p class="text-[11px] text-muted-foreground">
-                  Copy the prompt, paste it into Cursor, Claude Code, or Copilot
-                  — it will wire up Observe for you.
-                </p>
-              </div>
-              <Button
-                size="sm"
-                class="h-7 text-xs shrink-0"
-                @click="copyAiInstallPrompt"
-              >
-                <Copy class="h-3 w-3 mr-1" />
-                {{ aiInstallPromptCopied ? "Copied!" : "Copy prompt" }}
-              </Button>
-            </div>
-          </div>
-
-          <!-- Existing keys (compact) -->
-          <div v-if="sdkKeys.length > 0" class="space-y-1.5 mb-3">
-            <div
-              v-for="key in sdkKeys"
-              :key="key.id"
-              class="rounded-md border bg-card px-3 py-2 text-xs flex items-center justify-between"
-            >
-              <div class="flex items-center gap-3">
-                <code class="font-mono text-muted-foreground select-all">{{
-                  revealedKeyId === key.id
-                    ? key.full_key || key.key_prefix + "..."
-                    : key.key_prefix + "..."
-                }}</code>
-                <button
-                  v-if="key.full_key"
-                  class="text-muted-foreground hover:text-foreground transition-colors"
-                  @click="
-                    revealedKeyId = revealedKeyId === key.id ? null : key.id
-                  "
-                >
-                  <Eye class="h-3 w-3" />
-                </button>
-              </div>
-              <div class="flex items-center gap-1">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  class="h-6 px-2 text-xs text-muted-foreground"
-                  @click="copyFullKey(key)"
-                >
-                  <Copy class="h-3 w-3 mr-1" />
-                  {{ keyCopiedId === key.id ? "Copied!" : "Copy" }}
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  class="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
-                  @click="handleRevokeKey(key.id)"
-                >
-                  <Trash2 class="h-3 w-3" />
-                </Button>
-              </div>
-            </div>
-          </div>
-
-          <!-- Key generator (only shown when manually triggered for additional keys) -->
-          <div
-            v-if="showKeyGenerator && !generatedKey"
-            class="rounded-lg border bg-muted/30 p-4 mb-3 space-y-3"
-          >
-            <div class="flex gap-2">
-              <input
-                v-model="newKeyName"
-                type="text"
-                placeholder="Key name (optional, e.g. 'production')"
-                class="flex-1 h-8 rounded-md border bg-background px-3 text-sm"
-                @keydown.enter="handleGenerateKey"
-              />
-              <Button
-                size="sm"
-                class="h-8"
-                :disabled="isGeneratingKey"
-                @click="handleGenerateKey"
-              >
-                <Key class="h-3 w-3 mr-1" />
-                {{ isGeneratingKey ? "Generating..." : "Generate" }}
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                class="h-8"
-                @click="showKeyGenerator = false"
-                >Cancel</Button
-              >
-            </div>
-          </div>
-
-          <!-- Generated key display -->
-          <div
-            v-if="generatedKey"
-            class="rounded-lg border bg-muted/40 p-4 mb-3 space-y-2"
-          >
-            <div
-              class="flex items-center gap-2 text-xs font-medium text-success"
-            >
-              <Key class="h-3 w-3" />
-              Key generated — copy it now, you won't see it again
-            </div>
-            <div class="flex items-center gap-2">
-              <code
-                class="flex-1 text-xs font-mono bg-background border rounded px-3 py-2 select-all break-all"
-                >{{ generatedKey }}</code
-              >
-              <Button
-                variant="outline"
-                size="sm"
-                class="h-8 shrink-0"
-                @click="copyKeyToClipboard"
-              >
-                <Copy class="h-3 w-3 mr-1" />
-                {{ keyCopied ? "Copied!" : "Copy" }}
-              </Button>
-            </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              class="h-7 text-xs"
-              @click="dismissGeneratedKey"
-              >Done</Button
-            >
-          </div>
-
-          <Button
-            v-if="sdkKeys.length > 0"
-            variant="ghost"
-            size="sm"
-            class="h-7 text-xs text-muted-foreground"
-            @click="showKeyGenerator = true"
-          >
-            <Plus class="h-3 w-3 mr-1" />
-            Add another key
-          </Button>
-        </div>
 
         <!-- Other integration methods (collapsed) -->
         <details class="group">
@@ -984,17 +1129,21 @@ curl -X POST <span class="text-amber-300">'{{ proxyBaseUrl }}/google/generateCon
           <div class="mt-3 space-y-4">
             <!-- SDK Wrapper -->
             <div>
-              <h4 class="text-xs font-semibold mb-2">SDK Wrapper</h4>
+              <h4 class="text-xs font-semibold mb-2">
+                Auto-instrumentation (SDK wrap)
+              </h4>
               <p class="text-[11px] text-muted-foreground mb-2">
-                <span class="font-mono">npm install @tanso/observe</span> —
-                three calls, zero header plumbing.
+                <span class="font-mono">npm install @tansohq/observe</span> —
+                wraps your provider client so every call is auto-tracked. Only
+                pick this if you accept that Observe sits in front of your LLM
+                calls (Observe outage = LLM outage).
               </p>
               <div
                 class="rounded-md bg-zinc-950 border border-zinc-800 p-4 font-mono text-xs leading-relaxed overflow-x-auto"
               >
                 <pre
                   class="whitespace-pre text-zinc-100"
-                ><span class="text-emerald-400">import</span> { Observe } <span class="text-emerald-400">from</span> <span class="text-amber-300">'@tanso/observe'</span>
+                ><span class="text-emerald-400">import</span> { Observe } <span class="text-emerald-400">from</span> <span class="text-amber-300">'@tansohq/observe'</span>
 <span class="text-emerald-400">import</span> OpenAI <span class="text-emerald-400">from</span> <span class="text-amber-300">'openai'</span>
 
 Observe.configure({ <span class="text-sky-300">apiKey</span>: <span class="text-amber-300">'{{ apiKeyForSnippet }}'</span> })
@@ -1174,9 +1323,8 @@ Observe.identify({ <span class="text-sky-300">customerId</span>: user.stripeId }
                 <div class="flex items-center gap-2">
                   <p class="font-medium">AWS Cost Explorer</p>
                   <span
-                    v-if="cloudProviderStatus('aws')?.connected"
-                    class="text-[10px] font-medium bg-success/10 text-success px-2 py-0.5 rounded-full"
-                    >Connected</span
+                    class="text-[10px] font-medium bg-amber-500/10 text-amber-600 dark:text-amber-400 px-2 py-0.5 rounded-full"
+                    >Beta · Coming soon</span
                   >
                 </div>
                 <p class="text-xs text-muted-foreground">
@@ -1193,45 +1341,12 @@ Observe.identify({ <span class="text-sky-300">customerId</span>: user.stripeId }
               </div>
             </div>
             <div v-if="canEdit" class="flex items-center gap-2">
-              <template v-if="cloudProviderStatus('aws')?.connected">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  class="h-8 text-xs"
-                  :disabled="isSyncingCloud === 'aws'"
-                  @click="handleSyncCloud('aws')"
-                >
-                  <Loader2
-                    v-if="isSyncingCloud === 'aws'"
-                    class="h-3 w-3 mr-1.5 animate-spin"
-                  />
-                  <RefreshCw v-else class="h-3 w-3 mr-1.5" />
-                  {{ isSyncingCloud === "aws" ? "Syncing…" : "Sync" }}
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  class="h-8 text-xs text-muted-foreground hover:text-destructive"
-                  :disabled="isDisconnectingCloud === 'aws'"
-                  @click="handleDisconnectCloud('aws')"
-                >
-                  <Unplug class="h-3 w-3 mr-1.5" />
-                  Disconnect
-                </Button>
-              </template>
-              <Button
-                v-else
-                variant="outline"
-                size="sm"
-                @click="showAwsForm = !showAwsForm"
-              >
-                Connect
-              </Button>
+              <Button variant="outline" size="sm" disabled> Connect </Button>
             </div>
           </div>
 
           <!-- AWS credentials form (inline) -->
-          <div v-if="showAwsForm" class="mt-4 space-y-3 border-t pt-4">
+          <div v-if="false && showAwsForm" class="mt-4 space-y-3 border-t pt-4">
             <div class="space-y-2">
               <label class="text-xs font-medium">Access Key ID</label>
               <input
@@ -1293,9 +1408,8 @@ Observe.identify({ <span class="text-sky-300">customerId</span>: user.stripeId }
                 <div class="flex items-center gap-2">
                   <p class="font-medium">GCP Billing</p>
                   <span
-                    v-if="cloudProviderStatus('gcp')?.connected"
-                    class="text-[10px] font-medium bg-success/10 text-success px-2 py-0.5 rounded-full"
-                    >Connected</span
+                    class="text-[10px] font-medium bg-amber-500/10 text-amber-600 dark:text-amber-400 px-2 py-0.5 rounded-full"
+                    >Beta · Coming soon</span
                   >
                 </div>
                 <p class="text-xs text-muted-foreground">
@@ -1312,45 +1426,12 @@ Observe.identify({ <span class="text-sky-300">customerId</span>: user.stripeId }
               </div>
             </div>
             <div v-if="canEdit" class="flex items-center gap-2">
-              <template v-if="cloudProviderStatus('gcp')?.connected">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  class="h-8 text-xs"
-                  :disabled="isSyncingCloud === 'gcp'"
-                  @click="handleSyncCloud('gcp')"
-                >
-                  <Loader2
-                    v-if="isSyncingCloud === 'gcp'"
-                    class="h-3 w-3 mr-1.5 animate-spin"
-                  />
-                  <RefreshCw v-else class="h-3 w-3 mr-1.5" />
-                  {{ isSyncingCloud === "gcp" ? "Syncing…" : "Sync" }}
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  class="h-8 text-xs text-muted-foreground hover:text-destructive"
-                  :disabled="isDisconnectingCloud === 'gcp'"
-                  @click="handleDisconnectCloud('gcp')"
-                >
-                  <Unplug class="h-3 w-3 mr-1.5" />
-                  Disconnect
-                </Button>
-              </template>
-              <Button
-                v-else
-                variant="outline"
-                size="sm"
-                @click="showGcpForm = !showGcpForm"
-              >
-                Connect
-              </Button>
+              <Button variant="outline" size="sm" disabled> Connect </Button>
             </div>
           </div>
 
           <!-- GCP credentials form (inline) -->
-          <div v-if="showGcpForm" class="mt-4 space-y-3 border-t pt-4">
+          <div v-if="false && showGcpForm" class="mt-4 space-y-3 border-t pt-4">
             <div class="space-y-2">
               <label class="text-xs font-medium">Service Account JSON</label>
               <textarea

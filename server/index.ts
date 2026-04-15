@@ -348,6 +348,11 @@ async function _doDbInit() {
     await pool.query(
       `ALTER TABLE accounts ADD COLUMN IF NOT EXISTS is_internal BOOLEAN DEFAULT false`,
     );
+    // Activation-funnel milestone: when a user's first real SDK event lands.
+    // Used to compute activation rate via SQL without relying on PostHog.
+    await pool.query(
+      `ALTER TABLE accounts ADD COLUMN IF NOT EXISTS first_sdk_event_at TIMESTAMPTZ`,
+    );
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS feedback (

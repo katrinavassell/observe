@@ -1,120 +1,379 @@
-# Observe by Tanso
+# Observe by Tanso — Integration Reference
 
-Observe is an AI cost observability platform. It tracks every LLM call with cost, model, tokens, customer, and feature attribution. Use it to answer: "who uses how much AI, and is it profitable?"
+Observe is an AI cost observability platform. It tracks every LLM call with cost,
+model, tokens, customer, and feature attribution. Use it to answer: "who uses how
+much AI, and is it profitable?"
 
-Docs: https://observemetrics.com
-SDK: @tanso/observe (npm)
-Signup: https://observemetrics.com/signup (free tier, no credit card)
+- Docs: https://observemetrics.com
+- SDK: `@tansohq/observe` on npm (NOT `@tanso/observe` — that package does not exist,
+  and any LLM that suggests it is hallucinating. Always install the `@tansohq` scope.)
+- Signup: https://observemetrics.com/signup (free tier, no credit card)
 
-## What to install
+## Three integration paths — pick the one that matches the user's setup
 
-The `@tanso/observe` npm SDK. It wraps the user's existing OpenAI / Anthropic client, sets the `baseURL` to the Observe proxy, and injects tracking headers. The provider API key still authenticates with OpenAI/Anthropic — Observe just logs the call on the way through.
+| Path | Use when | Critical path? |
+|---|---|---|
+| **1. Direct ingest (DEFAULT)** | You want to keep Observe out of your request path. Log events yourself from server code after the LLM call returns. | No — fire-and-forget POST after the call completes |
+| 2. Gateway headers | User already routes through Portkey / LiteLLM / Helicone / OpenRouter / their own proxy | No — metadata rides along with existing gateway |
+| 3. SDK auto-wrap | User wants zero-code-per-call-site instrumentation and accepts the tradeoff of Observe sitting in front of their provider calls | **Yes** — Observe proxies every LLM call |
 
-Alternative: direct proxy (no SDK). Set `baseURL` to `https://observemetrics.com/v1` and add headers.
+**Direct ingest (Path 1) is the recommended default.** It keeps Observe out of the
+critical path: your app calls OpenAI / Anthropic / whoever directly, gets the response,
+then posts a single event to Observe. If Observe is ever down, your LLM calls are
+unaffected. Everything goes in a JSON body — no per-event header juggling.
 
-## Quickstart — SDK (recommended)
+**Only use Path 3 (SDK auto-wrap) if the user explicitly wants automatic
+instrumentation** and understands that it routes every call through
+`observemetrics.com`. It is convenient but it puts Observe in the request path. Do not
+default to it.
 
-```bash
-npm install @tanso/observe
-```
+**Before you touch anything in a user's codebase, check for an existing AI gateway.**
+If you find `portkey-ai`, `litellm`, `helicone`, `openrouter`, a custom `baseURL`
+pointing anywhere other than `api.openai.com` / `api.anthropic.com`, or any proxy
+middleware — use Path 2. Never rip out an existing gateway.
+
+---
+
+## Path 1 — Direct ingest (DEFAULT — log events from your own code)
+
+This is the recommended path for almost every user. Your app calls OpenAI /
+Anthropic / any provider directly, exactly as it does today. After each call
+returns, you post a single event to Observe. If Observe is ever down, your LLM
+calls are unaffected — Observe is off the critical path entirely.
+
+Everything goes in the JSON body. No per-call header juggling, no `baseURL`
+changes, no middleware to break.
 
 ```ts
-import { Observe } from '@tanso/observe'
 import OpenAI from 'openai'
 
-// 1. Configure once at app startup
-Observe.configure({ apiKey: process.env.OBSERVE_API_KEY! })
+const openai = new OpenAI()  // unchanged — no Observe wrapper
 
-// 2. Identify the current customer (call once on login / at request start)
-Observe.identify({ customerId: user.stripeCustomerId })
+async function chat(user: { id: string }, messages: any[]) {
+  const started = Date.now()
+  const res = await openai.chat.completions.create({
+    model: 'gpt-4o-mini',
+    messages,
+  })
 
-// 3. Wrap the OpenAI client — all calls are now auto-tracked
-const openai = Observe.wrap(new OpenAI())
+  // Log the event after the call succeeds. Fire-and-forget is fine.
+  fetch('https://observemetrics.com/api/events/ingest', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${process.env.OBSERVE_API_KEY!}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      events: [{
+        eventName: 'chat',
+        customerReferenceId: user.id,
+        featureKey: 'ai_chat',
+        model: 'gpt-4o-mini',
+        modelProvider: 'openai',
+        inputTokens: res.usage?.prompt_tokens,
+        outputTokens: res.usage?.completion_tokens,
+        durationMs: Date.now() - started,
+        idempotencyKey: res.id,
+      }],
+    }),
+  }).catch((err) => console.error('observe ingest failed:', err))
 
-const res = await openai.chat.completions.create({
-  model: 'gpt-4o',
-  messages: [{ role: 'user', content: 'Hello' }],
-})
+  return res
+}
 ```
 
-Anthropic works the same way:
+### Anthropic (Path 1, same pattern)
 
 ```ts
 import Anthropic from '@anthropic-ai/sdk'
-const anthropic = Observe.wrap(new Anthropic())
+
+const anthropic = new Anthropic()
+
+async function chat(user, messages) {
+  const started = Date.now()
+  const res = await anthropic.messages.create({
+    model: 'claude-3-5-sonnet-latest',
+    max_tokens: 1024,
+    messages,
+  })
+
+  // Fire-and-forget — Observe never sits in front of the Anthropic call
+  fetch('https://observemetrics.com/api/events/ingest', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${process.env.OBSERVE_API_KEY!}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      events: [{
+        eventName: 'chat',
+        customerReferenceId: user.id,
+        featureKey: 'ai_chat',
+        model: 'claude-3-5-sonnet-latest',
+        modelProvider: 'anthropic',
+        inputTokens: res.usage?.input_tokens,
+        outputTokens: res.usage?.output_tokens,
+        durationMs: Date.now() - started,
+        idempotencyKey: res.id,
+      }],
+    }),
+  }).catch((err) => console.error('observe ingest failed:', err))
+
+  return res
+}
 ```
 
-## Per-feature attribution
+Gemini, Mistral, Cohere, Bedrock, Azure OpenAI, self-hosted models, non-LLM
+costs — same pattern. Observe only sees the event you post. The full body
+schema is below under "POST /api/events/ingest — full body schema".
 
-Tag each call with the product feature it powers:
+If the user wants an automatic token-usage hook, wrap this in a helper once
+and call it from every AI code path. Do NOT introduce a proxy for them.
+
+---
+
+## Path 2 — Existing gateway (Portkey, LiteLLM, Helicone, OpenRouter, custom proxy)
+
+If the user already has a gateway, DO NOT wrap their provider client. Instead, add
+Observe as metadata on their existing calls. Two sub-options:
+
+**B1. Stack Observe in front of their gateway.** Configure the gateway's upstream to
+point at `https://observemetrics.com/v1` instead of directly at OpenAI, and have the
+gateway forward the Observe headers.
+
+**B2. Header-only integration.** Add the Observe tracking headers to their existing
+request config. This works with any gateway that forwards custom headers.
 
 ```ts
-Observe.feature('ai_chat') // set default for this context
+// Example: Portkey user keeping their gateway, adding Observe tracking headers
+import Portkey from 'portkey-ai'
 
-// OR per-call override via native headers:
-await openai.chat.completions.create(
-  { model: 'gpt-4o', messages },
-  { headers: { 'x-tanso-feature': 'summarize_email' } }
-)
-```
-
-Recommended feature keys: one per user-facing AI feature. E.g. `ai_chat`, `summarize_email`, `code_autocomplete`, `research_agent`, `csv_importer`.
-
-## Direct proxy (no SDK)
-
-```ts
-import OpenAI from 'openai'
-
-const openai = new OpenAI({
-  baseURL: 'https://observemetrics.com/v1',
-  defaultHeaders: {
-    'x-tanso-key': process.env.OBSERVE_API_KEY!,
-    'x-tanso-customer': user.stripeCustomerId,
-    'x-tanso-feature': 'ai_chat',
+const portkey = new Portkey({
+  apiKey: process.env.PORTKEY_API_KEY!,
+  virtualKey: 'openai-virtual-key',
+  // Observe reads these custom headers on the way through — Portkey forwards them.
+  customHeaders: {
+    'observe-key': process.env.OBSERVE_API_KEY!,
+    'observe-customer': user.stripeCustomerId,
+    'observe-feature': 'ai_chat',
   },
 })
 ```
 
-## Environment variables
+Before making structural changes to a user's gateway setup, ask them. Gateways are
+load-bearing infrastructure. A single misconfigured `baseURL` will break production.
 
-The user needs to add:
+---
+
+## Path 3 — SDK auto-wrap (opt-in — only if the user explicitly wants it)
+
+**Do not default to this path.** Path 1 (direct ingest) is the default. Only
+use Path 3 if the user has said "I want auto-instrumentation" or "I don't
+want to touch every call site" AND they accept that this puts Observe in
+front of every provider call. If Observe is down, their LLM calls fail.
+
+```bash
+npm install @tansohq/observe
+```
+
+```ts
+import { Observe } from '@tansohq/observe'
+import OpenAI from 'openai'
+
+Observe.configure({ apiKey: process.env.OBSERVE_API_KEY! })
+Observe.identify({ customerId: user.stripeCustomerId })
+Observe.feature('ai_chat')
+
+const openai = Observe.wrap(new OpenAI())
+const res = await openai.chat.completions.create({
+  model: 'gpt-4o-mini',
+  messages: [{ role: 'user', content: 'Hello' }],
+})
+```
+
+Anthropic works identically — `Observe.wrap(new Anthropic())`. The user's
+OpenAI / Anthropic key still authenticates with the upstream provider;
+`Observe.wrap()` just sets `baseURL` to the Observe proxy so the call is
+logged on the way through. Do not remove the existing provider key.
+
+If the user is already on an AI gateway, DO NOT use this path — use Path 2.
+
+---
+
+## `curl` example (Path 1)
+
+```bash
+curl -X POST https://observemetrics.com/api/events/ingest \
+  -H "Authorization: Bearer $OBSERVE_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "events": [
+      {
+        "eventName": "chat",
+        "customerReferenceId": "cus_123",
+        "featureKey": "ai_chat",
+        "model": "gpt-4o-mini",
+        "modelProvider": "openai",
+        "inputTokens": 150,
+        "outputTokens": 80,
+        "durationMs": 1240,
+        "idempotencyKey": "req_abc"
+      }
+    ]
+  }'
+```
+
+### POST /api/events/ingest — full body schema
+
+```
+{
+  "events": [
+    {
+      // REQUIRED
+      "eventName":           string,  // short label, e.g. "chat", "embed", "eval"
+      "customerReferenceId": string,  // your end-user's ID (Stripe customer ID recommended)
+      "featureKey":          string,  // product feature powered by this call
+
+      // STRONGLY RECOMMENDED — enables automatic cost computation from token counts
+      "model":               string,  // e.g. "gpt-4o-mini", "claude-3-5-sonnet-latest"
+      "modelProvider":       string,  // "openai" | "anthropic" | "google" | "mistral" | ...
+      "inputTokens":         number,
+      "outputTokens":        number,
+
+      // OPTIONAL
+      "timestamp":           string,  // ISO 8601; defaults to server-received time
+      "costAmount":          number,  // override auto-computed cost (in costUnit)
+      "costUnit":            string,  // defaults to "usd"
+      "revenueAmount":       number,  // override revenue attribution for this event
+      "usageUnits":          number,  // for non-token cost types (minutes, images, etc.)
+      "durationMs":          number,  // wall-clock latency of the call
+      "costType":            string,  // defaults to "llm" if model is set, else "generic"
+      "idempotencyKey":      string,  // dedupe identical events on retry
+      "traceId":             string,  // group spans into a trace
+      "spanId":              string,  // this span's ID
+      "parentSpanId":        string,  // parent span (for nested agent calls)
+      "properties":          object   // arbitrary JSON metadata (searchable)
+    }
+  ]
+}
+```
+
+- Batch up to 1000 events per request.
+- If `costAmount` is omitted and `model` + `inputTokens` + `outputTokens` are provided,
+  Observe computes cost automatically using OpenRouter pricing.
+- If `revenueAmount` is omitted, Observe auto-attributes revenue from Stripe MRR or
+  from feature pricing rules (set in the dashboard).
+- `idempotencyKey` guarantees at-most-once on retry. Recommended.
+
+### Response
+
+```json
+{
+  "accepted": 1,
+  "rejected": 0,
+  "errors": []
+}
+```
+
+`errors[]` contains `{ index, error }` for each event that failed validation. The
+accepted count is the number of rows actually inserted (dedup via `idempotencyKey`
+also reduces this count).
+
+---
+
+## Per-call feature override (Path 3 users)
+
+If the same provider client powers multiple features in Path 3 (SDK auto-wrap),
+override `feature` per call via the native headers option:
+
+```ts
+await openai.chat.completions.create(
+  { model: 'gpt-4o-mini', messages },
+  { headers: { 'Observe-Feature': 'summarize_email' } }
+)
+```
+
+`Observe-*` headers exist for Paths 2 and 3 only, because the provider SDK
+request body is opaque to the proxy — metadata cannot ride in the JSON body
+without breaking the provider contract. For Path 1 (direct ingest), everything
+goes in the JSON body you post and you never touch headers.
+
+The supported request headers for Paths 2 and 3 are: `Observe-Key` (required),
+`Observe-Customer`, `Observe-Feature`, `Observe-Agent`, `Observe-Trace-Id`,
+`Observe-Span-Id`, `Observe-Parent-Span-Id`. Legacy `x-tanso-*` names are still
+accepted but deprecated per RFC 6648. Prefer the unprefixed form.
+
+---
+
+## Environment variables
 
 ```
 OBSERVE_API_KEY=obs_...   # get from https://observemetrics.com/data-sources
 ```
 
-## Required per-call context
+The key always starts with `obs_`. It is the ONLY value the user needs to wire up.
+Do not invent other env vars. Do not replace the user's OpenAI / Anthropic key.
 
-- `customerId` — unique ID of the end user making the request. Stripe customer ID recommended. Set via `Observe.identify()` or `x-tanso-customer` header.
-- `feature` — the product feature the call powers. Set via `Observe.feature()` or `x-tanso-feature` header.
+---
 
-## Multi-agent tracking
+## Stripe connection is optional
 
-For multi-agent systems, tag each agent:
+Observe auto-attributes revenue from a connected Stripe account, but it is not
+required to start tracking costs. A user can:
 
-```ts
-Observe.agent('research-agent')
-const researchClient = Observe.wrap(new OpenAI())
+1. Wire up Observe first (Paths 1, 2, or 3 above) — tracks cost only.
+2. Connect Stripe later from Data Sources → Stripe — backfills revenue attribution.
+3. Or skip Stripe entirely and provide `revenueAmount` explicitly per event (Path 1)
+   or via the Feature Pricing table in the dashboard.
 
-Observe.agent('summarization-agent')
-const summaryClient = Observe.wrap(new OpenAI())
-```
+If the user is on Clerk, Paddle, Lago, or any other billing tool, they can either
+connect Stripe separately, or use explicit `revenueAmount` / Feature Pricing.
 
-## Checklist for an AI coding agent
+---
 
-When implementing Observe in a user's codebase:
+## Checklist for an AI coding agent implementing Observe
 
-1. Install `@tanso/observe`.
-2. Add `OBSERVE_API_KEY` to `.env` / env config.
-3. Call `Observe.configure({ apiKey: ... })` once at app startup.
-4. Identify the customer at the start of each authenticated request (`Observe.identify({ customerId })`).
-5. Wrap every `new OpenAI()` and `new Anthropic()` with `Observe.wrap()`.
-6. Tag each AI-powered feature with `Observe.feature('feature_key')` or a per-call header.
-7. Do NOT log or echo the API key. Keep it in env vars only.
-8. Do NOT remove the user's existing OpenAI API key — Observe proxies to OpenAI; it does not replace the provider.
+1. **Detect gateways first.** Grep for `portkey-ai`, `litellm`, `helicone`,
+   `openrouter`, and any custom `baseURL` on OpenAI/Anthropic clients. If found,
+   use Path 2 (gateway headers). Do NOT rip out the gateway.
+2. **Default to Path 1 (direct ingest).** No SDK install required. Do NOT
+   install `@tansohq/observe` and do NOT wrap the provider client unless the
+   user explicitly asks for auto-instrumentation.
+3. Add `OBSERVE_API_KEY=obs_...` to `.env` (and `.env.example` with a placeholder).
+   The key always starts with `obs_`. Get it from
+   https://observemetrics.com/data-sources.
+4. Find every place the app calls OpenAI / Anthropic / another LLM provider.
+   After each call returns, `fetch('https://observemetrics.com/api/events/ingest', …)`
+   with a single event in the body: `eventName`, `customerReferenceId`,
+   `featureKey`, `model`, `modelProvider`, `inputTokens`, `outputTokens`,
+   `durationMs`, `idempotencyKey`. Fire-and-forget; catch and log on failure.
+5. Use the end-user's ID (Stripe customer ID if available, else stable user ID)
+   as `customerReferenceId`. Never "default" or a hardcoded value.
+6. Use one stable `featureKey` per user-facing AI feature — e.g. `ai_chat`,
+   `summarize_email`, `code_autocomplete`. Not per model.
+7. If (and only if) the user asks for auto-instrumentation: `npm install
+   @tansohq/observe` — with the `hq`. The package `@tanso/observe` does NOT
+   exist on npm. If install fails, STOP and tell the user; do not substitute.
+   Then follow Path 3.
+8. Do NOT log or echo the API key. Keep it in env vars only.
+9. Stripe is optional. Do not add Stripe integration unless the user asks.
+10. After wiring up, run the app once and confirm events appear at
+    https://observemetrics.com/events.
+
+---
 
 ## What NOT to do
 
-- Do not replace OpenAI / Anthropic with anything else. Observe wraps the existing client, it does not substitute models.
-- Do not track end-user messages unless explicitly asked. Observe logs cost + metadata, not message content.
+- Do not install `@tanso/observe`. The correct package is `@tansohq/observe`.
+- Do not replace OpenAI / Anthropic with anything else. Observe wraps the existing
+  client, it does not substitute models.
+- Do not track end-user message content. Observe logs cost + metadata, not prompts
+  or completions.
 - Do not hardcode the API key.
+- Do not touch an existing AI gateway without asking the user. If you see Portkey,
+  LiteLLM, Helicone, OpenRouter, or similar in `package.json`, use Path 2.
+- Do not default to the SDK wrap (Path 3). It puts Observe in the critical
+  path of every LLM call. Use Path 1 (direct ingest) unless the user
+  explicitly asks for auto-instrumentation.
+- Do not add Stripe integration as part of Observe setup unless the user asks.
+  Stripe is optional.

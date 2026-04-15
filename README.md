@@ -98,7 +98,7 @@ from openai import OpenAI
 client = OpenAI(
     api_key="sk-...",                                  # your real provider key
     base_url="https://observemetrics.com/v1",          # or your self-hosted URL
-    default_headers={"x-tanso-key": "obs_..."},        # your Observe key from Data Sources
+    default_headers={"Observe-Key": "obs_..."},        # your Observe key from Data Sources
 )
 
 # Cost, model, tokens, customer, feature — all tracked automatically.
@@ -114,9 +114,9 @@ client = OpenAI(
     api_key="sk-...",
     base_url="https://observemetrics.com/v1",
     default_headers={
-        "x-tanso-key":      "obs_...",
-        "x-tanso-customer": user.stripe_customer_id,  # cus_...
-        "x-tanso-feature":  "ai_chat",                # your feature name
+        "Observe-Key":      "obs_...",
+        "Observe-Customer": user.stripe_customer_id,  # cus_...
+        "Observe-Feature":  "ai_chat",                # your feature name
     },
 )
 ```
@@ -132,7 +132,7 @@ import anthropic
 client = anthropic.Anthropic(
     api_key="sk-ant-...",
     base_url="https://observemetrics.com",
-    default_headers={"x-tanso-key": "obs_..."},
+    default_headers={"Observe-Key": "obs_..."},
 )
 ```
 
@@ -151,11 +151,11 @@ client = anthropic.Anthropic(
 ## SDK (zero headers, zero-latency wrap)
 
 ```bash
-npm install @tanso/observe
+npm install @tansohq/observe
 ```
 
 ```typescript
-import { Observe } from '@tanso/observe'
+import { Observe } from '@tansohq/observe'
 import OpenAI from 'openai'
 
 // 1. Configure once at startup
@@ -180,7 +180,7 @@ Per-call feature override:
 ```typescript
 await openai.chat.completions.create(
   { model: 'gpt-4o', messages },
-  { headers: { 'x-tanso-feature': 'summarize_email' } }
+  { headers: { 'Observe-Feature': 'summarize_email' } }
 )
 ```
 

@@ -20,7 +20,7 @@ export const OBSERVE_PLANS: Record<string, PlanConfig> = {
   free: {
     name: "Free",
     features: {
-      ai_insights: { limit: 50, reset: "monthly" },
+      ai_insights: { limit: 1000, reset: "monthly" },
       event_ingest: { limit: 10000, reset: "monthly" },
       cost_alerts: { limit: null },
       csv_upload: { limit: null },
@@ -34,14 +34,14 @@ export const OBSERVE_PLANS: Record<string, PlanConfig> = {
     name: "Growth",
     stripePriceId: process.env.STRIPE_GROWTH_PRICE_ID || "",
     features: {
-      ai_insights: { limit: 500, reset: "monthly" },
-      event_ingest: { limit: null },
+      ai_insights: { limit: 10000, reset: "monthly" },
+      event_ingest: { limit: 500000, reset: "monthly" },
       cost_alerts: { limit: null },
       csv_upload: { limit: null },
       stripe_connection: { limit: null },
       ai_provider_connection: { limit: null },
       team_members: { limit: null },
-      data_retention_days: { limit: null },
+      data_retention_days: { limit: 365 },
     },
   },
   pro: {

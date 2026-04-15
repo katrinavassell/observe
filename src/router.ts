@@ -86,11 +86,13 @@ const router = createRouter({
     },
     {
       path: "/onboarding",
-      redirect: "/data-sources",
+      name: "onboarding",
+      component: () => import("@/pages/OnboardingPage.vue"),
+      meta: { noLayout: true },
     },
     {
       path: "/onboarding/upload",
-      redirect: "/data-sources",
+      redirect: "/onboarding",
     },
     {
       path: "/dashboard",

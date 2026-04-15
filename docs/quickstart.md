@@ -12,7 +12,7 @@ from openai import OpenAI
 client = OpenAI(
     api_key="sk-...",
     base_url="https://app.tanso.io/v1",     # your Observe instance
-    default_headers={"x-tanso-key": "obs_..."}, # SDK key from Data Sources
+    default_headers={"Observe-Key": "obs_..."}, # SDK key from Data Sources
 )
 
 response = client.chat.completions.create(
@@ -30,7 +30,7 @@ import OpenAI from 'openai'
 const client = new OpenAI({
   apiKey: 'sk-...',
   baseURL: 'https://app.tanso.io/v1',
-  defaultHeaders: { 'x-tanso-key': 'obs_...' },
+  defaultHeaders: { 'Observe-Key': 'obs_...' },
 })
 ```
 
@@ -42,7 +42,7 @@ import anthropic
 client = anthropic.Anthropic(
     api_key="sk-ant-...",
     base_url="https://app.tanso.io",
-    default_headers={"x-tanso-key": "obs_..."},
+    default_headers={"Observe-Key": "obs_..."},
 )
 ```
 
@@ -59,9 +59,9 @@ client = OpenAI(
     api_key="sk-...",
     base_url="https://app.tanso.io/v1",
     default_headers={
-        "x-tanso-key":      "obs_...",
-        "x-tanso-customer": "cus_acme",      # your customer ID
-        "x-tanso-feature":  "ai-assistant",   # which feature this is
+        "Observe-Key":      "obs_...",
+        "Observe-Customer": "cus_acme",      # your customer ID
+        "Observe-Feature":  "ai-assistant",   # which feature this is
     },
 )
 ```
@@ -120,11 +120,11 @@ Go to **Data Sources** in the sidebar. Pick whichever fits:
 If you prefer fire-and-forget tracking from your backend instead of the proxy:
 
 ```bash
-npm install @tanso/observe
+npm install @tansohq/observe
 ```
 
 ```typescript
-import { Observe } from "@tanso/observe"
+import { Observe } from "@tansohq/observe"
 import OpenAI from "openai"
 
 Observe.configure({ apiKey: "obs_your_key" })
@@ -145,10 +145,10 @@ See the [SDK README](../packages/sdk/README.md) for full options.
 
 ## Tracing agent flows
 
-Track multi-step agent executions with cost attribution per step. Use the `x-tanso-trace-id` and `x-tanso-span-id` headers on each gateway call to group them into a single trace:
+Track multi-step agent executions with cost attribution per step. Use the `Observe-Trace-Id` and `Observe-Span-Id` headers on each gateway call to group them into a single trace:
 
 ```typescript
-import { Observe } from "@tanso/observe"
+import { Observe } from "@tansohq/observe"
 import OpenAI from "openai"
 
 Observe.configure({ apiKey: process.env.OBSERVE_API_KEY! })
@@ -159,13 +159,13 @@ const traceId = crypto.randomUUID()
 // Step 1 of a multi-step agent
 await openai.chat.completions.create(
   { model: "gpt-4o", messages: [{ role: "user", content: "Plan the research" }] },
-  { headers: { "x-tanso-trace-id": traceId, "x-tanso-span-id": "plan" } },
+  { headers: { "Observe-Trace-Id": traceId, "Observe-Span-Id": "plan" } },
 )
 
 // Step 2
 await openai.chat.completions.create(
   { model: "gpt-4o-mini", messages: [{ role: "user", content: "Summarize" }] },
-  { headers: { "x-tanso-trace-id": traceId, "x-tanso-span-id": "summarize", "x-tanso-parent-span-id": "plan" } },
+  { headers: { "Observe-Trace-Id": traceId, "Observe-Span-Id": "summarize", "Observe-Parent-Span-Id": "plan" } },
 )
 ```
 

@@ -686,6 +686,7 @@ export function createGatewayRoutes(
     async (req: Request, res: Response) => {
       try {
         const observeKey =
+          (req.headers["observe-key"] as string) ||
           (req.headers["x-tanso-key"] as string) ||
           (req.headers["x-observe-key"] as string);
         if (!observeKey) {

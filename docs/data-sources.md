@@ -17,7 +17,7 @@ Every data point in Observe carries a **source badge** so you can see where it c
 For real-time event ingestion from your application:
 
 - **Proxy mode** -- point your OpenAI/Anthropic client at Observe. Events logged automatically with `source: proxy`.
-- **SDK** -- use `@tanso/observe` with `Observe.configure()` + `identify()` + `wrap()`. Events logged with `source: sdk`.
+- **SDK** -- use `@tansohq/observe` with `Observe.configure()` + `identify()` + `wrap()`. Events logged with `source: sdk`.
 - **HTTP API** -- `POST /events/ingest` with an SDK key. Events logged with `source: sdk`.
 
 Generate SDK keys under **Data Sources > API Keys** in the dashboard.

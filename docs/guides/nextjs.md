@@ -5,7 +5,7 @@ Observe tracks AI costs from your Next.js application. All tracking happens serv
 ## Install
 
 ```bash
-npm install @tanso/observe openai
+npm install @tansohq/observe openai
 ```
 
 ## Configure Once
@@ -15,7 +15,7 @@ Call `Observe.configure()` from a server-only module. In Next.js, `lib/observe.t
 ```typescript
 // lib/observe.ts
 import "server-only";
-import { Observe } from "@tanso/observe";
+import { Observe } from "@tansohq/observe";
 
 Observe.configure({
   apiKey: process.env.OBSERVE_API_KEY!,
@@ -32,7 +32,7 @@ Import this file wherever you need tracking (route handlers, server actions, mid
 // app/api/chat/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
-import { Observe } from "@tanso/observe";
+import { Observe } from "@tansohq/observe";
 import { auth } from "@/lib/auth";
 import "@/lib/observe"; // side-effect import ensures Observe.configure ran
 
@@ -64,7 +64,7 @@ Server actions run on the server, so they work the same way:
 "use server";
 
 import OpenAI from "openai";
-import { Observe } from "@tanso/observe";
+import { Observe } from "@tansohq/observe";
 import { auth } from "@/lib/auth";
 import "@/lib/observe";
 
@@ -79,7 +79,7 @@ export async function summarize(text: string) {
       model: "gpt-4o",
       messages: [{ role: "user", content: `Summarize: ${text}` }],
     },
-    { headers: { "x-tanso-feature": "summarize_text" } }
+    { headers: { "Observe-Feature": "summarize_text" } }
   );
 
   return completion.choices[0].message.content;
@@ -108,7 +108,7 @@ Never expose `OBSERVE_API_KEY` to the browser. Keep it server-only (don't prefix
 
 ## Per-Request Attribution
 
-`Observe.identify({ customerId })` sets the customer context for the current async scope. Call it at the start of each authenticated request. Use `Observe.feature('ai_chat')` or a per-call `x-tanso-feature` header to tag the product feature that owns the call.
+`Observe.identify({ customerId })` sets the customer context for the current async scope. Call it at the start of each authenticated request. Use `Observe.feature('ai_chat')` or a per-call `Observe-Feature` header to tag the product feature that owns the call.
 
 ## Edge Runtime
 

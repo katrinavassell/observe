@@ -651,7 +651,6 @@ export interface OrgMember {
   id: string;
   visitor_id: string | null;
   invited_email: string | null;
-  role: "admin" | "viewer";
   status: "pending" | "active";
   joined_at: string | null;
   created_at: string;
@@ -667,7 +666,6 @@ export interface Organization {
 export interface TeamInfo {
   org: Organization;
   members: OrgMember[];
-  my_role: "admin" | "viewer";
 }
 
 export async function getTeamInfo(): Promise<TeamInfo> {
@@ -686,20 +684,16 @@ export interface InviteResult {
   invite_token: string;
 }
 
-export async function createInvite(
-  email: string,
-  role: "admin" | "viewer",
-): Promise<InviteResult> {
+export async function createInvite(email: string): Promise<InviteResult> {
   return request("/team/invite", {
     method: "POST",
-    body: JSON.stringify({ email, role }),
+    body: JSON.stringify({ email }),
   });
 }
 
 export interface InviteInfo {
   org_name: string;
   invited_email: string | null;
-  role: "admin" | "viewer";
 }
 
 export async function getInviteInfo(token: string): Promise<InviteInfo> {
@@ -708,31 +702,14 @@ export async function getInviteInfo(token: string): Promise<InviteInfo> {
 
 export async function acceptInvite(
   token: string,
-): Promise<{ success: boolean; org_id: string; role: string }> {
+): Promise<{ success: boolean; org_id: string }> {
   return request(`/team/join/${token}`, { method: "POST" });
-}
-
-export async function changeMemberRole(
-  memberId: string,
-  role: "admin" | "viewer",
-): Promise<{ success: boolean }> {
-  return request(`/team/members/${memberId}`, {
-    method: "PATCH",
-    body: JSON.stringify({ role }),
-  });
 }
 
 export async function removeMember(
   memberId: string,
 ): Promise<{ success: boolean }> {
   return request(`/team/members/${memberId}`, { method: "DELETE" });
-}
-
-export async function getMyRole(): Promise<{
-  role: "admin" | "viewer";
-  org_id: string;
-}> {
-  return request("/team/my-role");
 }
 
 // REFERRAL SYSTEM

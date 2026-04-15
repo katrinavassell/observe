@@ -64,16 +64,11 @@ export function createTeamRoutes(pool: Pool, ensureVisitor: any) {
           invited_email: m.invited_email || m.account_email || null,
           account_name: undefined,
           account_email: undefined,
+          // `role` is retained in the DB but no longer surfaced in the API.
+          role: undefined,
         }));
 
-        const myMember = members.find((m: any) => m.visitor_id === visitorId);
-        const myRole = myMember?.role || "viewer";
-
-        res.json({
-          org,
-          members,
-          my_role: myRole,
-        });
+        res.json({ org, members });
       } catch (err) {
         console.error("GET /team error:", err);
         res.status(500).json({ error: "Failed to load team info" });
@@ -101,16 +96,13 @@ export function createTeamRoutes(pool: Pool, ensureVisitor: any) {
         const org = await getOrCreateOrg(visitorId);
 
         const memberResult = await pool.query(
-          "SELECT role FROM organization_members WHERE org_id = $1 AND visitor_id = $2",
+          "SELECT 1 FROM organization_members WHERE org_id = $1 AND visitor_id = $2 AND status = 'active'",
           [org.id, visitorId],
         );
-        if (
-          !memberResult.rows.length ||
-          memberResult.rows[0].role !== "admin"
-        ) {
+        if (!memberResult.rows.length) {
           return res
             .status(403)
-            .json({ error: "Only admins can rename the team" });
+            .json({ error: "Only team members can rename the team" });
         }
 
         await pool.query("UPDATE organizations SET name = $1 WHERE id = $2", [
@@ -132,21 +124,18 @@ export function createTeamRoutes(pool: Pool, ensureVisitor: any) {
     async (req: AuthRequest, res: Response) => {
       try {
         const visitorId = req.visitorId!;
-        const { email, role } = req.body;
+        const { email } = req.body;
 
         const org = await getOrCreateOrg(visitorId);
 
         const memberResult = await pool.query(
-          "SELECT role FROM organization_members WHERE org_id = $1 AND visitor_id = $2",
+          "SELECT 1 FROM organization_members WHERE org_id = $1 AND visitor_id = $2 AND status = 'active'",
           [org.id, visitorId],
         );
-        if (
-          !memberResult.rows.length ||
-          memberResult.rows[0].role !== "admin"
-        ) {
+        if (!memberResult.rows.length) {
           return res
             .status(403)
-            .json({ error: "Only admins can invite members" });
+            .json({ error: "Only team members can invite new members" });
         }
 
         // Check team member limit before allowing invite
@@ -162,7 +151,10 @@ export function createTeamRoutes(pool: Pool, ensureVisitor: any) {
           });
         }
 
-        const validRole = role === "admin" ? "admin" : "viewer";
+        // Roles are no longer surfaced in the product — every invited
+        // member is provisioned as 'admin' so the DB column retains a
+        // legal value (the CHECK constraint still requires admin|viewer).
+        const validRole = "admin";
         const normalizedEmail = email ? email.trim().toLowerCase() : null;
 
         if (normalizedEmail) {
@@ -204,7 +196,7 @@ export function createTeamRoutes(pool: Pool, ensureVisitor: any) {
     try {
       const { token } = req.params;
       const result = await pool.query(
-        `SELECT om.invited_email, om.role, o.name AS org_name
+        `SELECT om.invited_email, o.name AS org_name
          FROM organization_members om
          JOIN organizations o ON o.id = om.org_id
          WHERE om.invite_token = $1 AND om.status = 'pending'`,
@@ -221,7 +213,6 @@ export function createTeamRoutes(pool: Pool, ensureVisitor: any) {
       res.json({
         org_name: row.org_name,
         invited_email: row.invited_email,
-        role: row.role,
       });
     } catch (err) {
       console.error("GET /team/invite/:token error:", err);
@@ -235,6 +226,14 @@ export function createTeamRoutes(pool: Pool, ensureVisitor: any) {
     ensureVisitor,
     async (req: AuthRequest, res: Response) => {
       try {
+        // Must be a logged-in user — otherwise ensureVisitor would stamp the
+        // invite onto a throwaway anonymous UUID, consuming the token without
+        // ever attaching the real human to the org.
+        if (!req.accountEmail) {
+          return res
+            .status(401)
+            .json({ error: "You must be signed in to accept an invite" });
+        }
         const visitorId = req.visitorId!;
         const { token } = req.params;
 
@@ -253,6 +252,17 @@ export function createTeamRoutes(pool: Pool, ensureVisitor: any) {
         }
 
         const invite = result.rows[0];
+
+        // If the invite was addressed to a specific email, the accepting
+        // user's email must match — prevents anyone-with-the-link joins.
+        if (
+          invite.invited_email &&
+          invite.invited_email.toLowerCase() !== req.accountEmail.toLowerCase()
+        ) {
+          return res.status(403).json({
+            error: `This invite is for ${invite.invited_email}. Sign in with that email to accept.`,
+          });
+        }
 
         const client = await pool.connect();
         try {
@@ -297,74 +307,10 @@ export function createTeamRoutes(pool: Pool, ensureVisitor: any) {
         res.json({
           success: true,
           org_id: String(invite.organization_id),
-          role: invite.role,
         });
       } catch (err) {
         console.error("POST /team/join/:token error:", err);
         res.status(500).json({ error: "Failed to accept invite" });
-      }
-    },
-  );
-
-  // PATCH /team/members/:id - update member role
-  router.patch(
-    "/team/members/:id",
-    ensureVisitor,
-    async (req: AuthRequest, res: Response) => {
-      try {
-        const visitorId = req.visitorId!;
-        const memberId = req.params.id;
-        const { role } = req.body;
-
-        if (!role || !["admin", "viewer"].includes(role)) {
-          return res.status(400).json({ error: "Invalid role" });
-        }
-
-        const org = await getOrCreateOrg(visitorId);
-
-        const adminCheck = await pool.query(
-          "SELECT role FROM organization_members WHERE org_id = $1 AND visitor_id = $2",
-          [org.id, visitorId],
-        );
-        if (!adminCheck.rows.length || adminCheck.rows[0].role !== "admin") {
-          return res
-            .status(403)
-            .json({ error: "Only admins can change roles" });
-        }
-
-        const targetMember = await pool.query(
-          "SELECT * FROM organization_members WHERE id = $1 AND org_id = $2",
-          [memberId, org.id],
-        );
-        if (!targetMember.rows.length) {
-          return res.status(404).json({ error: "Member not found" });
-        }
-
-        if (targetMember.rows[0].visitor_id === visitorId && role !== "admin") {
-          const adminCount = await pool.query(
-            "SELECT COUNT(*) FROM organization_members WHERE org_id = $1 AND role = 'admin' AND status = 'active'",
-            [org.id],
-          );
-          if (parseInt(adminCount.rows[0].count) <= 1) {
-            return res.status(400).json({
-              error: "Cannot demote yourself — you are the only admin",
-            });
-          }
-        }
-
-        const updateResult = await pool.query(
-          "UPDATE organization_members SET role = $1 WHERE id = $2 AND org_id = $3 RETURNING id",
-          [role, memberId, org.id],
-        );
-
-        if (!updateResult.rows.length) {
-          return res.status(404).json({ error: "Member not found" });
-        }
-
-        res.json({ success: true });
-      } catch (err) {
-        console.error("PATCH /team/members/:id error:", err);
-        res.status(500).json({ error: "Failed to update role" });
       }
     },
   );
@@ -380,14 +326,14 @@ export function createTeamRoutes(pool: Pool, ensureVisitor: any) {
 
         const org = await getOrCreateOrg(visitorId);
 
-        const adminCheck = await pool.query(
-          "SELECT role FROM organization_members WHERE org_id = $1 AND visitor_id = $2",
+        const callerCheck = await pool.query(
+          "SELECT 1 FROM organization_members WHERE org_id = $1 AND visitor_id = $2 AND status = 'active'",
           [org.id, visitorId],
         );
-        if (!adminCheck.rows.length || adminCheck.rows[0].role !== "admin") {
+        if (!callerCheck.rows.length) {
           return res
             .status(403)
-            .json({ error: "Only admins can remove members" });
+            .json({ error: "Only team members can remove members" });
         }
 
         const memberResult = await pool.query(
@@ -418,40 +364,6 @@ export function createTeamRoutes(pool: Pool, ensureVisitor: any) {
       } catch (err) {
         console.error("DELETE /team/members/:id error:", err);
         res.status(500).json({ error: "Failed to remove member" });
-      }
-    },
-  );
-
-  // GET /team/my-role - get current user's role
-  router.get(
-    "/team/my-role",
-    ensureVisitor,
-    async (req: AuthRequest, res: Response) => {
-      try {
-        const visitorId = req.visitorId!;
-
-        const mapResult = await pool.query(
-          "SELECT org_id FROM visitor_org_map WHERE visitor_id = $1",
-          [visitorId],
-        );
-
-        if (!mapResult.rows.length) {
-          return res.json({ role: "viewer", org_id: "" });
-        }
-
-        const orgId = mapResult.rows[0].org_id;
-        const memberResult = await pool.query(
-          "SELECT role FROM organization_members WHERE org_id = $1 AND visitor_id = $2",
-          [orgId, visitorId],
-        );
-
-        res.json({
-          role: memberResult.rows.length ? memberResult.rows[0].role : "viewer",
-          org_id: String(orgId),
-        });
-      } catch (err) {
-        console.error("GET /team/my-role error:", err);
-        res.status(500).json({ error: "Failed to get role" });
       }
     },
   );

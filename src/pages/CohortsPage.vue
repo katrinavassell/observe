@@ -8,6 +8,7 @@ import {
   createCustomCohort,
 } from "@/lib/api";
 import type {
+  CohortCustomer,
   CohortLabel,
   CohortSummary,
   DiscoveredCluster,
@@ -35,11 +36,16 @@ import {
   DialogTitle,
   DialogClose,
 } from "radix-vue";
-import { Card, Skeleton, Button } from "@/components/ui";
+import { Card, Skeleton, Button, Input } from "@/components/ui";
 import { formatCurrency as fmt, formatPct as fmtPct } from "@/lib/format";
 import { toast } from "vue-sonner";
 import { useAuth } from "@/composables/useAuth";
-import { GUEST_CUSTOMERS } from "@/lib/guest-preview";
+import {
+  GUEST_CUSTOMERS,
+  GUEST_COHORT_CUSTOMERS,
+  GUEST_COHORT_SUMMARY,
+  GUEST_COHORT_TOTALS,
+} from "@/lib/guest-preview";
 
 const queryClient = useQueryClient();
 const { isLoggedIn } = useAuth();
@@ -324,19 +330,29 @@ function removeExcludePattern(index: number) {
 
 const {
   data: cohortsData,
-  isLoading,
+  isLoading: realIsLoading,
   isError,
 } = useQuery({
   queryKey: ["cohorts"],
   queryFn: () => getCohorts(),
+  enabled: computed(() => isLoggedIn.value),
 });
 
-const customers = computed(() => cohortsData.value?.customers ?? []);
-const summary = computed(
-  () =>
-    cohortsData.value?.summary ?? ({} as Record<CohortLabel, CohortSummary>),
+const isLoading = computed(() => isLoggedIn.value && realIsLoading.value);
+
+const customers = computed<CohortCustomer[]>(() =>
+  isLoggedIn.value
+    ? (cohortsData.value?.customers ?? [])
+    : GUEST_COHORT_CUSTOMERS,
 );
-const totals = computed(() => cohortsData.value?.totals ?? null);
+const summary = computed<Record<CohortLabel, CohortSummary>>(() =>
+  isLoggedIn.value
+    ? (cohortsData.value?.summary ?? ({} as Record<CohortLabel, CohortSummary>))
+    : GUEST_COHORT_SUMMARY,
+);
+const totals = computed(() =>
+  isLoggedIn.value ? (cohortsData.value?.totals ?? null) : GUEST_COHORT_TOTALS,
+);
 
 // Cohort filter
 const activeCohort = ref<CohortLabel | null>(null);

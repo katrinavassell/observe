@@ -1,17 +1,17 @@
-# @tanso/observe
+# @tansohq/observe
 
 AI cost observability SDK. Track every LLM call with 3 lines of code.
 
 ## Install
 
 ```bash
-npm install @tanso/observe
+npm install @tansohq/observe
 ```
 
 ## Quickstart (recommended)
 
 ```ts
-import { Observe } from '@tanso/observe'
+import { Observe } from '@tansohq/observe'
 import OpenAI from 'openai'
 
 // 1. Configure once at startup
@@ -49,7 +49,7 @@ Per-call overrides use the client's native options:
 ```ts
 await openai.chat.completions.create(
   { model: 'gpt-4o', messages },
-  { headers: { 'x-tanso-feature': 'export_report' } }
+  { headers: { 'Observe-Feature': 'export_report' } }
 )
 ```
 
@@ -67,7 +67,7 @@ Observe.configure({
 Use `Observe.agent()` to attribute costs to individual agents in a multi-agent system:
 
 ```ts
-import { Observe } from '@tanso/observe'
+import { Observe } from '@tansohq/observe'
 import OpenAI from 'openai'
 
 Observe.configure({ apiKey: 'obs_your_api_key' })
@@ -106,9 +106,9 @@ client = OpenAI(
     api_key="sk-...",
     base_url="https://app.tanso.io/v1",
     default_headers={
-        "x-tanso-key": "obs_your_api_key",
-        "x-tanso-customer": user.stripe_id,
-        "x-tanso-feature": "ai_chat",
+        "Observe-Key": "obs_your_api_key",
+        "Observe-Customer": user.stripe_id,
+        "Observe-Feature": "ai_chat",
     },
 )
 ```
@@ -120,7 +120,7 @@ client = OpenAI(
 For non-OpenAI/Anthropic providers or custom cost attribution:
 
 ```ts
-import { TansoObserve } from '@tanso/observe';
+import { TansoObserve } from '@tansohq/observe';
 
 const observe = new TansoObserve({ apiKey: 'your-api-key' });
 
@@ -200,8 +200,8 @@ interface ObserveEvent {
 
 ```ts
 import OpenAI from 'openai';
-import { TansoObserve } from '@tanso/observe';
-import { wrapOpenAI } from '@tanso/observe/openai';
+import { TansoObserve } from '@tansohq/observe';
+import { wrapOpenAI } from '@tansohq/observe/openai';
 
 const observe = new TansoObserve({ apiKey: 'your-api-key' });
 
@@ -231,8 +231,8 @@ How it works:
 
 ```ts
 import Anthropic from '@anthropic-ai/sdk';
-import { TansoObserve } from '@tanso/observe';
-import { wrapAnthropic } from '@tanso/observe/anthropic';
+import { TansoObserve } from '@tansohq/observe';
+import { wrapAnthropic } from '@tansohq/observe/anthropic';
 
 const observe = new TansoObserve({ apiKey: 'your-api-key' });
 

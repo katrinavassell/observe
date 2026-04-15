@@ -56,7 +56,7 @@ Common issues and how to fix them.
 
 - Your OpenAI or Anthropic API key must be in the `Authorization` header as you would normally send it to the provider.
 
-- The `x-tanso-key` header is optional. Without it, the request is still proxied to the upstream provider -- it just won't log a usage event in Observe.
+- The `Observe-Key` header is optional. Without it, the request is still proxied to the upstream provider -- it just won't log a usage event in Observe.
 
 ---
 

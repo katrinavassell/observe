@@ -1,0 +1,16 @@
+{
+  "name": "@tanso/observe",
+  "version": "0.0.1",
+  "description": "DEPRECATED placeholder — install @tansohq/observe instead.",
+  "main": "index.js",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tansohq/observe-open-source"
+  },
+  "keywords": [
+    "deprecated",
+    "placeholder"
+  ],
+  "homepage": "https://github.com/tansohq/observe-open-source#readme"
+}

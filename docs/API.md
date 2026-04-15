@@ -233,7 +233,7 @@ Proxy to OpenAI embeddings.
 
 Proxy to Anthropic messages API.
 
-Headers: `x-tanso-key`, `x-tanso-customer`, `x-tanso-feature` for event attribution.
+Headers: `Observe-Key`, `Observe-Customer`, `Observe-Feature` for event attribution.
 
 ---
 

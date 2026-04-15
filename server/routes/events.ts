@@ -928,6 +928,18 @@ export function createEventsRoutes(
         ON CONFLICT (user_id, idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING
       `;
 
+        // Activation-funnel instrumentation: note whether the user had any
+        // non-sample SDK events BEFORE this batch. If they didn't, and this
+        // batch lands a row, we'll fire the first_event_ingested milestone.
+        // Checked pre-insert so the "first ever" flag is race-free.
+        const priorEventCheck = await pool.query(
+          `SELECT 1 FROM observe_events
+           WHERE user_id = $1 AND source = 'sdk'
+           LIMIT 1`,
+          [userId],
+        );
+        const wasPreviouslyEmpty = priorEventCheck.rows.length === 0;
+
         const result = await pool.query(insertQuery, values);
         const inserted = result.rowCount ?? 0;
         const deduped = validEvents.length - inserted;
@@ -940,6 +952,52 @@ export function createEventsRoutes(
 
         // Auto-trigger inference profile learning in the background (fire-and-forget)
         if (inserted > 0) {
+          // First-ever SDK event for this user — fire the activation milestone.
+          // Stamp the DB column AND fire a PostHog capture so the funnel is
+          // visible in both SQL and the PostHog funnel UI.
+          if (wasPreviouslyEmpty) {
+            const updateResult = await pool
+              .query(
+                `UPDATE accounts
+                 SET first_sdk_event_at = NOW()
+                 WHERE visitor_id = $1 AND first_sdk_event_at IS NULL
+                 RETURNING id, email`,
+                [userId],
+              )
+              .catch((err) => {
+                console.error("Failed to stamp first_sdk_event_at:", err);
+                return null;
+              });
+            if (
+              updateResult &&
+              updateResult.rowCount &&
+              updateResult.rowCount > 0
+            ) {
+              const accountEmail = updateResult.rows[0]?.email;
+              // Fire-and-forget — don't let telemetry block the ingest response.
+              fetch("https://us.i.posthog.com/capture/", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  api_key: "phc_o2WbwFatBrXLtocKFKLRHUWkqbuiCmTnVDTiTbKPT7rS",
+                  event: "first_event_ingested",
+                  distinct_id: accountEmail || userId,
+                  properties: {
+                    $process_person_profile: true,
+                    source: "sdk",
+                    batch_size: inserted,
+                  },
+                  timestamp: new Date().toISOString(),
+                }),
+              }).catch((err) =>
+                console.error(
+                  "PostHog first_event_ingested capture failed:",
+                  err,
+                ),
+              );
+            }
+          }
+
           deps
             .computeInferenceProfiles(userId)
             .catch((err) =>

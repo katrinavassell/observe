@@ -21,6 +21,10 @@ import type {
   ObserveEvent,
   ModelSummary,
   Customer,
+  CohortCustomer,
+  CohortLabel,
+  CohortSummary,
+  CohortTotals,
 } from "@/lib/api";
 
 const ISO = (offsetMinutes: number) =>
@@ -334,58 +338,61 @@ export function getGuestTraceDetail(traceId: string): TraceDetail | null {
   return SAMPLE_TRACE_DETAILS[traceId] ?? null;
 }
 
-export const GUEST_EVENTS: ObserveEvent[] = Array.from({ length: 20 }, (_, i) => {
-  const features = [
-    "rag_query",
-    "code_review_agent",
-    "content_pipeline",
-    "document_extraction",
-    "semantic_search",
-    "email_draft",
-  ];
-  const customers = [
-    ["cus_acme", "Acme Corp"],
-    ["cus_tidewater", "Tidewater AI"],
-    ["cus_neondata", "NeonData"],
-    ["cus_circleops", "CircleOps"],
-    ["cus_blazeml", "BlazeML"],
-  ];
-  const models: Array<[string, string]> = [
-    ["gpt-4o", "openai"],
-    ["gpt-4o-mini", "openai"],
-    ["claude-3-5-sonnet", "anthropic"],
-    ["text-embedding-3-small", "openai"],
-  ];
-  const feature = features[i % features.length];
-  const [cid, cname] = customers[i % customers.length];
-  const [model, provider] = models[i % models.length];
-  const cost = Number((0.002 + Math.random() * 0.28).toFixed(4));
-  return {
-    id: 1000 + i,
-    user_id: "guest",
-    customer_id: cid,
-    customer_name: cname,
-    feature_key: feature,
-    event_name: feature,
-    timestamp: ISO(i * 7),
-    cost_amount: cost,
-    cost_unit: "usd",
-    revenue_amount: Number((cost * (1 + Math.random() * 2)).toFixed(4)),
-    usage_units: Math.floor(200 + Math.random() * 1800),
-    model,
-    model_provider: provider,
-    source: "sample",
-    granularity: "event",
-    is_inferred: false,
-    properties: null,
-    created_at: ISO(i * 7),
-    trace_id: null,
-    span_id: null,
-    parent_span_id: null,
-    duration_ms: Math.floor(120 + Math.random() * 1800),
-    cost_type: model.startsWith("text-embedding") ? "embedding" : "llm",
-  };
-});
+export const GUEST_EVENTS: ObserveEvent[] = Array.from(
+  { length: 20 },
+  (_, i) => {
+    const features = [
+      "rag_query",
+      "code_review_agent",
+      "content_pipeline",
+      "document_extraction",
+      "semantic_search",
+      "email_draft",
+    ];
+    const customers = [
+      ["cus_acme", "Acme Corp"],
+      ["cus_tidewater", "Tidewater AI"],
+      ["cus_neondata", "NeonData"],
+      ["cus_circleops", "CircleOps"],
+      ["cus_blazeml", "BlazeML"],
+    ];
+    const models: Array<[string, string]> = [
+      ["gpt-4o", "openai"],
+      ["gpt-4o-mini", "openai"],
+      ["claude-3-5-sonnet", "anthropic"],
+      ["text-embedding-3-small", "openai"],
+    ];
+    const feature = features[i % features.length];
+    const [cid, cname] = customers[i % customers.length];
+    const [model, provider] = models[i % models.length];
+    const cost = Number((0.002 + Math.random() * 0.28).toFixed(4));
+    return {
+      id: 1000 + i,
+      user_id: "guest",
+      customer_id: cid,
+      customer_name: cname,
+      feature_key: feature,
+      event_name: feature,
+      timestamp: ISO(i * 7),
+      cost_amount: cost,
+      cost_unit: "usd",
+      revenue_amount: Number((cost * (1 + Math.random() * 2)).toFixed(4)),
+      usage_units: Math.floor(200 + Math.random() * 1800),
+      model,
+      model_provider: provider,
+      source: "sample",
+      granularity: "event",
+      is_inferred: false,
+      properties: null,
+      created_at: ISO(i * 7),
+      trace_id: null,
+      span_id: null,
+      parent_span_id: null,
+      duration_ms: Math.floor(120 + Math.random() * 1800),
+      cost_type: model.startsWith("text-embedding") ? "embedding" : "llm",
+    };
+  },
+);
 
 export const GUEST_MODELS: ModelSummary[] = [
   {
@@ -484,3 +491,182 @@ export const GUEST_CUSTOMERS: Customer[] = [
     created_at: new Date(Date.now() - 30 * 86_400_000).toISOString(),
   },
 ];
+
+const guestCohortCustomer = (
+  overrides: Partial<CohortCustomer> &
+    Pick<CohortCustomer, "customer_id" | "customer_name" | "cohort">,
+): CohortCustomer => ({
+  customer_email: null,
+  segment: null,
+  is_internal: false,
+  total_revenue: 0,
+  total_cost: 0,
+  margin_pct: null,
+  event_count: 0,
+  feature_count: 0,
+  model_count: 0,
+  adoption_depth: 0,
+  first_seen: new Date(Date.now() - 90 * 86_400_000).toISOString(),
+  last_seen: new Date().toISOString(),
+  cost_trend: "stable",
+  active_days_30d: 0,
+  health_score: 0,
+  top_model: null,
+  top_model_cost: null,
+  model_swap_suggestion: null,
+  mrr_movement: null,
+  ...overrides,
+});
+
+export const GUEST_COHORT_CUSTOMERS: CohortCustomer[] = [
+  guestCohortCustomer({
+    customer_id: "cus_acme",
+    customer_name: "Acme Corp",
+    customer_email: "ops@acme.example",
+    segment: "enterprise",
+    total_revenue: 4200,
+    total_cost: 980,
+    margin_pct: 76.7,
+    event_count: 18420,
+    feature_count: 6,
+    model_count: 3,
+    adoption_depth: 0.82,
+    cost_trend: "stable",
+    active_days_30d: 28,
+    health_score: 92,
+    top_model: "gpt-4o-mini",
+    top_model_cost: 640,
+    mrr_movement: "expansion",
+    cohort: "champion",
+  }),
+  guestCohortCustomer({
+    customer_id: "cus_tidewater",
+    customer_name: "Tidewater AI",
+    customer_email: "hello@tidewater.example",
+    segment: "growth",
+    total_revenue: 1200,
+    total_cost: 1380,
+    margin_pct: -15.0,
+    event_count: 9240,
+    feature_count: 4,
+    model_count: 2,
+    adoption_depth: 0.54,
+    cost_trend: "up",
+    active_days_30d: 24,
+    health_score: 41,
+    top_model: "claude-3-5-sonnet",
+    top_model_cost: 910,
+    model_swap_suggestion: {
+      suggested_model: "claude-3-5-haiku",
+      current_cost_per_event: 0.098,
+      suggested_cost_per_event: 0.022,
+      potential_savings_pct: 77.5,
+    },
+    mrr_movement: "stable",
+    cohort: "unprofitable",
+  }),
+  guestCohortCustomer({
+    customer_id: "cus_neondata",
+    customer_name: "NeonData",
+    customer_email: "team@neondata.example",
+    segment: "growth",
+    total_revenue: 890,
+    total_cost: 520,
+    margin_pct: 41.6,
+    event_count: 6180,
+    feature_count: 3,
+    model_count: 2,
+    adoption_depth: 0.47,
+    cost_trend: "up",
+    active_days_30d: 22,
+    health_score: 58,
+    top_model: "gpt-4o",
+    top_model_cost: 380,
+    mrr_movement: "stable",
+    cohort: "rising_cost",
+  }),
+  guestCohortCustomer({
+    customer_id: "cus_circleops",
+    customer_name: "CircleOps",
+    customer_email: "accounts@circleops.example",
+    segment: "starter",
+    total_revenue: 149,
+    total_cost: 62,
+    margin_pct: 58.4,
+    event_count: 2140,
+    feature_count: 2,
+    model_count: 1,
+    adoption_depth: 0.33,
+    cost_trend: "down",
+    active_days_30d: 11,
+    health_score: 48,
+    top_model: "gpt-4o-mini",
+    top_model_cost: 48,
+    mrr_movement: "contraction",
+    cohort: "at_risk",
+  }),
+  guestCohortCustomer({
+    customer_id: "cus_blazeml",
+    customer_name: "BlazeML",
+    customer_email: "hello@blazeml.example",
+    segment: "starter",
+    total_revenue: 49,
+    total_cost: 3,
+    margin_pct: 93.9,
+    event_count: 120,
+    feature_count: 1,
+    model_count: 1,
+    adoption_depth: 0.12,
+    first_seen: new Date(Date.now() - 28 * 86_400_000).toISOString(),
+    last_seen: new Date(Date.now() - 14 * 86_400_000).toISOString(),
+    cost_trend: "new",
+    active_days_30d: 3,
+    health_score: 34,
+    top_model: "gpt-4o-mini",
+    top_model_cost: 2.4,
+    mrr_movement: "new",
+    cohort: "inactive",
+  }),
+];
+
+const emptySummary = (): CohortSummary => ({
+  count: 0,
+  total_revenue: 0,
+  total_cost: 0,
+});
+
+export const GUEST_COHORT_SUMMARY: Record<CohortLabel, CohortSummary> = (() => {
+  const summary: Record<CohortLabel, CohortSummary> = {
+    unprofitable: emptySummary(),
+    at_risk: emptySummary(),
+    champion: emptySummary(),
+    inactive: emptySummary(),
+    rising_cost: emptySummary(),
+    healthy: emptySummary(),
+  };
+  for (const c of GUEST_COHORT_CUSTOMERS) {
+    const s = summary[c.cohort];
+    s.count += 1;
+    s.total_revenue += c.total_revenue;
+    s.total_cost += c.total_cost;
+  }
+  return summary;
+})();
+
+export const GUEST_COHORT_TOTALS: CohortTotals = (() => {
+  const revenue = GUEST_COHORT_CUSTOMERS.reduce(
+    (a, c) => a + c.total_revenue,
+    0,
+  );
+  const cost = GUEST_COHORT_CUSTOMERS.reduce((a, c) => a + c.total_cost, 0);
+  const avg_health =
+    GUEST_COHORT_CUSTOMERS.reduce((a, c) => a + c.health_score, 0) /
+    GUEST_COHORT_CUSTOMERS.length;
+  return {
+    customers: GUEST_COHORT_CUSTOMERS.length,
+    revenue,
+    cost,
+    margin_pct: revenue > 0 ? ((revenue - cost) / revenue) * 100 : null,
+    avg_health_score: avg_health,
+  };
+})();

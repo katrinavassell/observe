@@ -1,5 +1,5 @@
 {
-  "name": "@tanso/observe",
+  "name": "@tansohq/observe",
   "version": "0.1.0",
   "description": "Zero-latency AI cost observability SDK",
   "type": "module",

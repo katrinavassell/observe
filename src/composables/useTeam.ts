@@ -6,9 +6,6 @@ const isLoading = ref(false);
 const error = ref<string | null>(null);
 
 export function useTeam() {
-  const myRole = computed(() => teamInfo.value?.my_role ?? null);
-  const isAdmin = computed(() => myRole.value === "admin");
-  const isViewer = computed(() => myRole.value === "viewer");
   const org = computed(() => teamInfo.value?.org ?? null);
   const members = computed(() => teamInfo.value?.members ?? []);
 
@@ -31,16 +28,8 @@ export function useTeam() {
     }
   }
 
-  async function inviteMember(email: string, role: "admin" | "viewer") {
-    return api.createInvite(email, role);
-  }
-
-  async function changeRole(memberId: string, role: "admin" | "viewer") {
-    await api.changeMemberRole(memberId, role);
-    if (teamInfo.value) {
-      const member = teamInfo.value.members.find((m) => m.id === memberId);
-      if (member) member.role = role;
-    }
+  async function inviteMember(email: string) {
+    return api.createInvite(email);
   }
 
   async function removeMember(memberId: string) {
@@ -56,15 +45,11 @@ export function useTeam() {
     teamInfo,
     isLoading,
     error,
-    myRole,
-    isAdmin,
-    isViewer,
     org,
     members,
     fetchTeamInfo,
     renameTeam,
     inviteMember,
-    changeRole,
     removeMember,
   };
 }

@@ -69,9 +69,9 @@ const ROUTE_PROMPTS: Record<string, string[]> = {
     "What alerts have fired this week?",
   ],
   "/data-sources": [
-    "Am I tracking everything I should?",
-    "What data source is missing from my setup?",
-    "Why don't I see revenue for some events?",
+    "Which of my connected sources sent the most events this week?",
+    "Show me the last 10 events from the SDK",
+    "When did each of my data sources last sync?",
   ],
   "/plans": [
     "How close am I to my plan limits?",

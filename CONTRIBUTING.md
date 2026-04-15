@@ -42,7 +42,7 @@ server/               Express API backend
   tanso-client.ts     Tanso billing client
   model-pricing.ts    AI model pricing data
 docs/                 Documentation
-packages/sdk/         @tanso/observe SDK
+packages/sdk/         @tansohq/observe SDK
 ```
 
 ## Development

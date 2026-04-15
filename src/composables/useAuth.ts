@@ -41,6 +41,9 @@ export async function initialize() {
                 session.user.email,
               );
               account.value = result.account;
+              if (result.sdkKey) {
+                localStorage.setItem("observe:fresh_sdk_key", result.sdkKey);
+              }
               break;
             }
           } catch (err) {
@@ -83,6 +86,12 @@ export async function initialize() {
                         session.user.user_metadata?.name,
                     );
                     account.value = result.account;
+                    if (result.sdkKey) {
+                      localStorage.setItem(
+                        "observe:fresh_sdk_key",
+                        result.sdkKey,
+                      );
+                    }
                     break;
                   }
                 } catch (err) {
@@ -152,12 +161,19 @@ export function useAuth() {
     return { account: account.value };
   }
 
-  async function signup(email: string, password: string, name?: string) {
+  async function signup(
+    email: string,
+    password: string,
+    name?: string,
+    redirectPath?: string,
+  ) {
+    const target =
+      redirectPath && redirectPath.startsWith("/") ? redirectPath : "/";
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
-        emailRedirectTo: `${window.location.origin}/`,
+        emailRedirectTo: `${window.location.origin}${target}`,
         data: name ? { full_name: name } : undefined,
       },
     });
@@ -179,6 +195,9 @@ export function useAuth() {
     // Create local account row + SDK key
     const result = await api.signupComplete(name, email);
     account.value = result.account;
+    if (result.sdkKey) {
+      localStorage.setItem("observe:fresh_sdk_key", result.sdkKey);
+    }
 
     if (account.value && window.posthog) {
       window.posthog.identify(account.value.id, {
