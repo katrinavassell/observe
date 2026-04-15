@@ -17,6 +17,7 @@ import {
   Settings,
 } from "lucide-vue-next";
 import { Card, CardContent, Button } from "@/components/ui";
+import FeatureDefinitionsTable from "@/components/FeatureDefinitionsTable.vue";
 import StripeApiKeyModal from "@/components/integrations/StripeApiKeyModal.vue";
 import { getStripeStatus, syncStripeData } from "@/api/client";
 import { uploadProviderCsv, createSdkKey } from "@/lib/api";
@@ -30,6 +31,7 @@ const _queryClient = useQueryClient();
 // ---------------------------------------------------------------------------
 
 const selectedTrack = ref<"quick" | "full" | null>(null);
+const measureStepComplete = ref(false);
 
 // ---------------------------------------------------------------------------
 // Quick Start state
@@ -306,9 +308,43 @@ const canContinue = computed(() => {
 
 <template>
   <div class="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col">
+    <!-- Step 0 — Define what you want to measure -->
+    <div
+      v-if="!measureStepComplete && !selectedTrack"
+      class="flex-1 flex items-start justify-center px-4 py-12"
+    >
+      <div class="w-full max-w-3xl space-y-6">
+        <div class="text-center mb-2">
+          <h1 class="text-3xl font-semibold mb-2">
+            What do you want to measure?
+          </h1>
+          <p class="text-zinc-400">
+            Declare your AI features first. Every event you send will roll up
+            against these. You can add more later.
+          </p>
+        </div>
+
+        <FeatureDefinitionsTable
+          title="Your AI features"
+          class="text-zinc-100"
+        />
+
+        <div class="flex justify-center">
+          <Button size="lg" @click="measureStepComplete = true">
+            Continue
+            <ChevronRight class="w-4 h-4 ml-1" />
+          </Button>
+        </div>
+        <p class="text-center text-xs text-zinc-500">
+          You can skip this, but the install snippet will use a generic
+          <code class="text-zinc-400">ai_chat</code> placeholder.
+        </p>
+      </div>
+    </div>
+
     <!-- Track selection -->
     <div
-      v-if="!selectedTrack"
+      v-else-if="!selectedTrack"
       class="flex-1 flex items-center justify-center px-4"
     >
       <div class="w-full max-w-xl space-y-6">
