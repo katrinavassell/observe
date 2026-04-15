@@ -22,44 +22,52 @@ export function createFeatureDefinitionsRoutes(pool: Pool, ensureVisitor: any) {
     "/feature-definitions",
     ensureVisitor,
     async (req: AuthRequest, res: Response) => {
-      const result = await pool.query(
-        `SELECT
-           fd.id,
-           fd.name,
-           fd.feature_key,
-           fd.kind,
-           fd.description,
-           fd.code_location,
-           fd.created_at,
-           fd.updated_at,
-           COALESCE(ev.event_count, 0) AS event_count,
-           ev.last_seen
-         FROM feature_definitions fd
-         LEFT JOIN (
-           SELECT feature_key, COUNT(*) AS event_count, MAX(timestamp) AS last_seen
-           FROM observe_events
-           WHERE user_id = $1
-           GROUP BY feature_key
-         ) ev ON ev.feature_key = fd.feature_key
-         WHERE fd.user_id = $1
-         ORDER BY fd.created_at ASC`,
-        [req.visitorId],
-      );
+      try {
+        const result = await pool.query(
+          `SELECT
+             fd.id,
+             fd.name,
+             fd.feature_key,
+             fd.kind,
+             fd.description,
+             fd.code_location,
+             fd.created_at,
+             fd.updated_at,
+             COALESCE(ev.event_count, 0) AS event_count,
+             ev.last_seen
+           FROM feature_definitions fd
+           LEFT JOIN (
+             SELECT feature_key, COUNT(*) AS event_count, MAX(timestamp) AS last_seen
+             FROM observe_events
+             WHERE user_id = $1
+             GROUP BY feature_key
+           ) ev ON ev.feature_key = fd.feature_key
+           WHERE fd.user_id = $1
+           ORDER BY fd.created_at ASC`,
+          [req.visitorId],
+        );
 
-      res.json({
-        definitions: result.rows.map((row) => ({
-          id: row.id,
-          name: row.name,
-          feature_key: row.feature_key,
-          kind: row.kind,
-          description: row.description,
-          code_location: row.code_location,
-          created_at: row.created_at,
-          updated_at: row.updated_at,
-          event_count: parseInt(row.event_count, 10) || 0,
-          last_seen: row.last_seen,
-        })),
-      });
+        res.json({
+          definitions: result.rows.map((row) => ({
+            id: row.id,
+            name: row.name,
+            feature_key: row.feature_key,
+            kind: row.kind,
+            description: row.description,
+            code_location: row.code_location,
+            created_at: row.created_at,
+            updated_at: row.updated_at,
+            event_count: parseInt(row.event_count, 10) || 0,
+            last_seen: row.last_seen,
+          })),
+        });
+      } catch (err) {
+        console.error("GET /feature-definitions error:", {
+          userId: req.visitorId,
+          error: err,
+        });
+        res.status(500).json({ error: "Failed to list feature definitions" });
+      }
     },
   );
 
@@ -114,7 +122,12 @@ export function createFeatureDefinitionsRoutes(pool: Pool, ensureVisitor: any) {
             .status(409)
             .json({ error: `feature_key "${normalizedKey}" already exists` });
         }
-        throw err;
+        console.error("POST /feature-definitions error:", {
+          userId: req.visitorId,
+          input: { name, feature_key: normalizedKey, kind },
+          error: err,
+        });
+        res.status(500).json({ error: "Failed to create feature definition" });
       }
     },
   );
@@ -137,30 +150,39 @@ export function createFeatureDefinitionsRoutes(pool: Pool, ensureVisitor: any) {
           .json({ error: "kind must be cost, value, or outcome" });
       }
 
-      const result = await pool.query(
-        `UPDATE feature_definitions
-         SET
-           name = COALESCE($1, name),
-           kind = COALESCE($2, kind),
-           description = COALESCE($3, description),
-           code_location = COALESCE($4, code_location),
-           updated_at = NOW()
-         WHERE id = $5 AND user_id = $6
-         RETURNING *`,
-        [
-          name?.trim() || null,
-          kind || null,
-          description?.trim() || null,
-          code_location?.trim() || null,
-          id,
-          req.visitorId,
-        ],
-      );
+      try {
+        const result = await pool.query(
+          `UPDATE feature_definitions
+           SET
+             name = COALESCE($1, name),
+             kind = COALESCE($2, kind),
+             description = COALESCE($3, description),
+             code_location = COALESCE($4, code_location),
+             updated_at = NOW()
+           WHERE id = $5 AND user_id = $6
+           RETURNING *`,
+          [
+            name?.trim() || null,
+            kind || null,
+            description?.trim() || null,
+            code_location?.trim() || null,
+            id,
+            req.visitorId,
+          ],
+        );
 
-      if (result.rowCount === 0) {
-        return res.status(404).json({ error: "not found" });
+        if (result.rowCount === 0) {
+          return res.status(404).json({ error: "not found" });
+        }
+        res.json({ definition: result.rows[0] });
+      } catch (err) {
+        console.error("PATCH /feature-definitions/:id error:", {
+          userId: req.visitorId,
+          id,
+          error: err,
+        });
+        res.status(500).json({ error: "Failed to update feature definition" });
       }
-      res.json({ definition: result.rows[0] });
     },
   );
 
@@ -174,14 +196,23 @@ export function createFeatureDefinitionsRoutes(pool: Pool, ensureVisitor: any) {
         return res.status(400).json({ error: "invalid id" });
       }
 
-      const result = await pool.query(
-        `DELETE FROM feature_definitions WHERE id = $1 AND user_id = $2`,
-        [id, req.visitorId],
-      );
-      if (result.rowCount === 0) {
-        return res.status(404).json({ error: "not found" });
+      try {
+        const result = await pool.query(
+          `DELETE FROM feature_definitions WHERE id = $1 AND user_id = $2`,
+          [id, req.visitorId],
+        );
+        if (result.rowCount === 0) {
+          return res.status(404).json({ error: "not found" });
+        }
+        res.status(204).end();
+      } catch (err) {
+        console.error("DELETE /feature-definitions/:id error:", {
+          userId: req.visitorId,
+          id,
+          error: err,
+        });
+        res.status(500).json({ error: "Failed to delete feature definition" });
       }
-      res.status(204).end();
     },
   );
 

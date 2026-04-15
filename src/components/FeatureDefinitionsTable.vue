@@ -32,7 +32,7 @@ defineProps<{ title?: string; showTestEventButton?: boolean }>();
 
 const queryClient = useQueryClient();
 
-const { data, isLoading } = useQuery({
+const { data, isLoading, isError, error, refetch } = useQuery({
   queryKey: ["feature-definitions"],
   queryFn: listFeatureDefinitions,
 });
@@ -149,6 +149,7 @@ async function handleCreate() {
     createOpen.value = false;
     resetForm();
   } catch (err) {
+    console.error("createFeatureDefinition failed:", err);
     toast.error(
       err instanceof Error ? err.message : "Failed to create feature",
     );
@@ -164,6 +165,7 @@ async function handleDelete(def: FeatureDefinition) {
     queryClient.invalidateQueries({ queryKey: ["feature-definitions"] });
     toast.success("Feature deleted");
   } catch (err) {
+    console.error("deleteFeatureDefinition failed:", err);
     toast.error(err instanceof Error ? err.message : "Failed to delete");
   }
 }
@@ -214,6 +216,7 @@ async function sendTestEvent() {
     toast.success(`Test event sent as "${first.feature_key}"`);
     queryClient.invalidateQueries({ queryKey: ["feature-definitions"] });
   } catch (err) {
+    console.error("sendTestEvent failed:", err);
     toast.error(
       err instanceof Error ? err.message : "Failed to send test event",
     );
@@ -296,6 +299,24 @@ const KIND_META: Record<
       <!-- Loading -->
       <div v-if="isLoading" class="text-sm text-muted-foreground py-4">
         Loading…
+      </div>
+
+      <!-- Error state — don't fall through to the empty-state template grid,
+           because that would mask the fetch failure and make the user think
+           they have zero features when the query actually errored. -->
+      <div
+        v-else-if="isError"
+        class="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 flex items-start justify-between gap-4"
+      >
+        <div class="text-sm">
+          <p class="font-medium text-destructive">
+            Couldn't load your features
+          </p>
+          <p class="text-xs text-muted-foreground mt-0.5">
+            {{ error instanceof Error ? error.message : "Unknown error" }}
+          </p>
+        </div>
+        <Button size="sm" variant="outline" @click="refetch()">Retry</Button>
       </div>
 
       <!-- Empty state: starter templates -->
