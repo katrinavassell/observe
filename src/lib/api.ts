@@ -1733,3 +1733,59 @@ export async function deleteCustomCohort(
 ): Promise<{ deleted: boolean }> {
   return request(`/cohorts/custom/${id}`, { method: "DELETE" });
 }
+
+// ======================================================================
+// FEATURE DEFINITIONS — user-declared catalog of what to measure
+// ======================================================================
+
+export type FeatureDefinitionKind = "cost" | "value" | "outcome";
+
+export interface FeatureDefinition {
+  id: number;
+  name: string;
+  feature_key: string;
+  kind: FeatureDefinitionKind;
+  description: string | null;
+  code_location: string | null;
+  created_at: string;
+  updated_at: string;
+  event_count: number;
+  last_seen: string | null;
+}
+
+export interface FeatureDefinitionInput {
+  name: string;
+  feature_key?: string;
+  kind: FeatureDefinitionKind;
+  description?: string | null;
+  code_location?: string | null;
+}
+
+export async function listFeatureDefinitions(): Promise<{
+  definitions: FeatureDefinition[];
+}> {
+  return request("/feature-definitions");
+}
+
+export async function createFeatureDefinition(
+  input: FeatureDefinitionInput,
+): Promise<{ definition: FeatureDefinition }> {
+  return request("/feature-definitions", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export async function updateFeatureDefinition(
+  id: number,
+  input: Partial<Omit<FeatureDefinitionInput, "feature_key">>,
+): Promise<{ definition: FeatureDefinition }> {
+  return request(`/feature-definitions/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
+export async function deleteFeatureDefinition(id: number): Promise<void> {
+  await request(`/feature-definitions/${id}`, { method: "DELETE" });
+}
