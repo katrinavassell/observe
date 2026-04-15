@@ -28,6 +28,7 @@ import {
   Zap,
 } from "lucide-vue-next";
 import { Card, CardContent, Button } from "@/components/ui";
+import FeatureDefinitionsTable from "@/components/FeatureDefinitionsTable.vue";
 import { CostsSection, UsageSection } from "@/components/data-sources";
 import StripeApiKeyModal from "@/components/integrations/StripeApiKeyModal.vue";
 import OpenAIApiKeyModal from "@/components/integrations/OpenAIApiKeyModal.vue";
@@ -754,6 +755,11 @@ watch(
         Start tracking AI costs in one line. Add revenue data when you're ready.
       </p>
     </div>
+
+    <!-- ================================================================== -->
+    <!-- STEP 0: Declare what you want to measure                            -->
+    <!-- ================================================================== -->
+    <FeatureDefinitionsTable v-if="isLoggedIn" show-test-event-button />
 
     <!-- ================================================================== -->
     <!-- PRIMARY HERO: one-click install prompt for your AI coding agent     -->
