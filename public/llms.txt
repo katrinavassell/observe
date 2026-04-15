@@ -201,14 +201,19 @@ the native headers option:
 ```ts
 await openai.chat.completions.create(
   { model: 'gpt-4o-mini', messages },
-  { headers: { 'x-tanso-feature': 'summarize_email' } }
+  { headers: { 'Observe-Feature': 'summarize_email' } }
 )
 ```
 
-`x-tanso-*` headers exist only because the OpenAI/Anthropic SDK request body is
+`Observe-*` headers exist only because the OpenAI/Anthropic SDK request body is
 opaque to the proxy — we cannot inject metadata into it without breaking the provider
 contract. For programmatic use where you control the payload, use **Path C** (body-
 based ingest) instead.
+
+The supported request headers for Path A / Path B are: `Observe-Key` (required),
+`Observe-Customer`, `Observe-Feature`, `Observe-Agent`, `Observe-Trace-Id`,
+`Observe-Span-Id`, `Observe-Parent-Span-Id`. Legacy `x-tanso-*` names are still
+accepted but deprecated per RFC 6648. Prefer the unprefixed form.
 
 ---
 
@@ -253,7 +258,7 @@ connect Stripe separately, or use explicit `revenueAmount` / Feature Pricing.
 6. Wrap `new OpenAI()` and `new Anthropic()` with `Observe.wrap(...)` ONLY if there's
    no existing gateway. Do not replace the provider, just wrap it.
 7. Tag each AI-powered feature with `Observe.feature('feature_key')` or a per-call
-   `x-tanso-feature` header. One feature key per user-facing AI feature.
+   `Observe-Feature` header. One feature key per user-facing AI feature.
 8. Do NOT log or echo the API key. Keep it in env vars only.
 9. Stripe is optional. Do not add Stripe integration unless the user asks.
 10. After wiring up, run the app once and confirm events appear at

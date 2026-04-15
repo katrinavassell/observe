@@ -21,9 +21,9 @@ llm = ChatOpenAI(
     openai_api_key="sk-...",
     openai_api_base="http://localhost:3001/v1",  # Your Observe instance
     default_headers={
-        "x-tanso-key": "obs_...",           # SDK key from Data Sources
-        "x-tanso-customer": "cus_acme",     # Attribute to a customer
-        "x-tanso-feature": "langchain-chat", # Attribute to a feature
+        "Observe-Key": "obs_...",           # SDK key from Data Sources
+        "Observe-Customer": "cus_acme",     # Attribute to a customer
+        "Observe-Feature": "langchain-chat", # Attribute to a feature
     },
 )
 
@@ -40,9 +40,9 @@ embeddings = OpenAIEmbeddings(
     openai_api_key="sk-...",
     openai_api_base="http://localhost:3001/v1",
     default_headers={
-        "x-tanso-key": "obs_...",
-        "x-tanso-customer": "cus_acme",
-        "x-tanso-feature": "langchain-embeddings",
+        "Observe-Key": "obs_...",
+        "Observe-Customer": "cus_acme",
+        "Observe-Feature": "langchain-embeddings",
     },
 )
 
@@ -69,7 +69,7 @@ attribution. Events are logged under the admin account.
 - Proxies requests to the upstream provider (OpenAI or Anthropic).
 - Logs the event with model, token counts, and calculated cost.
 - Never blocks, modifies, or delays requests or responses.
-- Without `x-tanso-key`, requests are still proxied but no event is logged.
+- Without `Observe-Key`, requests are still proxied but no event is logged.
 
 ---
 
@@ -166,9 +166,9 @@ def get_llm_for_customer(customer_id: str) -> ChatOpenAI:
         openai_api_key="sk-...",
         openai_api_base="http://localhost:3001/v1",
         default_headers={
-            "x-tanso-key": "obs_...",
-            "x-tanso-customer": customer_id,
-            "x-tanso-feature": "chat",
+            "Observe-Key": "obs_...",
+            "Observe-Customer": customer_id,
+            "Observe-Feature": "chat",
         },
     )
 
@@ -231,9 +231,9 @@ llm = ChatOpenAI(
     openai_api_key="sk-...",
     openai_api_base="https://observe.yourcompany.com/v1",
     default_headers={
-        "x-tanso-key": "obs_...",
-        "x-tanso-customer": "cus_acme",
-        "x-tanso-feature": "chat",
+        "Observe-Key": "obs_...",
+        "Observe-Customer": "cus_acme",
+        "Observe-Feature": "chat",
     },
 )
 

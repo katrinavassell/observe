@@ -49,7 +49,7 @@ Per-call overrides use the client's native options:
 ```ts
 await openai.chat.completions.create(
   { model: 'gpt-4o', messages },
-  { headers: { 'x-tanso-feature': 'export_report' } }
+  { headers: { 'Observe-Feature': 'export_report' } }
 )
 ```
 
@@ -106,9 +106,9 @@ client = OpenAI(
     api_key="sk-...",
     base_url="https://app.tanso.io/v1",
     default_headers={
-        "x-tanso-key": "obs_your_api_key",
-        "x-tanso-customer": user.stripe_id,
-        "x-tanso-feature": "ai_chat",
+        "Observe-Key": "obs_your_api_key",
+        "Observe-Customer": user.stripe_id,
+        "Observe-Feature": "ai_chat",
     },
 )
 ```

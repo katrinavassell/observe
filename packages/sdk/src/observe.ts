@@ -47,16 +47,16 @@ function resolveHeaders(overrides?: WrapOverrides): Record<string, string> {
   const featureKey = overrides?.featureKey ?? _featureKey;
   const agentId = overrides?.agentId ?? _agentId;
   const headers: Record<string, string> = {
-    "x-tanso-key": config.apiKey,
+    "Observe-Key": config.apiKey,
   };
-  if (customerId) headers["x-tanso-customer"] = customerId;
-  if (featureKey) headers["x-tanso-feature"] = featureKey;
-  if (agentId) headers["x-tanso-agent"] = agentId;
+  if (customerId) headers["Observe-Customer"] = customerId;
+  if (featureKey) headers["Observe-Feature"] = featureKey;
+  if (agentId) headers["Observe-Agent"] = agentId;
   if (_traceContext) {
-    headers["x-tanso-trace-id"] = _traceContext.traceId;
-    headers["x-tanso-span-id"] = _traceContext.spanId;
+    headers["Observe-Trace-Id"] = _traceContext.traceId;
+    headers["Observe-Span-Id"] = _traceContext.spanId;
     if (_traceContext.parentSpanId)
-      headers["x-tanso-parent-span-id"] = _traceContext.parentSpanId;
+      headers["Observe-Parent-Span-Id"] = _traceContext.parentSpanId;
   }
   return headers;
 }

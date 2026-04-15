@@ -801,9 +801,9 @@ watch(
 <span class="text-emerald-400">const</span> openai = <span class="text-emerald-400">new</span> OpenAI({
   <span class="text-sky-300">baseURL</span>: <span class="text-amber-300">'{{ proxyBaseUrl }}'</span>,
   <span class="text-sky-300">defaultHeaders</span>: {
-    <span class="text-amber-300">'x-tanso-key'</span>: <span class="text-amber-300">'{{ apiKeyForSnippet }}'</span>,
-    <span class="text-amber-300">'x-tanso-customer'</span>: user.stripeId,    <span class="text-zinc-500">// Stripe customer ID (cus_...)</span>
-    <span class="text-amber-300">'x-tanso-feature'</span>: <span class="text-amber-300">'ai_chat'</span>,          <span class="text-zinc-500">// which product feature</span>
+    <span class="text-amber-300">'Observe-Key'</span>: <span class="text-amber-300">'{{ apiKeyForSnippet }}'</span>,
+    <span class="text-amber-300">'Observe-Customer'</span>: user.stripeId,    <span class="text-zinc-500">// Stripe customer ID (cus_...)</span>
+    <span class="text-amber-300">'Observe-Feature'</span>: <span class="text-amber-300">'ai_chat'</span>,          <span class="text-zinc-500">// which product feature</span>
   },
 })
 <span class="text-zinc-500">// Every call is tracked with cost, model, customer, and feature.</span></pre>
@@ -835,9 +835,9 @@ watch(
 
 curl -X POST <span class="text-amber-300">'{{ proxyBaseUrl }}/google/generateContent'</span> \
   -H <span class="text-amber-300">'Authorization: Bearer YOUR_GOOGLE_API_KEY'</span> \
-  -H <span class="text-amber-300">'x-tanso-key: {{ apiKeyForSnippet }}'</span> \
-  -H <span class="text-amber-300">'x-tanso-customer: cus_123'</span> \
-  -H <span class="text-amber-300">'x-tanso-feature: ai_chat'</span> \
+  -H <span class="text-amber-300">'Observe-Key: {{ apiKeyForSnippet }}'</span> \
+  -H <span class="text-amber-300">'Observe-Customer: cus_123'</span> \
+  -H <span class="text-amber-300">'Observe-Feature: ai_chat'</span> \
   -H <span class="text-amber-300">'Content-Type: application/json'</span> \
   -d <span class="text-amber-300">'{"model":"gemini-2.5-flash","contents":[{"parts":[{"text":"Hello"}]}]}'</span></pre>
               </div>
@@ -857,13 +857,13 @@ curl -X POST <span class="text-amber-300">'{{ proxyBaseUrl }}/google/generateCon
   <span class="text-sky-300">token</span>: <span class="text-amber-300">'YOUR_COHERE_KEY'</span>,
   <span class="text-sky-300">baseUrl</span>: <span class="text-amber-300">'{{ proxyBaseUrl }}/cohere'</span>,
 })
-<span class="text-zinc-500">// Add x-tanso-key, x-tanso-customer, x-tanso-feature via fetch override or headers.</span>
+<span class="text-zinc-500">// Add Observe-Key, Observe-Customer, Observe-Feature via fetch override or headers.</span>
 
 <span class="text-zinc-500">// Or use curl directly:</span>
 <span class="text-zinc-500">// curl -X POST '{{ proxyBaseUrl }}/cohere/chat' \</span>
 <span class="text-zinc-500">//   -H 'Authorization: Bearer YOUR_COHERE_KEY' \</span>
-<span class="text-zinc-500">//   -H 'x-tanso-key: {{ apiKeyForSnippet }}' \</span>
-<span class="text-zinc-500">//   -H 'x-tanso-customer: cus_123' \</span>
+<span class="text-zinc-500">//   -H 'Observe-Key: {{ apiKeyForSnippet }}' \</span>
+<span class="text-zinc-500">//   -H 'Observe-Customer: cus_123' \</span>
 <span class="text-zinc-500">//   -d '{"model":"command-r-plus","messages":[{"role":"user","content":"Hello"}]}'</span></pre>
               </div>
             </div>
@@ -881,13 +881,13 @@ curl -X POST <span class="text-amber-300">'{{ proxyBaseUrl }}/google/generateCon
   <span class="text-sky-300">apiKey</span>: <span class="text-amber-300">'YOUR_MISTRAL_KEY'</span>,
   <span class="text-sky-300">serverURL</span>: <span class="text-amber-300">'{{ proxyBaseUrl }}/mistral'</span>,
 })
-<span class="text-zinc-500">// Add x-tanso-key, x-tanso-customer, x-tanso-feature via additionalHeaders.</span>
+<span class="text-zinc-500">// Add Observe-Key, Observe-Customer, Observe-Feature via additionalHeaders.</span>
 
 <span class="text-zinc-500">// Or use curl directly:</span>
 <span class="text-zinc-500">// curl -X POST '{{ proxyBaseUrl }}/mistral/chat/completions' \</span>
 <span class="text-zinc-500">//   -H 'Authorization: Bearer YOUR_MISTRAL_KEY' \</span>
-<span class="text-zinc-500">//   -H 'x-tanso-key: {{ apiKeyForSnippet }}' \</span>
-<span class="text-zinc-500">//   -H 'x-tanso-customer: cus_123' \</span>
+<span class="text-zinc-500">//   -H 'Observe-Key: {{ apiKeyForSnippet }}' \</span>
+<span class="text-zinc-500">//   -H 'Observe-Customer: cus_123' \</span>
 <span class="text-zinc-500">//   -d '{"model":"mistral-large-latest","messages":[{"role":"user","content":"Hello"}]}'</span></pre>
               </div>
             </div>

@@ -68,7 +68,7 @@ const quickStartProxySnippet = computed(() => {
 client = OpenAI(
     api_key="sk-...",
     base_url="${proxyUrl}",
-    default_headers={"x-tanso-key": "${key}"},
+    default_headers={"Observe-Key": "${key}"},
 )
 # Every call is now tracked. That's it.`;
 });
@@ -234,7 +234,7 @@ const fullSdkSnippet = computed(() => {
 client = OpenAI(
     api_key="sk-...",
     base_url="${proxyUrl}",
-    default_headers={"x-tanso-key": "${key}"},
+    default_headers={"Observe-Key": "${key}"},
 )
 # Every call is now tracked. That's it.`;
 });

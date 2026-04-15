@@ -6,7 +6,7 @@ import { type AuthRequest } from "./auth.js";
 export function createA2ARoutes(pool: Pool, _ensureVisitor: any) {
   const router = Router();
 
-  // Auth middleware that accepts either session cookie OR x-tanso-key header
+  // Auth middleware that accepts session cookie, Observe-Key header, or Bearer token
   async function ensureA2AAuth(
     req: AuthRequest,
     res: Response,
@@ -15,15 +15,16 @@ export function createA2ARoutes(pool: Pool, _ensureVisitor: any) {
     // Try session auth first
     if (req.visitorId) return next();
 
-    // Try SDK key auth via x-tanso-key header
+    // Try SDK key auth: Observe-Key (preferred) > x-tanso-key (legacy) > Bearer
     const apiKey =
+      (req.headers["observe-key"] as string) ||
       (req.headers["x-tanso-key"] as string) ||
       (req.headers["authorization"] as string)?.replace("Bearer ", "");
 
     if (!apiKey) {
       return res.status(401).json({
         error:
-          "Authentication required. Pass x-tanso-key header or session cookie.",
+          "Authentication required. Pass Observe-Key header or session cookie.",
       });
     }
 
@@ -59,8 +60,9 @@ export function createA2ARoutes(pool: Pool, _ensureVisitor: any) {
       ],
       authentication: {
         type: "bearer",
-        header: "x-tanso-key",
-        description: "SDK API key from the Data Sources page",
+        header: "Observe-Key",
+        description:
+          "SDK API key from the Data Sources page. Legacy alias: x-tanso-key.",
       },
       endpoints: {
         query: "/a2a/query",
