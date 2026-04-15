@@ -157,19 +157,47 @@ const loomEmbedUrl = ref("");
 function buildAiInstallPrompt(apiKey: string) {
   return `Install Observe by Tanso in this repo so every LLM call is tracked with cost, model, customer, and feature.
 
-Full instructions: https://observemetrics.com/llms.txt
+READ THIS FIRST — full reference: https://observemetrics.com/llms.txt
+It documents three integration paths (SDK wrap, existing-gateway, direct ingest) and the full POST body schema. Use it as the source of truth; do not improvise.
 
 My Observe API key: ${apiKey}
 
-Steps:
-1. npm install @tansohq/observe
-2. Add OBSERVE_API_KEY=${apiKey} to .env (and .env.example with a placeholder).
-3. At app startup, call Observe.configure({ apiKey: process.env.OBSERVE_API_KEY! }).
-4. At the start of each authenticated request, call Observe.identify({ customerId: <user's stripe customer id> }).
-5. Wrap every \`new OpenAI()\` and \`new Anthropic()\` with Observe.wrap(...). Do not replace them.
-6. For each user-facing AI feature, set Observe.feature('<feature_key>') or pass { headers: { 'x-tanso-feature': '<feature_key>' } } per call. Pick one feature key per product feature (e.g. ai_chat, summarize_email, code_autocomplete).
-7. Do not log the API key. Do not alter the existing provider (OpenAI/Anthropic) API key.
-8. After wiring it up, run the app once and confirm events appear in https://observemetrics.com/analytics.`;
+## Step 0 — detect the user's current setup before touching anything
+
+Grep the codebase for \`portkey-ai\`, \`litellm\`, \`helicone\`, \`openrouter\`, and any custom \`baseURL\` on \`new OpenAI()\` / \`new Anthropic()\`. If ANY of those exist, the user is on an AI gateway. Do NOT rip it out — use Path B (gateway layer) from llms.txt: add Observe headers to their existing gateway config. Ask the user before making structural gateway changes.
+
+If there is no gateway, use Path A (SDK wrap) below.
+
+## Step 1 — install the correct package
+
+\`npm install @tansohq/observe\` — with the \`hq\`. The package \`@tanso/observe\` (no hq) does NOT exist on npm. If your install command fails to resolve, STOP and tell the user; do not substitute a similar-looking package.
+
+## Step 2 — environment
+
+Add \`OBSERVE_API_KEY=${apiKey}\` to \`.env\` and \`.env.example\` (placeholder in the example file). Do not hardcode it anywhere.
+
+## Step 3 — wire up (Path A only — skip if the user has a gateway)
+
+1. At app startup (server-only): \`Observe.configure({ apiKey: process.env.OBSERVE_API_KEY! })\`
+2. At the start of each authenticated request: \`Observe.identify({ customerId: <user's stripe customer id, or a stable user id> })\`
+3. Wrap every \`new OpenAI()\` and \`new Anthropic()\` with \`Observe.wrap(...)\`. Do not replace the client, just wrap it. Do not alter the existing provider API key.
+4. Tag each user-facing AI feature with \`Observe.feature('<feature_key>')\` (or a per-call \`x-tanso-feature\` header). Pick one feature key per feature, not per model — e.g. \`ai_chat\`, \`summarize_email\`, \`code_autocomplete\`.
+
+## Step 4 — programmatic / custom events (optional)
+
+If the user wants to log non-LLM events or have full control of the payload, use \`POST /api/events/ingest\` with \`Authorization: Bearer ${apiKey}\`. Everything goes in the JSON body — no custom headers. Full schema in llms.txt under "Path C".
+
+## Do not
+
+- Do not install \`@tanso/observe\`. Correct name: \`@tansohq/observe\`.
+- Do not replace OpenAI / Anthropic with anything else.
+- Do not touch an existing AI gateway (Portkey, LiteLLM, etc.) without asking.
+- Do not add Stripe integration as part of Observe setup — Stripe is optional and the user can connect it later from Data Sources → Stripe.
+- Do not log the API key.
+
+## Verify
+
+After wiring up, run the app once and confirm events appear at https://observemetrics.com/events.`;
 }
 
 async function copyAiInstallPrompt() {
