@@ -22,6 +22,7 @@ import { createModelsApiRoutes } from "./routes/models-api.js";
 import { createTeamRoutes } from "./routes/team.js";
 import { createAnalyticsRoutes } from "./routes/analytics.js";
 import { createCohortsRoutes } from "./routes/cohorts.js";
+import { createFeatureDefinitionsRoutes } from "./routes/feature-definitions.js";
 import { createA2ARoutes } from "./routes/a2a.js";
 import { createCloudCostRoutes } from "./routes/cloud-costs.js";
 import { createBillingApiRoutes } from "./routes/billing-api.js";
@@ -212,6 +213,7 @@ app.use(createModelsApiRoutes(pool, ensureVisitor));
 app.use(createTeamRoutes(pool, ensureVisitor));
 app.use(createAnalyticsRoutes(pool, ensureVisitor));
 app.use(createCohortsRoutes(pool, ensureVisitor));
+app.use(createFeatureDefinitionsRoutes(pool, ensureVisitor));
 app.use(createInferenceRoutes(pool, ensureVisitor));
 app.use(createA2ARoutes(pool, ensureVisitor));
 app.use(createCloudCostRoutes(pool, ensureVisitor));
@@ -498,6 +500,25 @@ async function _doDbInit() {
         UNIQUE(user_id, feature_key)
       )
     `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS feature_definitions (
+        id SERIAL PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        feature_key TEXT NOT NULL,
+        kind TEXT NOT NULL CHECK (kind IN ('cost','value','outcome')),
+        description TEXT,
+        code_location TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(user_id, feature_key)
+      )
+    `);
+
+    await pool.query(
+      `CREATE INDEX IF NOT EXISTS idx_feature_definitions_user_id ON feature_definitions(user_id)`,
+    );
 
     // Add revenue_source column to observe_events if missing
     await pool.query(`
