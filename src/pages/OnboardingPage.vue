@@ -43,6 +43,10 @@ const copiedSnippet = ref(false);
 
 const proxyUrl =
   typeof window !== "undefined" ? `${window.location.origin}/v1` : "/v1";
+const ingestUrl =
+  typeof window !== "undefined"
+    ? `${window.location.origin}/api/events/ingest`
+    : "/api/events/ingest";
 
 async function runQuickStart() {
   quickStartLoading.value = true;
@@ -61,6 +65,38 @@ async function runQuickStart() {
   }
 }
 
+const quickStartIngestSnippet = computed(() => {
+  const key = quickStartSdkKey.value ?? "obs_your_api_key";
+  return `// 1. Call your provider directly — no wrapper, no baseURL change
+const started = Date.now()
+const res = await openai.chat.completions.create({
+  model: 'gpt-4o-mini',
+  messages,
+})
+
+// 2. Log the event after the call returns (fire-and-forget)
+fetch('${ingestUrl}', {
+  method: 'POST',
+  headers: {
+    Authorization: 'Bearer ${key}',
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({
+    events: [{
+      eventName: 'chat',
+      customerReferenceId: user.stripeId,
+      featureKey: 'ai_chat',
+      model: 'gpt-4o-mini',
+      modelProvider: 'openai',
+      inputTokens: res.usage?.prompt_tokens,
+      outputTokens: res.usage?.completion_tokens,
+      durationMs: Date.now() - started,
+      idempotencyKey: res.id,
+    }],
+  }),
+}).catch((err) => console.error('observe ingest failed:', err))`;
+});
+
 const quickStartProxySnippet = computed(() => {
   const key = quickStartSdkKey.value ?? "obs_your_api_key";
   return `from openai import OpenAI
@@ -70,17 +106,7 @@ client = OpenAI(
     base_url="${proxyUrl}",
     default_headers={"Observe-Key": "${key}"},
 )
-# Every call is now tracked. That's it.`;
-});
-
-const quickStartSdkSnippet = computed(() => {
-  const key = quickStartSdkKey.value ?? "obs_your_api_key";
-  return `import { TansoObserve } from '@tansohq/observe'
-import { wrapOpenAI } from '@tansohq/observe/openai'
-
-const observe = new TansoObserve({ apiKey: '${key}' })
-const openai = wrapOpenAI(new OpenAI(), observe)
-// Every call is automatically tracked with model, tokens, and cost`;
+# Auto-instrumentation. Puts Observe in the critical path of every call.`;
 });
 
 function copyToClipboard(text: string, which: "proxy" | "snippet") {
@@ -96,7 +122,7 @@ function copyToClipboard(text: string, which: "proxy" | "snippet") {
 }
 
 function goToDashboard() {
-  router.push("/");
+  router.push("/data-sources");
 }
 
 // ---------------------------------------------------------------------------
@@ -229,14 +255,30 @@ function copyFullClipboard(text: string, which: "proxy" | "snippet") {
 
 const fullSdkSnippet = computed(() => {
   const key = fullSdkKey.value ?? "obs_your_api_key";
-  return `from openai import OpenAI
+  return `// Call your provider directly, then log one event after the call returns.
+const started = Date.now()
+const res = await openai.chat.completions.create({ model: 'gpt-4o-mini', messages })
 
-client = OpenAI(
-    api_key="sk-...",
-    base_url="${proxyUrl}",
-    default_headers={"Observe-Key": "${key}"},
-)
-# Every call is now tracked. That's it.`;
+fetch('${ingestUrl}', {
+  method: 'POST',
+  headers: {
+    Authorization: 'Bearer ${key}',
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({
+    events: [{
+      eventName: 'chat',
+      customerReferenceId: user.stripeId,
+      featureKey: 'ai_chat',
+      model: 'gpt-4o-mini',
+      modelProvider: 'openai',
+      inputTokens: res.usage?.prompt_tokens,
+      outputTokens: res.usage?.completion_tokens,
+      durationMs: Date.now() - started,
+      idempotencyKey: res.id,
+    }],
+  }),
+}).catch((err) => console.error('observe ingest failed:', err))`;
 });
 
 // ---------------------------------------------------------------------------
@@ -360,18 +402,47 @@ const canContinue = computed(() => {
             </p>
           </div>
 
-          <!-- Proxy snippet (primary) -->
+          <!-- Direct ingest (primary — matches f2a8b00 default) -->
           <Card class="bg-zinc-900 border-zinc-800">
             <CardContent class="p-6 space-y-3">
               <div class="flex items-center justify-between">
                 <p class="text-sm font-medium text-zinc-300">
-                  Proxy mode (one line)
+                  Direct ingest (off the critical path)
                 </p>
                 <span
                   class="text-xs px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400"
                   >Recommended</span
                 >
               </div>
+              <div class="relative">
+                <pre
+                  class="bg-zinc-800 rounded px-3 py-3 text-xs font-mono text-zinc-300 overflow-x-auto whitespace-pre"
+                  >{{ quickStartIngestSnippet }}</pre
+                >
+                <Button
+                  variant="outline"
+                  size="sm"
+                  class="absolute top-2 right-2"
+                  @click="copyToClipboard(quickStartIngestSnippet, 'snippet')"
+                >
+                  <Check v-if="copiedSnippet" class="w-4 h-4" />
+                  <Copy v-else class="w-4 h-4" />
+                </Button>
+              </div>
+              <p class="text-xs text-zinc-500">
+                Call OpenAI / Anthropic directly, then post one event to Observe
+                after the call returns. Observe never sits in front of your LLM
+                calls.
+              </p>
+            </CardContent>
+          </Card>
+
+          <!-- Proxy mode (alternative — auto-instrumentation) -->
+          <Card class="bg-zinc-900 border-zinc-800">
+            <CardContent class="p-6 space-y-3">
+              <p class="text-sm font-medium text-zinc-300">
+                Proxy mode (auto-instrumentation)
+              </p>
               <div class="relative">
                 <pre
                   class="bg-zinc-800 rounded px-3 py-3 text-xs font-mono text-zinc-300 overflow-x-auto whitespace-pre"
@@ -388,33 +459,9 @@ const canContinue = computed(() => {
                 </Button>
               </div>
               <p class="text-xs text-zinc-500">
-                Set your OpenAI or Anthropic SDK base URL to the proxy. Observe
-                logs every call automatically.
+                Routes every LLM call through Observe. Zero code changes per
+                call, but puts Observe in the critical path of your app.
               </p>
-            </CardContent>
-          </Card>
-
-          <!-- SDK snippet (alternative) -->
-          <Card class="bg-zinc-900 border-zinc-800">
-            <CardContent class="p-6 space-y-3">
-              <p class="text-sm font-medium text-zinc-300">
-                SDK mode (more control)
-              </p>
-              <div class="relative">
-                <pre
-                  class="bg-zinc-800 rounded px-3 py-3 text-xs font-mono text-zinc-300 overflow-x-auto whitespace-pre"
-                  >{{ quickStartSdkSnippet }}</pre
-                >
-                <Button
-                  variant="outline"
-                  size="sm"
-                  class="absolute top-2 right-2"
-                  @click="copyToClipboard(quickStartSdkSnippet, 'snippet')"
-                >
-                  <Check v-if="copiedSnippet" class="w-4 h-4" />
-                  <Copy v-else class="w-4 h-4" />
-                </Button>
-              </div>
             </CardContent>
           </Card>
 
@@ -649,17 +696,17 @@ const canContinue = computed(() => {
           <div v-if="currentStep === 3">
             <h1 class="text-2xl font-semibold mb-2">Start Observing</h1>
             <p class="text-zinc-400 mb-6">
-              Route your AI traffic through the Observe proxy to track costs per
-              feature and customer.
+              Call your LLM provider directly, then post one event to Observe
+              after the call returns. Off the critical path of your app.
             </p>
 
             <div class="space-y-4">
-              <!-- Proxy snippet -->
+              <!-- Direct ingest snippet -->
               <Card class="bg-zinc-900 border-zinc-800">
                 <CardContent class="p-6 space-y-3">
                   <div class="flex items-center justify-between">
                     <p class="text-sm font-medium text-zinc-300">
-                      Proxy mode (one line)
+                      Direct ingest (off the critical path)
                     </p>
                     <Button
                       v-if="!fullSdkKey"
@@ -691,8 +738,8 @@ const canContinue = computed(() => {
                     </Button>
                   </div>
                   <p class="text-xs text-zinc-500">
-                    Set your OpenAI or Anthropic SDK base URL to the proxy.
-                    Observe logs every call automatically.
+                    No SDK install, no baseURL change. If Observe is down, your
+                    app keeps working.
                   </p>
                 </CardContent>
               </Card>

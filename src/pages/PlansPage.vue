@@ -130,7 +130,7 @@ const plans = [
       "Unlimited data retention",
       "Monthly Pricing Strategy session",
       "Priority support",
-      "Bespoke contract & SLA",
+      "Custom contract & SLA",
     ],
   },
 ];
@@ -211,12 +211,6 @@ const repoUrl = "https://github.com/katrinalaszlo/observe";
                     class="text-[10px] font-medium bg-primary/10 text-primary px-2 py-0.5 rounded-full"
                   >
                     Current
-                  </span>
-                  <span
-                    v-else-if="plan.key === 'enterprise'"
-                    class="text-[10px] font-medium bg-violet-100 text-violet-700 px-2 py-0.5 rounded-full"
-                  >
-                    Bespoke
                   </span>
                 </div>
                 <p class="text-xs text-muted-foreground mt-1">

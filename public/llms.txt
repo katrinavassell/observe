@@ -82,9 +82,50 @@ async function chat(user: { id: string }, messages: any[]) {
 }
 ```
 
-Anthropic, Gemini, Mistral, Cohere, Bedrock, Azure OpenAI, self-hosted models,
-non-LLM costs — same pattern. Observe only sees the event you post. The full
-body schema is below under "POST /api/events/ingest — full body schema".
+### Anthropic (Path 1, same pattern)
+
+```ts
+import Anthropic from '@anthropic-ai/sdk'
+
+const anthropic = new Anthropic()
+
+async function chat(user, messages) {
+  const started = Date.now()
+  const res = await anthropic.messages.create({
+    model: 'claude-3-5-sonnet-latest',
+    max_tokens: 1024,
+    messages,
+  })
+
+  // Fire-and-forget — Observe never sits in front of the Anthropic call
+  fetch('https://observemetrics.com/api/events/ingest', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${process.env.OBSERVE_API_KEY!}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      events: [{
+        eventName: 'chat',
+        customerReferenceId: user.id,
+        featureKey: 'ai_chat',
+        model: 'claude-3-5-sonnet-latest',
+        modelProvider: 'anthropic',
+        inputTokens: res.usage?.input_tokens,
+        outputTokens: res.usage?.output_tokens,
+        durationMs: Date.now() - started,
+        idempotencyKey: res.id,
+      }],
+    }),
+  }).catch((err) => console.error('observe ingest failed:', err))
+
+  return res
+}
+```
+
+Gemini, Mistral, Cohere, Bedrock, Azure OpenAI, self-hosted models, non-LLM
+costs — same pattern. Observe only sees the event you post. The full body
+schema is below under "POST /api/events/ingest — full body schema".
 
 If the user wants an automatic token-usage hook, wrap this in a helper once
 and call it from every AI code path. Do NOT introduce a proxy for them.
