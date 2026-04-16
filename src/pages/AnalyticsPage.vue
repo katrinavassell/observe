@@ -14,7 +14,9 @@ import {
   getUsageLimits,
   listFeaturePricing,
   getSourceBreakdown,
+  getCostByTokenType,
 } from "@/lib/api";
+import CostByTokenTypeChart from "@/components/charts/CostByTokenTypeChart.vue";
 import type {} from "@/lib/api";
 import { AlertCircle, Plug, Sparkles } from "lucide-vue-next";
 import Sheet from "@/components/ui/sheet.vue";
@@ -214,6 +216,14 @@ const sortedCostTypes = computed(() => {
     (a, b) => b.total_cost - a.total_cost,
   );
 });
+
+const { data: costByTokenTypeData } = useQuery({
+  queryKey: ["cost-by-token-type", 30],
+  queryFn: () => getCostByTokenType(30),
+});
+const costByTokenTypeSeries = computed(
+  () => costByTokenTypeData.value?.series ?? [],
+);
 
 const {
   data: mrrData,
@@ -605,6 +615,9 @@ const insightCategories = [
           </div>
         </Card>
       </div>
+
+      <!-- Cost by token type (input vs output) -->
+      <CostByTokenTypeChart :series="costByTokenTypeSeries" />
 
       <!-- Tab bar -->
       <div class="flex gap-1 border-b">

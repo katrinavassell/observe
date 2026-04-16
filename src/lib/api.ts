@@ -846,6 +846,19 @@ export async function getRevenueConfidence(): Promise<RevenueConfidence> {
   return request("/analytics/revenue-confidence");
 }
 
+export interface CostByTokenTypePoint {
+  date: string;
+  input_cost: number;
+  output_cost: number;
+}
+
+export async function getCostByTokenType(
+  days?: number,
+): Promise<{ series: CostByTokenTypePoint[] }> {
+  const params = days ? `?days=${days}` : "";
+  return request(`/analytics/cost-by-token-type${params}`);
+}
+
 // ======================================================================// MRR MOVEMENTS
 // ======================================================================
 export interface MrrMovement {
