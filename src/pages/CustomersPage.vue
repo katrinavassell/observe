@@ -68,8 +68,8 @@ const filteredCustomers = computed(() => {
     const q = searchQuery.value.toLowerCase();
     list = list.filter(
       (c) =>
-        c.customer_name.toLowerCase().includes(q) ||
-        c.customer_id.toLowerCase().includes(q) ||
+        (c.customer_name ?? "").toLowerCase().includes(q) ||
+        (c.customer_id ?? "").toLowerCase().includes(q) ||
         (c.customer_email?.toLowerCase().includes(q) ?? false),
     );
   }
@@ -180,7 +180,7 @@ function sortIcon(key: SortKey) {
         <CardContent class="p-4">
           <p class="text-xs text-muted-foreground">Customers</p>
           <p class="text-2xl font-semibold">
-            {{ totals.customers.toLocaleString() }}
+            {{ (totals.customers ?? 0).toLocaleString() }}
           </p>
         </CardContent>
       </Card>
@@ -206,7 +206,7 @@ function sortIcon(key: SortKey) {
         <CardContent class="p-4">
           <p class="text-xs text-muted-foreground">Avg Health</p>
           <p class="text-2xl font-semibold">
-            {{ Math.round(totals.avg_health_score) }}
+            {{ Math.round(totals.avg_health_score ?? 0) }}
           </p>
         </CardContent>
       </Card>
