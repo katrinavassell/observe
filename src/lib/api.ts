@@ -328,6 +328,7 @@ export interface ObserveEvent {
     | "tiered"
     | "allocated"
     | "hybrid"
+    | "subscription"
     | "none"
     | null;
   model: string | null;

@@ -1077,6 +1077,14 @@ export function createEventsRoutes(
               evt.usageUnits ??
               (evt.inputTokens || 0) + (evt.outputTokens || 0);
 
+            // Per-event revenue should ONLY be the portion that's genuinely
+            // attributable to this event. Flat-subscription MRR belongs to the
+            // customer, not individual events — allocating MRR/30 per event
+            // produced misleading rows like "$9.97 revenue / $0.004 cost /
+            // 100% margin." For flat/allocated cases we zero the per-event
+            // revenue and tag revenue_source='subscription'; the subscription
+            // MRR is still counted at customer level via the monthly_aggregate
+            // stripe row that sync emits per subscription per period.
             if (meta.pricingModel === "metered" && meta.unitPrice != null) {
               revenue = meta.unitPrice * evtUsage;
               revenueSource = "per_unit";
@@ -1090,19 +1098,27 @@ export function createEventsRoutes(
                 revenue = tierPrice * evtUsage;
                 revenueSource = "tiered";
               } else {
-                revenue = meta.mrr / 30;
-                revenueSource = "allocated";
+                revenue = 0;
+                revenueSource = "subscription";
               }
             } else if (meta.pricingModel === "hybrid") {
-              // Base portion allocated per day + metered overage exact per unit.
+              // Metered overage is real per-event revenue; flat base portion
+              // belongs to the customer, not this event.
               const meteredPortion =
                 meta.unitPrice != null ? meta.unitPrice * evtUsage : 0;
-              revenue = meta.mrr / 30 + meteredPortion;
-              revenueSource = "hybrid";
+              if (meteredPortion > 0) {
+                revenue = meteredPortion;
+                revenueSource = "hybrid";
+              } else {
+                revenue = 0;
+                revenueSource = "subscription";
+              }
             } else {
-              // flat (or unknown pricing_model on a legacy sub) — daily MRR split
-              revenue = meta.mrr / 30;
-              revenueSource = "allocated";
+              // flat (or unknown pricing_model on a legacy sub) — MRR belongs
+              // to the customer, not this event. Customer-level aggregates
+              // still sum the monthly_aggregate stripe row for accurate totals.
+              revenue = 0;
+              revenueSource = "subscription";
             }
           }
 
