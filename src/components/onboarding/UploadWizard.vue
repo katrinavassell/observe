@@ -229,6 +229,17 @@ const processUploadsMutation = useMutation({
     queryClient.invalidateQueries({ queryKey: ["accounts"] });
     queryClient.invalidateQueries({ queryKey: ["revenue-analytics"] });
     queryClient.invalidateQueries({ queryKey: ["projects"] });
+    // Invalidate all analytics queries so AnalyticsPage shows fresh data
+    queryClient.invalidateQueries({ queryKey: ["events-by-feature"] });
+    queryClient.invalidateQueries({ queryKey: ["events-by-model"] });
+    queryClient.invalidateQueries({ queryKey: ["events-by-customer"] });
+    queryClient.invalidateQueries({ queryKey: ["events-by-agent"] });
+    queryClient.invalidateQueries({ queryKey: ["events-by-cost-type"] });
+    queryClient.invalidateQueries({ queryKey: ["source-breakdown"] });
+    queryClient.invalidateQueries({ queryKey: ["mrr-movements"] });
+    queryClient.invalidateQueries({ queryKey: ["insights"] });
+    queryClient.invalidateQueries({ queryKey: ["usage-limits"] });
+    queryClient.invalidateQueries({ queryKey: ["feature-pricing"] });
   },
 });
 

@@ -30,6 +30,13 @@ const analyticsQueryKeys = [
   ["events-by-feature"],
   ["events-by-model"],
   ["events-by-customer"],
+  ["events-by-agent"],
+  ["events-by-cost-type"],
+  ["source-breakdown"],
+  ["mrr-movements"],
+  ["insights"],
+  ["usage-limits"],
+  ["feature-pricing"],
   ["data-status"],
 ];
 
@@ -63,6 +70,9 @@ export function useDataMode() {
       try {
         dataStatus.value = await api.getDataStatus();
         isLoading.value = false;
+        for (const key of analyticsQueryKeys) {
+          queryClient.invalidateQueries({ queryKey: key });
+        }
         return;
       } catch (error) {
         if (attempt < retries - 1) {

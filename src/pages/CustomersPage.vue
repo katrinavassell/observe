@@ -356,7 +356,11 @@ function sortIcon(key: SortKey) {
             v-for="c in filteredCustomers"
             :key="c.customer_id"
             class="border-b last:border-0 hover:bg-muted/50 cursor-pointer transition-colors"
-            @click="router.push(`/customers/${c.customer_id}`)"
+            @click="
+              isLoggedIn
+                ? router.push(`/customers/${c.customer_id}`)
+                : router.push('/signup')
+            "
           >
             <td class="px-3 py-2.5">
               <div class="flex items-center gap-2">

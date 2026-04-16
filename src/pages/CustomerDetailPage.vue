@@ -530,6 +530,21 @@ const costPerEvent = computed(() => {
       </details>
     </template>
 
+    <!-- Not logged in -->
+    <Card
+      v-else-if="!isLoggedIn"
+      class="border-dashed border-muted-foreground/30"
+    >
+      <CardContent class="p-8 text-center">
+        <p class="text-sm text-muted-foreground mb-3">
+          Sign up to view individual customer details.
+        </p>
+        <Button size="sm" @click="router.push('/signup')">
+          Sign up to get started
+        </Button>
+      </CardContent>
+    </Card>
+
     <!-- Not found -->
     <Card v-else class="border-dashed">
       <CardContent class="p-8 text-center">
