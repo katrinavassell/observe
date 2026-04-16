@@ -4,10 +4,33 @@ import { z } from "zod";
 import { type AuthRequest } from "./auth.js";
 import { inferModelProvider, inferenceConfidence } from "../lib/models.js";
 
+async function resolveAccountId(
+  pool: Pool,
+  userId: string,
+  accountId?: number,
+): Promise<number | null> {
+  if (accountId !== undefined) return accountId;
+  try {
+    const result = await pool.query(
+      `SELECT account_id FROM user_accounts
+        WHERE user_id = (SELECT id FROM users WHERE visitor_id = $1)
+          AND role = 'owner' LIMIT 1`,
+      [userId],
+    );
+    if (result.rows[0]) return result.rows[0].account_id;
+  } catch (err) {
+    console.error("inference: account_id fallback lookup failed:", err);
+  }
+  console.warn("inference: no account_id resolved for user", userId);
+  return null;
+}
+
 export async function computeInferenceProfiles(
   pool: Pool,
   userId: string,
+  accountId?: number,
 ): Promise<number> {
+  const resolvedAccountId = await resolveAccountId(pool, userId, accountId);
   const result = await pool.query(
     `SELECT model_provider, feature_key,
             COUNT(*)::int as event_count,
@@ -58,8 +81,8 @@ export async function computeInferenceProfiles(
     );
 
     await pool.query(
-      `INSERT INTO inference_profiles (user_id, profile_type, scope_key, distribution, sample_count, time_window_start, time_window_end)
-       VALUES ($1, 'feature_distribution', $2, $3, $4, $5, $6)
+      `INSERT INTO inference_profiles (user_id, account_id, profile_type, scope_key, distribution, sample_count, time_window_start, time_window_end)
+       VALUES ($1, $2, 'feature_distribution', $3, $4, $5, $6, $7)
        ON CONFLICT (user_id, profile_type, scope_key) DO UPDATE SET
          distribution = EXCLUDED.distribution,
          sample_count = EXCLUDED.sample_count,
@@ -68,6 +91,7 @@ export async function computeInferenceProfiles(
          created_at = NOW()`,
       [
         userId,
+        resolvedAccountId,
         provider,
         JSON.stringify(distribution),
         data.totalCount,
@@ -84,7 +108,9 @@ export async function computeInferenceProfiles(
 async function applyInference(
   pool: Pool,
   userId: string,
+  accountId?: number,
 ): Promise<{ rows_inferred: number; rows_split: number }> {
+  const resolvedAccountId = await resolveAccountId(pool, userId, accountId);
   const coarseRows = await pool.query(
     `SELECT id, customer_id, feature_key, event_name, timestamp, cost_amount, cost_unit,
             revenue_amount, usage_units, model, model_provider, source, granularity, properties
@@ -164,13 +190,14 @@ async function applyInference(
 
         await client.query(
           `INSERT INTO observe_events
-           (user_id, customer_id, feature_key, event_name, timestamp, cost_amount, cost_unit,
+           (user_id, account_id, customer_id, feature_key, event_name, timestamp, cost_amount, cost_unit,
             revenue_amount, usage_units, model, model_provider, source, granularity, properties,
             is_inferred, inference_method, inference_confidence, inferred_from_source, original_event_id)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
-                   true, 'proportional', $15, $16, $17)`,
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,
+                   true, 'proportional', $16, $17, $18)`,
           [
             userId,
+            resolvedAccountId,
             row.customer_id,
             featureKey,
             row.event_name,
@@ -226,10 +253,15 @@ export function createInferenceRoutes(pool: Pool, ensureVisitor: any) {
     async (req: AuthRequest, res: Response) => {
       try {
         const userId = req.visitorId!;
-        const profilesUpdated = await computeInferenceProfiles(pool, userId);
+        const profilesUpdated = await computeInferenceProfiles(
+          pool,
+          userId,
+          req.accountId,
+        );
         const { rows_inferred, rows_split } = await applyInference(
           pool,
           userId,
+          req.accountId,
         );
         res.json({
           profiles_updated: profilesUpdated,
@@ -310,14 +342,15 @@ export function createInferenceRoutes(pool: Pool, ensureVisitor: any) {
 
           const result = await pool.query(
             `INSERT INTO observe_events (
-            user_id, customer_id, feature_key, event_name, timestamp,
+            user_id, account_id, customer_id, feature_key, event_name, timestamp,
             cost_amount, cost_unit, revenue_amount, usage_units,
             model, model_provider, source, granularity, is_inferred, properties,
             idempotency_key
-          ) VALUES ($1, $2, $3, 'cost', $4, $5, 'usd', 0, $6, $7, $8, 'helicone_import', 'event', false, $9, $10)
+          ) VALUES ($1, $2, $3, $4, 'cost', $5, $6, 'usd', 0, $7, $8, $9, 'helicone_import', 'event', false, $10, $11)
           ON CONFLICT (user_id, idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING`,
             [
               userId,
+              req.accountId ?? null,
               customerId,
               featureKey,
               timestamp,
