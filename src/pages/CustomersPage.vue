@@ -26,7 +26,7 @@ const { isLoggedIn } = useAuth();
 
 const { data, isLoading } = useQuery({
   queryKey: ["cohorts"],
-  queryFn: () => getCohorts(),
+  queryFn: () => getCohorts(true),
   enabled: isLoggedIn,
 });
 
