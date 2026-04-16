@@ -181,15 +181,6 @@ const usageMeters = computed(() => {
       pct: Math.min(100, Math.round((ev.used / ev.limit) * 100)),
     });
   }
-  const ai = usageLimits.value.ai_insights?.usage;
-  if (ai?.limit) {
-    meters.push({
-      label: "Messages",
-      used: ai.used,
-      limit: ai.limit,
-      pct: Math.min(100, Math.round((ai.used / ai.limit) * 100)),
-    });
-  }
   return meters;
 });
 
