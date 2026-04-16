@@ -162,6 +162,11 @@ export function createEventsRoutes(
         if (source) {
           where += ` AND oe.source = $${paramIdx++}`;
           params.push(source);
+        } else {
+          // Hide synthetic Stripe subscription revenue rows from the default
+          // view — one per month per customer, they bury the real usage events.
+          // Still visible when the user explicitly picks Source → Stripe.
+          where += ` AND (oe.source IS NULL OR oe.source != 'stripe')`;
         }
         if (dateFrom) {
           where += ` AND oe.timestamp >= $${paramIdx++}`;
