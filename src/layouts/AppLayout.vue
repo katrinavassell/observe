@@ -24,7 +24,6 @@ import {
 import ErrorBoundary from "@/components/shared/ErrorBoundary.vue";
 import FeedbackModal from "@/components/shared/FeedbackModal.vue";
 import OnboardingChecklist from "@/components/onboarding/OnboardingChecklist.vue";
-import AiDrawer from "@/components/AiDrawer.vue";
 import { useTeam } from "@/composables/useTeam";
 import { useAuth } from "@/composables/useAuth";
 import { useDataMode } from "@/composables/useDataMode";
@@ -439,7 +438,5 @@ function isActive(path: string) {
       v-if="isLoggedIn && !onboardingDismissed"
       @dismiss="dismissOnboarding"
     />
-
-    <AiDrawer v-if="isLoggedIn" />
   </div>
 </template>
