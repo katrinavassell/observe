@@ -1127,17 +1127,40 @@ function customerMarginClass(pct: number | null): string {
                     </div>
 
                     <!-- No bodies available -->
-                    <p
+                    <div
                       v-if="
                         !eventDetails[event.id].request_body &&
                         !eventDetails[event.id].response_body &&
                         !eventDetails[event.id].properties?.prompt &&
                         !eventDetails[event.id].properties?.completion
                       "
-                      class="text-sm text-muted-foreground"
+                      class="rounded-md border border-dashed px-4 py-3 text-sm text-muted-foreground space-y-1"
                     >
-                      No request/response body recorded for this event.
-                    </p>
+                      <p class="font-medium text-foreground">
+                        No request/response body recorded
+                      </p>
+                      <p class="text-xs">
+                        To see the prompt + completion here, include them in
+                        <code class="font-mono">properties</code> when you send
+                        the event:
+                      </p>
+                      <pre
+                        class="text-[11px] bg-muted rounded p-2 mt-1 overflow-x-auto"
+                      ><code>properties: {
+  prompt: messages,
+  completion: res.choices[0].message.content,
+}</code></pre>
+                      <p class="text-xs">
+                        Full guidance:
+                        <a
+                          href="https://observemetrics.com/llms.txt"
+                          target="_blank"
+                          rel="noopener"
+                          class="underline"
+                          >observemetrics.com/llms.txt</a
+                        >
+                      </p>
+                    </div>
 
                     <!-- Metadata -->
                     <div
