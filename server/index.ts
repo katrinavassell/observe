@@ -499,6 +499,17 @@ async function _doDbInit() {
     await pool.query(
       `ALTER TABLE observe_events ADD COLUMN IF NOT EXISTS output_tokens INT`,
     );
+    // Stripe-aware revenue — pricing model detected at sync time drives
+    // per-event revenue enrichment at ingest. Nullable for pre-migration rows.
+    await pool.query(
+      `ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS pricing_model TEXT`,
+    );
+    await pool.query(
+      `ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS pricing_tiers JSONB`,
+    );
+    await pool.query(
+      `ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS unit_price NUMERIC(12, 6)`,
+    );
     // Track where the token split came from: 'direct' from SDK, 'estimated'
     // backfilled from provider daily aggregates, NULL for pre-backfill rows.
     await pool.query(

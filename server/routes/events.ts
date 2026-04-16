@@ -922,27 +922,113 @@ export function createEventsRoutes(
           console.error("Feature pricing lookup failed:", err);
         }
 
-        // Auto-enrich revenue from Stripe: look up MRR for customers in this batch
+        // Auto-enrich revenue from Stripe: look up subscriptions for customers
+        // in this batch, carrying the pricing model so we pick the right
+        // revenue derivation per event.
         const customerIds = [
           ...new Set(validEvents.map((e) => e.customerReferenceId)),
         ];
-        const mrrByCustomer = new Map<string, number>();
+        interface SubMeta {
+          mrr: number;
+          pricingModel: "flat" | "tiered" | "metered" | "hybrid" | null;
+          pricingTiers: unknown | null;
+          unitPrice: number | null;
+        }
+        const subByCustomer = new Map<string, SubMeta>();
         if (customerIds.length > 0) {
           try {
-            const mrrResult = await pool.query(
-              `SELECT s.customer_id, SUM(s.mrr_override) as mrr
-             FROM subscriptions s
-             WHERE s.user_id = $1 AND s.is_active = true AND s.customer_id = ANY($2)
-             GROUP BY s.customer_id`,
+            const subResult = await pool.query(
+              `SELECT s.customer_id,
+                      SUM(COALESCE(s.mrr_override, 0)) AS mrr,
+                      MAX(s.pricing_model) AS pricing_model,
+                      MAX(CASE WHEN s.pricing_model = 'tiered' OR s.pricing_model = 'hybrid'
+                               THEN s.pricing_tiers::text END) AS pricing_tiers,
+                      MAX(s.unit_price) AS unit_price
+               FROM subscriptions s
+               WHERE s.user_id = $1 AND s.is_active = true AND s.customer_id = ANY($2)
+               GROUP BY s.customer_id`,
               [userId, customerIds],
             );
-            for (const row of mrrResult.rows) {
-              // MRR / 30 = daily revenue share per event
-              mrrByCustomer.set(row.customer_id, parseFloat(row.mrr) / 30);
+            for (const row of subResult.rows) {
+              subByCustomer.set(row.customer_id, {
+                mrr: parseFloat(row.mrr) || 0,
+                pricingModel: row.pricing_model,
+                pricingTiers: row.pricing_tiers
+                  ? JSON.parse(row.pricing_tiers)
+                  : null,
+                unitPrice:
+                  row.unit_price != null ? parseFloat(row.unit_price) : null,
+              });
             }
           } catch (err) {
-            throw new Error(`MRR enrichment lookup failed: ${err}`);
+            throw new Error(`Subscription enrichment lookup failed: ${err}`);
           }
+        }
+
+        // Tiered-pricing: month-to-date usage per customer so we can resolve
+        // which tier each event lands in. One query covers all customers in
+        // the batch who have tiered/hybrid subs.
+        const tieredCustomers = [...subByCustomer.entries()]
+          .filter(
+            ([, meta]) =>
+              meta.pricingModel === "tiered" || meta.pricingModel === "hybrid",
+          )
+          .map(([cid]) => cid);
+        const mtdUsageByCustomer = new Map<string, number>();
+        if (tieredCustomers.length > 0) {
+          try {
+            const usageResult = await pool.query(
+              `SELECT customer_id, COALESCE(SUM(usage_units), 0) AS usage
+               FROM observe_events
+               WHERE user_id = $1
+                 AND customer_id = ANY($2)
+                 AND timestamp >= date_trunc('month', NOW())
+               GROUP BY customer_id`,
+              [userId, tieredCustomers],
+            );
+            for (const row of usageResult.rows) {
+              mtdUsageByCustomer.set(row.customer_id, parseFloat(row.usage));
+            }
+          } catch (err) {
+            console.error("Tiered MTD usage lookup failed:", err);
+          }
+        }
+
+        // Resolve the per-unit price for a given month-to-date usage using a
+        // Stripe "tiers" payload. Returns dollars per unit. Falls back to the
+        // top tier when usage exceeds the largest `up_to`.
+        function tierUnitPrice(
+          tiers: unknown,
+          mtdUsage: number,
+        ): number | null {
+          if (!Array.isArray(tiers) || tiers.length === 0) return null;
+          for (const t of tiers) {
+            const row = t as {
+              up_to: number | null | "inf";
+              unit_amount?: number | null;
+              unit_amount_decimal?: string | null;
+            };
+            const cap =
+              row.up_to === null || row.up_to === "inf"
+                ? Infinity
+                : Number(row.up_to);
+            if (mtdUsage < cap) {
+              const amount =
+                row.unit_amount_decimal != null
+                  ? parseFloat(row.unit_amount_decimal)
+                  : (row.unit_amount ?? 0);
+              return amount / 100;
+            }
+          }
+          const last = tiers[tiers.length - 1] as {
+            unit_amount?: number | null;
+            unit_amount_decimal?: string | null;
+          };
+          const amount =
+            last.unit_amount_decimal != null
+              ? parseFloat(last.unit_amount_decimal)
+              : (last.unit_amount ?? 0);
+          return amount / 100;
         }
 
         // Build batch insert
@@ -964,7 +1050,10 @@ export function createEventsRoutes(
               evt.outputTokens,
             ));
 
-          // Revenue enrichment priority: explicit > feature_pricing > MRR allocation > 0
+          // Revenue enrichment priority: explicit > feature_pricing > Stripe subscription > 0
+          // Within "Stripe subscription" we pick the derivation based on the
+          // sub's pricing_model so the revenue_source label tells the UI how
+          // precise the number is.
           let revenue = 0;
           let revenueSource = "none";
           if (evt.revenueAmount != null) {
@@ -973,9 +1062,39 @@ export function createEventsRoutes(
           } else if (featurePricingMap.has(evt.featureKey)) {
             revenue = featurePricingMap.get(evt.featureKey)!;
             revenueSource = "feature_pricing";
-          } else if (mrrByCustomer.has(evt.customerReferenceId)) {
-            revenue = mrrByCustomer.get(evt.customerReferenceId)!;
-            revenueSource = "mrr_allocation";
+          } else if (subByCustomer.has(evt.customerReferenceId)) {
+            const meta = subByCustomer.get(evt.customerReferenceId)!;
+            const evtUsage =
+              evt.usageUnits ??
+              (evt.inputTokens || 0) + (evt.outputTokens || 0);
+
+            if (meta.pricingModel === "metered" && meta.unitPrice != null) {
+              revenue = meta.unitPrice * evtUsage;
+              revenueSource = "per_unit";
+            } else if (
+              meta.pricingModel === "tiered" &&
+              meta.pricingTiers != null
+            ) {
+              const mtd = mtdUsageByCustomer.get(evt.customerReferenceId) ?? 0;
+              const tierPrice = tierUnitPrice(meta.pricingTiers, mtd);
+              if (tierPrice != null) {
+                revenue = tierPrice * evtUsage;
+                revenueSource = "tiered";
+              } else {
+                revenue = meta.mrr / 30;
+                revenueSource = "allocated";
+              }
+            } else if (meta.pricingModel === "hybrid") {
+              // Base portion allocated per day + metered overage exact per unit.
+              const meteredPortion =
+                meta.unitPrice != null ? meta.unitPrice * evtUsage : 0;
+              revenue = meta.mrr / 30 + meteredPortion;
+              revenueSource = "hybrid";
+            } else {
+              // flat (or unknown pricing_model on a legacy sub) — daily MRR split
+              revenue = meta.mrr / 30;
+              revenueSource = "allocated";
+            }
           }
 
           // Only mark tokens_source='direct' when the SDK actually provided

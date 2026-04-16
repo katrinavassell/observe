@@ -341,6 +341,24 @@ required to start tracking costs. A user can:
 If the user is on Clerk, Paddle, Lago, or any other billing tool, they can either
 connect Stripe separately, or use explicit `revenueAmount` / Feature Pricing.
 
+### Revenue per event
+
+Revenue is enriched at ingest in this priority order:
+
+1. **explicit** — `revenueAmount` sent directly in the event payload.
+2. **feature_pricing** — from feature definitions (set in Data Sources → Features).
+3. **Stripe subscription** — derived from the customer's active subscription:
+   - Metered / usage-based prices → exact per-unit revenue (`revenue_source: "per_unit"`).
+   - Tiered / graduated prices → tier lookup based on this customer's month-to-date usage (`revenue_source: "tiered"`).
+   - Flat subscriptions → MRR / 30 allocated per day (`revenue_source: "allocated"`).
+   - Hybrid (flat + metered) → base allocated + overage exact per unit (`revenue_source: "hybrid"`).
+4. **none** — $0 if no revenue source is found.
+
+The `revenue_source` field on each event indicates how the number was derived.
+`per_unit` and `tiered` are exact. `allocated` is estimated from the subscription
+amount and diverges slightly from the true per-event contribution as event volume
+grows across the month.
+
 ---
 
 ## Checklist for an AI coding agent implementing Observe
