@@ -1,6 +1,7 @@
 import { Router, Request, Response, NextFunction } from "express";
 import type { Pool } from "pg";
 import { createClient } from "@supabase/supabase-js";
+import { encryptApiKey } from "../stripe-client.js";
 
 const supabaseServiceKey =
   process.env.SUPABASE_SERVICE_ROLE_KEY ||
@@ -94,10 +95,10 @@ export function createEnsureVisitor(pool: Pool) {
                   .digest("hex");
                 const keyPrefix = rawKey.slice(0, 11);
                 await pool.query(
-                  `INSERT INTO sdk_api_keys (user_id, key_hash, key_prefix, name)
-                   VALUES ($1, $2, $3, 'default')
+                  `INSERT INTO sdk_api_keys (user_id, key_hash, key_prefix, encrypted_key, name)
+                   VALUES ($1, $2, $3, $4, 'default')
                    ON CONFLICT (user_id, name) WHERE revoked_at IS NULL DO NOTHING`,
-                  [user.id, keyHash, keyPrefix],
+                  [user.id, keyHash, keyPrefix, encryptApiKey(rawKey)],
                 );
               }
             } catch (healErr) {
@@ -270,11 +271,11 @@ export function createAuthRoutes(
           .digest("hex");
         const keyPrefix = rawKey.slice(0, 11);
         const insertResult = await pool.query(
-          `INSERT INTO sdk_api_keys (user_id, key_hash, key_prefix, name)
-             VALUES ($1, $2, $3, $4)
+          `INSERT INTO sdk_api_keys (user_id, key_hash, key_prefix, encrypted_key, name)
+             VALUES ($1, $2, $3, $4, $5)
              ON CONFLICT (user_id, name) DO NOTHING
              RETURNING id`,
-          [userId, keyHash, keyPrefix, "default"],
+          [userId, keyHash, keyPrefix, encryptApiKey(rawKey), "default"],
         );
         if (insertResult.rows.length > 0) {
           sdkKey = rawKey;
