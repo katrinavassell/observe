@@ -318,6 +318,8 @@ export interface ObserveEvent {
   usage_units: number | null;
   input_tokens: number | null;
   output_tokens: number | null;
+  input_cost: number | null;
+  output_cost: number | null;
   tokens_source: "direct" | "estimated" | null;
   model: string | null;
   model_provider: string | null;
@@ -1343,6 +1345,8 @@ export interface EventDetail {
   usage_units: number;
   input_tokens: number | null;
   output_tokens: number | null;
+  input_cost: number | null;
+  output_cost: number | null;
   model?: string;
   model_provider?: string;
   source: string;

@@ -4,12 +4,67 @@ import crypto from "crypto";
 import rateLimit from "express-rate-limit";
 import { type AuthRequest } from "./auth.js";
 import { encryptApiKey, decryptApiKey } from "../stripe-client.js";
-import { calculateCostFromTokens as calcCostFromDb } from "../model-pricing.js";
+import {
+  calculateCostFromTokens as calcCostFromDb,
+  resolveModelPricing,
+  type ModelPrice,
+} from "../model-pricing.js";
 import { checkAlerts, checkCustomerAlerts } from "./alerts.js";
 import { checkFeatureAccess } from "../billing.js";
 import { inferModelProvider } from "../lib/models.js";
 
 type ComputeInferenceProfilesFn = (userId: string) => Promise<number>;
+
+/**
+ * Annotate a list of already-coerced event rows with derived `input_cost` +
+ * `output_cost`. Tokens × resolved rate — matches the ingest-time pricing
+ * chain (tier > user override > global). Cached per-request so N rows with M
+ * unique models do M pricing lookups, not N.
+ */
+async function attachSplitCosts(
+  pool: Pool,
+  userId: string,
+  rows: Array<Record<string, unknown>>,
+): Promise<Array<Record<string, unknown>>> {
+  const cache = new Map<string, ModelPrice | null>();
+  async function lookup(model: string): Promise<ModelPrice | null> {
+    if (cache.has(model)) return cache.get(model)!;
+    const p = await resolveModelPricing(pool, model, userId);
+    cache.set(model, p);
+    return p;
+  }
+  const out: Array<Record<string, unknown>> = [];
+  for (const row of rows) {
+    const model = typeof row.model === "string" ? row.model : null;
+    const inputTokens =
+      typeof row.input_tokens === "number" ? row.input_tokens : null;
+    const outputTokens =
+      typeof row.output_tokens === "number" ? row.output_tokens : null;
+    let inputCost: number | null = null;
+    let outputCost: number | null = null;
+    if (model && (inputTokens != null || outputTokens != null)) {
+      const pricing = await lookup(model);
+      if (pricing) {
+        if (inputTokens != null) {
+          inputCost =
+            Math.round(
+              ((inputTokens * pricing.input_cost_per_million) / 1_000_000) *
+                1_000_000,
+            ) / 1_000_000;
+        }
+        if (outputTokens != null) {
+          outputCost =
+            Math.round(
+              ((outputTokens * pricing.output_cost_per_million) / 1_000_000) *
+                1_000_000,
+            ) / 1_000_000;
+        }
+      }
+    }
+    out.push({ ...row, input_cost: inputCost, output_cost: outputCost });
+  }
+  return out;
+}
 
 function coerceEventRow(row: Record<string, unknown>) {
   return {
@@ -201,8 +256,11 @@ export function createEventsRoutes(
           params,
         );
 
+        const coerced = eventsResult.rows.map(coerceEventRow);
+        const withSplit = await attachSplitCosts(pool, req.visitorId!, coerced);
+
         res.json({
-          events: eventsResult.rows.map(coerceEventRow),
+          events: withSplit,
           total: parseInt(countResult.rows[0].count),
           limit,
           offset,
@@ -522,7 +580,10 @@ export function createEventsRoutes(
         );
         if (result.rows.length === 0)
           return res.status(404).json({ error: "Event not found" });
-        res.json(coerceEventRow(result.rows[0]));
+        const [withSplit] = await attachSplitCosts(pool, req.visitorId!, [
+          coerceEventRow(result.rows[0]),
+        ]);
+        res.json(withSplit);
       } catch (error) {
         console.error("GET /events/:id error:", error);
         res.status(500).json({ error: "Failed to get event detail" });
