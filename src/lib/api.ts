@@ -968,7 +968,9 @@ export interface CohortCustomer {
   first_seen: string;
   last_seen: string;
   cost_trend: "up" | "down" | "stable" | "new";
+  cost_trend_pct: number | null;
   active_days_30d: number;
+  active_days_prior_avg: number | null;
   health_score: number;
   top_model: string | null;
   top_model_cost: number | null;

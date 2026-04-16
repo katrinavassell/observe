@@ -89,11 +89,18 @@ function coerceEventRow(row: Record<string, unknown>) {
   };
 }
 
+// Dedup partition: only collapse rows that share a user_id + idempotency_key
+// (the same event arriving from multiple sources — e.g. proxy mirrored from
+// SDK). Rows without an idempotency_key fall back to their primary key, so
+// every call ends up in its own partition and nothing is silently dropped.
+// Earlier partition was (user_id, model, customer_id, feature_key, day) which
+// undercounted aggregates by collapsing every gpt-4o blog_post call for a
+// given day into one row.
 const SOURCE_PRIORITY_CTE = `
   WITH ranked AS (
     SELECT oe.*,
       ROW_NUMBER() OVER (
-        PARTITION BY oe.user_id, COALESCE(oe.model,''), COALESCE(oe.customer_id,''), COALESCE(oe.feature_key,''), date_trunc('day', oe.timestamp)
+        PARTITION BY oe.user_id, COALESCE(oe.idempotency_key, oe.id::text)
         ORDER BY CASE oe.source WHEN 'proxy' THEN 1 WHEN 'sdk' THEN 2 WHEN 'csv' THEN 3 WHEN 'sample' THEN 4 ELSE 5 END
       ) AS _src_rank
     FROM observe_events oe
@@ -862,6 +869,8 @@ export function createEventsRoutes(
           inputTokens?: number;
           outputTokens?: number;
           properties?: Record<string, unknown>;
+          requestBody?: unknown;
+          responseBody?: unknown;
           idempotencyKey?: string;
           traceId?: string;
           spanId?: string;
@@ -1105,7 +1114,7 @@ export function createEventsRoutes(
               : null;
 
           placeholders.push(
-            `($${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, 'sdk', 'event', false, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++})`,
+            `($${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, 'sdk', 'event', false, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++})`,
           );
           values.push(
             userId,
@@ -1129,6 +1138,16 @@ export function createEventsRoutes(
             evt.inputTokens ?? null,
             evt.outputTokens ?? null,
             tokensSource,
+            evt.requestBody != null
+              ? typeof evt.requestBody === "string"
+                ? evt.requestBody
+                : JSON.stringify(evt.requestBody)
+              : null,
+            evt.responseBody != null
+              ? typeof evt.responseBody === "string"
+                ? evt.responseBody
+                : JSON.stringify(evt.responseBody)
+              : null,
           );
         }
 
@@ -1138,7 +1157,8 @@ export function createEventsRoutes(
           cost_amount, cost_unit, revenue_amount, usage_units,
           model, model_provider, source, granularity, is_inferred, idempotency_key, revenue_source,
           trace_id, span_id, parent_span_id, duration_ms, cost_type,
-          input_tokens, output_tokens, tokens_source
+          input_tokens, output_tokens, tokens_source,
+          request_body, response_body
         ) VALUES ${placeholders.join(", ")}
         ON CONFLICT (user_id, idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING
       `;

@@ -137,7 +137,7 @@ export function createCohortsRoutes(pool: Pool, ensureVisitor: any) {
           ? ""
           : "AND (c.is_internal IS NOT TRUE)";
 
-        // 8 parallel queries
+        // 9 parallel queries
         const [
           pnlResult,
           totalFeaturesResult,
@@ -147,6 +147,7 @@ export function createCohortsRoutes(pool: Pool, ensureVisitor: any) {
           topModelResult,
           currentMrrResult,
           priorMrrResult,
+          priorActiveDaysResult,
         ] = await Promise.all([
           // 1. Per-customer P&L
           pool.query(
@@ -233,6 +234,26 @@ export function createCohortsRoutes(pool: Pool, ensureVisitor: any) {
              GROUP BY s.customer_id`,
             [userId],
           ),
+          // 9. Prior-months active-days average — used to contextualize
+          // "inactive" signals. Excludes the current month (partial) and caps
+          // at the last 4 prior months so seasonality dominates less.
+          pool.query(
+            `SELECT customer_id, AVG(active_days_per_month) AS avg_days
+             FROM (
+               SELECT customer_id,
+                      DATE_TRUNC('month', timestamp) AS month,
+                      COUNT(DISTINCT DATE(timestamp)) AS active_days_per_month
+               FROM observe_events
+               WHERE user_id = $1
+                 AND customer_id IS NOT NULL
+                 AND timestamp < DATE_TRUNC('month', NOW())
+                 AND timestamp >= DATE_TRUNC('month', NOW()) - INTERVAL '4 months'
+               GROUP BY customer_id, month
+             ) monthly
+             GROUP BY customer_id
+             HAVING COUNT(*) >= 2`,
+            [userId],
+          ),
         ]);
 
         const totalFeatures =
@@ -276,6 +297,12 @@ export function createCohortsRoutes(pool: Pool, ensureVisitor: any) {
           priorMrrMap[row.customer_id] = parseFloat(row.mrr) || 0;
         }
 
+        const priorActiveDaysAvgMap: Record<string, number> = {};
+        for (const row of priorActiveDaysResult.rows) {
+          priorActiveDaysAvgMap[row.customer_id] =
+            parseFloat(row.avg_days) || 0;
+        }
+
         // Model swap suggestions — find cheapest same-provider alternative
         const allPricing = await getAllPricing(pool);
         const pricingByProvider: Record<
@@ -302,9 +329,12 @@ export function createCohortsRoutes(pool: Pool, ensureVisitor: any) {
 
         // Compute per-customer metrics
         const customers = pnlResult.rows.map((row) => {
-          const eventRevenue = parseFloat(row.total_revenue) || 0;
-          const subRevenue = subRevenueMap[row.customer_id] || 0;
-          const totalRevenue = eventRevenue + subRevenue;
+          // Per PR #94, per-event revenue is enriched from the active
+          // subscription at ingest; observe_events already contains that
+          // contribution (both the monthly_aggregate stripe rows and the
+          // per-event allocated/tiered/metered portions). Summing subRevenue
+          // on top double-counts.
+          const totalRevenue = parseFloat(row.total_revenue) || 0;
           const totalCost = parseFloat(row.total_cost) || 0;
           const eventCount = parseInt(row.event_count) || 0;
           const featureCount = parseInt(row.feature_count) || 0;
@@ -324,6 +354,7 @@ export function createCohortsRoutes(pool: Pool, ensureVisitor: any) {
           // Cost trend
           const trend = costTrendMap[row.customer_id];
           let costTrend: "up" | "down" | "stable" | "new" = "new";
+          let costTrendPct: number | null = null;
           if (trend) {
             if (trend.prior === 0 && trend.current > 0) {
               costTrend = "new";
@@ -332,10 +363,16 @@ export function createCohortsRoutes(pool: Pool, ensureVisitor: any) {
               if (ratio > 1.15) costTrend = "up";
               else if (ratio < 0.85) costTrend = "down";
               else costTrend = "stable";
+              costTrendPct = Math.round(
+                ((trend.current - trend.prior) / trend.prior) * 100,
+              );
             }
           }
 
           const activeDays = stickinessMap[row.customer_id] || 0;
+          const priorActiveDaysAvg = priorActiveDaysAvgMap[row.customer_id]
+            ? Math.round(priorActiveDaysAvgMap[row.customer_id])
+            : null;
 
           // Health score (0-100)
           // Margin (40 pts): 40 * clamp(margin/100, 0, 1)
@@ -438,7 +475,9 @@ export function createCohortsRoutes(pool: Pool, ensureVisitor: any) {
             first_seen: row.first_seen,
             last_seen: row.last_seen,
             cost_trend: costTrend,
+            cost_trend_pct: costTrendPct,
             active_days_30d: activeDays,
+            active_days_prior_avg: priorActiveDaysAvg,
             health_score: healthScore,
             top_model: topModel?.model || null,
             top_model_cost: topModel?.cost || null,

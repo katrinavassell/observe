@@ -252,23 +252,26 @@ curl -X POST https://observemetrics.com/api/events/ingest \
       "traceId":             string,  // group spans into a trace
       "spanId":              string,  // this span's ID
       "parentSpanId":        string,  // parent span (for nested agent calls)
-      "properties":          object   // arbitrary JSON metadata (searchable)
+      "properties":          object,  // arbitrary JSON metadata (searchable)
+      "requestBody":         object,  // optional — prompt/messages you sent
+      "responseBody":        object   // optional — provider response body
     }
   ]
 }
 ```
 
-To see request/response in the Observe event detail view, include `prompt` and
-`completion` in `properties`:
+`requestBody` and `responseBody` are first-class fields that show up as Request
+and Response sections in the event detail view. Pass the full messages array
+and the provider response object — Observe stores them as JSONB.
 
 ```ts
-properties: {
-  prompt: messages,                         // the messages array you sent
-  completion: res.choices[0].message.content // the final assistant text
-}
+requestBody: { model, messages },
+responseBody: res,  // the full OpenAI / Anthropic response
 ```
 
 Optional — skip if content is sensitive or subject to privacy requirements.
+Legacy pattern using `properties: { prompt, completion }` still works as a
+fallback, but the explicit fields are preferred.
 
 - Batch up to 1000 events per request.
 - If `costAmount` is omitted and `model` + `inputTokens` + `outputTokens` are provided,
