@@ -208,7 +208,8 @@ export function createAuthRoutes(
           [email, userId],
         );
         let result;
-        if (existing.rows.length > 0) {
+        const isNewAccount = existing.rows.length === 0;
+        if (!isNewAccount) {
           result = await pool.query(
             `UPDATE accounts SET email = $1, visitor_id = $2, name = COALESCE($3, name), password_hash = 'supabase-managed', updated_at = NOW()
              WHERE id = $4 RETURNING id, email, name`,
@@ -223,6 +224,63 @@ export function createAuthRoutes(
           );
         }
         const account = result.rows[0];
+
+        // Dogfood: treat every new Observe signup as a customer on each
+        // admin's dashboard. Fire-and-forget — failure here must not block
+        // signup. Only runs on first-time account creation (not re-login
+        // UPDATEs) and uses idempotency keys so repeated calls don't
+        // duplicate the event.
+        if (isNewAccount) {
+          const adminEmailsForDogfood = [
+            "tansoadmin@tansohq.com",
+            "kat@tansohq.com",
+            "doug@tansohq.com",
+            ...(process.env.ADMIN_EMAILS
+              ? process.env.ADMIN_EMAILS.split(",").map((e) =>
+                  e.trim().toLowerCase(),
+                )
+              : []),
+          ];
+          pool
+            .query(
+              `SELECT visitor_id, email FROM accounts
+               WHERE LOWER(email) = ANY($1) AND visitor_id IS NOT NULL`,
+              [adminEmailsForDogfood.map((e) => e.toLowerCase())],
+            )
+            .then(async (admins) => {
+              for (const row of admins.rows) {
+                const adminUid = row.visitor_id as string;
+                // Ensure the customer row exists on the admin's side so the
+                // /customers LEFT JOIN finds a name.
+                await pool
+                  .query(
+                    `INSERT INTO customers (user_id, customer_id, name, email)
+                     VALUES ($1, $2, $3, $4)
+                     ON CONFLICT DO NOTHING`,
+                    [adminUid, email, name?.trim() || email, email],
+                  )
+                  .catch((err) =>
+                    console.error("Dogfood customer insert failed:", err),
+                  );
+                // Emit a signup event — idempotency_key keeps this one-shot.
+                await pool
+                  .query(
+                    `INSERT INTO observe_events
+                       (user_id, customer_id, feature_key, event_name,
+                        timestamp, source, granularity, idempotency_key)
+                     VALUES ($1, $2, 'observe_signup', 'signup', NOW(),
+                             'sdk', 'event', $3)
+                     ON CONFLICT (user_id, idempotency_key)
+                       WHERE idempotency_key IS NOT NULL DO NOTHING`,
+                    [adminUid, email, `signup:${email}`],
+                  )
+                  .catch((err) =>
+                    console.error("Dogfood signup event insert failed:", err),
+                  );
+              }
+            })
+            .catch((err) => console.error("Dogfood admin lookup failed:", err));
+        }
 
         // Clear any leftover sample/demo data
         await pool.query(
