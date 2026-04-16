@@ -5,7 +5,7 @@ import rateLimit from "express-rate-limit";
 import { type AuthRequest } from "./auth.js";
 import { encryptApiKey } from "../stripe-client.js";
 import { calculateCostFromTokens as calcCostFromDb } from "../model-pricing.js";
-import { checkAlerts } from "./alerts.js";
+import { checkAlerts, checkCustomerAlerts } from "./alerts.js";
 import { checkFeatureAccess } from "../billing.js";
 import { inferModelProvider } from "../lib/models.js";
 
@@ -1007,6 +1007,24 @@ export function createEventsRoutes(
           checkAlerts(pool, userId).catch((err) =>
             console.error("checkAlerts error (ingest):", err),
           );
+          // Check per-customer alerts for each unique customer in this batch
+          const alertCustomerIds = [
+            ...new Set(
+              validEvents
+                .filter(
+                  (e: { customerReferenceId?: string }) =>
+                    e.customerReferenceId,
+                )
+                .map(
+                  (e: { customerReferenceId: string }) => e.customerReferenceId,
+                ),
+            ),
+          ];
+          for (const cid of alertCustomerIds) {
+            checkCustomerAlerts(pool, userId, cid).catch((err) =>
+              console.error("checkCustomerAlerts error (ingest):", err),
+            );
+          }
           // Check usage limit and send warning emails
           if (ingestAccess.limit != null && ingestAccess.usage != null) {
             const newUsage = ingestAccess.usage + inserted;

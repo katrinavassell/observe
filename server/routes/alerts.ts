@@ -9,21 +9,29 @@ import { type AuthRequest } from "./auth.js";
 // using metrics the UI couldn't display. Now aligned.
 const alertRuleSchema = z.object({
   name: z.string().min(1).max(100),
-  metric: z.enum([
-    "daily_cost",
-    "margin_percent",
-    "customer_margin",
-    "usage_velocity",
-    "customer_cost_share",
-    "top_customer_unprofitable",
-    "model_cost_increase",
-    "customer_concentration",
-  ]),
+  metric: z
+    .enum([
+      "daily_cost",
+      "margin_percent",
+      "customer_margin",
+      "usage_velocity",
+      "customer_cost_share",
+      "top_customer_unprofitable",
+      "model_cost_increase",
+      "customer_concentration",
+    ])
+    .optional(),
   operator: z.enum(["gt", "lt", "gte", "lte"]),
   threshold: z.coerce.number(),
   email: z.string().email().optional().or(z.literal("")),
   webhook_url: z.string().url().optional().or(z.literal("")),
   cooldown_minutes: z.coerce.number().int().min(1).default(60),
+  trigger_type: z.string().default("threshold"),
+  segment_type: z
+    .enum(["all", "cohort", "mrr_above", "mrr_below", "specific"])
+    .default("all"),
+  segment_value: z.string().optional().or(z.literal("")),
+  evaluation: z.enum(["aggregate", "per_customer"]).default("aggregate"),
 });
 
 const METRIC_QUERIES: Record<string, string> = {
@@ -35,6 +43,20 @@ const METRIC_QUERIES: Record<string, string> = {
   top_customer_unprofitable: `SELECT COUNT(*) as value FROM (SELECT customer_id, SUM(revenue_amount) - SUM(cost_amount) as profit FROM observe_events WHERE user_id = $1 AND timestamp >= NOW() - INTERVAL '30 days' AND customer_id IS NOT NULL GROUP BY customer_id ORDER BY SUM(cost_amount) DESC LIMIT 10) t WHERE profit < 0`,
   model_cost_increase: `SELECT COALESCE((SELECT AVG(cost_amount) FROM observe_events WHERE user_id = $1 AND timestamp >= NOW() - INTERVAL '7 days' AND model IS NOT NULL) / NULLIF((SELECT AVG(cost_amount) FROM observe_events WHERE user_id = $1 AND timestamp >= NOW() - INTERVAL '14 days' AND timestamp < NOW() - INTERVAL '7 days' AND model IS NOT NULL), 0) * 100 - 100, 0) as value`,
   customer_concentration: `SELECT CASE WHEN COALESCE(SUM(cost_amount), 0) = 0 THEN 0 ELSE (SELECT SUM(cost_amount) FROM observe_events WHERE user_id = $1 AND timestamp >= NOW() - INTERVAL '30 days' GROUP BY customer_id ORDER BY 1 DESC LIMIT 1) / SUM(cost_amount) * 100 END as value FROM observe_events WHERE user_id = $1 AND timestamp >= NOW() - INTERVAL '30 days'`,
+};
+
+const CUSTOMER_TRIGGER_QUERIES: Record<string, string> = {
+  usage_decline: `SELECT CASE WHEN prev.cnt = 0 THEN 0 ELSE ((curr.cnt - prev.cnt)::float / prev.cnt * 100) END as value
+    FROM (SELECT COUNT(*) as cnt FROM observe_events WHERE user_id = $1 AND customer_id = $2 AND timestamp >= NOW() - INTERVAL '30 days') curr,
+         (SELECT COUNT(*) as cnt FROM observe_events WHERE user_id = $1 AND customer_id = $2 AND timestamp >= NOW() - INTERVAL '60 days' AND timestamp < NOW() - INTERVAL '30 days') prev`,
+  usage_growth: `SELECT CASE WHEN prev.cnt = 0 THEN 0 ELSE ((curr.cnt - prev.cnt)::float / prev.cnt * 100) END as value
+    FROM (SELECT COUNT(*) as cnt FROM observe_events WHERE user_id = $1 AND customer_id = $2 AND timestamp >= NOW() - INTERVAL '30 days') curr,
+         (SELECT COUNT(*) as cnt FROM observe_events WHERE user_id = $1 AND customer_id = $2 AND timestamp >= NOW() - INTERVAL '60 days' AND timestamp < NOW() - INTERVAL '30 days') prev`,
+  margin_negative: `SELECT CASE WHEN COALESCE(SUM(revenue_amount), 0) = 0 THEN 0 ELSE ((SUM(revenue_amount) - SUM(cost_amount)) / SUM(revenue_amount) * 100) END as value FROM observe_events WHERE user_id = $1 AND customer_id = $2 AND timestamp >= NOW() - INTERVAL '30 days'`,
+  inactive: `SELECT EXTRACT(EPOCH FROM (NOW() - MAX(timestamp))) / 86400 as value FROM observe_events WHERE user_id = $1 AND customer_id = $2`,
+  cost_spike: `SELECT CASE WHEN prev.cost = 0 THEN 0 ELSE ((curr.cost - prev.cost) / prev.cost * 100) END as value
+    FROM (SELECT COALESCE(SUM(cost_amount), 0) as cost FROM observe_events WHERE user_id = $1 AND customer_id = $2 AND timestamp >= NOW() - INTERVAL '7 days') curr,
+         (SELECT COALESCE(SUM(cost_amount), 0) as cost FROM observe_events WHERE user_id = $1 AND customer_id = $2 AND timestamp >= NOW() - INTERVAL '14 days' AND timestamp < NOW() - INTERVAL '7 days') prev`,
 };
 
 const OPERATOR_FNS: Record<
@@ -263,6 +285,237 @@ export async function checkAlerts(pool: Pool, userId: string) {
   }
 }
 
+function matchesSegment(
+  rule: { segment_type: string; segment_value: string | null },
+  customerId: string,
+  customer: { segment?: string } | undefined,
+): boolean {
+  switch (rule.segment_type) {
+    case "all":
+      return true;
+    case "specific":
+      return customerId === rule.segment_value;
+    case "cohort":
+      // Cohort matching requires the full cohort computation — for now match on segment field
+      return customer?.segment === rule.segment_value;
+    default:
+      return true;
+  }
+}
+
+async function sendCustomerAlertEmail(
+  to: string,
+  rule: {
+    name: string;
+    trigger_type: string;
+    operator: string;
+    threshold: number;
+  },
+  currentValue: number,
+  customerId: string,
+  customerName: string,
+): Promise<boolean> {
+  const RESEND_API_KEY = process.env.RESEND_API_KEY;
+  if (!RESEND_API_KEY) return false;
+
+  const from = process.env.ALERT_FROM_EMAIL || "alerts@example.com";
+  const triggerLabel = rule.trigger_type.replace(/_/g, " ");
+  const subject = `Alert: ${customerName} — ${triggerLabel}`;
+
+  try {
+    const res = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${RESEND_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from,
+        to: [to],
+        subject,
+        html: `<h2>${rule.name}</h2>
+          <p><strong>Customer:</strong> ${customerName} (${customerId})</p>
+          <p><strong>Trigger:</strong> ${triggerLabel}</p>
+          <p><strong>Current value:</strong> ${currentValue.toFixed(1)}</p>
+          <p><strong>Threshold:</strong> ${rule.operator} ${rule.threshold}</p>
+          <p style="margin-top:16px"><a href="https://observemetrics.com/customers/${encodeURIComponent(customerId)}">View customer →</a></p>`,
+      }),
+    });
+    return res.ok;
+  } catch (err) {
+    console.error("Customer alert email error:", err);
+    return false;
+  }
+}
+
+async function sendCustomerAlertWebhook(
+  url: string,
+  rule: {
+    name: string;
+    trigger_type: string;
+    operator: string;
+    threshold: number;
+  },
+  currentValue: number,
+  customerId: string,
+  customerName: string,
+): Promise<boolean> {
+  const triggerLabel = rule.trigger_type.replace(/_/g, " ");
+  const summary = `${rule.name}: ${customerName} — ${triggerLabel} (${currentValue.toFixed(1)}, threshold: ${rule.operator} ${rule.threshold})`;
+
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        text: summary,
+        blocks: [
+          {
+            type: "header",
+            text: { type: "plain_text", text: rule.name },
+          },
+          {
+            type: "section",
+            text: {
+              type: "mrkdwn",
+              text: `*Customer:* ${customerName}\n*Trigger:* ${triggerLabel}\n*Value:* ${currentValue.toFixed(1)}\n*Threshold:* ${rule.operator} ${rule.threshold}`,
+            },
+          },
+          {
+            type: "actions",
+            elements: [
+              {
+                type: "button",
+                text: { type: "plain_text", text: "View Customer" },
+                url: `https://observemetrics.com/customers/${encodeURIComponent(customerId)}`,
+              },
+            ],
+          },
+        ],
+        alert_name: rule.name,
+        trigger_type: rule.trigger_type,
+        customer_id: customerId,
+        customer_name: customerName,
+        current_value: currentValue,
+        threshold: rule.threshold,
+        triggered_at: new Date().toISOString(),
+      }),
+    });
+    return res.ok;
+  } catch (err) {
+    console.error("Customer alert webhook error:", err);
+    return false;
+  }
+}
+
+export async function checkCustomerAlerts(
+  pool: Pool,
+  userId: string,
+  customerId: string,
+) {
+  try {
+    const { rows: rules } = await pool.query(
+      `SELECT * FROM alert_rules WHERE user_id = $1 AND enabled = true AND evaluation = 'per_customer'`,
+      [userId],
+    );
+
+    if (rules.length === 0) return;
+
+    // Get customer info for notifications
+    const { rows: custRows } = await pool.query(
+      `SELECT name, email, segment FROM customers WHERE user_id = $1 AND customer_id = $2`,
+      [userId, customerId],
+    );
+    const customerName = custRows[0]?.name || customerId;
+
+    for (const rule of rules) {
+      try {
+        // Check cooldown
+        if (rule.last_triggered_at) {
+          const cooldownMs = (rule.cooldown_minutes || 60) * 60 * 1000;
+          if (
+            Date.now() - new Date(rule.last_triggered_at).getTime() <
+            cooldownMs
+          )
+            continue;
+        }
+
+        // Check segment match
+        if (!matchesSegment(rule, customerId, custRows[0])) continue;
+
+        const query = CUSTOMER_TRIGGER_QUERIES[rule.trigger_type];
+        if (!query) continue;
+
+        const { rows } = await pool.query(query, [userId, customerId]);
+        const currentValue = parseFloat(rows[0]?.value) || 0;
+
+        // For usage_decline, value is negative when declining — trigger when below threshold (e.g. < -30)
+        // For usage_growth, value is positive when growing — trigger when above threshold (e.g. > 20)
+        // For margin_negative, trigger when below threshold (e.g. < 0)
+        // For inactive, value is days — trigger when above threshold (e.g. > 14)
+        // For cost_spike, trigger when above threshold (e.g. > 20)
+        const operatorFn = OPERATOR_FNS[rule.operator];
+        if (!operatorFn) continue;
+
+        if (operatorFn(currentValue, parseFloat(rule.threshold))) {
+          let deliveryStatus: Record<string, string> = {};
+
+          if (rule.email) {
+            const ok = await sendCustomerAlertEmail(
+              rule.email,
+              rule,
+              currentValue,
+              customerId,
+              customerName,
+            );
+            deliveryStatus.email = ok ? "sent" : "failed";
+          }
+
+          if (rule.webhook_url) {
+            const ok = await sendCustomerAlertWebhook(
+              rule.webhook_url,
+              rule,
+              currentValue,
+              customerId,
+              customerName,
+            );
+            deliveryStatus.webhook = ok ? "sent" : "failed";
+          }
+
+          const delivered = Object.values(deliveryStatus).includes("sent");
+
+          // Write to history regardless
+          await pool.query(
+            `INSERT INTO alert_history (user_id, alert_rule_id, customer_id, customer_name, trigger_type, current_value, threshold, delivery_status)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+            [
+              userId,
+              rule.id,
+              customerId,
+              customerName,
+              rule.trigger_type,
+              currentValue,
+              rule.threshold,
+              JSON.stringify(deliveryStatus),
+            ],
+          );
+
+          if (delivered) {
+            await pool.query(
+              "UPDATE alert_rules SET last_triggered_at = NOW() WHERE id = $1",
+              [rule.id],
+            );
+          }
+        }
+      } catch (ruleErr) {
+        console.error(`checkCustomerAlerts rule ${rule.id} error:`, ruleErr);
+      }
+    }
+  } catch (err) {
+    console.error("checkCustomerAlerts error:", err);
+  }
+}
+
 export function createAlertRoutes(
   pool: Pool,
   ensureVisitor: any,
@@ -431,6 +684,65 @@ export function createAlertRoutes(
       } catch (err) {
         console.error("DELETE /alerts/:id error:", err);
         res.status(500).json({ error: "Failed to delete alert" });
+      }
+    },
+  );
+
+  // GET /alerts/history — paginated alert history
+  router.get(
+    "/alerts/history",
+    ensureVisitor,
+    async (req: AuthRequest, res: Response) => {
+      try {
+        const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
+        const offset = parseInt(req.query.offset as string) || 0;
+        const customerId = req.query.customer_id as string;
+
+        let where = "WHERE user_id = $1";
+        const params: unknown[] = [req.visitorId];
+        if (customerId) {
+          params.push(customerId);
+          where += ` AND customer_id = $${params.length}`;
+        }
+
+        const [countRes, historyRes] = await Promise.all([
+          pool.query(
+            `SELECT COUNT(*) as total FROM alert_history ${where}`,
+            params,
+          ),
+          pool.query(
+            `SELECT * FROM alert_history ${where} ORDER BY fired_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
+            [...params, limit, offset],
+          ),
+        ]);
+
+        res.json({
+          history: historyRes.rows,
+          total: parseInt(countRes.rows[0].total),
+          limit,
+          offset,
+        });
+      } catch (err) {
+        console.error("GET /alerts/history error:", err);
+        res.status(500).json({ error: "Failed to load alert history" });
+      }
+    },
+  );
+
+  // GET /alerts/history/count — count for nav badge (last 24h)
+  router.get(
+    "/alerts/history/count",
+    ensureVisitor,
+    async (req: AuthRequest, res: Response) => {
+      try {
+        const { rows } = await pool.query(
+          `SELECT COUNT(*) as count FROM alert_history WHERE user_id = $1 AND fired_at >= NOW() - INTERVAL '24 hours'`,
+          [req.visitorId],
+        );
+        res.json({ count: parseInt(rows[0].count) });
+      } catch (err) {
+        console.error("GET /alerts/history/count error:", err);
+        res.json({ count: 0 });
       }
     },
   );

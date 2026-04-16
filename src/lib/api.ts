@@ -1209,6 +1209,23 @@ export interface AlertRule {
   cooldown_minutes: number;
   last_triggered_at: string | null;
   created_at: string;
+  trigger_type: string;
+  segment_type: "all" | "cohort" | "mrr_above" | "mrr_below" | "specific";
+  segment_value: string | null;
+  evaluation: "aggregate" | "per_customer";
+}
+
+export interface AlertHistoryEntry {
+  id: number;
+  user_id: string;
+  alert_rule_id: number;
+  customer_id: string | null;
+  customer_name: string | null;
+  trigger_type: string;
+  current_value: number;
+  threshold: number;
+  fired_at: string;
+  delivery_status: Record<string, string>;
 }
 
 export async function listAlertRules(): Promise<{
@@ -1223,6 +1240,10 @@ export async function createAlertRule(
     email?: string;
     webhook_url?: string;
     cooldown_minutes?: number;
+    trigger_type?: string;
+    segment_type?: string;
+    segment_value?: string;
+    evaluation?: string;
   },
 ): Promise<AlertRule> {
   return request("/alerts", { method: "POST", body: JSON.stringify(rule) });
@@ -1249,6 +1270,23 @@ export async function deleteAlertRule(
   id: number,
 ): Promise<{ success: boolean }> {
   return request(`/alerts/${id}`, { method: "DELETE" });
+}
+
+export async function listAlertHistory(params?: {
+  customer_id?: string;
+  limit?: number;
+  offset?: number;
+}): Promise<{ history: AlertHistoryEntry[]; total: number }> {
+  const qs = new URLSearchParams();
+  if (params?.customer_id) qs.set("customer_id", params.customer_id);
+  if (params?.limit) qs.set("limit", String(params.limit));
+  if (params?.offset) qs.set("offset", String(params.offset));
+  const q = qs.toString();
+  return request(`/alerts/history${q ? "?" + q : ""}`);
+}
+
+export async function getAlertHistoryCount(): Promise<{ count: number }> {
+  return request("/alerts/history/count");
 }
 
 // ── Proxy Cache ───────────────────────────────────────────────────────────────

@@ -880,6 +880,46 @@ async function _doDbInit() {
       `ALTER TABLE alert_rules ALTER COLUMN email DROP NOT NULL`,
     );
 
+    // Alerts v2 migrations
+    try {
+      await pool.query(
+        `ALTER TABLE alert_rules ADD COLUMN IF NOT EXISTS trigger_type TEXT DEFAULT 'threshold'`,
+      );
+      await pool.query(
+        `ALTER TABLE alert_rules ADD COLUMN IF NOT EXISTS segment_type TEXT DEFAULT 'all'`,
+      );
+      await pool.query(
+        `ALTER TABLE alert_rules ADD COLUMN IF NOT EXISTS segment_value TEXT`,
+      );
+      await pool.query(
+        `ALTER TABLE alert_rules ADD COLUMN IF NOT EXISTS evaluation TEXT DEFAULT 'aggregate'`,
+      );
+    } catch (err) {
+      console.error("Non-fatal migration (alert_rules v2 columns):", err);
+    }
+
+    try {
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS alert_history (
+          id SERIAL PRIMARY KEY,
+          user_id TEXT NOT NULL,
+          alert_rule_id INTEGER REFERENCES alert_rules(id) ON DELETE CASCADE,
+          customer_id TEXT,
+          customer_name TEXT,
+          trigger_type TEXT NOT NULL,
+          current_value NUMERIC,
+          threshold NUMERIC,
+          fired_at TIMESTAMPTZ DEFAULT NOW(),
+          delivery_status JSONB DEFAULT '{}'
+        )
+      `);
+      await pool.query(
+        `CREATE INDEX IF NOT EXISTS idx_alert_history_user ON alert_history(user_id, fired_at DESC)`,
+      );
+    } catch (err) {
+      console.error("Non-fatal migration (alert_history table):", err);
+    }
+
     // Cloud provider integrations (AWS Cost Explorer, GCP Billing)
     await pool.query(`
       CREATE TABLE IF NOT EXISTS cloud_integrations (
