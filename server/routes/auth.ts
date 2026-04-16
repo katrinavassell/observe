@@ -19,6 +19,15 @@ export interface AuthRequest extends Request {
 // Prevents running cleanup queries on every request
 const sampleClearedUsers = new Set<string>();
 
+// Cache (visitorId + X-Account-Id header) -> resolved accountId.
+// Saves a DB round-trip per request. 5-minute TTL means role/membership
+// changes take at most 5 minutes to reflect.
+const ACCOUNT_ID_TTL_MS = 5 * 60 * 1000;
+const accountIdCache = new Map<
+  string,
+  { accountId: number; expiresAt: number }
+>();
+
 export function createEnsureVisitor(pool: Pool) {
   return async function ensureVisitor(
     req: AuthRequest,
@@ -53,21 +62,20 @@ export function createEnsureVisitor(pool: Pool) {
           req.visitorId = user.id;
           req.accountEmail = user.email;
 
-          // Look up local account row for accountId (used by billing, team features)
+          // Look up local user row (used for self-heal only; req.accountId
+          // is resolved below via user_accounts)
           const accountResult = await pool.query(
-            "SELECT id FROM accounts WHERE visitor_id = $1",
+            "SELECT id FROM users WHERE visitor_id = $1",
             [user.id],
           );
-          if (accountResult.rows[0]) {
-            req.accountId = accountResult.rows[0].id;
-          } else if (user.email) {
-            // Self-heal: authenticated user with no accounts row. This
+          if (!accountResult.rows[0] && user.email) {
+            // Self-heal: authenticated user with no users row. This
             // normally runs from /auth/signup-complete but may not have if
             // the frontend retry loop exhausted. Create the row + SDK key
             // inline so the user is never stuck without an account.
             try {
-              const insertResult = await pool.query(
-                `INSERT INTO accounts (email, password_hash, name, visitor_id)
+              await pool.query(
+                `INSERT INTO users (email, password_hash, name, visitor_id)
                  VALUES ($1, 'supabase-managed', $2, $3)
                  ON CONFLICT (email) DO UPDATE SET visitor_id = $3
                  RETURNING id`,
@@ -79,7 +87,6 @@ export function createEnsureVisitor(pool: Pool) {
                   user.id,
                 ],
               );
-              req.accountId = insertResult.rows[0]?.id;
 
               // Ensure an SDK key exists
               const existingKey = await pool.query(
@@ -140,6 +147,62 @@ export function createEnsureVisitor(pool: Pool) {
               console.error(
                 "Sample data cleanup failed — will retry on next request:",
                 cleanupErr,
+              );
+            }
+          }
+
+          // Resolve req.accountId from user_accounts. If X-Account-Id is
+          // provided, verify membership before using it; otherwise pick
+          // the user's default account (owner > admin > member, earliest
+          // joined). Cached for 5 minutes keyed on (visitorId, header).
+          const headerAccountIdRaw = req.headers["x-account-id"];
+          const headerAccountId = Array.isArray(headerAccountIdRaw)
+            ? headerAccountIdRaw[0]
+            : headerAccountIdRaw;
+          const cacheKey = `${user.id}:${headerAccountId ?? ""}`;
+          const cached = accountIdCache.get(cacheKey);
+          const now = Date.now();
+          if (cached && cached.expiresAt > now) {
+            req.accountId = cached.accountId;
+          } else {
+            let resolvedAccountId: number | undefined;
+            if (headerAccountId) {
+              const verifyResult = await pool.query(
+                `SELECT ua.account_id
+                 FROM user_accounts ua
+                 JOIN users u ON u.id = ua.user_id
+                 WHERE u.visitor_id = $1 AND ua.account_id = $2 AND ua.status = 'active'
+                 LIMIT 1`,
+                [user.id, headerAccountId],
+              );
+              if (verifyResult.rows[0]) {
+                resolvedAccountId = verifyResult.rows[0].account_id;
+              }
+            }
+            if (resolvedAccountId === undefined) {
+              const defaultResult = await pool.query(
+                `SELECT ua.account_id
+                 FROM user_accounts ua
+                 JOIN users u ON u.id = ua.user_id
+                 WHERE u.visitor_id = $1 AND ua.status = 'active'
+                 ORDER BY CASE ua.role WHEN 'owner' THEN 0 WHEN 'admin' THEN 1 ELSE 2 END, ua.joined_at ASC NULLS LAST
+                 LIMIT 1`,
+                [user.id],
+              );
+              if (defaultResult.rows[0]) {
+                resolvedAccountId = defaultResult.rows[0].account_id;
+              }
+            }
+            if (resolvedAccountId !== undefined) {
+              req.accountId = resolvedAccountId;
+              accountIdCache.set(cacheKey, {
+                accountId: resolvedAccountId,
+                expiresAt: now + ACCOUNT_ID_TTL_MS,
+              });
+            } else {
+              console.warn(
+                "ensureVisitor: no active user_accounts row for visitor",
+                user.id,
               );
             }
           }
@@ -204,20 +267,20 @@ export function createAuthRoutes(
 
         // Create or update local account row (handles both email and visitor_id conflicts)
         const existing = await pool.query(
-          "SELECT id FROM accounts WHERE email = $1 OR visitor_id = $2 LIMIT 1",
+          "SELECT id FROM users WHERE email = $1 OR visitor_id = $2 LIMIT 1",
           [email, userId],
         );
         let result;
         const isNewAccount = existing.rows.length === 0;
         if (!isNewAccount) {
           result = await pool.query(
-            `UPDATE accounts SET email = $1, visitor_id = $2, name = COALESCE($3, name), password_hash = 'supabase-managed', updated_at = NOW()
+            `UPDATE users SET email = $1, visitor_id = $2, name = COALESCE($3, name), password_hash = 'supabase-managed', updated_at = NOW()
              WHERE id = $4 RETURNING id, email, name`,
             [email, userId, name?.trim() || null, existing.rows[0].id],
           );
         } else {
           result = await pool.query(
-            `INSERT INTO accounts (email, password_hash, name, visitor_id)
+            `INSERT INTO users (email, password_hash, name, visitor_id)
              VALUES ($1, 'supabase-managed', $2, $3)
              RETURNING id, email, name`,
             [email, name?.trim() || null, userId],
@@ -243,7 +306,7 @@ export function createAuthRoutes(
           ];
           pool
             .query(
-              `SELECT visitor_id, email FROM accounts
+              `SELECT visitor_id, email FROM users
                WHERE LOWER(email) = ANY($1) AND visitor_id IS NOT NULL`,
               [adminEmailsForDogfood.map((e) => e.toLowerCase())],
             )
@@ -411,7 +474,7 @@ export function createAuthRoutes(
     async (req: AuthRequest, res: Response) => {
       try {
         const result = await pool.query(
-          "SELECT id, email, name FROM accounts WHERE visitor_id = $1",
+          "SELECT id, email, name FROM users WHERE visitor_id = $1",
           [req.visitorId],
         );
         if (result.rows.length === 0) {
