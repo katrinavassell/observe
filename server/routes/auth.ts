@@ -74,7 +74,7 @@ export function createEnsureVisitor(pool: Pool) {
             // the frontend retry loop exhausted. Create the row + SDK key
             // inline so the user is never stuck without an account.
             try {
-              await pool.query(
+              const insertedUser = await pool.query(
                 `INSERT INTO users (email, password_hash, name, visitor_id)
                  VALUES ($1, 'supabase-managed', $2, $3)
                  ON CONFLICT (email) DO UPDATE SET visitor_id = $3
@@ -87,6 +87,38 @@ export function createEnsureVisitor(pool: Pool) {
                   user.id,
                 ],
               );
+              const userInternalId = insertedUser.rows[0].id as number;
+
+              // Ensure an accounts + user_accounts row exists so
+              // req.accountId resolves and subsequent INSERTs carry a
+              // non-null account_id. Without this, a fresh signup arriving
+              // after Stage 1 backfill has no account row until next boot.
+              const existingMembership = await pool.query(
+                `SELECT account_id FROM user_accounts
+                  WHERE user_id = $1 AND role = 'owner' AND status = 'active'
+                  LIMIT 1`,
+                [userInternalId],
+              );
+              let resolvedAccountId: number | undefined =
+                existingMembership.rows[0]?.account_id;
+              if (resolvedAccountId === undefined) {
+                const accountName = user.user_metadata?.full_name
+                  ? `${user.user_metadata.full_name}'s Account`
+                  : user.user_metadata?.name
+                    ? `${user.user_metadata.name}'s Account`
+                    : "Personal Account";
+                const insertedAccount = await pool.query(
+                  `INSERT INTO accounts (name) VALUES ($1) RETURNING id`,
+                  [accountName],
+                );
+                resolvedAccountId = insertedAccount.rows[0].id as number;
+                await pool.query(
+                  `INSERT INTO user_accounts (user_id, account_id, role, status, joined_at)
+                   VALUES ($1, $2, 'owner', 'active', NOW())
+                   ON CONFLICT (user_id, account_id) DO NOTHING`,
+                  [userInternalId, resolvedAccountId],
+                );
+              }
 
               // Ensure an SDK key exists
               const existingKey = await pool.query(
@@ -102,10 +134,16 @@ export function createEnsureVisitor(pool: Pool) {
                   .digest("hex");
                 const keyPrefix = rawKey.slice(0, 11);
                 await pool.query(
-                  `INSERT INTO sdk_api_keys (user_id, key_hash, key_prefix, encrypted_key, name)
-                   VALUES ($1, $2, $3, $4, 'default')
+                  `INSERT INTO sdk_api_keys (user_id, account_id, key_hash, key_prefix, encrypted_key, name)
+                   VALUES ($1, $2, $3, $4, $5, 'default')
                    ON CONFLICT (user_id, name) WHERE revoked_at IS NULL DO NOTHING`,
-                  [user.id, keyHash, keyPrefix, encryptApiKey(rawKey)],
+                  [
+                    user.id,
+                    resolvedAccountId,
+                    keyHash,
+                    keyPrefix,
+                    encryptApiKey(rawKey),
+                  ],
                 );
               }
             } catch (healErr) {
@@ -287,6 +325,38 @@ export function createAuthRoutes(
           );
         }
         const account = result.rows[0];
+        const userInternalId = account.id as number;
+
+        // Ensure accounts + user_accounts rows exist synchronously. Stage 1
+        // backfill only runs on boot, so signups arriving after deploy
+        // would otherwise have no account row until next restart — causing
+        // NULL account_id on every subsequent INSERT. Idempotent: skip if
+        // the user already has an active owner membership.
+        const existingMembership = await pool.query(
+          `SELECT account_id FROM user_accounts
+            WHERE user_id = $1 AND role = 'owner' AND status = 'active'
+            LIMIT 1`,
+          [userInternalId],
+        );
+        let resolvedAccountId: number | undefined =
+          existingMembership.rows[0]?.account_id;
+        if (resolvedAccountId === undefined) {
+          const trimmedName = name?.trim();
+          const accountName = trimmedName
+            ? `${trimmedName}'s Account`
+            : "Personal Account";
+          const insertedAccount = await pool.query(
+            `INSERT INTO accounts (name) VALUES ($1) RETURNING id`,
+            [accountName],
+          );
+          resolvedAccountId = insertedAccount.rows[0].id as number;
+          await pool.query(
+            `INSERT INTO user_accounts (user_id, account_id, role, status, joined_at)
+             VALUES ($1, $2, 'owner', 'active', NOW())
+             ON CONFLICT (user_id, account_id) DO NOTHING`,
+            [userInternalId, resolvedAccountId],
+          );
+        }
 
         // Dogfood: treat every new Observe signup as a customer on each
         // admin's dashboard. Fire-and-forget — failure here must not block
@@ -306,21 +376,32 @@ export function createAuthRoutes(
           ];
           pool
             .query(
-              `SELECT visitor_id, email FROM users
-               WHERE LOWER(email) = ANY($1) AND visitor_id IS NOT NULL`,
+              `SELECT u.visitor_id, u.email, ua.account_id
+                 FROM users u
+                 LEFT JOIN user_accounts ua
+                   ON ua.user_id = u.id AND ua.status = 'active'
+                WHERE LOWER(u.email) = ANY($1) AND u.visitor_id IS NOT NULL`,
               [adminEmailsForDogfood.map((e) => e.toLowerCase())],
             )
             .then(async (admins) => {
               for (const row of admins.rows) {
                 const adminUid = row.visitor_id as string;
+                const adminAccountId =
+                  (row.account_id as number | null) ?? null;
                 // Ensure the customer row exists on the admin's side so the
                 // /customers LEFT JOIN finds a name.
                 await pool
                   .query(
-                    `INSERT INTO customers (user_id, customer_id, name, email)
-                     VALUES ($1, $2, $3, $4)
+                    `INSERT INTO customers (user_id, account_id, customer_id, name, email)
+                     VALUES ($1, $2, $3, $4, $5)
                      ON CONFLICT DO NOTHING`,
-                    [adminUid, email, name?.trim() || email, email],
+                    [
+                      adminUid,
+                      adminAccountId,
+                      email,
+                      name?.trim() || email,
+                      email,
+                    ],
                   )
                   .catch((err) =>
                     console.error("Dogfood customer insert failed:", err),
@@ -329,13 +410,13 @@ export function createAuthRoutes(
                 await pool
                   .query(
                     `INSERT INTO observe_events
-                       (user_id, customer_id, feature_key, event_name,
+                       (user_id, account_id, customer_id, feature_key, event_name,
                         timestamp, source, granularity, idempotency_key)
-                     VALUES ($1, $2, 'observe_signup', 'signup', NOW(),
-                             'sdk', 'event', $3)
+                     VALUES ($1, $2, $3, 'observe_signup', 'signup', NOW(),
+                             'sdk', 'event', $4)
                      ON CONFLICT (user_id, idempotency_key)
                        WHERE idempotency_key IS NOT NULL DO NOTHING`,
-                    [adminUid, email, `signup:${email}`],
+                    [adminUid, adminAccountId, email, `signup:${email}`],
                   )
                   .catch((err) =>
                     console.error("Dogfood signup event insert failed:", err),
@@ -392,11 +473,18 @@ export function createAuthRoutes(
           .digest("hex");
         const keyPrefix = rawKey.slice(0, 11);
         const insertResult = await pool.query(
-          `INSERT INTO sdk_api_keys (user_id, key_hash, key_prefix, encrypted_key, name)
-             VALUES ($1, $2, $3, $4, $5)
+          `INSERT INTO sdk_api_keys (user_id, account_id, key_hash, key_prefix, encrypted_key, name)
+             VALUES ($1, $2, $3, $4, $5, $6)
              ON CONFLICT (user_id, name) DO NOTHING
              RETURNING id`,
-          [userId, keyHash, keyPrefix, encryptApiKey(rawKey), "default"],
+          [
+            userId,
+            resolvedAccountId,
+            keyHash,
+            keyPrefix,
+            encryptApiKey(rawKey),
+            "default",
+          ],
         );
         if (insertResult.rows.length > 0) {
           sdkKey = rawKey;
