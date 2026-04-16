@@ -78,7 +78,8 @@ const signals = computed(() => {
     description: string;
   }[] = [];
 
-  // Unprofitable
+  // Unprofitable — negative margin OR cost with zero revenue (margin_pct is
+  // null when revenue is zero, so the naive `< 0` check missed this case)
   if (cc.margin_pct !== null && cc.margin_pct < 0) {
     items.push({
       type: "danger",
@@ -86,35 +87,52 @@ const signals = computed(() => {
       title: "Unprofitable customer",
       description: `Margin is ${cc.margin_pct}% — cost exceeds revenue by ${fmt(cc.total_cost - cc.total_revenue)}.`,
     });
+  } else if (cc.total_cost > 0 && cc.total_revenue === 0) {
+    items.push({
+      type: "danger",
+      icon: AlertTriangle,
+      title: "Unprofitable customer",
+      description: `No revenue recorded — ${fmt(cc.total_cost)} of cost is unrecovered. Connect Stripe or set feature pricing.`,
+    });
   }
 
-  // Usage declining
+  // Usage declining — include magnitude from cost_trend_pct
   if (cc.cost_trend === "down" && cc.active_days_30d < 20) {
+    const magnitude =
+      cc.cost_trend_pct != null
+        ? `Usage down ${Math.abs(cc.cost_trend_pct)}% — `
+        : "";
     items.push({
       type: "warning",
       icon: TrendingDown,
       title: "Usage declining",
-      description: `Cost trending down with only ${cc.active_days_30d} active days in the last 30. Possible churn risk.`,
+      description: `${magnitude}cost trending down with only ${cc.active_days_30d} active days in the last 30. Possible churn risk.`,
     });
   }
 
-  // Usage growing
+  // Usage growing — include magnitude
   if (cc.cost_trend === "up") {
+    const magnitude =
+      cc.cost_trend_pct != null ? `Usage up ${cc.cost_trend_pct}% — ` : "";
     items.push({
       type: "success",
       icon: TrendingUp,
       title: "Usage growing",
-      description: "Cost trending up — potential expansion opportunity.",
+      description: `${magnitude}cost trending up, potential expansion opportunity.`,
     });
   }
 
-  // Inactive
+  // Inactive — add historical context when we have >= 2 prior months of data
   if (cc.active_days_30d < 3) {
+    const historical =
+      cc.active_days_prior_avg != null
+        ? ` (usually ${cc.active_days_prior_avg})`
+        : "";
     items.push({
       type: "warning",
       icon: Clock,
       title: "Inactive",
-      description: `Only ${cc.active_days_30d} active day${cc.active_days_30d === 1 ? "" : "s"} in the last 30 days.`,
+      description: `Only ${cc.active_days_30d} active day${cc.active_days_30d === 1 ? "" : "s"} in the last 30${historical}.`,
     });
   }
 

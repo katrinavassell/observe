@@ -33,19 +33,6 @@ export function createAnalyticsRoutes(pool: Pool, ensureVisitor: any) {
           [userId],
         );
 
-        const subResult = await pool.query(
-          `SELECT s.customer_id, COALESCE(SUM(COALESCE(s.mrr_override, p.price_amount)), 0) as sub_revenue
-         FROM subscriptions s
-         LEFT JOIN plans p ON s.user_id = p.user_id AND s.plan_id = p.plan_id
-         WHERE s.user_id = $1 AND s.is_active = true
-         GROUP BY s.customer_id`,
-          [userId],
-        );
-        const subRevenueMap: Record<string, number> = {};
-        for (const row of subResult.rows) {
-          subRevenueMap[row.customer_id] = parseFloat(row.sub_revenue) || 0;
-        }
-
         const topFeatureResult = await pool.query(
           `SELECT DISTINCT ON (customer_id) customer_id, feature_key, SUM(cost_amount) as feat_cost
          FROM observe_events
@@ -60,9 +47,11 @@ export function createAnalyticsRoutes(pool: Pool, ensureVisitor: any) {
         }
 
         const customers = result.rows.map((row) => {
-          const eventRevenue = parseFloat(row.total_revenue) || 0;
-          const subRevenue = subRevenueMap[row.customer_id] || 0;
-          const totalRevenue = eventRevenue + subRevenue;
+          // PR #94 enriches per-event revenue from the active subscription at
+          // ingest, so observe_events.revenue_amount already includes the
+          // subscription contribution. Summing subscription MRR again here
+          // would double-count.
+          const totalRevenue = parseFloat(row.total_revenue) || 0;
           const totalCost = parseFloat(row.total_cost) || 0;
           const marginPct =
             totalRevenue > 0
