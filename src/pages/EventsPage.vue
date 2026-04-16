@@ -75,16 +75,16 @@ const DEFAULT_COLUMNS: TableColumn[] = [
   { id: "customer", label: "Customer", visible: true, align: "left" },
   { id: "model", label: "Model", visible: true, align: "left" },
   { id: "source", label: "Source", visible: true, align: "left" },
-  { id: "trace", label: "Trace", visible: true, align: "left" },
   { id: "usage", label: "Usage", visible: true, align: "right" },
   { id: "cost", label: "Cost", visible: true, align: "right" },
   { id: "margin", label: "Customer margin", visible: true, align: "right" },
+  { id: "trace", label: "Trace", visible: true, align: "left" },
   { id: "duration", label: "Duration", visible: false, align: "right" },
   { id: "cost_type", label: "Cost Type", visible: false, align: "left" },
   { id: "properties", label: "Properties", visible: false, align: "left" },
 ];
 
-const STORAGE_KEY = "observe:events-columns";
+const STORAGE_KEY = "observe:events-columns:v2";
 
 function loadColumns(): TableColumn[] {
   const saved = window.localStorage.getItem(STORAGE_KEY);
