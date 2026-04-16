@@ -671,11 +671,12 @@ Return ONLY the JSON array, no markdown or explanation.`;
         const storedInsights: any[] = [];
         for (const insight of insights) {
           const result = await pool.query(
-            `INSERT INTO ai_insights (user_id, insight_type, title, description, severity, feature_key, customer_id, tokens_used, cost_usd)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            `INSERT INTO ai_insights (user_id, account_id, insight_type, title, description, severity, feature_key, customer_id, tokens_used, cost_usd)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
            RETURNING *`,
             [
               req.visitorId,
+              req.accountId ?? null,
               insight.insight_type,
               insight.title,
               insight.description,
@@ -692,14 +693,15 @@ Return ONLY the JSON array, no markdown or explanation.`;
         // Log the generation as an observe_event
         await pool.query(
           `INSERT INTO observe_events
-             (user_id, customer_id, feature_key, event_name, timestamp,
+             (user_id, account_id, customer_id, feature_key, event_name, timestamp,
               cost_amount, cost_unit, usage_units, model, model_provider,
               source, granularity, request_body, response_body)
-           VALUES ($1, 'system', 'ai_insights', 'insight_generated', NOW(),
-                   $2, 'usd', $3, 'gpt-4o', 'openai',
-                   'internal', 'event', $4, $5)`,
+           VALUES ($1, $2, 'system', 'ai_insights', 'insight_generated', NOW(),
+                   $3, 'usd', $4, 'gpt-4o', 'openai',
+                   'internal', 'event', $5, $6)`,
           [
             visitorId,
+            req.accountId ?? null,
             costUsd,
             tokensUsed,
             llmRequestBody ? JSON.stringify(llmRequestBody) : null,
