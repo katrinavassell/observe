@@ -130,7 +130,7 @@ async function sendUsageLimitEmail(
   if (!resendKey) return;
 
   const accountResult = await pool.query(
-    `SELECT email FROM accounts WHERE visitor_id = $1`,
+    `SELECT email FROM users WHERE visitor_id = $1`,
     [userId],
   );
   const email = accountResult.rows[0]?.email;
@@ -1244,7 +1244,7 @@ export function createEventsRoutes(
           if (wasPreviouslyEmpty) {
             const updateResult = await pool
               .query(
-                `UPDATE accounts
+                `UPDATE users
                  SET first_sdk_event_at = NOW()
                  WHERE visitor_id = $1 AND first_sdk_event_at IS NULL
                  RETURNING id, email`,

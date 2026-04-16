@@ -809,7 +809,7 @@ Return ONLY the JSON array, no markdown or explanation.`;
             COALESCE(e.total_cost, 0) as total_cost_this_month,
             COALESCE(e.total_revenue, 0) as total_revenue_this_month,
             COALESCE(i.insight_count, 0) as insights_this_month
-          FROM accounts a
+          FROM users a
           LEFT JOIN (
             SELECT user_id,
               COUNT(*) as event_count,
@@ -903,7 +903,7 @@ Return ONLY the JSON array, no markdown or explanation.`;
             e.timestamp,
             e.properties
           FROM observe_events e
-          JOIN accounts a ON a.visitor_id = e.user_id
+          JOIN users a ON a.visitor_id = e.user_id
           WHERE e.source != 'sample'
             AND e.timestamp >= NOW() - INTERVAL '7 days'
           ORDER BY e.timestamp DESC
@@ -913,7 +913,7 @@ Return ONLY the JSON array, no markdown or explanation.`;
 
         // Also get recent signups and logins
         const signups = await pool.query(
-          `SELECT email, name, created_at FROM accounts
+          `SELECT email, name, created_at FROM users
            WHERE created_at >= NOW() - INTERVAL '7 days'
            ORDER BY created_at DESC`,
         );
@@ -923,7 +923,7 @@ Return ONLY the JSON array, no markdown or explanation.`;
           `SELECT r.type, r.title, r.severity, r.status, r.created_at, r.applied_at, r.dismissed_at,
             a.email
           FROM recommendations r
-          JOIN accounts a ON a.visitor_id = r.user_id
+          JOIN users a ON a.visitor_id = r.user_id
           WHERE r.created_at >= NOW() - INTERVAL '7 days'
           ORDER BY r.created_at DESC
           LIMIT 50`,
@@ -958,7 +958,7 @@ Return ONLY the JSON array, no markdown or explanation.`;
         }
 
         const freeUsers = await pool.query(
-          `SELECT visitor_id FROM accounts WHERE stripe_plan = 'free' OR stripe_plan IS NULL`,
+          `SELECT visitor_id FROM users WHERE stripe_plan = 'free' OR stripe_plan IS NULL`,
         );
 
         let cleaned = 0;

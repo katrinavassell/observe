@@ -24,7 +24,7 @@ async function gatherDigestData(
   visitorId: string,
 ): Promise<DigestData | null> {
   const account = await pool.query(
-    "SELECT email, name FROM accounts WHERE visitor_id = $1",
+    "SELECT email, name FROM users WHERE visitor_id = $1",
     [visitorId],
   );
   if (!account.rows[0]?.email) return null;
@@ -200,7 +200,7 @@ export async function runWeeklyDigest(pool: Pool): Promise<void> {
   // Get all accounts with data in the last 30 days
   const accounts = await pool.query(
     `SELECT DISTINCT a.visitor_id
-     FROM accounts a
+     FROM users a
      JOIN observe_events oe ON oe.user_id = a.visitor_id
      WHERE oe.timestamp > NOW() - INTERVAL '30 days'
        AND oe.source != 'sample'

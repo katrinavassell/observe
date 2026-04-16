@@ -78,7 +78,7 @@ export async function checkFeatureAccess(
 }> {
   // Look up user's plan
   const result = await pool.query(
-    `SELECT stripe_plan FROM accounts WHERE visitor_id = $1`,
+    `SELECT stripe_plan FROM users WHERE visitor_id = $1`,
     [visitorId],
   );
   const plan = result.rows[0]?.stripe_plan || "free";
@@ -139,7 +139,7 @@ export async function checkFeatureAccess(
   let effectiveLimit = featureConfig.limit;
   if (featureKey === "ai_insights") {
     const bonusResult = await pool.query(
-      `SELECT bonus_credits FROM accounts WHERE visitor_id = $1`,
+      `SELECT bonus_credits FROM users WHERE visitor_id = $1`,
       [visitorId],
     );
     const bonusCredits = bonusResult.rows[0]?.bonus_credits ?? 0;
@@ -177,7 +177,7 @@ export async function grantBonusCredits(
 ): Promise<{ bonus_credits: number; granted: number }> {
   const amount = CREDIT_REWARDS[rewardType];
   const result = await pool.query(
-    `UPDATE accounts
+    `UPDATE users
      SET bonus_credits = COALESCE(bonus_credits, 0) + $1
      WHERE visitor_id = $2
      RETURNING bonus_credits`,
@@ -194,7 +194,7 @@ export async function getBonusCredits(
   visitorId: string,
 ): Promise<number> {
   const result = await pool.query(
-    `SELECT bonus_credits FROM accounts WHERE visitor_id = $1`,
+    `SELECT bonus_credits FROM users WHERE visitor_id = $1`,
     [visitorId],
   );
   return result.rows[0]?.bonus_credits ?? 0;
@@ -234,7 +234,7 @@ export async function createCheckoutSession(
 
   // Get or create Stripe customer
   const accountResult = await pool.query(
-    `SELECT email, stripe_customer_id FROM accounts WHERE visitor_id = $1`,
+    `SELECT email, stripe_customer_id FROM users WHERE visitor_id = $1`,
     [visitorId],
   );
   const account = accountResult.rows[0];
@@ -248,7 +248,7 @@ export async function createCheckoutSession(
     });
     customerId = customer.id;
     await pool.query(
-      `UPDATE accounts SET stripe_customer_id = $1 WHERE visitor_id = $2`,
+      `UPDATE users SET stripe_customer_id = $1 WHERE visitor_id = $2`,
       [customerId, visitorId],
     );
   }
@@ -281,7 +281,7 @@ export async function createPortalSession(
   const stripe = await getUncachableStripeClient();
 
   const accountResult = await pool.query(
-    `SELECT stripe_customer_id FROM accounts WHERE visitor_id = $1`,
+    `SELECT stripe_customer_id FROM users WHERE visitor_id = $1`,
     [visitorId],
   );
   const customerId = accountResult.rows[0]?.stripe_customer_id;
@@ -320,7 +320,7 @@ export async function handleWebhook(
 
       if (visitorId) {
         const result = await pool.query(
-          `UPDATE accounts SET stripe_plan = 'growth', stripe_customer_id = $1 WHERE visitor_id = $2 RETURNING id`,
+          `UPDATE users SET stripe_plan = 'growth', stripe_customer_id = $1 WHERE visitor_id = $2 RETURNING id`,
           [customerId, visitorId],
         );
         if (result.rowCount === 0) {
@@ -330,7 +330,7 @@ export async function handleWebhook(
         }
       } else if (customerId) {
         const result = await pool.query(
-          `UPDATE accounts SET stripe_plan = 'growth' WHERE stripe_customer_id = $1 RETURNING id`,
+          `UPDATE users SET stripe_plan = 'growth' WHERE stripe_customer_id = $1 RETURNING id`,
           [customerId],
         );
         if (result.rowCount === 0) {
@@ -353,7 +353,7 @@ export async function handleWebhook(
 
       if (status === "active" || status === "trialing") {
         await pool.query(
-          `UPDATE accounts SET stripe_plan = 'growth' WHERE stripe_customer_id = $1`,
+          `UPDATE users SET stripe_plan = 'growth' WHERE stripe_customer_id = $1`,
           [customerId],
         );
       } else if (
@@ -362,7 +362,7 @@ export async function handleWebhook(
         status === "past_due"
       ) {
         await pool.query(
-          `UPDATE accounts SET stripe_plan = 'free' WHERE stripe_customer_id = $1`,
+          `UPDATE users SET stripe_plan = 'free' WHERE stripe_customer_id = $1`,
           [customerId],
         );
       }
@@ -373,7 +373,7 @@ export async function handleWebhook(
       const sub = event.data.object;
       const customerId = sub.customer as string;
       await pool.query(
-        `UPDATE accounts SET stripe_plan = 'free' WHERE stripe_customer_id = $1`,
+        `UPDATE users SET stripe_plan = 'free' WHERE stripe_customer_id = $1`,
         [customerId],
       );
       break;
