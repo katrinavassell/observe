@@ -468,8 +468,8 @@ function customerMarginClass(pct: number | null): string {
       <div>
         <h1 class="text-2xl font-semibold tracking-tight">Events</h1>
         <p class="text-sm text-muted-foreground mt-1">
-          Per-event cost with customer-level margin. Stripe subscription rows
-          are hidden unless you filter Source → Stripe.
+          Per-event cost with customer-level margin. Includes Stripe
+          subscription rows that feed revenue — filter by Source to narrow.
         </p>
       </div>
       <div
@@ -1164,7 +1164,11 @@ function customerMarginClass(pct: number | null): string {
                     </div>
                   </div>
                   <div v-else class="p-4 text-sm text-muted-foreground">
-                    Failed to load detail.
+                    {{
+                      isLoggedIn
+                        ? "Failed to load detail."
+                        : "Sign in to view event details."
+                    }}
                   </div>
                 </td>
               </tr>
