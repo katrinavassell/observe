@@ -1191,5 +1191,75 @@ export function createEventsRoutes(
     },
   );
 
+  // POST /events/test — internal "Send test event" button from the dashboard.
+  // Uses the Supabase session (ensureVisitor) — no SDK key needed. Writes a
+  // single event with hardcoded test values for the requested feature_key.
+  router.post(
+    "/events/test",
+    ensureVisitor,
+    async (req: AuthRequest, res: Response) => {
+      try {
+        const userId = req.visitorId!;
+        const featureKey =
+          typeof req.body?.featureKey === "string"
+            ? req.body.featureKey.trim()
+            : "";
+        if (!featureKey) {
+          return res.status(400).json({ error: "featureKey is required" });
+        }
+
+        const model = "gpt-4o-mini";
+        const inputTokens = 100;
+        const outputTokens = 50;
+        const cost = await calcCostFromDb(
+          pool,
+          model,
+          inputTokens,
+          outputTokens,
+          userId,
+        );
+
+        const insertResult = await pool.query(
+          `INSERT INTO observe_events (
+             user_id, customer_id, feature_key, event_name, timestamp,
+             cost_amount, cost_unit, revenue_amount, usage_units,
+             model, model_provider, source, granularity, is_inferred,
+             idempotency_key, revenue_source, duration_ms, cost_type,
+             input_tokens, output_tokens, tokens_source
+           ) VALUES (
+             $1, 'test_customer', $2, 'test_event', NOW(),
+             $3, 'usd', 0, $4,
+             $5, 'openai', 'sdk', 'event', false,
+             $6, 'none', 500, 'llm',
+             $7, $8, 'direct'
+           )
+           ON CONFLICT (user_id, idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING
+           RETURNING *`,
+          [
+            userId,
+            featureKey,
+            cost,
+            inputTokens + outputTokens,
+            model,
+            `test-${Date.now()}`,
+            inputTokens,
+            outputTokens,
+          ],
+        );
+
+        if (insertResult.rowCount === 0) {
+          return res
+            .status(409)
+            .json({ error: "Duplicate test event — try again" });
+        }
+
+        res.json(coerceEventRow(insertResult.rows[0]));
+      } catch (error) {
+        console.error("POST /events/test error:", error);
+        res.status(500).json({ error: "Failed to send test event" });
+      }
+    },
+  );
+
   return router;
 }
