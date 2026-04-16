@@ -156,31 +156,107 @@ export async function syncStripeDataForUser(
   }
 
   // Insert subscriptions + revenue events
+  //
+  // Pricing model detection per subscription, across all line items:
+  //   flat    — every item is per_unit + licensed
+  //   metered — every item is usage_type=metered
+  //   tiered  — any item has billing_scheme=tiered
+  //   hybrid  — mix of flat + metered (or tiered + metered)
+  //
+  // MRR = sum of non-metered line items (monthly-equivalent). Metered items
+  // contribute $0 upfront — their revenue is exact per-event at ingest.
+  //
+  // For tiered prices we fetch `tiers` via a second API call (the list call
+  // doesn't expand tiers). Cached per priceId so the same plan isn't re-fetched.
   let syncedSubs = 0;
-  const subRows: {
+  const tiersCache = new Map<string, unknown>();
+  async function fetchTiersOnce(priceId: string): Promise<unknown | null> {
+    if (tiersCache.has(priceId)) return tiersCache.get(priceId)!;
+    try {
+      const full = await stripe.prices.retrieve(priceId, {
+        expand: ["tiers"],
+      });
+      const tiers = full.tiers ?? null;
+      tiersCache.set(priceId, tiers);
+      return tiers;
+    } catch (err) {
+      console.error(`Failed to fetch tiers for price ${priceId}:`, err);
+      tiersCache.set(priceId, null);
+      return null;
+    }
+  }
+
+  interface SubRow {
     id: string;
     customerId: string;
     priceId: string;
     isActive: boolean;
     mrr: number;
-  }[] = [];
+    pricingModel: "flat" | "tiered" | "metered" | "hybrid";
+    pricingTiers: unknown | null;
+    unitPrice: number | null; // for metered items, dollars per unit
+  }
+  const subRows: SubRow[] = [];
+
   for (const sub of stripeSubscriptionsList) {
-    const priceId = sub.items?.data?.[0]?.price?.id;
-    if (!priceId) continue;
-    const unitAmount = sub.items.data[0].price.unit_amount || 0;
-    const mrr =
-      sub.items.data[0].price.recurring?.interval === "year"
-        ? Math.round(unitAmount / 12 / 100)
-        : Math.round(unitAmount / 100);
+    const items = sub.items?.data ?? [];
+    if (items.length === 0) continue;
+
+    let hasFlat = false;
+    let hasMetered = false;
+    let hasTiered = false;
+    let aggregatedMrr = 0;
+    let meteredUnitPrice: number | null = null;
+    let tieredPayload: unknown | null = null;
+
+    for (const item of items) {
+      const price = item.price;
+      if (!price) continue;
+      const isMetered = price.recurring?.usage_type === "metered";
+      const isTiered = price.billing_scheme === "tiered";
+      const yearly = price.recurring?.interval === "year";
+      const unitAmountDollars = (price.unit_amount ?? 0) / 100;
+      const quantity = item.quantity ?? 1;
+
+      if (isTiered) {
+        hasTiered = true;
+        if (!tieredPayload) {
+          tieredPayload = await fetchTiersOnce(price.id);
+        }
+        // Tiered base MRR is ambiguous without usage; leave at $0 and rely on
+        // per-event tier lookup at ingest.
+      } else if (isMetered) {
+        hasMetered = true;
+        // Capture per-unit price so ingest can multiply usage_units.
+        if (meteredUnitPrice == null) meteredUnitPrice = unitAmountDollars;
+      } else {
+        hasFlat = true;
+        const itemMrr = yearly
+          ? (unitAmountDollars * quantity) / 12
+          : unitAmountDollars * quantity;
+        aggregatedMrr += itemMrr;
+      }
+    }
+
+    let pricingModel: SubRow["pricingModel"];
+    if (hasTiered && !hasMetered && !hasFlat) pricingModel = "tiered";
+    else if (hasMetered && !hasTiered && !hasFlat) pricingModel = "metered";
+    else if (hasFlat && !hasMetered && !hasTiered) pricingModel = "flat";
+    else pricingModel = "hybrid";
+
     subRows.push({
       id: sub.id,
       customerId: sub.customer as string,
-      priceId,
+      priceId: items[0].price?.id ?? "",
       isActive: sub.status === "active",
-      mrr,
+      mrr: Math.round(aggregatedMrr * 100) / 100,
+      pricingModel,
+      pricingTiers: tieredPayload,
+      unitPrice: meteredUnitPrice,
     });
     syncedSubs++;
   }
+
   for (let i = 0; i < subRows.length; i += batchSize) {
     const batch = subRows.slice(i, i + batchSize);
     const subValues: unknown[] = [];
@@ -191,22 +267,38 @@ export async function syncStripeDataForUser(
     let eventIdx = 1;
     for (const s of batch) {
       subPlaceholders.push(
-        `($${subIdx++}, $${subIdx++}, $${subIdx++}, $${subIdx++}, $${subIdx++}, $${subIdx++})`,
+        `($${subIdx++}, $${subIdx++}, $${subIdx++}, $${subIdx++}, $${subIdx++}, $${subIdx++}, $${subIdx++}, $${subIdx++}, $${subIdx++})`,
       );
-      subValues.push(userId, s.id, s.customerId, s.priceId, s.isActive, s.mrr);
-      eventPlaceholders.push(
-        `($${eventIdx++}, $${eventIdx++}, 'subscription', 'revenue', NOW(), $${eventIdx++}, 'stripe', 'monthly_aggregate')`,
+      subValues.push(
+        userId,
+        s.id,
+        s.customerId,
+        s.priceId,
+        s.isActive,
+        s.mrr,
+        s.pricingModel,
+        s.pricingTiers ? JSON.stringify(s.pricingTiers) : null,
+        s.unitPrice,
       );
-      eventValues.push(userId, s.customerId, s.mrr);
+      // Still emit a monthly_aggregate observe_event for non-metered revenue so
+      // Analytics can roll up subscription revenue alongside events.
+      if (s.mrr > 0) {
+        eventPlaceholders.push(
+          `($${eventIdx++}, $${eventIdx++}, 'subscription', 'revenue', NOW(), $${eventIdx++}, 'stripe', 'monthly_aggregate')`,
+        );
+        eventValues.push(userId, s.customerId, s.mrr);
+      }
     }
     await pool.query(
-      `INSERT INTO subscriptions (user_id, subscription_id, customer_id, plan_id, is_active, mrr_override) VALUES ${subPlaceholders.join(", ")} ON CONFLICT DO NOTHING`,
+      `INSERT INTO subscriptions (user_id, subscription_id, customer_id, plan_id, is_active, mrr_override, pricing_model, pricing_tiers, unit_price) VALUES ${subPlaceholders.join(", ")} ON CONFLICT DO NOTHING`,
       subValues,
     );
-    await pool.query(
-      `INSERT INTO observe_events (user_id, customer_id, feature_key, event_name, timestamp, revenue_amount, source, granularity) VALUES ${eventPlaceholders.join(", ")}`,
-      eventValues,
-    );
+    if (eventPlaceholders.length > 0) {
+      await pool.query(
+        `INSERT INTO observe_events (user_id, customer_id, feature_key, event_name, timestamp, revenue_amount, source, granularity) VALUES ${eventPlaceholders.join(", ")}`,
+        eventValues,
+      );
+    }
   }
 
   // Update last_synced_at

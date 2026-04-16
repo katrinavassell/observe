@@ -432,6 +432,47 @@ function customerMarginTooltip(event: ObserveEvent): string {
   return `Customer margin this month: ${m.pct}% ($${m.revenue.toFixed(2)} revenue / $${m.cost.toFixed(2)} cost)`;
 }
 
+function revenueSourceLabel(src: string | null | undefined): string {
+  switch (src) {
+    case "per_unit":
+      return "per unit (exact)";
+    case "tiered":
+      return "tiered (exact)";
+    case "allocated":
+      return "allocated (estimate)";
+    case "hybrid":
+      return "hybrid";
+    case "explicit":
+      return "explicit";
+    case "feature_pricing":
+      return "feature pricing";
+    case "mrr_allocation":
+      return "allocated (estimate)";
+    default:
+      return src ?? "—";
+  }
+}
+
+function revenueSourceTooltip(src: string | null | undefined): string {
+  switch (src) {
+    case "per_unit":
+      return "Metered Stripe price — revenue is unit_price × usage_units for this event. Exact.";
+    case "tiered":
+      return "Graduated Stripe price — unit_price comes from the tier that matches this customer's month-to-date usage. Exact.";
+    case "allocated":
+    case "mrr_allocation":
+      return "Flat subscription — monthly MRR split across days (MRR / 30). Estimate; not exact per event.";
+    case "hybrid":
+      return "Flat + metered — base allocated per day, metered portion exact per unit.";
+    case "explicit":
+      return "Sent directly on the event payload.";
+    case "feature_pricing":
+      return "Set on the feature definition (Data Sources → Features).";
+    default:
+      return "";
+  }
+}
+
 function costTooltip(event: ObserveEvent): string {
   if (event.input_cost != null || event.output_cost != null) {
     const inp = formatCost(event.input_cost);
@@ -1161,6 +1202,21 @@ function customerMarginClass(pct: number | null): string {
                       <span v-if="eventDetails[event.id].feature_key"
                         >Feature: {{ eventDetails[event.id].feature_key }}</span
                       >
+                      <span
+                        v-if="eventDetails[event.id].revenue_source"
+                        :title="
+                          revenueSourceTooltip(
+                            eventDetails[event.id].revenue_source,
+                          )
+                        "
+                      >
+                        Revenue:
+                        {{
+                          revenueSourceLabel(
+                            eventDetails[event.id].revenue_source,
+                          )
+                        }}
+                      </span>
                     </div>
                   </div>
                   <div v-else class="p-4 text-sm text-muted-foreground">
