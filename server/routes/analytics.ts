@@ -1,7 +1,11 @@
 import { Router, Response } from "express";
 import type { Pool } from "pg";
 import { type AuthRequest } from "./auth.js";
-import { getAllPricing } from "../model-pricing.js";
+import {
+  getAllPricing,
+  getModelPricing,
+  type ModelPrice,
+} from "../model-pricing.js";
 import { inferModelProvider } from "../lib/models.js";
 
 export function createAnalyticsRoutes(pool: Pool, ensureVisitor: any) {
@@ -1707,6 +1711,82 @@ Only return the JSON array, no other text.`;
       } catch (error) {
         console.error("GET /analytics/mrr-movements error:", error);
         res.status(500).json({ error: "Failed to get MRR movements" });
+      }
+    },
+  );
+
+  // GET /analytics/cost-by-token-type — daily cost split by input vs output tokens
+  router.get(
+    "/analytics/cost-by-token-type",
+    ensureVisitor,
+    async (req: AuthRequest, res: Response) => {
+      try {
+        const userId = req.visitorId!;
+        const days = Math.min(
+          Math.max(parseInt(String(req.query.days)) || 30, 1),
+          365,
+        );
+
+        const result = await pool.query(
+          `SELECT
+             DATE_TRUNC('day', timestamp) AS day,
+             model,
+             SUM(input_tokens) AS total_input,
+             SUM(output_tokens) AS total_output
+           FROM observe_events
+           WHERE user_id = $1
+             AND timestamp > NOW() - MAKE_INTERVAL(days => $2)
+             AND input_tokens IS NOT NULL
+             AND output_tokens IS NOT NULL
+             AND model IS NOT NULL
+             AND (source IS NULL OR source <> 'stripe')
+           GROUP BY day, model
+           ORDER BY day ASC`,
+          [userId, days],
+        );
+
+        // Per-request pricing cache so repeated models don't re-query
+        const pricingCache = new Map<string, ModelPrice | null>();
+        async function lookup(model: string): Promise<ModelPrice | null> {
+          if (pricingCache.has(model)) return pricingCache.get(model)!;
+          const p = await getModelPricing(pool, model);
+          pricingCache.set(model, p);
+          return p;
+        }
+
+        const byDay = new Map<
+          string,
+          { input_cost: number; output_cost: number }
+        >();
+        for (const row of result.rows) {
+          const pricing = await lookup(row.model);
+          if (!pricing) continue;
+          const inputTokens = parseFloat(row.total_input) || 0;
+          const outputTokens = parseFloat(row.total_output) || 0;
+          const inputCost =
+            (inputTokens * pricing.input_cost_per_million) / 1_000_000;
+          const outputCost =
+            (outputTokens * pricing.output_cost_per_million) / 1_000_000;
+
+          const dateStr = new Date(row.day).toISOString().slice(0, 10);
+          const entry = byDay.get(dateStr) || { input_cost: 0, output_cost: 0 };
+          entry.input_cost += inputCost;
+          entry.output_cost += outputCost;
+          byDay.set(dateStr, entry);
+        }
+
+        const series = Array.from(byDay.entries())
+          .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+          .map(([date, v]) => ({
+            date,
+            input_cost: Math.round(v.input_cost * 10000) / 10000,
+            output_cost: Math.round(v.output_cost * 10000) / 10000,
+          }));
+
+        res.json({ series });
+      } catch (error) {
+        console.error("GET /analytics/cost-by-token-type error:", error);
+        res.status(500).json({ error: "Failed to get cost by token type" });
       }
     },
   );
