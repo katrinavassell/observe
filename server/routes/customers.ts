@@ -982,7 +982,7 @@ export function createCustomersRoutes(
             [req.visitorId, id],
           ),
           pool.query(
-            `SELECT feature_key, COUNT(*) as event_count, COALESCE(SUM(cost_amount), 0) as total_cost, COALESCE(SUM(revenue_amount), 0) as total_revenue, COALESCE(SUM(usage_units), 0) as total_usage FROM observe_events WHERE user_id = $1 AND customer_id = $2 AND feature_key IS NOT NULL GROUP BY feature_key ORDER BY total_cost DESC`,
+            `SELECT feature_key, COUNT(*) as event_count, COALESCE(SUM(cost_amount), 0) as total_cost, COALESCE(SUM(revenue_amount), 0) as total_revenue, COALESCE(SUM(usage_units), 0) as total_usage, SUM(input_tokens) as total_input_tokens, SUM(output_tokens) as total_output_tokens FROM observe_events WHERE user_id = $1 AND customer_id = $2 AND feature_key IS NOT NULL GROUP BY feature_key ORDER BY total_cost DESC`,
             [req.visitorId, id],
           ),
         ]);
@@ -1036,12 +1036,22 @@ export function createCustomersRoutes(
               total_cost: string;
               total_revenue: string;
               total_usage: string;
+              total_input_tokens: string | null;
+              total_output_tokens: string | null;
             }) => ({
               feature_key: r.feature_key,
               event_count: parseInt(r.event_count),
               total_cost: parseFloat(r.total_cost) || 0,
               total_revenue: parseFloat(r.total_revenue) || 0,
               total_usage: parseFloat(r.total_usage) || 0,
+              total_input_tokens:
+                r.total_input_tokens == null
+                  ? null
+                  : parseFloat(r.total_input_tokens),
+              total_output_tokens:
+                r.total_output_tokens == null
+                  ? null
+                  : parseFloat(r.total_output_tokens),
             }),
           ),
         });
