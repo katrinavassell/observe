@@ -53,7 +53,7 @@ export function createTeamRoutes(pool: Pool, ensureVisitor: any) {
         const membersResult = await pool.query(
           `SELECT om.*, a.email AS account_email, a.name AS account_name
          FROM organization_members om
-         LEFT JOIN accounts a ON a.visitor_id = om.visitor_id
+         LEFT JOIN users a ON a.visitor_id = om.visitor_id
          WHERE om.org_id = $1
          ORDER BY om.created_at ASC`,
           [org.id],
@@ -296,7 +296,7 @@ export function createTeamRoutes(pool: Pool, ensureVisitor: any) {
           if (ownerVisitorId) {
             await grantBonusCredits(pool, ownerVisitorId, "invite_accepted");
             await pool.query(
-              `UPDATE accounts SET invite_credits_granted = COALESCE(invite_credits_granted, 0) + 1 WHERE visitor_id = $1`,
+              `UPDATE users SET invite_credits_granted = COALESCE(invite_credits_granted, 0) + 1 WHERE visitor_id = $1`,
               [ownerVisitorId],
             );
           }

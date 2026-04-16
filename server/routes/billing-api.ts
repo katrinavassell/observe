@@ -168,7 +168,7 @@ export function createBillingApiRoutes(
     async (req: AuthRequest, res: Response) => {
       try {
         const result = await pool.query(
-          `SELECT stripe_plan, stripe_customer_id FROM accounts WHERE visitor_id = $1`,
+          `SELECT stripe_plan, stripe_customer_id FROM users WHERE visitor_id = $1`,
           [req.visitorId],
         );
         const plan = result.rows[0]?.stripe_plan || "free";
@@ -193,7 +193,7 @@ export function createBillingApiRoutes(
           [req.visitorId],
         );
         const inviteResult = await pool.query(
-          `SELECT invite_credits_granted FROM accounts WHERE visitor_id = $1`,
+          `SELECT invite_credits_granted FROM users WHERE visitor_id = $1`,
           [req.visitorId],
         );
         res.json({
@@ -254,7 +254,7 @@ export function createBillingApiRoutes(
           "feedback",
         );
         await pool.query(
-          `UPDATE accounts SET feedback_submitted = true WHERE visitor_id = $1`,
+          `UPDATE users SET feedback_submitted = true WHERE visitor_id = $1`,
           [req.visitorId],
         );
 
@@ -262,7 +262,7 @@ export function createBillingApiRoutes(
         const resendKey = process.env.RESEND_API_KEY;
         if (resendKey) {
           const acct = await pool.query(
-            `SELECT email, name FROM accounts WHERE visitor_id = $1`,
+            `SELECT email, name FROM users WHERE visitor_id = $1`,
             [req.visitorId],
           );
           const sender = acct.rows[0]?.email || "unknown";
