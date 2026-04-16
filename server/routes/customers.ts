@@ -557,6 +557,7 @@ export function createCustomersRoutes(
           [req.visitorId],
         );
 
+        const acctIdCost = req.accountId ?? null;
         const batchSize = 500;
         for (let i = 0; i < records.length; i += batchSize) {
           const batch = records.slice(i, i + batchSize);
@@ -575,10 +576,11 @@ export function createCustomersRoutes(
             const periodEndStr = periodEnd.toISOString().split("T")[0];
 
             costPlaceholders.push(
-              `($${costIdx++}, $${costIdx++}, $${costIdx++}, $${costIdx++}, $${costIdx++}, $${costIdx++})`,
+              `($${costIdx++}, $${costIdx++}, $${costIdx++}, $${costIdx++}, $${costIdx++}, $${costIdx++}, $${costIdx++})`,
             );
             costValues.push(
               req.visitorId,
+              acctIdCost,
               record.customer_id || null,
               record.provider || "infrastructure",
               record.cost,
@@ -587,10 +589,11 @@ export function createCustomersRoutes(
             );
 
             eventPlaceholders.push(
-              `($${eventIdx++}, $${eventIdx++}, $${eventIdx++}, 'cost', $${eventIdx++}, $${eventIdx++}, 'usd', 'csv', 'monthly_aggregate', $${eventIdx++})`,
+              `($${eventIdx++}, $${eventIdx++}, $${eventIdx++}, $${eventIdx++}, 'cost', $${eventIdx++}, $${eventIdx++}, 'usd', 'csv', 'monthly_aggregate', $${eventIdx++})`,
             );
             eventValues.push(
               req.visitorId,
+              acctIdCost,
               record.customer_id || "_aggregate",
               record.provider || "infrastructure",
               new Date(`${record.month}-01`).toISOString(),
@@ -600,11 +603,11 @@ export function createCustomersRoutes(
           }
 
           await client.query(
-            `INSERT INTO cost_records (user_id, customer_id, cost_type, amount, period_start, period_end) VALUES ${costPlaceholders.join(", ")}`,
+            `INSERT INTO cost_records (user_id, account_id, customer_id, cost_type, amount, period_start, period_end) VALUES ${costPlaceholders.join(", ")}`,
             costValues,
           );
           await client.query(
-            `INSERT INTO observe_events (user_id, customer_id, feature_key, event_name, timestamp, cost_amount, cost_unit, source, granularity, model_provider) VALUES ${eventPlaceholders.join(", ")}`,
+            `INSERT INTO observe_events (user_id, account_id, customer_id, feature_key, event_name, timestamp, cost_amount, cost_unit, source, granularity, model_provider) VALUES ${eventPlaceholders.join(", ")}`,
             eventValues,
           );
         }
@@ -674,6 +677,7 @@ export function createCustomersRoutes(
         );
 
         const batchSize = 500;
+        const acctIdUsage = req.accountId ?? null;
         for (let i = 0; i < records.length; i += batchSize) {
           const batch = records.slice(i, i + batchSize);
           const usageValues: unknown[] = [];
@@ -693,10 +697,11 @@ export function createCustomersRoutes(
             const metricValue = record.value ?? record.metric_value;
 
             usagePlaceholders.push(
-              `($${usageIdx++}, $${usageIdx++}, $${usageIdx++}, $${usageIdx++}, $${usageIdx++}, $${usageIdx++}, $${usageIdx++})`,
+              `($${usageIdx++}, $${usageIdx++}, $${usageIdx++}, $${usageIdx++}, $${usageIdx++}, $${usageIdx++}, $${usageIdx++}, $${usageIdx++})`,
             );
             usageValues.push(
               req.visitorId,
+              acctIdUsage,
               record.customer_id,
               metricKey,
               metricValue,
@@ -706,10 +711,11 @@ export function createCustomersRoutes(
             );
 
             eventPlaceholders.push(
-              `($${eventIdx++}, $${eventIdx++}, $${eventIdx++}, 'usage', $${eventIdx++}, $${eventIdx++}, 'csv', 'monthly_aggregate')`,
+              `($${eventIdx++}, $${eventIdx++}, $${eventIdx++}, $${eventIdx++}, 'usage', $${eventIdx++}, $${eventIdx++}, 'csv', 'monthly_aggregate')`,
             );
             eventValues.push(
               req.visitorId,
+              acctIdUsage,
               record.customer_id || "_aggregate",
               metricKey,
               new Date(`${record.month}-01`).toISOString(),
@@ -718,11 +724,11 @@ export function createCustomersRoutes(
           }
 
           await client.query(
-            `INSERT INTO usage_records (user_id, customer_id, metric_key, metric_value, metric_limit, period_start, period_end) VALUES ${usagePlaceholders.join(", ")}`,
+            `INSERT INTO usage_records (user_id, account_id, customer_id, metric_key, metric_value, metric_limit, period_start, period_end) VALUES ${usagePlaceholders.join(", ")}`,
             usageValues,
           );
           await client.query(
-            `INSERT INTO observe_events (user_id, customer_id, feature_key, event_name, timestamp, usage_units, source, granularity) VALUES ${eventPlaceholders.join(", ")}`,
+            `INSERT INTO observe_events (user_id, account_id, customer_id, feature_key, event_name, timestamp, usage_units, source, granularity) VALUES ${eventPlaceholders.join(", ")}`,
             eventValues,
           );
         }
@@ -791,12 +797,14 @@ export function createCustomersRoutes(
           [req.visitorId],
         );
 
+        const acctId = req.accountId ?? null;
         if (Array.isArray(plans)) {
           for (const plan of plans) {
             await client.query(
-              "INSERT INTO plans (user_id, plan_id, name, price_amount, interval_months) VALUES ($1, $2, $3, $4, $5)",
+              "INSERT INTO plans (user_id, account_id, plan_id, name, price_amount, interval_months) VALUES ($1, $2, $3, $4, $5, $6)",
               [
                 req.visitorId,
+                acctId,
                 plan.plan_id,
                 plan.name,
                 plan.price_amount,
@@ -808,9 +816,10 @@ export function createCustomersRoutes(
         if (Array.isArray(customers)) {
           for (const customer of customers) {
             await client.query(
-              "INSERT INTO customers (user_id, customer_id, name, email, segment) VALUES ($1, $2, $3, $4, $5)",
+              "INSERT INTO customers (user_id, account_id, customer_id, name, email, segment) VALUES ($1, $2, $3, $4, $5, $6)",
               [
                 req.visitorId,
+                acctId,
                 customer.customer_id,
                 customer.name,
                 customer.email || null,
@@ -822,9 +831,10 @@ export function createCustomersRoutes(
         if (Array.isArray(subscriptions)) {
           for (const sub of subscriptions) {
             await client.query(
-              "INSERT INTO subscriptions (user_id, subscription_id, customer_id, plan_id, is_active, mrr_override, current_period_start, current_period_end) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+              "INSERT INTO subscriptions (user_id, account_id, subscription_id, customer_id, plan_id, is_active, mrr_override, current_period_start, current_period_end) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
               [
                 req.visitorId,
+                acctId,
                 sub.subscription_id,
                 sub.customer_id,
                 sub.plan_id,
@@ -848,8 +858,8 @@ export function createCustomersRoutes(
           for (const sub of subscriptions) {
             const mrr = sub.mrr_override || planPriceMap.get(sub.plan_id) || 0;
             await client.query(
-              `INSERT INTO observe_events (user_id, customer_id, feature_key, event_name, timestamp, revenue_amount, source, granularity) VALUES ($1, $2, 'subscription', 'revenue', NOW(), $3, 'csv', 'monthly_aggregate')`,
-              [req.visitorId, sub.customer_id, mrr],
+              `INSERT INTO observe_events (user_id, account_id, customer_id, feature_key, event_name, timestamp, revenue_amount, source, granularity) VALUES ($1, $2, $3, 'subscription', 'revenue', NOW(), $4, 'csv', 'monthly_aggregate')`,
+              [req.visitorId, acctId, sub.customer_id, mrr],
             );
           }
         }
@@ -1126,10 +1136,10 @@ export function createCustomersRoutes(
         if (result.rows.length === 0) {
           // Customer might only exist in observe_events, not customers table — upsert
           await pool.query(
-            `INSERT INTO customers (user_id, customer_id, name, is_internal)
-             VALUES ($1, $2, $2, $3)
-             ON CONFLICT (user_id, customer_id) DO UPDATE SET is_internal = $3, updated_at = NOW()`,
-            [req.visitorId, customerId, is_internal],
+            `INSERT INTO customers (user_id, account_id, customer_id, name, is_internal)
+             VALUES ($1, $2, $3, $3, $4)
+             ON CONFLICT (user_id, customer_id) DO UPDATE SET is_internal = $4, updated_at = NOW()`,
+            [req.visitorId, req.accountId ?? null, customerId, is_internal],
           );
         }
         res.json({ customer_id: customerId, is_internal });
