@@ -23,7 +23,8 @@ const router = createRouter({
     },
     {
       path: "/features",
-      redirect: "/",
+      name: "features",
+      component: () => import("@/pages/FeaturesPage.vue"),
     },
     {
       path: "/features/:key",
