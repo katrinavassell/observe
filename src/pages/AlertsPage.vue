@@ -334,83 +334,6 @@ function relativeTime(dateStr: string) {
       </Button>
     </div>
 
-    <!-- Alert History Feed -->
-    <Card v-if="history?.history.length">
-      <CardContent class="p-6">
-        <h2 class="font-semibold mb-4">Recent triggers</h2>
-        <div class="overflow-x-auto">
-          <table class="w-full text-sm">
-            <thead>
-              <tr class="border-b bg-muted/30 text-left">
-                <th class="py-2 px-3 font-medium text-muted-foreground">
-                  Time
-                </th>
-                <th class="py-2 px-3 font-medium text-muted-foreground">
-                  Customer
-                </th>
-                <th class="py-2 px-3 font-medium text-muted-foreground">
-                  Trigger
-                </th>
-                <th class="py-2 px-3 font-medium text-muted-foreground">
-                  Value
-                </th>
-                <th class="py-2 px-3 font-medium text-muted-foreground">
-                  Status
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr
-                v-for="entry in history.history"
-                :key="entry.id"
-                class="border-b last:border-0 hover:bg-muted/20"
-              >
-                <td class="py-2 px-3 text-muted-foreground whitespace-nowrap">
-                  {{ relativeTime(entry.fired_at) }}
-                </td>
-                <td class="py-2 px-3">
-                  <button
-                    v-if="entry.customer_id"
-                    class="text-primary hover:underline text-left"
-                    @click="router.push(`/customers/${entry.customer_id}`)"
-                  >
-                    {{ entry.customer_name || entry.customer_id }}
-                  </button>
-                  <span v-else class="text-muted-foreground">--</span>
-                </td>
-                <td class="py-2 px-3">
-                  {{
-                    triggerById(entry.trigger_type)?.label || entry.trigger_type
-                  }}
-                </td>
-                <td class="py-2 px-3 font-mono text-xs">
-                  {{
-                    formatHistoryValue(entry.current_value, entry.trigger_type)
-                  }}
-                </td>
-                <td class="py-2 px-3">
-                  <span
-                    v-for="(status, channel) in entry.delivery_status"
-                    :key="channel"
-                    class="inline-block text-[10px] font-medium px-1.5 py-0.5 rounded-full mr-1"
-                    :class="deliveryStatusClass(status)"
-                  >
-                    {{ channel }}: {{ status }}
-                  </span>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </CardContent>
-    </Card>
-    <div
-      v-else-if="historyLoading"
-      class="flex items-center justify-center py-6"
-    >
-      <Loader2 class="h-4 w-4 animate-spin text-muted-foreground" />
-    </div>
-
     <!-- Create form -->
     <Card v-if="showForm">
       <CardHeader class="pb-3">
@@ -734,6 +657,93 @@ function relativeTime(dateStr: string) {
           </div>
         </CardContent>
       </Card>
+    </div>
+
+    <!-- Delivery history -->
+    <Card v-if="history?.history.length">
+      <CardContent class="p-6">
+        <h2
+          class="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-4"
+        >
+          Delivery history
+        </h2>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="border-b bg-muted/30 text-left">
+                <th class="py-2 px-3 font-medium text-muted-foreground">
+                  Time
+                </th>
+                <th class="py-2 px-3 font-medium text-muted-foreground">
+                  Alert
+                </th>
+                <th class="py-2 px-3 font-medium text-muted-foreground">
+                  Customer
+                </th>
+                <th class="py-2 px-3 font-medium text-muted-foreground">
+                  Trigger
+                </th>
+                <th class="py-2 px-3 font-medium text-muted-foreground">
+                  Value
+                </th>
+                <th class="py-2 px-3 font-medium text-muted-foreground">
+                  Delivery
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="entry in history.history"
+                :key="entry.id"
+                class="border-b last:border-0 hover:bg-muted/20"
+              >
+                <td class="py-2 px-3 text-muted-foreground whitespace-nowrap">
+                  {{ relativeTime(entry.fired_at) }}
+                </td>
+                <td class="py-2 px-3">
+                  {{ entry.rule_name || "—" }}
+                </td>
+                <td class="py-2 px-3">
+                  <button
+                    v-if="entry.customer_id"
+                    class="text-primary hover:underline text-left"
+                    @click="router.push(`/customers/${entry.customer_id}`)"
+                  >
+                    {{ entry.customer_name || entry.customer_id }}
+                  </button>
+                  <span v-else class="text-muted-foreground">—</span>
+                </td>
+                <td class="py-2 px-3">
+                  {{
+                    triggerById(entry.trigger_type)?.label || entry.trigger_type
+                  }}
+                </td>
+                <td class="py-2 px-3 font-mono text-xs">
+                  {{
+                    formatHistoryValue(entry.current_value, entry.trigger_type)
+                  }}
+                </td>
+                <td class="py-2 px-3">
+                  <span
+                    v-for="(status, channel) in entry.delivery_status"
+                    :key="channel"
+                    class="inline-block text-[10px] font-medium px-1.5 py-0.5 rounded-full mr-1"
+                    :class="deliveryStatusClass(status)"
+                  >
+                    {{ channel }} {{ status }}
+                  </span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </CardContent>
+    </Card>
+    <div
+      v-else-if="historyLoading"
+      class="flex items-center justify-center py-6"
+    >
+      <Loader2 class="h-4 w-4 animate-spin text-muted-foreground" />
     </div>
 
     <!-- Error state -->

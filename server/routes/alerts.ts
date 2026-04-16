@@ -255,12 +255,12 @@ export async function checkAlerts(pool: Pool, userId: string) {
         if (!operatorFn) continue;
 
         if (operatorFn(currentValue, parseFloat(rule.threshold))) {
-          let delivered = false;
+          const deliveryStatus: Record<string, string> = {};
 
           // Email channel
           if (rule.email) {
             const ok = await sendAlertEmail(rule.email, rule, currentValue);
-            delivered = delivered || ok;
+            deliveryStatus.email = ok ? "sent" : "failed";
           }
 
           // Webhook channel (Slack-compatible JSON POST)
@@ -270,7 +270,7 @@ export async function checkAlerts(pool: Pool, userId: string) {
               rule,
               currentValue,
             );
-            delivered = delivered || ok;
+            deliveryStatus.webhook = ok ? "sent" : "failed";
           }
 
           // Always update cooldown timestamp when alert triggers,
@@ -278,6 +278,22 @@ export async function checkAlerts(pool: Pool, userId: string) {
           await pool.query(
             "UPDATE alert_rules SET last_triggered_at = NOW() WHERE id = $1",
             [rule.id],
+          );
+
+          // Write to history — customer_id/customer_name NULL for aggregate alerts.
+          await pool.query(
+            `INSERT INTO alert_history (user_id, alert_rule_id, customer_id, customer_name, trigger_type, current_value, threshold, delivery_status)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+            [
+              userId,
+              rule.id,
+              null,
+              null,
+              rule.metric,
+              currentValue,
+              rule.threshold,
+              JSON.stringify(deliveryStatus),
+            ],
           );
         }
       } catch (ruleErr) {
@@ -712,20 +728,25 @@ export function createAlertRoutes(
         const offset = parseInt(req.query.offset as string) || 0;
         const customerId = req.query.customer_id as string;
 
-        let where = "WHERE user_id = $1";
+        let where = "WHERE h.user_id = $1";
         const params: unknown[] = [req.visitorId];
         if (customerId) {
           params.push(customerId);
-          where += ` AND customer_id = $${params.length}`;
+          where += ` AND h.customer_id = $${params.length}`;
         }
 
         const [countRes, historyRes] = await Promise.all([
           pool.query(
-            `SELECT COUNT(*) as total FROM alert_history ${where}`,
+            `SELECT COUNT(*) as total FROM alert_history h ${where}`,
             params,
           ),
           pool.query(
-            `SELECT * FROM alert_history ${where} ORDER BY fired_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
+            `SELECT h.*, r.name AS rule_name
+             FROM alert_history h
+             LEFT JOIN alert_rules r ON r.id = h.alert_rule_id
+             ${where}
+             ORDER BY h.fired_at DESC
+             LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
             [...params, limit, offset],
           ),
         ]);
