@@ -1789,13 +1789,16 @@ export interface FeatureDefinition {
   created_at: string;
   updated_at: string;
   event_count: number;
+  total_cost: number;
   last_seen: string | null;
+  revenue_per_unit: number | null;
+  unit_label: string | null;
 }
 
 export interface FeatureDefinitionInput {
   name: string;
   feature_key?: string;
-  kind: FeatureDefinitionKind;
+  kind?: FeatureDefinitionKind;
   description?: string | null;
   code_location?: string | null;
 }
