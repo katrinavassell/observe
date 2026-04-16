@@ -34,14 +34,22 @@ export function createFeatureDefinitionsRoutes(pool: Pool, ensureVisitor: any) {
              fd.created_at,
              fd.updated_at,
              COALESCE(ev.event_count, 0) AS event_count,
-             ev.last_seen
+             COALESCE(ev.total_cost, 0) AS total_cost,
+             ev.last_seen,
+             fp.revenue_per_unit,
+             fp.unit_label
            FROM feature_definitions fd
            LEFT JOIN (
-             SELECT feature_key, COUNT(*) AS event_count, MAX(timestamp) AS last_seen
+             SELECT feature_key,
+                    COUNT(*) AS event_count,
+                    SUM(cost_amount) AS total_cost,
+                    MAX(timestamp) AS last_seen
              FROM observe_events
              WHERE user_id = $1
              GROUP BY feature_key
            ) ev ON ev.feature_key = fd.feature_key
+           LEFT JOIN feature_pricing fp
+             ON fp.user_id = fd.user_id AND fp.feature_key = fd.feature_key
            WHERE fd.user_id = $1
            ORDER BY fd.created_at ASC`,
           [req.visitorId],
@@ -58,7 +66,13 @@ export function createFeatureDefinitionsRoutes(pool: Pool, ensureVisitor: any) {
             created_at: row.created_at,
             updated_at: row.updated_at,
             event_count: parseInt(row.event_count, 10) || 0,
+            total_cost: parseFloat(row.total_cost) || 0,
             last_seen: row.last_seen,
+            revenue_per_unit:
+              row.revenue_per_unit !== null
+                ? parseFloat(row.revenue_per_unit)
+                : null,
+            unit_label: row.unit_label,
           })),
         });
       } catch (err) {
@@ -83,7 +97,8 @@ export function createFeatureDefinitionsRoutes(pool: Pool, ensureVisitor: any) {
       if (!name || typeof name !== "string" || !name.trim()) {
         return res.status(400).json({ error: "name is required" });
       }
-      if (!kind || !ALLOWED_KINDS.has(kind)) {
+      const effectiveKind = kind ?? "outcome";
+      if (!ALLOWED_KINDS.has(effectiveKind)) {
         return res
           .status(400)
           .json({ error: "kind must be cost, value, or outcome" });
@@ -110,7 +125,7 @@ export function createFeatureDefinitionsRoutes(pool: Pool, ensureVisitor: any) {
             req.visitorId,
             name.trim(),
             normalizedKey,
-            kind,
+            effectiveKind,
             description?.trim() || null,
             code_location?.trim() || null,
           ],

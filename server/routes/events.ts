@@ -965,6 +965,41 @@ export function createEventsRoutes(
           errors,
         });
 
+        // Auto-create feature_definitions for any new featureKeys in this
+        // batch. Users can rename later — kind defaults to 'outcome' because
+        // the DB column is NOT NULL and we've removed it from the UI.
+        if (inserted > 0) {
+          const uniqueFeatureKeys = [
+            ...new Set(
+              validEvents
+                .map((e) => e.featureKey)
+                .filter((fk): fk is string => typeof fk === "string" && !!fk),
+            ),
+          ];
+          if (uniqueFeatureKeys.length > 0) {
+            const fdPlaceholders: string[] = [];
+            const fdValues: unknown[] = [];
+            let fdIdx = 1;
+            for (const fk of uniqueFeatureKeys) {
+              fdPlaceholders.push(
+                `($${fdIdx}, $${fdIdx + 1}, $${fdIdx + 2}, 'outcome')`,
+              );
+              fdValues.push(userId, fk, fk);
+              fdIdx += 3;
+            }
+            pool
+              .query(
+                `INSERT INTO feature_definitions (user_id, feature_key, name, kind)
+                 VALUES ${fdPlaceholders.join(", ")}
+                 ON CONFLICT (user_id, feature_key) DO NOTHING`,
+                fdValues,
+              )
+              .catch((err) =>
+                console.error("Auto-create feature_definitions failed:", err),
+              );
+          }
+        }
+
         // Auto-trigger inference profile learning in the background (fire-and-forget)
         if (inserted > 0) {
           // First-ever SDK event for this user — fire the activation milestone.
