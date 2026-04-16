@@ -3,7 +3,7 @@ import type { Pool } from "pg";
 import crypto from "crypto";
 import rateLimit from "express-rate-limit";
 import { type AuthRequest } from "./auth.js";
-import { encryptApiKey } from "../stripe-client.js";
+import { encryptApiKey, decryptApiKey } from "../stripe-client.js";
 import { calculateCostFromTokens as calcCostFromDb } from "../model-pricing.js";
 import { checkAlerts, checkCustomerAlerts } from "./alerts.js";
 import { checkFeatureAccess } from "../billing.js";
@@ -574,15 +574,30 @@ export function createEventsRoutes(
       try {
         const userId = req.visitorId!;
         const result = await pool.query(
-          "SELECT id, key_prefix, name, created_at FROM sdk_api_keys WHERE user_id = $1 AND revoked_at IS NULL ORDER BY created_at DESC",
+          "SELECT id, key_prefix, encrypted_key, name, created_at, last_used_at FROM sdk_api_keys WHERE user_id = $1 AND revoked_at IS NULL ORDER BY created_at DESC",
           [userId],
         );
-        const keys = result.rows.map((row) => ({
-          id: row.id,
-          key_prefix: row.key_prefix,
-          label: row.name,
-          created_at: row.created_at,
-        }));
+        const keys = result.rows.map((row) => {
+          let fullKey: string | null = null;
+          if (row.encrypted_key) {
+            try {
+              fullKey = decryptApiKey(row.encrypted_key);
+            } catch (err) {
+              console.error(
+                `Failed to decrypt sdk_api_keys.encrypted_key for id=${row.id}:`,
+                err,
+              );
+            }
+          }
+          return {
+            id: row.id,
+            key_prefix: row.key_prefix,
+            full_key: fullKey,
+            name: row.name,
+            created_at: row.created_at,
+            last_used_at: row.last_used_at,
+          };
+        });
         res.json(keys);
       } catch (error) {
         console.error("GET /sdk-keys error:", error);

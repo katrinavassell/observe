@@ -130,8 +130,9 @@ function copyKeyToClipboard() {
   }, 2000);
 }
 
-function copyKeyPrefix(key: SdkKey) {
-  window.navigator.clipboard.writeText(key.key_prefix);
+function copyKeyValue(key: SdkKey) {
+  const value = key.full_key ?? key.key_prefix;
+  window.navigator.clipboard.writeText(value);
   copiedPrefixId.value = key.id;
   setTimeout(() => {
     if (copiedPrefixId.value === key.id) copiedPrefixId.value = null;
@@ -612,7 +613,7 @@ watch(
               class="flex items-center gap-2 text-xs font-medium text-success"
             >
               <Key class="h-3 w-3" />
-              Key ready — copy it now, you won't see it again
+              Key ready
             </div>
             <div class="flex items-center gap-2">
               <code
@@ -636,21 +637,20 @@ watch(
             </p>
           </div>
 
-          <!-- Existing masked keys -->
+          <!-- Existing keys -->
           <div v-else-if="sdkKeys.length > 0" class="space-y-2">
             <div
               v-for="key in sdkKeys"
               :key="key.id"
               class="rounded-md border bg-card px-3 py-2.5 flex items-center justify-between gap-3"
             >
-              <div class="flex items-center gap-3 min-w-0">
+              <div class="flex items-center gap-3 min-w-0 flex-1">
+                <span class="text-xs font-medium whitespace-nowrap">{{
+                  key.name || "default"
+                }}</span>
                 <code
-                  class="font-mono text-sm text-muted-foreground truncate"
-                  >{{ key.key_prefix + "…" }}</code
-                >
-                <span
-                  class="text-[11px] text-muted-foreground whitespace-nowrap"
-                  >({{ key.name || "default" }})</span
+                  class="font-mono text-xs text-muted-foreground truncate min-w-0 flex-1"
+                  >{{ key.full_key ?? key.key_prefix + "…" }}</code
                 >
               </div>
               <div class="flex items-center gap-1 shrink-0">
@@ -658,10 +658,15 @@ watch(
                   variant="ghost"
                   size="sm"
                   class="h-8 w-8 p-0 text-muted-foreground"
+                  :disabled="!key.full_key"
                   :title="
-                    copiedPrefixId === key.id ? 'Copied!' : 'Copy key prefix'
+                    !key.full_key
+                      ? 'Legacy key — rotate to view full key'
+                      : copiedPrefixId === key.id
+                        ? 'Copied!'
+                        : 'Copy key'
                   "
-                  @click="copyKeyPrefix(key)"
+                  @click="copyKeyValue(key)"
                 >
                   <Check
                     v-if="copiedPrefixId === key.id"
@@ -691,9 +696,8 @@ watch(
               </div>
             </div>
             <p class="text-[11px] text-muted-foreground">
-              The full key is only shown once, at creation. If you've lost it,
-              rotate — the old key stops working immediately and a new one is
-              displayed.
+              Keys stay visible here. Rotate any time the current one is
+              compromised — the old key stops working immediately.
             </p>
           </div>
 
