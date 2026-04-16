@@ -773,11 +773,12 @@ Return ONLY the JSON object, no markdown or explanation.`;
         }
 
         const result = await pool.query(
-          `INSERT INTO simulations (user_id, name, scenarios, time_range, status)
-         VALUES ($1, $2, $3, $4, 'draft')
+          `INSERT INTO simulations (user_id, account_id, name, scenarios, time_range, status)
+         VALUES ($1, $2, $3, $4, $5, 'draft')
          RETURNING *`,
           [
             visitorId,
+            req.accountId ?? null,
             name,
             JSON.stringify(scenarios || []),
             time_range ? JSON.stringify(time_range) : null,
