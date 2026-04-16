@@ -52,16 +52,6 @@ const usageItems = computed(() => {
     });
   }
 
-  const ai = usageLimits.value.ai_insights?.usage;
-  if (ai) {
-    items.push({
-      label: "Messages this month",
-      used: ai.used,
-      limit: ai.limit || null,
-      pct: ai.limit ? Math.min(100, Math.round((ai.used / ai.limit) * 100)) : 0,
-    });
-  }
-
   return items;
 });
 
@@ -101,11 +91,7 @@ const plans = [
     name: "Free",
     price: "$0",
     interval: "forever",
-    features: [
-      "10,000 events/month",
-      "1,000 AI messages/month",
-      "90-day data retention",
-    ],
+    features: ["10,000 events/month", "90-day data retention"],
   },
   {
     key: "growth",
@@ -114,7 +100,6 @@ const plans = [
     interval: "/month",
     features: [
       "500,000 events/month",
-      "10,000 AI messages/month",
       "1-year data retention",
       "1 Pricing Strategy session / quarter",
     ],
@@ -126,7 +111,6 @@ const plans = [
     interval: "",
     features: [
       "Unlimited events",
-      "Unlimited AI messages",
       "Unlimited data retention",
       "Monthly Pricing Strategy session",
       "Priority support",
