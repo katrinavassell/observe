@@ -115,9 +115,14 @@ export async function initialize() {
       isInitialized.value = true;
     } catch (error) {
       logger.error("Failed to initialize auth session", error);
+    } finally {
+      // Clear initPromise whether init succeeded or failed so a subsequent
+      // call can retry (previously only cleared on throw — a hung promise
+      // never threw and stayed cached forever, silently blocking every
+      // `await initialize()` caller).
       initPromise = null;
+      isLoading.value = false;
     }
-    isLoading.value = false;
   })();
 
   return initPromise;
