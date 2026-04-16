@@ -658,11 +658,11 @@ watch(
                   >{{ key.full_key ?? key.key_prefix + "…" }}</code
                 >
               </div>
-              <div class="flex items-center gap-1 shrink-0">
+              <div class="flex items-center gap-1.5 shrink-0">
                 <Button
                   variant="ghost"
                   size="sm"
-                  class="h-8 w-8 p-0 text-muted-foreground"
+                  class="h-9 w-9 p-0 text-muted-foreground"
                   :disabled="!key.full_key"
                   :title="
                     !key.full_key
@@ -675,28 +675,28 @@ watch(
                 >
                   <Check
                     v-if="copiedPrefixId === key.id"
-                    class="h-4 w-4 text-success"
+                    class="h-[18px] w-[18px] text-success"
                   />
-                  <Copy v-else class="h-4 w-4" />
+                  <Copy v-else class="h-[18px] w-[18px]" />
                 </Button>
                 <Button
                   variant="outline"
                   size="sm"
-                  class="h-8 text-xs"
+                  class="h-9 text-sm"
                   title="Rotate — invalidates the old key and shows the new one"
                   @click="handleResetKey(key.id)"
                 >
-                  <RefreshCw class="h-3 w-3 mr-1" />
+                  <RefreshCw class="h-4 w-4 mr-1.5" />
                   Rotate
                 </Button>
                 <Button
                   variant="ghost"
                   size="sm"
-                  class="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
+                  class="h-9 w-9 p-0 text-muted-foreground hover:text-destructive"
                   title="Delete key"
                   @click="handleRevokeKey(key.id)"
                 >
-                  <Trash2 class="h-4 w-4" />
+                  <Trash2 class="h-[18px] w-[18px]" />
                 </Button>
               </div>
             </div>
