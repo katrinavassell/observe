@@ -1256,6 +1256,7 @@ export interface AlertHistoryEntry {
   id: number;
   user_id: string;
   alert_rule_id: number;
+  rule_name: string | null;
   customer_id: string | null;
   customer_name: string | null;
   trigger_type: string;
