@@ -318,6 +318,7 @@ export interface ObserveEvent {
   usage_units: number | null;
   input_tokens: number | null;
   output_tokens: number | null;
+  tokens_source: "direct" | "estimated" | null;
   model: string | null;
   model_provider: string | null;
   source: string | null;
@@ -659,6 +660,23 @@ export async function listFeatureKeys(): Promise<string[]> {
     "/feature-pricing/features",
   );
   return data.features;
+}
+
+// ── Historical token backfill ────────────────────────────────────────────────
+export interface BackfillTokensSummary {
+  buckets_processed: number;
+  rows_updated: number;
+  rows_skipped_no_data: number;
+  rows_out_of_retention: number;
+}
+
+export async function backfillTokens(
+  provider: "openai" | "anthropic",
+): Promise<BackfillTokensSummary> {
+  return request("/backfill/tokens", {
+    method: "POST",
+    body: JSON.stringify({ provider }),
+  });
 }
 
 // ======================================================================// TEAM / ORGANIZATION

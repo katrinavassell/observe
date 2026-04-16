@@ -436,7 +436,8 @@ function usageTooltip(event: ObserveEvent): string {
   if (event.input_tokens != null || event.output_tokens != null) {
     const inp = (event.input_tokens ?? 0).toLocaleString();
     const out = (event.output_tokens ?? 0).toLocaleString();
-    return `${inp} in / ${out} out`;
+    const base = `${inp} in / ${out} out`;
+    return event.tokens_source === "estimated" ? `${base} (estimated)` : base;
   }
   if (event.usage_units != null && event.usage_units !== 0) {
     return `${event.usage_units.toLocaleString()} units (token split unavailable)`;

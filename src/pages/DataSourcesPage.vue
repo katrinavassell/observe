@@ -35,12 +35,15 @@ import {
   resetSdkKey,
   getEvents,
   uploadProviderCsv,
+  backfillTokens,
 } from "@/lib/api";
 import type { SdkKey } from "@/lib/api";
 import {
   getStripeStatus,
   syncStripeData,
   disconnectStripe,
+  getOpenAIStatus,
+  getAnthropicStatus,
 } from "@/api/client";
 import type { StripeStatus } from "@/api/client";
 
@@ -396,6 +399,46 @@ const showAnthropicModal = ref(false);
 const isUploadingProviderCsv = ref(false);
 const providerCsvFileInput = ref<HTMLInputElement | null>(null);
 
+// Connection status drives whether the "Backfill historical tokens" button
+// is visible for each provider.
+const openaiConnected = ref(false);
+const anthropicConnected = ref(false);
+const isBackfillingOpenAI = ref(false);
+const isBackfillingAnthropic = ref(false);
+
+async function loadProviderStatus() {
+  try {
+    const [oa, an] = await Promise.all([
+      getOpenAIStatus(),
+      getAnthropicStatus(),
+    ]);
+    openaiConnected.value = oa.connected;
+    anthropicConnected.value = an.connected;
+  } catch (err) {
+    // Non-critical — backfill button just won't appear.
+    console.error("loadProviderStatus failed:", err);
+  }
+}
+
+async function handleBackfillTokens(provider: "openai" | "anthropic") {
+  const flag =
+    provider === "openai" ? isBackfillingOpenAI : isBackfillingAnthropic;
+  flag.value = true;
+  try {
+    const summary = await backfillTokens(provider);
+    toast.success(`Backfill complete (${provider})`, {
+      description: `${summary.rows_updated.toLocaleString()} rows updated across ${summary.buckets_processed} buckets. ${summary.rows_skipped_no_data.toLocaleString()} skipped (no match), ${summary.rows_out_of_retention.toLocaleString()} beyond retention.`,
+    });
+    queryClient.invalidateQueries({ queryKey: ["events"] });
+  } catch (error) {
+    toast.error(`Backfill failed (${provider})`, {
+      description: error instanceof Error ? error.message : "Please try again.",
+    });
+  } finally {
+    flag.value = false;
+  }
+}
+
 async function handleProviderCsvFile(event: Event) {
   const input = event.target as HTMLInputElement;
   const file = input.files?.[0];
@@ -479,7 +522,7 @@ async function handleUsageFileCleared(): Promise<void> {
 
 onMounted(async () => {
   if (!isLoggedIn.value) return;
-  await Promise.all([loadSdkKeys(), loadStripeStatus()]);
+  await Promise.all([loadSdkKeys(), loadStripeStatus(), loadProviderStatus()]);
 
   const stashed = window.localStorage.getItem("observe:fresh_sdk_key");
   if (stashed) {
@@ -1184,14 +1227,34 @@ Observe.identify({ <span class="text-sky-300">customerId</span>: user.stripeId }
                   </p>
                 </div>
               </div>
-              <Button
-                v-if="canEdit"
-                variant="outline"
-                size="sm"
-                @click="showOpenAIModal = true"
-              >
-                Connect
-              </Button>
+              <div class="flex items-center gap-2">
+                <Button
+                  v-if="canEdit && openaiConnected"
+                  variant="outline"
+                  size="sm"
+                  :disabled="isBackfillingOpenAI"
+                  title="Fill in input/output token splits for historical events using OpenAI's daily usage API (last 30 days only)."
+                  @click="handleBackfillTokens('openai')"
+                >
+                  <Loader2
+                    v-if="isBackfillingOpenAI"
+                    class="mr-2 h-4 w-4 animate-spin"
+                  />
+                  {{
+                    isBackfillingOpenAI
+                      ? "Backfilling…"
+                      : "Backfill historical tokens"
+                  }}
+                </Button>
+                <Button
+                  v-if="canEdit"
+                  variant="outline"
+                  size="sm"
+                  @click="showOpenAIModal = true"
+                >
+                  Connect
+                </Button>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -1213,14 +1276,34 @@ Observe.identify({ <span class="text-sky-300">customerId</span>: user.stripeId }
                   </p>
                 </div>
               </div>
-              <Button
-                v-if="canEdit"
-                variant="outline"
-                size="sm"
-                @click="showAnthropicModal = true"
-              >
-                Connect
-              </Button>
+              <div class="flex items-center gap-2">
+                <Button
+                  v-if="canEdit && anthropicConnected"
+                  variant="outline"
+                  size="sm"
+                  :disabled="isBackfillingAnthropic"
+                  title="Fill in input/output token splits for historical events using Anthropic's daily usage API (last 90 days only)."
+                  @click="handleBackfillTokens('anthropic')"
+                >
+                  <Loader2
+                    v-if="isBackfillingAnthropic"
+                    class="mr-2 h-4 w-4 animate-spin"
+                  />
+                  {{
+                    isBackfillingAnthropic
+                      ? "Backfilling…"
+                      : "Backfill historical tokens"
+                  }}
+                </Button>
+                <Button
+                  v-if="canEdit"
+                  variant="outline"
+                  size="sm"
+                  @click="showAnthropicModal = true"
+                >
+                  Connect
+                </Button>
+              </div>
             </div>
           </CardContent>
         </Card>
