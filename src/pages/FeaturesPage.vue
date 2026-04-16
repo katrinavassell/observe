@@ -56,7 +56,7 @@ function goBack() {
         <h1 class="text-2xl font-semibold tracking-tight">Features</h1>
         <p class="text-muted-foreground">
           Features are auto-detected from your events. Edit them here to add
-          names and revenue pricing.
+          names and descriptions.
         </p>
       </div>
     </div>
