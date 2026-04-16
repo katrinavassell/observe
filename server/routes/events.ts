@@ -22,6 +22,14 @@ function coerceEventRow(row: Record<string, unknown>) {
         : null,
     usage_units:
       row.usage_units != null ? parseFloat(row.usage_units as string) : null,
+    input_tokens:
+      row.input_tokens != null
+        ? parseInt(row.input_tokens as string, 10)
+        : null,
+    output_tokens:
+      row.output_tokens != null
+        ? parseInt(row.output_tokens as string, 10)
+        : null,
   };
 }
 
@@ -914,7 +922,7 @@ export function createEventsRoutes(
           }
 
           placeholders.push(
-            `($${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, 'sdk', 'event', false, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++})`,
+            `($${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, 'sdk', 'event', false, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++})`,
           );
           values.push(
             userId,
@@ -935,6 +943,8 @@ export function createEventsRoutes(
             evt.parentSpanId ?? null,
             evt.durationMs ?? null,
             evt.costType ?? (evt.model ? "llm" : "generic"),
+            evt.inputTokens ?? null,
+            evt.outputTokens ?? null,
           );
         }
 
@@ -943,7 +953,8 @@ export function createEventsRoutes(
           user_id, customer_id, feature_key, event_name, timestamp,
           cost_amount, cost_unit, revenue_amount, usage_units,
           model, model_provider, source, granularity, is_inferred, idempotency_key, revenue_source,
-          trace_id, span_id, parent_span_id, duration_ms, cost_type
+          trace_id, span_id, parent_span_id, duration_ms, cost_type,
+          input_tokens, output_tokens
         ) VALUES ${placeholders.join(", ")}
         ON CONFLICT (user_id, idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING
       `;

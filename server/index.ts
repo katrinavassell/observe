@@ -488,6 +488,16 @@ async function _doDbInit() {
       )
     `);
 
+    // Split token persistence — input and output tokens have different
+    // provider rates, so we store them separately. Nullable so historical
+    // rows (blended into usage_units) stay as-is.
+    await pool.query(
+      `ALTER TABLE observe_events ADD COLUMN IF NOT EXISTS input_tokens INT`,
+    );
+    await pool.query(
+      `ALTER TABLE observe_events ADD COLUMN IF NOT EXISTS output_tokens INT`,
+    );
+
     await pool.query(`
       CREATE TABLE IF NOT EXISTS feature_pricing (
         id SERIAL PRIMARY KEY,

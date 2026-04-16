@@ -432,6 +432,18 @@ function customerMarginTooltip(event: ObserveEvent): string {
   return `Customer margin this month: ${m.pct}% ($${m.revenue.toFixed(2)} revenue / $${m.cost.toFixed(2)} cost)`;
 }
 
+function usageTooltip(event: ObserveEvent): string {
+  if (event.input_tokens != null || event.output_tokens != null) {
+    const inp = (event.input_tokens ?? 0).toLocaleString();
+    const out = (event.output_tokens ?? 0).toLocaleString();
+    return `${inp} in / ${out} out`;
+  }
+  if (event.usage_units != null && event.usage_units !== 0) {
+    return `${event.usage_units.toLocaleString()} units (token split unavailable)`;
+  }
+  return "No usage recorded";
+}
+
 function customerMarginClass(pct: number | null): string {
   if (pct === null) return "text-muted-foreground";
   if (pct >= 50) return "text-green-600 font-medium";
@@ -850,6 +862,7 @@ function customerMarginClass(pct: number | null): string {
                   <td
                     v-else-if="col.id === 'usage'"
                     class="px-4 py-3 text-right text-xs text-muted-foreground tabular-nums"
+                    :title="usageTooltip(event)"
                   >
                     {{
                       event.usage_units != null && event.usage_units !== 0
@@ -1038,7 +1051,26 @@ function customerMarginClass(pct: number | null): string {
                     <div
                       class="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground border-t pt-3"
                     >
-                      <span v-if="eventDetails[event.id].usage_units"
+                      <span
+                        v-if="
+                          eventDetails[event.id].input_tokens != null ||
+                          eventDetails[event.id].output_tokens != null
+                        "
+                      >
+                        {{
+                          (
+                            eventDetails[event.id].input_tokens ?? 0
+                          ).toLocaleString()
+                        }}
+                        in /
+                        {{
+                          (
+                            eventDetails[event.id].output_tokens ?? 0
+                          ).toLocaleString()
+                        }}
+                        out
+                      </span>
+                      <span v-else-if="eventDetails[event.id].usage_units"
                         >{{
                           eventDetails[event.id].usage_units.toLocaleString()
                         }}
