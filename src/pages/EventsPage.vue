@@ -77,14 +77,15 @@ const DEFAULT_COLUMNS: TableColumn[] = [
   { id: "source", label: "Source", visible: true, align: "left" },
   { id: "usage", label: "Usage", visible: true, align: "right" },
   { id: "cost", label: "Cost", visible: true, align: "right" },
-  { id: "margin", label: "Customer margin", visible: true, align: "right" },
+  { id: "revenue", label: "Revenue", visible: true, align: "right" },
+  { id: "margin", label: "Margin", visible: true, align: "right" },
   { id: "trace", label: "Trace", visible: true, align: "left" },
   { id: "duration", label: "Duration", visible: false, align: "right" },
   { id: "cost_type", label: "Cost Type", visible: false, align: "left" },
   { id: "properties", label: "Properties", visible: false, align: "left" },
 ];
 
-const STORAGE_KEY = "observe:events-columns:v2";
+const STORAGE_KEY = "observe:events-columns:v3";
 
 function loadColumns(): TableColumn[] {
   const saved = window.localStorage.getItem(STORAGE_KEY);
@@ -398,72 +399,71 @@ function formatDate(ts: string) {
   });
 }
 
-const customerAggById = computed(() => {
-  const map = new Map<string, { revenue: number; cost: number }>();
-  for (const c of customerAgg.value ?? []) {
-    map.set(c.customer_id, {
-      revenue: c.total_revenue,
-      cost: c.total_cost,
-    });
-  }
-  return map;
-});
+// ── Revenue / margin rendering helpers ─────────────────────────────────────
+// Per-event revenue comes from PR #94's ingest enrichment. The revenue_source
+// label tells us whether the number is exact (per_unit/tiered), estimated
+// (allocated), or a hybrid. Margin is only shown per-event when the revenue
+// is exact — for estimates we tag (est); for "none" we render em-dash.
 
-function customerMarginForEvent(event: ObserveEvent): {
-  pct: number | null;
-  revenue: number;
-  cost: number;
-} | null {
-  if (!event.customer_id) return null;
-  const agg = customerAggById.value.get(event.customer_id);
-  if (!agg) return null;
-  const pct =
-    agg.revenue > 0
-      ? Math.round(((agg.revenue - agg.cost) / agg.revenue) * 100)
-      : null;
-  return { pct, revenue: agg.revenue, cost: agg.cost };
-}
+type RevenueKind =
+  | "per_unit"
+  | "tiered"
+  | "allocated"
+  | "hybrid"
+  | "explicit"
+  | "feature_pricing"
+  | "mrr_allocation"
+  | "none"
+  | null
+  | undefined;
 
-function customerMarginTooltip(event: ObserveEvent): string {
-  const m = customerMarginForEvent(event);
-  if (!m) return "No customer data yet";
-  if (m.pct === null)
-    return `No revenue tracked for this customer ($${m.cost.toFixed(2)} cost)`;
-  return `Customer margin this month: ${m.pct}% ($${m.revenue.toFixed(2)} revenue / $${m.cost.toFixed(2)} cost)`;
-}
-
-function revenueSourceLabel(src: string | null | undefined): string {
+function revenueShortLabel(src: RevenueKind): string {
   switch (src) {
     case "per_unit":
-      return "per unit (exact)";
+      return "per unit";
     case "tiered":
-      return "tiered (exact)";
+      return "tiered";
     case "allocated":
-      return "allocated (estimate)";
+    case "mrr_allocation":
+      return "est";
     case "hybrid":
       return "hybrid";
-    case "explicit":
-      return "explicit";
     case "feature_pricing":
-      return "feature pricing";
-    case "mrr_allocation":
-      return "allocated (estimate)";
+      return "feature";
+    case "explicit":
+    case "none":
     default:
-      return src ?? "—";
+      return "";
   }
 }
 
-function revenueSourceTooltip(src: string | null | undefined): string {
+function revenueLabelClass(src: RevenueKind): string {
   switch (src) {
     case "per_unit":
-      return "Metered Stripe price — revenue is unit_price × usage_units for this event. Exact.";
     case "tiered":
-      return "Graduated Stripe price — unit_price comes from the tier that matches this customer's month-to-date usage. Exact.";
+      return "text-green-600";
     case "allocated":
     case "mrr_allocation":
-      return "Flat subscription — monthly MRR split across days (MRR / 30). Estimate; not exact per event.";
+      return "text-muted-foreground";
     case "hybrid":
-      return "Flat + metered — base allocated per day, metered portion exact per unit.";
+    case "feature_pricing":
+      return "text-blue-600";
+    default:
+      return "text-muted-foreground";
+  }
+}
+
+function revenueSourceTooltip(src: RevenueKind): string {
+  switch (src) {
+    case "per_unit":
+      return "Metered Stripe price — unit_price × usage_units. Exact.";
+    case "tiered":
+      return "Graduated Stripe price — unit_price from the tier matching this customer's month-to-date usage. Exact.";
+    case "allocated":
+    case "mrr_allocation":
+      return "Flat subscription — MRR / 30 split per day. Estimate.";
+    case "hybrid":
+      return "Flat + metered — base allocated per day + metered portion exact.";
     case "explicit":
       return "Sent directly on the event payload.";
     case "feature_pricing":
@@ -471,6 +471,38 @@ function revenueSourceTooltip(src: string | null | undefined): string {
     default:
       return "";
   }
+}
+
+function marginForEvent(event: ObserveEvent): number | null {
+  if (
+    event.revenue_amount == null ||
+    event.cost_amount == null ||
+    event.revenue_amount <= 0
+  )
+    return null;
+  return Math.round(
+    ((event.revenue_amount - event.cost_amount) / event.revenue_amount) * 100,
+  );
+}
+
+function marginColorClass(pct: number | null): string {
+  if (pct === null) return "text-muted-foreground";
+  if (pct >= 50) return "text-green-600 font-medium";
+  if (pct >= 20) return "text-yellow-600 font-medium";
+  return "text-red-600 font-medium";
+}
+
+function isExactRevenue(src: RevenueKind): boolean {
+  return src === "per_unit" || src === "tiered" || src === "explicit";
+}
+
+function isEstimateRevenue(src: RevenueKind): boolean {
+  return (
+    src === "allocated" ||
+    src === "mrr_allocation" ||
+    src === "hybrid" ||
+    src === "feature_pricing"
+  );
 }
 
 function costTooltip(event: ObserveEvent): string {
@@ -493,13 +525,6 @@ function usageTooltip(event: ObserveEvent): string {
     return `${event.usage_units.toLocaleString()} units (token split unavailable)`;
   }
   return "No usage recorded";
-}
-
-function customerMarginClass(pct: number | null): string {
-  if (pct === null) return "text-muted-foreground";
-  if (pct >= 50) return "text-green-600 font-medium";
-  if (pct >= 20) return "text-yellow-600 font-medium";
-  return "text-red-600 font-medium";
 }
 </script>
 
@@ -931,25 +956,62 @@ function customerMarginClass(pct: number | null): string {
                     {{ formatCost(event.cost_amount) }}
                   </td>
 
-                  <!-- Customer margin (aggregate, not per-event) -->
+                  <!-- Revenue (per-event, with revenue_source label) -->
+                  <td
+                    v-else-if="col.id === 'revenue'"
+                    class="px-4 py-3 text-right text-xs tabular-nums"
+                    :title="revenueSourceTooltip(event.revenue_source)"
+                  >
+                    <template
+                      v-if="
+                        event.revenue_amount != null &&
+                        event.revenue_amount > 0 &&
+                        event.revenue_source &&
+                        event.revenue_source !== 'none'
+                      "
+                    >
+                      <span class="text-foreground">{{
+                        formatCost(event.revenue_amount)
+                      }}</span>
+                      <span
+                        v-if="revenueShortLabel(event.revenue_source)"
+                        :class="[
+                          'ml-1 text-[10px]',
+                          revenueLabelClass(event.revenue_source),
+                        ]"
+                      >
+                        ({{ revenueShortLabel(event.revenue_source) }})
+                      </span>
+                    </template>
+                    <span v-else class="text-muted-foreground">—</span>
+                  </td>
+
+                  <!-- Margin (per-event) -->
                   <td
                     v-else-if="col.id === 'margin'"
                     class="px-4 py-3 text-right text-xs tabular-nums"
                   >
-                    <span
-                      :title="customerMarginTooltip(event)"
-                      :class="
-                        customerMarginClass(
-                          customerMarginForEvent(event)?.pct ?? null,
-                        )
+                    <template
+                      v-if="
+                        isExactRevenue(event.revenue_source) &&
+                        marginForEvent(event) !== null
                       "
                     >
-                      {{
-                        customerMarginForEvent(event)?.pct != null
-                          ? `${customerMarginForEvent(event)!.pct}%`
-                          : "—"
-                      }}
-                    </span>
+                      <span :class="marginColorClass(marginForEvent(event))">
+                        {{ marginForEvent(event) }}%
+                      </span>
+                    </template>
+                    <template
+                      v-else-if="
+                        isEstimateRevenue(event.revenue_source) &&
+                        marginForEvent(event) !== null
+                      "
+                    >
+                      <span class="text-muted-foreground">
+                        {{ marginForEvent(event) }}% (est)
+                      </span>
+                    </template>
+                    <span v-else class="text-muted-foreground">—</span>
                   </td>
 
                   <!-- Duration -->
