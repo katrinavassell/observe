@@ -773,13 +773,8 @@ const excludedCount = computed(() => {
             <tbody>
               <template v-for="c in filteredCustomers" :key="c.customer_id">
                 <tr
-                  class="group border-b hover:bg-muted/30 transition-colors"
-                  :class="{ 'cursor-pointer': c.model_swap_suggestion }"
-                  @click="
-                    c.model_swap_suggestion
-                      ? toggleRow(c.customer_id)
-                      : undefined
-                  "
+                  class="group border-b hover:bg-muted/30 transition-colors cursor-pointer"
+                  @click="$router.push(`/customers/${c.customer_id}`)"
                 >
                   <td class="p-3">
                     <component

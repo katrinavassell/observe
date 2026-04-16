@@ -522,6 +522,20 @@ export async function getCustomerDetail(id: string): Promise<CustomerDetail> {
   return request(`/customers/${encodeURIComponent(id)}`);
 }
 
+export interface CustomerTimeseriesPoint {
+  month: string;
+  event_count: number;
+  total_cost: number;
+  total_revenue: number;
+  total_usage: number;
+}
+
+export async function getCustomerTimeseries(
+  id: string,
+): Promise<{ timeseries: CustomerTimeseriesPoint[] }> {
+  return request(`/customers/${encodeURIComponent(id)}/timeseries`);
+}
+
 // ======================================================================// SDK EVENT INGESTION
 // ======================================================================
 export interface IngestEvent {

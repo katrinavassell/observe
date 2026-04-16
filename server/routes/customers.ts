@@ -390,7 +390,6 @@ export function createCustomersRoutes(
     },
   );
 
-
   router.delete(
     "/data/clear",
     ensureVisitor,
@@ -1040,6 +1039,48 @@ export function createCustomersRoutes(
       } catch (error) {
         console.error("Get customer detail error:", error);
         res.status(500).json({ error: "Failed to get customer detail" });
+      }
+    },
+  );
+
+  // GET /customers/:id/timeseries — monthly aggregated metrics for a customer
+  router.get(
+    "/customers/:id/timeseries",
+    ensureVisitor,
+    async (req: AuthRequest, res: Response) => {
+      try {
+        const { id } = req.params;
+        const timeseriesRes = await pool.query(
+          `SELECT DATE_TRUNC('month', timestamp) as month,
+                 COUNT(*) as event_count,
+                 COALESCE(SUM(cost_amount), 0) as total_cost,
+                 COALESCE(SUM(revenue_amount), 0) as total_revenue,
+                 COALESCE(SUM(usage_units), 0) as total_usage
+           FROM observe_events WHERE user_id = $1 AND customer_id = $2
+           GROUP BY month ORDER BY month ASC`,
+          [req.visitorId, id],
+        );
+
+        res.json({
+          timeseries: timeseriesRes.rows.map(
+            (r: {
+              month: string;
+              event_count: string;
+              total_cost: string;
+              total_revenue: string;
+              total_usage: string;
+            }) => ({
+              month: r.month,
+              event_count: parseInt(r.event_count),
+              total_cost: parseFloat(r.total_cost) || 0,
+              total_revenue: parseFloat(r.total_revenue) || 0,
+              total_usage: parseFloat(r.total_usage) || 0,
+            }),
+          ),
+        });
+      } catch (error) {
+        console.error("Get customer timeseries error:", error);
+        res.status(500).json({ error: "Failed to get customer timeseries" });
       }
     },
   );

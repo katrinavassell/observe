@@ -19,6 +19,7 @@ import {
   X,
   MessageSquare,
   Shield,
+  UserCircle,
 } from "lucide-vue-next";
 import ErrorBoundary from "@/components/shared/ErrorBoundary.vue";
 import FeedbackModal from "@/components/shared/FeedbackModal.vue";
@@ -96,6 +97,12 @@ const navItems = computed(() => [
     label: "Cohorts",
     icon: Users,
     description: "Customer segments by profitability and behavior",
+  },
+  {
+    path: "/customers",
+    label: "Customers",
+    icon: UserCircle,
+    description: "Individual customer health and profitability",
   },
   {
     path: "/alerts",
