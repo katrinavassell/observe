@@ -1299,9 +1299,9 @@ function usageTooltip(event: ObserveEvent): string {
                       >
                         Revenue:
                         {{
-                          revenueSourceLabel(
+                          revenueShortLabel(
                             eventDetails[event.id].revenue_source,
-                          )
+                          ) || eventDetails[event.id].revenue_source
                         }}
                       </span>
                     </div>
