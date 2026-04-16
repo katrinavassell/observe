@@ -6,6 +6,7 @@ import { toast } from "vue-sonner";
 import {
   Key,
   Copy,
+  Check,
   Trash2,
   Plus,
   CreditCard,
@@ -80,6 +81,7 @@ const newKeyName = ref("");
 const isGeneratingKey = ref(false);
 const generatedKey = ref<string | null>(null);
 const keyCopied = ref(false);
+const copiedPrefixId = ref<number | null>(null);
 
 async function loadSdkKeys() {
   try {
@@ -125,6 +127,14 @@ function copyKeyToClipboard() {
   keyCopied.value = true;
   setTimeout(() => {
     keyCopied.value = false;
+  }, 2000);
+}
+
+function copyKeyPrefix(key: SdkKey) {
+  window.navigator.clipboard.writeText(key.key_prefix);
+  copiedPrefixId.value = key.id;
+  setTimeout(() => {
+    if (copiedPrefixId.value === key.id) copiedPrefixId.value = null;
   }, 2000);
 }
 
@@ -645,6 +655,21 @@ watch(
               </div>
               <div class="flex items-center gap-1 shrink-0">
                 <Button
+                  variant="ghost"
+                  size="sm"
+                  class="h-8 w-8 p-0 text-muted-foreground"
+                  :title="
+                    copiedPrefixId === key.id ? 'Copied!' : 'Copy key prefix'
+                  "
+                  @click="copyKeyPrefix(key)"
+                >
+                  <Check
+                    v-if="copiedPrefixId === key.id"
+                    class="h-4 w-4 text-success"
+                  />
+                  <Copy v-else class="h-4 w-4" />
+                </Button>
+                <Button
                   variant="outline"
                   size="sm"
                   class="h-8 text-xs"
@@ -661,7 +686,7 @@ watch(
                   title="Delete key"
                   @click="handleRevokeKey(key.id)"
                 >
-                  <Trash2 class="h-3 w-3" />
+                  <Trash2 class="h-4 w-4" />
                 </Button>
               </div>
             </div>
