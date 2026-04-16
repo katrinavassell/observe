@@ -30,6 +30,7 @@ function coerceEventRow(row: Record<string, unknown>) {
       row.output_tokens != null
         ? parseInt(row.output_tokens as string, 10)
         : null,
+    tokens_source: (row.tokens_source as string | null) ?? null,
   };
 }
 
@@ -921,8 +922,15 @@ export function createEventsRoutes(
             revenueSource = "mrr_allocation";
           }
 
+          // Only mark tokens_source='direct' when the SDK actually provided
+          // the split — otherwise leave NULL so the backfill job can fill it.
+          const tokensSource =
+            evt.inputTokens != null || evt.outputTokens != null
+              ? "direct"
+              : null;
+
           placeholders.push(
-            `($${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, 'sdk', 'event', false, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++})`,
+            `($${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, 'sdk', 'event', false, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++})`,
           );
           values.push(
             userId,
@@ -945,6 +953,7 @@ export function createEventsRoutes(
             evt.costType ?? (evt.model ? "llm" : "generic"),
             evt.inputTokens ?? null,
             evt.outputTokens ?? null,
+            tokensSource,
           );
         }
 
@@ -954,7 +963,7 @@ export function createEventsRoutes(
           cost_amount, cost_unit, revenue_amount, usage_units,
           model, model_provider, source, granularity, is_inferred, idempotency_key, revenue_source,
           trace_id, span_id, parent_span_id, duration_ms, cost_type,
-          input_tokens, output_tokens
+          input_tokens, output_tokens, tokens_source
         ) VALUES ${placeholders.join(", ")}
         ON CONFLICT (user_id, idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING
       `;

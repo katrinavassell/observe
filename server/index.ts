@@ -26,6 +26,7 @@ import { createFeatureDefinitionsRoutes } from "./routes/feature-definitions.js"
 import { createA2ARoutes } from "./routes/a2a.js";
 import { createCloudCostRoutes } from "./routes/cloud-costs.js";
 import { createBillingApiRoutes } from "./routes/billing-api.js";
+import { createBackfillRoutes } from "./routes/backfill.js";
 import {
   createInferenceRoutes,
   computeInferenceProfiles,
@@ -217,6 +218,7 @@ app.use(createFeatureDefinitionsRoutes(pool, ensureVisitor));
 app.use(createInferenceRoutes(pool, ensureVisitor));
 app.use(createA2ARoutes(pool, ensureVisitor));
 app.use(createCloudCostRoutes(pool, ensureVisitor));
+app.use(createBackfillRoutes(pool, ensureVisitor));
 
 // ─── Weekly digest (cloud-only, manual trigger for admin) ───────────────────
 import { runWeeklyDigest } from "./digest.js";
@@ -496,6 +498,11 @@ async function _doDbInit() {
     );
     await pool.query(
       `ALTER TABLE observe_events ADD COLUMN IF NOT EXISTS output_tokens INT`,
+    );
+    // Track where the token split came from: 'direct' from SDK, 'estimated'
+    // backfilled from provider daily aggregates, NULL for pre-backfill rows.
+    await pool.query(
+      `ALTER TABLE observe_events ADD COLUMN IF NOT EXISTS tokens_source TEXT`,
     );
 
     await pool.query(`

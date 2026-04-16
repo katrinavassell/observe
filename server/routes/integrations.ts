@@ -360,12 +360,15 @@ export function createIntegrationsRoutes(
           );
         }
 
+        // Persist the encrypted key so the historical-tokens backfill job
+        // can call the usage API later without the user re-entering it.
+        const encryptedOpenAIKey = encryptApiKey(api_key);
         await pool.query(
-          `INSERT INTO integrations (user_id, provider, api_key_prefix, has_usage_access, connected_at)
-         VALUES ($1, 'openai', $2, $3, NOW())
+          `INSERT INTO integrations (user_id, provider, api_key_prefix, has_usage_access, connected_at, encrypted_api_key)
+         VALUES ($1, 'openai', $2, $3, NOW(), $4)
          ON CONFLICT (user_id, provider)
-         DO UPDATE SET api_key_prefix = $2, has_usage_access = $3, connected_at = NOW()`,
-          [visitorId, keyPrefix, hasUsageAccess],
+         DO UPDATE SET api_key_prefix = $2, has_usage_access = $3, connected_at = NOW(), encrypted_api_key = $4`,
+          [visitorId, keyPrefix, hasUsageAccess, encryptedOpenAIKey],
         );
 
         // Track OpenAI sync usage in Tanso
@@ -570,12 +573,15 @@ export function createIntegrationsRoutes(
           );
         }
 
+        // Persist the encrypted key so the historical-tokens backfill job
+        // can call the usage API later without the user re-entering it.
+        const encryptedAnthropicKey = encryptApiKey(api_key);
         await pool.query(
-          `INSERT INTO integrations (user_id, provider, api_key_prefix, has_usage_access, connected_at)
-         VALUES ($1, 'anthropic', $2, $3, NOW())
+          `INSERT INTO integrations (user_id, provider, api_key_prefix, has_usage_access, connected_at, encrypted_api_key)
+         VALUES ($1, 'anthropic', $2, $3, NOW(), $4)
          ON CONFLICT (user_id, provider)
-         DO UPDATE SET api_key_prefix = $2, has_usage_access = $3, connected_at = NOW()`,
-          [visitorId, keyPrefix, hasUsageAccess],
+         DO UPDATE SET api_key_prefix = $2, has_usage_access = $3, connected_at = NOW(), encrypted_api_key = $4`,
+          [visitorId, keyPrefix, hasUsageAccess, encryptedAnthropicKey],
         );
 
         // Track Anthropic sync usage in Tanso

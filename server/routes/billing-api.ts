@@ -937,8 +937,8 @@ export function createBillingApiRoutes(
         }
 
         await pool.query(
-          `INSERT INTO integrations (user_id, provider, api_key_prefix, has_usage_access, connected_at) VALUES ($1, 'openai', $2, $3, NOW()) ON CONFLICT (user_id, provider) DO UPDATE SET api_key_prefix = $2, has_usage_access = $3, connected_at = NOW()`,
-          [visitorId, keyPrefix, hasUsageAccess],
+          `INSERT INTO integrations (user_id, provider, api_key_prefix, has_usage_access, connected_at, encrypted_api_key) VALUES ($1, 'openai', $2, $3, NOW(), $4) ON CONFLICT (user_id, provider) DO UPDATE SET api_key_prefix = $2, has_usage_access = $3, connected_at = NOW(), encrypted_api_key = $4`,
+          [visitorId, keyPrefix, hasUsageAccess, encryptApiKey(api_key)],
         );
         deps.trackBillingUsage(visitorId, "openai_sync", "openai_connected");
         res.json({
@@ -1134,8 +1134,8 @@ export function createBillingApiRoutes(
         }
 
         await pool.query(
-          `INSERT INTO integrations (user_id, provider, api_key_prefix, has_usage_access, connected_at) VALUES ($1, 'anthropic', $2, $3, NOW()) ON CONFLICT (user_id, provider) DO UPDATE SET api_key_prefix = $2, has_usage_access = $3, connected_at = NOW()`,
-          [visitorId, keyPrefix, hasUsageAccess],
+          `INSERT INTO integrations (user_id, provider, api_key_prefix, has_usage_access, connected_at, encrypted_api_key) VALUES ($1, 'anthropic', $2, $3, NOW(), $4) ON CONFLICT (user_id, provider) DO UPDATE SET api_key_prefix = $2, has_usage_access = $3, connected_at = NOW(), encrypted_api_key = $4`,
+          [visitorId, keyPrefix, hasUsageAccess, encryptApiKey(api_key)],
         );
         deps.trackBillingUsage(
           visitorId,
