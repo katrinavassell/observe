@@ -631,8 +631,15 @@ export function createEventsRoutes(
         }
 
         await pool.query(
-          "INSERT INTO sdk_api_keys (user_id, key_hash, key_prefix, encrypted_key, name) VALUES ($1, $2, $3, $4, $5)",
-          [userId, keyHash, keyPrefix, encryptedKey, finalName],
+          "INSERT INTO sdk_api_keys (user_id, account_id, key_hash, key_prefix, encrypted_key, name) VALUES ($1, $2, $3, $4, $5, $6)",
+          [
+            userId,
+            req.accountId ?? null,
+            keyHash,
+            keyPrefix,
+            encryptedKey,
+            finalName,
+          ],
         );
 
         res.json({ key: rawKey, prefix: keyPrefix, name: finalName });
@@ -722,8 +729,15 @@ export function createEventsRoutes(
         const encryptedKey = encryptApiKey(rawKey);
 
         const result = await pool.query(
-          "INSERT INTO sdk_api_keys (user_id, key_hash, key_prefix, encrypted_key, name) VALUES ($1, $2, $3, $4, $5) RETURNING id",
-          [userId, keyHash, keyPrefix, encryptedKey, name],
+          "INSERT INTO sdk_api_keys (user_id, account_id, key_hash, key_prefix, encrypted_key, name) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id",
+          [
+            userId,
+            req.accountId ?? null,
+            keyHash,
+            keyPrefix,
+            encryptedKey,
+            name,
+          ],
         );
 
         res.json({
@@ -1130,10 +1144,11 @@ export function createEventsRoutes(
               : null;
 
           placeholders.push(
-            `($${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, 'sdk', 'event', false, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++})`,
+            `($${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, 'sdk', 'event', false, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++})`,
           );
           values.push(
             userId,
+            req.accountId ?? null,
             evt.customerReferenceId,
             evt.featureKey,
             evt.eventName,
@@ -1169,7 +1184,7 @@ export function createEventsRoutes(
 
         const insertQuery = `
         INSERT INTO observe_events (
-          user_id, customer_id, feature_key, event_name, timestamp,
+          user_id, account_id, customer_id, feature_key, event_name, timestamp,
           cost_amount, cost_unit, revenue_amount, usage_units,
           model, model_provider, source, granularity, is_inferred, idempotency_key, revenue_source,
           trace_id, span_id, parent_span_id, duration_ms, cost_type,
@@ -1216,16 +1231,17 @@ export function createEventsRoutes(
             const fdPlaceholders: string[] = [];
             const fdValues: unknown[] = [];
             let fdIdx = 1;
+            const acctId = req.accountId ?? null;
             for (const fk of uniqueFeatureKeys) {
               fdPlaceholders.push(
-                `($${fdIdx}, $${fdIdx + 1}, $${fdIdx + 2}, 'outcome')`,
+                `($${fdIdx}, $${fdIdx + 1}, $${fdIdx + 2}, $${fdIdx + 3}, 'outcome')`,
               );
-              fdValues.push(userId, fk, fk);
-              fdIdx += 3;
+              fdValues.push(userId, acctId, fk, fk);
+              fdIdx += 4;
             }
             pool
               .query(
-                `INSERT INTO feature_definitions (user_id, feature_key, name, kind)
+                `INSERT INTO feature_definitions (user_id, account_id, feature_key, name, kind)
                  VALUES ${fdPlaceholders.join(", ")}
                  ON CONFLICT (user_id, feature_key) DO NOTHING`,
                 fdValues,
@@ -1371,22 +1387,23 @@ export function createEventsRoutes(
 
         const insertResult = await pool.query(
           `INSERT INTO observe_events (
-             user_id, customer_id, feature_key, event_name, timestamp,
+             user_id, account_id, customer_id, feature_key, event_name, timestamp,
              cost_amount, cost_unit, revenue_amount, usage_units,
              model, model_provider, source, granularity, is_inferred,
              idempotency_key, revenue_source, duration_ms, cost_type,
              input_tokens, output_tokens, tokens_source
            ) VALUES (
-             $1, 'test_customer', $2, 'test_event', NOW(),
-             $3, 'usd', 0, $4,
-             $5, 'openai', 'sdk', 'event', false,
-             $6, 'none', 500, 'llm',
-             $7, $8, 'direct'
+             $1, $2, 'test_customer', $3, 'test_event', NOW(),
+             $4, 'usd', 0, $5,
+             $6, 'openai', 'sdk', 'event', false,
+             $7, 'none', 500, 'llm',
+             $8, $9, 'direct'
            )
            ON CONFLICT (user_id, idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING
            RETURNING *`,
           [
             userId,
+            req.accountId ?? null,
             featureKey,
             cost,
             inputTokens + outputTokens,
