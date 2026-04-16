@@ -1246,14 +1246,9 @@ Observe.identify({ <span class="text-sky-300">customerId</span>: user.stripeId }
                       : "Backfill historical tokens"
                   }}
                 </Button>
-                <Button
-                  v-if="canEdit"
-                  variant="outline"
-                  size="sm"
-                  @click="showOpenAIModal = true"
-                >
-                  Connect
-                </Button>
+                <p v-else-if="canEdit" class="text-xs text-muted-foreground">
+                  Connect OpenAI above to enable backfill
+                </p>
               </div>
             </div>
           </CardContent>
@@ -1295,14 +1290,9 @@ Observe.identify({ <span class="text-sky-300">customerId</span>: user.stripeId }
                       : "Backfill historical tokens"
                   }}
                 </Button>
-                <Button
-                  v-if="canEdit"
-                  variant="outline"
-                  size="sm"
-                  @click="showAnthropicModal = true"
-                >
-                  Connect
-                </Button>
+                <p v-else-if="canEdit" class="text-xs text-muted-foreground">
+                  Connect Anthropic above to enable backfill
+                </p>
               </div>
             </div>
           </CardContent>
