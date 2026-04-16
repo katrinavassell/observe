@@ -5,7 +5,7 @@
  * Uses the OpenAI Usage API to fetch cost data.
  * Requires an API key with organization admin access for usage data.
  */
-import { ref, computed } from "vue";
+import { ref, computed, watch } from "vue";
 import { toast } from "vue-sonner";
 import {
   X,
@@ -33,9 +33,14 @@ const apiKey = ref("");
 const showKey = ref(false);
 const isConnecting = ref(false);
 
+watch(apiKey, (value) => {
+  const trimmed = value.trim();
+  const normalized = trimmed.replace(/^(sk-)+(?=sk-)/, "");
+  if (normalized !== value) apiKey.value = normalized;
+});
+
 const isKeyValid = computed(() => {
   const key = apiKey.value.trim();
-  // OpenAI keys start with 'sk-'
   return key.startsWith("sk-") && key.length > 20;
 });
 
@@ -164,7 +169,7 @@ function handleClose() {
               <Input
                 v-model="apiKey"
                 :type="showKey ? 'text' : 'password'"
-                placeholder="sk-..."
+                placeholder="sk-proj-… or sk-…"
                 :class="`pr-10 font-mono text-sm ${apiKey.trim() && isKeyValid ? 'border-success/50' : ''}`"
               />
               <button
@@ -177,7 +182,8 @@ function handleClose() {
               </button>
             </div>
             <p class="text-xs text-muted-foreground">
-              Your key is encrypted and stored securely.
+              Paste the full key — don't prepend anything. Your key is encrypted
+              and stored securely.
             </p>
           </div>
 

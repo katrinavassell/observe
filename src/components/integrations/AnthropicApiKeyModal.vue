@@ -5,7 +5,7 @@
  * Uses the Anthropic Admin API to fetch usage data.
  * Requires an Admin API key (different from regular API key).
  */
-import { ref, computed } from "vue";
+import { ref, computed, watch } from "vue";
 import { toast } from "vue-sonner";
 import {
   X,
@@ -33,9 +33,14 @@ const apiKey = ref("");
 const showKey = ref(false);
 const isConnecting = ref(false);
 
+watch(apiKey, (value) => {
+  const trimmed = value.trim();
+  const normalized = trimmed.replace(/^(sk-(?:ant-)?)+(?=sk-ant-)/, "");
+  if (normalized !== value) apiKey.value = normalized;
+});
+
 const isKeyValid = computed(() => {
   const key = apiKey.value.trim();
-  // Anthropic admin keys start with 'sk-ant-admin'
   return key.startsWith("sk-ant-admin") || key.startsWith("sk-ant-api");
 });
 
@@ -175,7 +180,8 @@ function handleClose() {
               </button>
             </div>
             <p class="text-xs text-muted-foreground">
-              Your key is encrypted and stored securely.
+              Paste the full key — don't prepend anything. Your key is encrypted
+              and stored securely.
             </p>
           </div>
 
