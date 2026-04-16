@@ -260,18 +260,21 @@ curl -X POST https://observemetrics.com/api/events/ingest \
 }
 ```
 
-`requestBody` and `responseBody` are first-class fields that show up as Request
-and Response sections in the event detail view. Pass the full messages array
-and the provider response object — Observe stores them as JSONB.
+To see request/response in the event detail view, include `requestBody` and
+`responseBody`:
 
 ```ts
-requestBody: { model, messages },
-responseBody: res,  // the full OpenAI / Anthropic response
+requestBody: { messages },
+responseBody: {
+  choices: [{ message: { content: res.choices[0].message.content } }],
+},
 ```
 
-Optional — skip if content is sensitive or subject to privacy requirements.
-Legacy pattern using `properties: { prompt, completion }` still works as a
-fallback, but the explicit fields are preferred.
+Optional — skip if content is sensitive.
+
+Observe stores these as JSONB on the event row. The legacy pattern using
+`properties: { prompt, completion }` still works as a fallback, but the
+first-class fields above are preferred.
 
 - Batch up to 1000 events per request.
 - If `costAmount` is omitted and `model` + `inputTokens` + `outputTokens` are provided,
