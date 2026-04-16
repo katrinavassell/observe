@@ -3,10 +3,9 @@ import type { Pool } from "pg";
 import { z } from "zod";
 import { type AuthRequest } from "./auth.js";
 
-// Server metric set must match the 8 shown in src/pages/AlertsPage.vue.
-// Dropped in a previous commit (frontend-only) but server still accepted
-// them — creating a state where an API client could create alert rules
-// using metrics the UI couldn't display. Now aligned.
+// Schema accepts the 4 global metrics exposed in the UI.
+// Legacy metrics (usage_velocity, customer_cost_share, etc.) still evaluate
+// in METRIC_QUERIES for existing DB rules — just not creatable from the UI.
 const alertRuleSchema = z.object({
   name: z.string().min(1).max(100),
   metric: z
@@ -14,22 +13,16 @@ const alertRuleSchema = z.object({
       "daily_cost",
       "margin_percent",
       "customer_margin",
-      "usage_velocity",
-      "customer_cost_share",
-      "top_customer_unprofitable",
-      "model_cost_increase",
       "customer_concentration",
     ])
     .optional(),
-  operator: z.enum(["gt", "lt", "gte", "lte"]),
+  operator: z.enum(["gt", "lt"]),
   threshold: z.coerce.number(),
   email: z.string().email().optional().or(z.literal("")),
   webhook_url: z.string().url().optional().or(z.literal("")),
   cooldown_minutes: z.coerce.number().int().min(1).default(60),
   trigger_type: z.string().default("threshold"),
-  segment_type: z
-    .enum(["all", "cohort", "mrr_above", "mrr_below", "specific"])
-    .default("all"),
+  segment_type: z.enum(["all", "cohort", "specific"]).default("all"),
   segment_value: z.string().optional().or(z.literal("")),
   evaluation: z.enum(["aggregate", "per_customer"]).default("aggregate"),
 });
@@ -53,7 +46,7 @@ const CUSTOMER_TRIGGER_QUERIES: Record<string, string> = {
     FROM (SELECT COUNT(*) as cnt FROM observe_events WHERE user_id = $1 AND customer_id = $2 AND timestamp >= NOW() - INTERVAL '30 days') curr,
          (SELECT COUNT(*) as cnt FROM observe_events WHERE user_id = $1 AND customer_id = $2 AND timestamp >= NOW() - INTERVAL '60 days' AND timestamp < NOW() - INTERVAL '30 days') prev`,
   margin_negative: `SELECT CASE WHEN COALESCE(SUM(revenue_amount), 0) = 0 THEN 0 ELSE ((SUM(revenue_amount) - SUM(cost_amount)) / SUM(revenue_amount) * 100) END as value FROM observe_events WHERE user_id = $1 AND customer_id = $2 AND timestamp >= NOW() - INTERVAL '30 days'`,
-  inactive: `SELECT EXTRACT(EPOCH FROM (NOW() - MAX(timestamp))) / 86400 as value FROM observe_events WHERE user_id = $1 AND customer_id = $2`,
+  inactive: `SELECT COALESCE(EXTRACT(EPOCH FROM (NOW() - MAX(timestamp))) / 86400, 999999) as value FROM observe_events WHERE user_id = $1 AND customer_id = $2`,
   cost_spike: `SELECT CASE WHEN prev.cost = 0 THEN 0 ELSE ((curr.cost - prev.cost) / prev.cost * 100) END as value
     FROM (SELECT COALESCE(SUM(cost_amount), 0) as cost FROM observe_events WHERE user_id = $1 AND customer_id = $2 AND timestamp >= NOW() - INTERVAL '7 days') curr,
          (SELECT COALESCE(SUM(cost_amount), 0) as cost FROM observe_events WHERE user_id = $1 AND customer_id = $2 AND timestamp >= NOW() - INTERVAL '14 days' AND timestamp < NOW() - INTERVAL '7 days') prev`,
@@ -97,8 +90,20 @@ const TANSO_UPSELLS: Record<string, string> = {
 };
 
 function formatValue(metric: string, value: number): string {
-  if (metric === "margin_percent") return `${value.toFixed(1)}%`;
-  return `$${value.toFixed(4)}`;
+  switch (metric) {
+    case "margin_percent":
+    case "customer_margin":
+    case "customer_cost_share":
+    case "model_cost_increase":
+    case "customer_concentration":
+      return `${value.toFixed(1)}%`;
+    case "usage_velocity":
+      return `${value.toFixed(1)}x`;
+    case "top_customer_unprofitable":
+      return `${Math.round(value)}`;
+    default:
+      return `$${value.toFixed(4)}`;
+  }
 }
 
 async function sendAlertEmail(
@@ -224,7 +229,7 @@ async function sendAlertWebhook(
 export async function checkAlerts(pool: Pool, userId: string) {
   try {
     const { rows: rules } = await pool.query(
-      `SELECT * FROM alert_rules WHERE user_id = $1 AND enabled = true`,
+      `SELECT * FROM alert_rules WHERE user_id = $1 AND enabled = true AND (evaluation = 'aggregate' OR evaluation IS NULL)`,
       [userId],
     );
 
@@ -267,14 +272,12 @@ export async function checkAlerts(pool: Pool, userId: string) {
             delivered = delivered || ok;
           }
 
-          // If at least one channel fired, record the trigger so we
-          // don't spam while cooldown is active.
-          if (delivered) {
-            await pool.query(
-              "UPDATE alert_rules SET last_triggered_at = NOW() WHERE id = $1",
-              [rule.id],
-            );
-          }
+          // Always update cooldown timestamp when alert triggers,
+          // regardless of delivery success, to prevent spam on repeated failures.
+          await pool.query(
+            "UPDATE alert_rules SET last_triggered_at = NOW() WHERE id = $1",
+            [rule.id],
+          );
         }
       } catch (ruleErr) {
         console.error(`checkAlerts rule ${rule.id} error:`, ruleErr);
@@ -299,7 +302,7 @@ function matchesSegment(
       // Cohort matching requires the full cohort computation — for now match on segment field
       return customer?.segment === rule.segment_value;
     default:
-      return true;
+      return false;
   }
 }
 
@@ -316,7 +319,10 @@ async function sendCustomerAlertEmail(
   customerName: string,
 ): Promise<boolean> {
   const RESEND_API_KEY = process.env.RESEND_API_KEY;
-  if (!RESEND_API_KEY) return false;
+  if (!RESEND_API_KEY) {
+    console.warn("RESEND_API_KEY not set, skipping customer alert email");
+    return false;
+  }
 
   const from = process.env.ALERT_FROM_EMAIL || "alerts@example.com";
   const triggerLabel = rule.trigger_type.replace(/_/g, " ");
@@ -482,8 +488,6 @@ export async function checkCustomerAlerts(
             deliveryStatus.webhook = ok ? "sent" : "failed";
           }
 
-          const delivered = Object.values(deliveryStatus).includes("sent");
-
           // Write to history regardless
           await pool.query(
             `INSERT INTO alert_history (user_id, alert_rule_id, customer_id, customer_name, trigger_type, current_value, threshold, delivery_status)
@@ -500,12 +504,11 @@ export async function checkCustomerAlerts(
             ],
           );
 
-          if (delivered) {
-            await pool.query(
-              "UPDATE alert_rules SET last_triggered_at = NOW() WHERE id = $1",
-              [rule.id],
-            );
-          }
+          // Always update cooldown timestamp to prevent spam on repeated delivery failures.
+          await pool.query(
+            "UPDATE alert_rules SET last_triggered_at = NOW() WHERE id = $1",
+            [rule.id],
+          );
         }
       } catch (ruleErr) {
         console.error(`checkCustomerAlerts rule ${rule.id} error:`, ruleErr);
@@ -573,8 +576,8 @@ export function createAlertRoutes(
           });
         }
         const { rows } = await pool.query(
-          `INSERT INTO alert_rules (user_id, name, metric, operator, threshold, email, webhook_url, cooldown_minutes)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+          `INSERT INTO alert_rules (user_id, name, metric, operator, threshold, email, webhook_url, cooldown_minutes, trigger_type, segment_type, segment_value, evaluation)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING *`,
           [
             req.visitorId,
             parsed.name,
@@ -584,6 +587,10 @@ export function createAlertRoutes(
             email,
             webhookUrl,
             parsed.cooldown_minutes,
+            parsed.trigger_type,
+            parsed.segment_type,
+            parsed.segment_value || null,
+            parsed.evaluation,
           ],
         );
         res.json(rows[0]);
@@ -635,6 +642,10 @@ export function createAlertRoutes(
           "webhook_url",
           "enabled",
           "cooldown_minutes",
+          "trigger_type",
+          "segment_type",
+          "segment_value",
+          "evaluation",
         ] as const) {
           const val = (parsed as Record<string, unknown>)[field];
           if (val !== undefined) {
@@ -742,7 +753,7 @@ export function createAlertRoutes(
         res.json({ count: parseInt(rows[0].count) });
       } catch (err) {
         console.error("GET /alerts/history/count error:", err);
-        res.json({ count: 0 });
+        res.status(500).json({ error: "Failed to load alert count" });
       }
     },
   );
