@@ -246,9 +246,11 @@ async function handleToggle(rule: AlertRule) {
   }
 }
 
-async function handleDelete(id: number) {
+async function handleDelete(rule: AlertRule) {
+  const label = rule.name || triggerById(rule.trigger_type)?.label || "alert";
+  if (!window.confirm(`Delete "${label}"? This can't be undone.`)) return;
   try {
-    await deleteAlertRule(id);
+    await deleteAlertRule(rule.id);
     queryClient.invalidateQueries({ queryKey: ["alert-rules"] });
     toast.success("Alert deleted");
   } catch {
@@ -647,11 +649,13 @@ function relativeTime(dateStr: string) {
               <Button
                 variant="ghost"
                 size="sm"
-                class="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                class="h-7 text-xs text-muted-foreground hover:text-destructive"
                 aria-label="Delete alert"
-                @click="handleDelete(rule.id)"
+                title="Delete this alert rule"
+                @click="handleDelete(rule)"
               >
-                <Trash2 class="h-3.5 w-3.5" />
+                <Trash2 class="h-3.5 w-3.5 mr-1" />
+                Delete
               </Button>
             </div>
           </div>
