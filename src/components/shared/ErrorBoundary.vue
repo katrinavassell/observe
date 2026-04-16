@@ -26,15 +26,28 @@ function retry() {
 <template>
   <div
     v-if="error"
-    class="rounded-lg border border-red-200 bg-red-50 p-6 text-center"
+    class="rounded-lg border border-red-200 bg-red-50 p-6 text-left space-y-2"
   >
-    <p class="text-sm font-medium text-red-800">{{ props.fallbackMessage }}</p>
-    <button
-      class="mt-3 text-xs text-red-600 underline hover:text-red-800"
-      @click="retry"
+    <p class="text-sm font-medium text-red-800 text-center">
+      {{ props.fallbackMessage }}
+    </p>
+    <pre
+      class="text-[11px] text-red-700 bg-red-100/60 rounded p-2 overflow-x-auto max-h-40 whitespace-pre-wrap break-words"
+      >{{ error.message
+      }}{{
+        error.stack
+          ? "\n\n" + error.stack.split("\n").slice(0, 5).join("\n")
+          : ""
+      }}</pre
     >
-      Try again
-    </button>
+    <div class="text-center">
+      <button
+        class="mt-1 text-xs text-red-600 underline hover:text-red-800"
+        @click="retry"
+      >
+        Try again
+      </button>
+    </div>
   </div>
   <slot v-else />
 </template>
