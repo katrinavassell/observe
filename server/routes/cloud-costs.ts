@@ -57,11 +57,11 @@ export function createCloudCostRoutes(pool: Pool, ensureVisitor: any) {
         const encrypted = encryptApiKey(JSON.stringify(credentials));
 
         await pool.query(
-          `INSERT INTO cloud_integrations (user_id, provider, encrypted_credentials)
-           VALUES ($1, $2, $3)
+          `INSERT INTO cloud_integrations (user_id, account_id, provider, encrypted_credentials)
+           VALUES ($1, $2, $3, $4)
            ON CONFLICT (user_id, provider)
-           DO UPDATE SET encrypted_credentials = $3, last_sync_at = NULL`,
-          [visitorId, provider, encrypted],
+           DO UPDATE SET encrypted_credentials = $4, last_sync_at = NULL`,
+          [visitorId, req.accountId ?? null, provider, encrypted],
         );
 
         res.json({ success: true });
@@ -94,11 +94,9 @@ export function createCloudCostRoutes(pool: Pool, ensureVisitor: any) {
           [visitorId, provider],
         );
         if (result.rows.length === 0) {
-          return res
-            .status(404)
-            .json({
-              error: `No ${provider} credentials found. Connect first.`,
-            });
+          return res.status(404).json({
+            error: `No ${provider} credentials found. Connect first.`,
+          });
         }
 
         const credentials = JSON.parse(

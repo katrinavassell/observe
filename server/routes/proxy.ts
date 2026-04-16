@@ -7,6 +7,25 @@ import { checkAlerts } from "./alerts.js";
 
 type GetAdminVisitorIdFn = () => Promise<string | null>;
 
+async function resolveAccountIdForUser(
+  pool: Pool,
+  userId: string,
+): Promise<number | null> {
+  try {
+    const result = await pool.query(
+      `SELECT account_id FROM user_accounts
+        WHERE user_id = (SELECT id FROM users WHERE visitor_id = $1)
+          AND role = 'owner' LIMIT 1`,
+      [userId],
+    );
+    if (result.rows[0]) return result.rows[0].account_id;
+  } catch (err) {
+    console.error("proxy: account_id fallback lookup failed:", err);
+  }
+  console.warn("proxy: no account_id resolved for user", userId);
+  return null;
+}
+
 function parseProxyHeaders(req: Request): {
   observeKey: string | undefined;
   customerId: string;
@@ -143,9 +162,10 @@ export function createProxyRoutes(
     tokensSaved: number,
     costSaved: number,
   ): Promise<void> {
+    const accountId = await resolveAccountIdForUser(pool, userId);
     await pool.query(
-      `INSERT INTO proxy_cache (user_id, cache_key, model, request_hash, response_body, tokens_saved, cost_saved, expires_at)
-       VALUES ($1, $2, $3, $2, $4, $5, $6, NOW() + ($7 || ' seconds')::INTERVAL)
+      `INSERT INTO proxy_cache (user_id, account_id, cache_key, model, request_hash, response_body, tokens_saved, cost_saved, expires_at)
+       VALUES ($1, $2, $3, $4, $3, $5, $6, $7, NOW() + ($8 || ' seconds')::INTERVAL)
        ON CONFLICT (user_id, cache_key) DO UPDATE SET
          response_body = EXCLUDED.response_body,
          tokens_saved = proxy_cache.tokens_saved + EXCLUDED.tokens_saved,
@@ -153,6 +173,7 @@ export function createProxyRoutes(
          expires_at = EXCLUDED.expires_at`,
       [
         userId,
+        accountId,
         cacheKey,
         model,
         responseBody,
@@ -244,17 +265,20 @@ export function createProxyRoutes(
       console.error("Proxy revenue enrichment failed:", err);
     }
 
+    const accountId = await resolveAccountIdForUser(pool, userId);
+
     // 1. Log for the user
     await pool.query(
       `INSERT INTO observe_events (
-        user_id, customer_id, feature_key, event_name, timestamp,
+        user_id, account_id, customer_id, feature_key, event_name, timestamp,
         cost_amount, cost_unit, revenue_amount, usage_units,
         model, model_provider, source, granularity, is_inferred, properties,
         request_body, response_body, revenue_source, agent_id,
         trace_id, span_id, parent_span_id, duration_ms, cost_type
-      ) VALUES ($1, $2, $3, 'cost', NOW(), $4, 'usd', $5, $6, $7, $8, 'proxy', 'event', false, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)`,
+      ) VALUES ($1, $2, $3, $4, 'cost', NOW(), $5, 'usd', $6, $7, $8, $9, 'proxy', 'event', false, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)`,
       [
         userId,
+        accountId,
         customerId,
         featureKey,
         cost,
@@ -281,19 +305,21 @@ export function createProxyRoutes(
     // 2. Mirror to admin account so admin@example.com sees all activity
     deps
       .getAdminVisitorId()
-      .then((adminId) => {
+      .then(async (adminId) => {
         if (!adminId || adminId === userId) return;
+        const adminAccountId = await resolveAccountIdForUser(pool, adminId);
         pool
           .query(
             `INSERT INTO observe_events (
-          user_id, customer_id, feature_key, event_name, timestamp,
+          user_id, account_id, customer_id, feature_key, event_name, timestamp,
           cost_amount, cost_unit, revenue_amount, usage_units,
           model, model_provider, source, granularity, is_inferred, properties,
           request_body, response_body, revenue_source, agent_id,
           trace_id, span_id, parent_span_id, duration_ms, cost_type
-        ) VALUES ($1, $2, $3, 'cost', NOW(), $4, 'usd', $5, $6, $7, $8, 'proxy', 'event', false, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)`,
+        ) VALUES ($1, $2, $3, $4, 'cost', NOW(), $5, 'usd', $6, $7, $8, $9, 'proxy', 'event', false, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)`,
             [
               adminId,
+              adminAccountId,
               customerId,
               featureKey,
               cost,

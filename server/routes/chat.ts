@@ -365,10 +365,11 @@ Only include action blocks when the user explicitly asks you to do something. Fo
         };
         pool
           .query(
-            `INSERT INTO observe_events (user_id, feature_key, event_name, timestamp, cost_amount, cost_unit, usage_units, model, model_provider, source, granularity, is_inferred, request_body, response_body)
-           VALUES ($1, 'ai_chat', 'chat', NOW(), $2, 'usd', $3, 'gpt-4o-mini', 'openai', 'internal', 'event', false, $4, $5)`,
+            `INSERT INTO observe_events (user_id, account_id, feature_key, event_name, timestamp, cost_amount, cost_unit, usage_units, model, model_provider, source, granularity, is_inferred, request_body, response_body)
+           VALUES ($1, $2, 'ai_chat', 'chat', NOW(), $3, 'usd', $4, 'gpt-4o-mini', 'openai', 'internal', 'event', false, $5, $6)`,
             [
               req.visitorId,
+              req.accountId ?? null,
               (
                 (usage?.prompt_tokens || 0) * 0.00000015 +
                 (usage?.completion_tokens || 0) * 0.0000006
@@ -383,10 +384,11 @@ Only include action blocks when the user explicitly asks you to do something. Fo
         // Count against AI message quota (ai_insights table is what billing checks)
         pool
           .query(
-            `INSERT INTO ai_insights (user_id, insight_type, title, description, tokens_used, cost_usd)
-           VALUES ($1, 'chat', 'Chat message', $2, $3, $4)`,
+            `INSERT INTO ai_insights (user_id, account_id, insight_type, title, description, tokens_used, cost_usd)
+           VALUES ($1, $2, 'chat', 'Chat message', $3, $4, $5)`,
             [
               req.visitorId,
+              req.accountId ?? null,
               content.slice(0, 200),
               (usage?.prompt_tokens || 0) + (usage?.completion_tokens || 0),
               (
@@ -510,10 +512,11 @@ Only include action blocks when the user explicitly asks you to do something. Fo
                 .json({ error: `Invalid operator: ${operator}` });
             }
             await pool.query(
-              `INSERT INTO alert_rules (user_id, name, metric, operator, threshold, email, cooldown_minutes)
-             VALUES ($1, $2, $3, $4, $5, $6, 60)`,
+              `INSERT INTO alert_rules (user_id, account_id, name, metric, operator, threshold, email, cooldown_minutes)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, 60)`,
               [
                 req.visitorId,
+                req.accountId ?? null,
                 action.name || "Chat-created alert",
                 metric,
                 operator,

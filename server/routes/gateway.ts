@@ -12,6 +12,25 @@ import { calculateCostFromTokens } from "../model-pricing.js";
 import { decryptApiKey, encryptApiKey } from "../stripe-client.js";
 import { checkAlerts } from "./alerts.js";
 
+async function resolveAccountIdForUser(
+  pool: Pool,
+  userId: string,
+): Promise<number | null> {
+  try {
+    const result = await pool.query(
+      `SELECT account_id FROM user_accounts
+        WHERE user_id = (SELECT id FROM users WHERE visitor_id = $1)
+          AND role = 'owner' LIMIT 1`,
+      [userId],
+    );
+    if (result.rows[0]) return result.rows[0].account_id;
+  } catch (err) {
+    console.error("gateway: account_id fallback lookup failed:", err);
+  }
+  console.warn("gateway: no account_id resolved for user", userId);
+  return null;
+}
+
 // ── Types ────────────────────────────────────────────────────────────────────
 
 interface RoutingTarget {
@@ -643,16 +662,19 @@ export function createGatewayRoutes(
       console.error("Gateway revenue enrichment failed:", err);
     }
 
+    const accountId = await resolveAccountIdForUser(pool, userId);
+
     await pool.query(
       `INSERT INTO observe_events (
-        user_id, customer_id, feature_key, event_name, timestamp,
+        user_id, account_id, customer_id, feature_key, event_name, timestamp,
         cost_amount, cost_unit, revenue_amount, usage_units,
         model, model_provider, source, granularity, is_inferred, properties,
         request_body, response_body, revenue_source, agent_id,
         trace_id, span_id, parent_span_id, duration_ms, cost_type
-      ) VALUES ($1, $2, $3, 'cost', NOW(), $4, 'usd', $5, $6, $7, $8, 'gateway', 'event', false, $9, $10, $11, $12, $13, $14, $15, $16, $17, 'llm')`,
+      ) VALUES ($1, $2, $3, $4, 'cost', NOW(), $5, 'usd', $6, $7, $8, $9, 'gateway', 'event', false, $10, $11, $12, $13, $14, $15, $16, $17, $18, 'llm')`,
       [
         userId,
+        accountId,
         customerId,
         featureKey,
         cost,
@@ -922,8 +944,13 @@ export function createGatewayRoutes(
           return res.status(400).json({ error: "name is required" });
         }
         const result = await pool.query(
-          "INSERT INTO routing_configs (user_id, name, description) VALUES ($1, $2, $3) RETURNING *",
-          [req.visitorId, name.trim(), description || null],
+          "INSERT INTO routing_configs (user_id, account_id, name, description) VALUES ($1, $2, $3, $4) RETURNING *",
+          [
+            req.visitorId,
+            req.accountId ?? null,
+            name.trim(),
+            description || null,
+          ],
         );
         res.status(201).json(result.rows[0]);
       } catch (error: any) {
