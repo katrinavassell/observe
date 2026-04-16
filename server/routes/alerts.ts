@@ -50,6 +50,7 @@ const CUSTOMER_TRIGGER_QUERIES: Record<string, string> = {
   cost_spike: `SELECT CASE WHEN prev.cost = 0 THEN 0 ELSE ((curr.cost - prev.cost) / prev.cost * 100) END as value
     FROM (SELECT COALESCE(SUM(cost_amount), 0) as cost FROM observe_events WHERE user_id = $1 AND customer_id = $2 AND timestamp >= NOW() - INTERVAL '7 days') curr,
          (SELECT COALESCE(SUM(cost_amount), 0) as cost FROM observe_events WHERE user_id = $1 AND customer_id = $2 AND timestamp >= NOW() - INTERVAL '14 days' AND timestamp < NOW() - INTERVAL '7 days') prev`,
+  customer_cost_budget: `SELECT COALESCE(SUM(cost_amount), 0) as value FROM observe_events WHERE user_id = $1 AND customer_id = $2 AND timestamp >= NOW() - INTERVAL '30 days'`,
 };
 
 const OPERATOR_FNS: Record<

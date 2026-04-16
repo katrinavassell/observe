@@ -59,11 +59,10 @@ interface Trigger {
 }
 
 const TRIGGERS: Trigger[] = [
-  // ── Global ──
   {
     id: "daily_cost",
-    label: "Daily cost too high",
-    description: "Total API cost in the last 24 hours",
+    label: "Daily cost budget",
+    description: "Total API cost exceeds your daily budget",
     defaultThreshold: 100,
     unit: "$",
     direction: "above",
@@ -71,87 +70,25 @@ const TRIGGERS: Trigger[] = [
     metric: "daily_cost",
   },
   {
-    id: "margin_percent",
-    label: "Overall margin too low",
-    description: "Blended margin across all customers (30 days)",
-    defaultThreshold: 40,
-    unit: "%",
-    direction: "below",
-    evaluation: "aggregate",
-    metric: "margin_percent",
-  },
-  {
-    id: "customer_margin",
-    label: "Customer margin too low",
-    description: "Any single customer's margin drops below threshold",
-    defaultThreshold: 10,
-    unit: "%",
-    direction: "below",
-    evaluation: "aggregate",
-    metric: "customer_margin",
-  },
-  {
-    id: "customer_concentration",
-    label: "Single customer dominates cost",
-    description: "Top customer's share of total API cost",
-    defaultThreshold: 40,
-    unit: "%",
-    direction: "above",
-    evaluation: "aggregate",
-    metric: "customer_concentration",
-  },
-  // ── Per customer ──
-  {
-    id: "usage_decline",
-    label: "Customer usage declining",
-    description: "Event count dropped over 30 days",
-    defaultThreshold: 30,
-    unit: "%",
-    direction: "below",
-    evaluation: "per_customer",
-  },
-  {
-    id: "usage_growth",
-    label: "Customer usage growing",
-    description: "Event count increased over 30 days",
-    defaultThreshold: 20,
-    unit: "%",
-    direction: "above",
-    evaluation: "per_customer",
-  },
-  {
-    id: "margin_negative",
-    label: "Customer losing money",
-    description: "Customer cost exceeds revenue",
-    defaultThreshold: 0,
-    unit: "%",
-    direction: "below",
-    evaluation: "per_customer",
-  },
-  {
     id: "inactive",
     label: "Customer gone quiet",
-    description: "No events for more than N days",
+    description: "No events from a customer for more than N days",
     defaultThreshold: 14,
     unit: "days",
     direction: "above",
     evaluation: "per_customer",
   },
   {
-    id: "cost_spike",
-    label: "Customer cost spiking",
-    description: "Week-over-week cost increase",
-    defaultThreshold: 50,
-    unit: "%",
+    id: "customer_cost_budget",
+    label: "Customer cost budget",
+    description: "A single customer's monthly cost exceeds your limit",
+    defaultThreshold: 500,
+    unit: "$",
     direction: "above",
     evaluation: "per_customer",
+    metric: "customer_concentration",
   },
 ];
-
-const GLOBAL_TRIGGERS = TRIGGERS.filter((t) => t.evaluation === "aggregate");
-const CUSTOMER_TRIGGERS = TRIGGERS.filter(
-  (t) => t.evaluation === "per_customer",
-);
 
 const SEGMENT_OPTIONS = [
   { value: "all" as const, label: "All customers" },
@@ -496,48 +433,19 @@ function relativeTime(dateStr: string) {
             What do you want to watch?
           </p>
 
-          <!-- Global triggers -->
-          <div>
-            <p
-              class="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2"
+          <!-- Triggers (flat list — 3 items don't need sections) -->
+          <div class="space-y-2">
+            <button
+              v-for="t in TRIGGERS"
+              :key="t.id"
+              class="w-full text-left p-3 rounded-lg border transition-colors hover:bg-muted/30"
+              @click="selectTrigger(t)"
             >
-              Global
-            </p>
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              <button
-                v-for="t in GLOBAL_TRIGGERS"
-                :key="t.id"
-                class="text-left p-3 rounded-lg border transition-colors hover:bg-muted/30"
-                @click="selectTrigger(t)"
-              >
-                <span class="text-sm font-medium">{{ t.label }}</span>
-                <p class="text-xs text-muted-foreground mt-1">
-                  {{ t.description }}
-                </p>
-              </button>
-            </div>
-          </div>
-
-          <!-- Per-customer triggers -->
-          <div class="pt-1">
-            <p
-              class="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2"
-            >
-              Per customer
-            </p>
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              <button
-                v-for="t in CUSTOMER_TRIGGERS"
-                :key="t.id"
-                class="text-left p-3 rounded-lg border transition-colors hover:bg-muted/30"
-                @click="selectTrigger(t)"
-              >
-                <span class="text-sm font-medium">{{ t.label }}</span>
-                <p class="text-xs text-muted-foreground mt-1">
-                  {{ t.description }}
-                </p>
-              </button>
-            </div>
+              <span class="text-sm font-medium">{{ t.label }}</span>
+              <p class="text-xs text-muted-foreground mt-1">
+                {{ t.description }}
+              </p>
+            </button>
           </div>
         </template>
 
