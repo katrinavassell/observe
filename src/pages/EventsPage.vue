@@ -413,6 +413,7 @@ type RevenueKind =
   | "explicit"
   | "feature_pricing"
   | "mrr_allocation"
+  | "subscription"
   | "none"
   | null
   | undefined;
@@ -459,11 +460,12 @@ function revenueSourceTooltip(src: RevenueKind): string {
       return "Metered Stripe price — unit_price × usage_units. Exact.";
     case "tiered":
       return "Graduated Stripe price — unit_price from the tier matching this customer's month-to-date usage. Exact.";
+    case "subscription":
     case "allocated":
     case "mrr_allocation":
-      return "Flat subscription — MRR / 30 split per day. Estimate.";
+      return "Revenue from subscription — see customer page";
     case "hybrid":
-      return "Flat + metered — base allocated per day + metered portion exact.";
+      return "Flat + metered — metered portion exact per unit; flat base lives at customer level.";
     case "explicit":
       return "Sent directly on the event payload.";
     case "feature_pricing":
