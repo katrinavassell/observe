@@ -42,11 +42,13 @@ const router = createRouter({
     },
     {
       path: "/customers",
-      redirect: "/",
+      name: "customers",
+      component: () => import("@/pages/CustomersPage.vue"),
     },
     {
       path: "/customers/:id",
-      redirect: "/",
+      name: "customer-detail",
+      component: () => import("@/pages/CustomerDetailPage.vue"),
     },
     {
       path: "/data-sources",
