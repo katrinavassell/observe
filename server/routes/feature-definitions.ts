@@ -118,11 +118,12 @@ export function createFeatureDefinitionsRoutes(pool: Pool, ensureVisitor: any) {
       try {
         const result = await pool.query(
           `INSERT INTO feature_definitions
-             (user_id, name, feature_key, kind, description, code_location)
-           VALUES ($1, $2, $3, $4, $5, $6)
+             (user_id, account_id, name, feature_key, kind, description, code_location)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)
            RETURNING *`,
           [
             req.visitorId,
+            req.accountId ?? null,
             name.trim(),
             normalizedKey,
             effectiveKind,
