@@ -25,6 +25,16 @@ export function createEnsureVisitor(pool: Pool) {
     next: NextFunction,
   ) {
     try {
+      // Test auth bypass — only active when TEST_AUTH_BYPASS=1
+      if (
+        process.env.TEST_AUTH_BYPASS === "1" &&
+        req.headers["x-test-user-id"]
+      ) {
+        req.visitorId = req.headers["x-test-user-id"] as string;
+        req.accountEmail = "test@observe.test";
+        return next();
+      }
+
       const authHeader = req.headers.authorization;
 
       if (authHeader?.startsWith("Bearer ")) {
