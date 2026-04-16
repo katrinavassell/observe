@@ -258,6 +258,18 @@ curl -X POST https://observemetrics.com/api/events/ingest \
 }
 ```
 
+To see request/response in the Observe event detail view, include `prompt` and
+`completion` in `properties`:
+
+```ts
+properties: {
+  prompt: messages,                         // the messages array you sent
+  completion: res.choices[0].message.content // the final assistant text
+}
+```
+
+Optional — skip if content is sensitive or subject to privacy requirements.
+
 - Batch up to 1000 events per request.
 - If `costAmount` is omitted and `model` + `inputTokens` + `outputTokens` are provided,
   Observe computes cost automatically using OpenRouter pricing.
@@ -367,8 +379,9 @@ connect Stripe separately, or use explicit `revenueAmount` / Feature Pricing.
 - Do not install `@tanso/observe`. The correct package is `@tansohq/observe`.
 - Do not replace OpenAI / Anthropic with anything else. Observe wraps the existing
   client, it does not substitute models.
-- Do not track end-user message content. Observe logs cost + metadata, not prompts
-  or completions.
+- Observe logs cost + metadata by default. Optionally include `prompt` /
+  `completion` in `properties` for debugging visibility — skip if content is
+  sensitive or subject to privacy requirements.
 - Do not hardcode the API key.
 - Do not touch an existing AI gateway without asking the user. If you see Portkey,
   LiteLLM, Helicone, OpenRouter, or similar in `package.json`, use Path 2.

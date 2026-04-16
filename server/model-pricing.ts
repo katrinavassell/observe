@@ -712,6 +712,36 @@ function findApplicableTier(
 
 // ─── Cost Calculation ───────────────────────────────────────────────────────
 
+/**
+ * Resolve effective pricing for (user, model) honoring tier > override > global.
+ * Extracted so read-time display can compute split costs using the same
+ * priority chain that ingest used to price the event.
+ */
+export async function resolveModelPricing(
+  pool: Pg.Pool,
+  model: string,
+  userId?: string,
+): Promise<ModelPrice | null> {
+  if (userId) {
+    const tiers = await getUserPricingTiers(pool, userId, model);
+    if (tiers.length > 0) {
+      const monthlyUsage = await getMonthlyTokenUsage(pool, userId, model);
+      const tier = findApplicableTier(tiers, monthlyUsage);
+      if (tier) {
+        return {
+          model,
+          provider: "",
+          input_cost_per_million: tier.input_cost_per_million,
+          output_cost_per_million: tier.output_cost_per_million,
+        };
+      }
+    }
+    const override = await getUserModelPricing(pool, userId, model);
+    if (override) return override;
+  }
+  return await getModelPricing(pool, model);
+}
+
 export async function calculateCostFromTokens(
   pool: Pg.Pool,
   model: string | undefined,
@@ -720,37 +750,8 @@ export async function calculateCostFromTokens(
   userId?: string,
 ): Promise<number> {
   if (!model || (inputTokens == null && outputTokens == null)) return 0;
-
-  let pricing: ModelPrice | null = null;
-
-  // Priority 1: Check tiered pricing (volume-based)
-  if (userId) {
-    const tiers = await getUserPricingTiers(pool, userId, model);
-    if (tiers.length > 0) {
-      const monthlyUsage = await getMonthlyTokenUsage(pool, userId, model);
-      const tier = findApplicableTier(tiers, monthlyUsage);
-      if (tier) {
-        pricing = {
-          model,
-          provider: "",
-          input_cost_per_million: tier.input_cost_per_million,
-          output_cost_per_million: tier.output_cost_per_million,
-        };
-      }
-    }
-  }
-
-  // Priority 2: Flat user override
-  if (!pricing && userId) {
-    pricing = await getUserModelPricing(pool, userId, model);
-  }
-
-  // Priority 3: Global default
-  if (!pricing) {
-    pricing = await getModelPricing(pool, model);
-  }
+  const pricing = await resolveModelPricing(pool, model, userId);
   if (!pricing) return 0;
-
   const inputCost =
     ((inputTokens || 0) * pricing.input_cost_per_million) / 1_000_000;
   const outputCost =

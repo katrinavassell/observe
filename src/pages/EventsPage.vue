@@ -432,6 +432,15 @@ function customerMarginTooltip(event: ObserveEvent): string {
   return `Customer margin this month: ${m.pct}% ($${m.revenue.toFixed(2)} revenue / $${m.cost.toFixed(2)} cost)`;
 }
 
+function costTooltip(event: ObserveEvent): string {
+  if (event.input_cost != null || event.output_cost != null) {
+    const inp = formatCost(event.input_cost);
+    const out = formatCost(event.output_cost);
+    return `${inp} input / ${out} output`;
+  }
+  return "";
+}
+
 function usageTooltip(event: ObserveEvent): string {
   if (event.input_tokens != null || event.output_tokens != null) {
     const inp = (event.input_tokens ?? 0).toLocaleString();
@@ -876,6 +885,7 @@ function customerMarginClass(pct: number | null): string {
                   <td
                     v-else-if="col.id === 'cost'"
                     class="px-4 py-3 text-right text-xs text-foreground tabular-nums"
+                    :title="costTooltip(event)"
                   >
                     {{ formatCost(event.cost_amount) }}
                   </td>
@@ -1037,11 +1047,51 @@ function customerMarginClass(pct: number | null): string {
                       >
                     </div>
 
+                    <!-- Request/response from properties (Path 1 direct-ingest fallback) -->
+                    <div
+                      v-if="
+                        !eventDetails[event.id].request_body &&
+                        eventDetails[event.id].properties?.prompt
+                      "
+                    >
+                      <p
+                        class="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2"
+                      >
+                        Request
+                      </p>
+                      <div class="flex gap-2">
+                        <User class="h-4 w-4 text-foreground shrink-0 mt-0.5" />
+                        <p class="text-sm whitespace-pre-wrap break-words">
+                          {{ eventDetails[event.id].properties!.prompt }}
+                        </p>
+                      </div>
+                    </div>
+                    <div
+                      v-if="
+                        !eventDetails[event.id].response_body &&
+                        eventDetails[event.id].properties?.completion
+                      "
+                    >
+                      <p
+                        class="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2"
+                      >
+                        Response
+                      </p>
+                      <div class="flex gap-2">
+                        <Bot class="h-4 w-4 text-success shrink-0 mt-0.5" />
+                        <p class="text-sm whitespace-pre-wrap break-words">
+                          {{ eventDetails[event.id].properties!.completion }}
+                        </p>
+                      </div>
+                    </div>
+
                     <!-- No bodies available -->
                     <p
                       v-if="
                         !eventDetails[event.id].request_body &&
-                        !eventDetails[event.id].response_body
+                        !eventDetails[event.id].response_body &&
+                        !eventDetails[event.id].properties?.prompt &&
+                        !eventDetails[event.id].properties?.completion
                       "
                       class="text-sm text-muted-foreground"
                     >
@@ -1077,7 +1127,21 @@ function customerMarginClass(pct: number | null): string {
                         }}
                         tokens</span
                       >
-                      <span v-if="eventDetails[event.id].cost_amount"
+                      <span
+                        v-if="
+                          eventDetails[event.id].input_cost != null ||
+                          eventDetails[event.id].output_cost != null
+                        "
+                      >
+                        ${{
+                          (eventDetails[event.id].input_cost ?? 0).toFixed(4)
+                        }}
+                        input / ${{
+                          (eventDetails[event.id].output_cost ?? 0).toFixed(4)
+                        }}
+                        output
+                      </span>
+                      <span v-else-if="eventDetails[event.id].cost_amount"
                         >${{
                           eventDetails[event.id].cost_amount.toFixed(4)
                         }}
