@@ -607,7 +607,9 @@ export function createAlertRoutes(
   );
 
   // Update alert rule
-  const alertPatchSchema = alertRuleSchema.partial();
+  const alertPatchSchema = alertRuleSchema
+    .extend({ enabled: z.boolean() })
+    .partial();
 
   router.patch(
     "/alerts/:id",
