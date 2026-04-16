@@ -987,11 +987,20 @@ export function createCustomersRoutes(
           ),
         ]);
 
-        if (customerRes.rows.length === 0) {
+        // Customer may exist only in observe_events (not in customers table)
+        // — e.g. events ingested with a customerReferenceId before Stripe sync.
+        if (customerRes.rows.length === 0 && eventsRes.rows.length === 0) {
           return res.status(404).json({ error: "Customer not found" });
         }
 
-        const c = customerRes.rows[0];
+        const c = customerRes.rows[0] ?? {
+          customer_id: id,
+          name: id,
+          email: null,
+          segment: null,
+          created_at:
+            eventsRes.rows[eventsRes.rows.length - 1]?.timestamp ?? null,
+        };
         const totalCost = featureRes.rows.reduce(
           (sum: number, r: { total_cost: string }) =>
             sum + (parseFloat(r.total_cost) || 0),
