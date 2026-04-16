@@ -41,11 +41,11 @@ const DEFAULT_COLUMNS: TableColumn[] = [
   { id: "customers", label: "Customers", visible: true, align: "right" },
   { id: "features", label: "Features", visible: true, align: "right" },
   { id: "usage", label: "Usage", visible: true, align: "right" },
-  { id: "total_cost", label: "Total Cost", visible: true, align: "right" },
+  { id: "total_cost", label: "Model Cost", visible: true, align: "right" },
   { id: "avg_cost", label: "Avg Cost/Event", visible: true, align: "right" },
   {
     id: "total_revenue",
-    label: "Total Revenue",
+    label: "Model Revenue",
     visible: true,
     align: "right",
   },
@@ -470,13 +470,13 @@ const filteredPricing = computed(() => {
         <div class="text-2xl font-semibold">{{ models.length }}</div>
       </div>
       <div class="rounded-lg border bg-card p-4">
-        <div class="text-xs text-muted-foreground mb-1">Total Cost</div>
+        <div class="text-xs text-muted-foreground mb-1">Model Cost</div>
         <div class="text-2xl font-semibold">
           {{ formatCurrency(models.reduce((s, m) => s + m.total_cost, 0)) }}
         </div>
       </div>
       <div class="rounded-lg border bg-card p-4">
-        <div class="text-xs text-muted-foreground mb-1">Total Revenue</div>
+        <div class="text-xs text-muted-foreground mb-1">Model Revenue</div>
         <div class="text-2xl font-semibold">
           {{ formatCurrency(models.reduce((s, m) => s + m.total_revenue, 0)) }}
         </div>

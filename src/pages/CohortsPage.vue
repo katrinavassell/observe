@@ -778,7 +778,7 @@ const excludedCount = computed(() => {
                 >
                   <td class="p-3">
                     <button
-                      v-if="c.model_swap_suggestion"
+                      v-if="false && c.model_swap_suggestion"
                       type="button"
                       class="inline-flex items-center justify-center rounded hover:bg-muted p-0.5 cursor-pointer"
                       @click.stop="toggleRow(c.customer_id)"
@@ -868,10 +868,13 @@ const excludedCount = computed(() => {
                     </td>
                   </template>
                 </tr>
-                <!-- Expanded model-swap row -->
+                <!-- Expanded model-swap row (hidden — compares unrelated
+                     model families, not trustworthy yet) -->
                 <tr
                   v-if="
-                    expandedRows.has(c.customer_id) && c.model_swap_suggestion
+                    false &&
+                    expandedRows.has(c.customer_id) &&
+                    c.model_swap_suggestion
                   "
                   class="bg-muted/20"
                 >
