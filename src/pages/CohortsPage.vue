@@ -777,15 +777,21 @@ const excludedCount = computed(() => {
                   @click="$router.push(`/customers/${c.customer_id}`)"
                 >
                   <td class="p-3">
-                    <component
-                      :is="
-                        expandedRows.has(c.customer_id)
-                          ? ChevronDown
-                          : ChevronRight
-                      "
+                    <button
                       v-if="c.model_swap_suggestion"
-                      class="h-3.5 w-3.5 text-muted-foreground"
-                    />
+                      type="button"
+                      class="inline-flex items-center justify-center rounded hover:bg-muted p-0.5 cursor-pointer"
+                      @click.stop="toggleRow(c.customer_id)"
+                    >
+                      <component
+                        :is="
+                          expandedRows.has(c.customer_id)
+                            ? ChevronDown
+                            : ChevronRight
+                        "
+                        class="h-3.5 w-3.5 text-muted-foreground"
+                      />
+                    </button>
                   </td>
 
                   <template v-for="col in visibleColumns" :key="col.id">
