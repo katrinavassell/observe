@@ -563,23 +563,25 @@ export function createCohortsRoutes(pool: Pool, ensureVisitor: any) {
             const values: unknown[] = [];
             const placeholders: string[] = [];
             let idx = 1;
+            const accountId = req.accountId ?? null;
             for (const c of chunk) {
               placeholders.push(
-                `($${idx}, $${idx + 1}, $${idx + 2}, $${idx + 3}, $${idx + 4}, $${idx + 5})`,
+                `($${idx}, $${idx + 1}, $${idx + 2}, $${idx + 3}, $${idx + 4}, $${idx + 5}, $${idx + 6})`,
               );
               values.push(
                 userId,
+                accountId,
                 c.customer_id,
                 c.health_score,
                 c.margin_pct,
                 c.adoption_depth,
                 c.active_days_30d,
               );
-              idx += 6;
+              idx += 7;
             }
             pool
               .query(
-                `INSERT INTO customer_health_snapshots (user_id, customer_id, health_score, margin_pct, adoption_depth, active_days)
+                `INSERT INTO customer_health_snapshots (user_id, account_id, customer_id, health_score, margin_pct, adoption_depth, active_days)
                  VALUES ${placeholders.join(", ")}
                  ON CONFLICT (user_id, customer_id, snapshot_date) DO UPDATE SET
                    health_score = EXCLUDED.health_score,

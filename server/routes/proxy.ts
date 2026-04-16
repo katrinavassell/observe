@@ -143,9 +143,20 @@ export function createProxyRoutes(
     tokensSaved: number,
     costSaved: number,
   ): Promise<void> {
+    // Proxy resolves userId from API key — no req.accountId. Fallback: owner's account_id.
+    const accountIdResult = await pool.query(
+      `SELECT account_id FROM user_accounts WHERE user_id = (SELECT id FROM users WHERE visitor_id = $1) AND role = 'owner' LIMIT 1`,
+      [userId],
+    );
+    const accountId: number | null =
+      accountIdResult.rows[0]?.account_id ?? null;
+    if (accountId === null) {
+      console.warn("writeCache: no owner account_id for visitor", userId);
+    }
+
     await pool.query(
-      `INSERT INTO proxy_cache (user_id, cache_key, model, request_hash, response_body, tokens_saved, cost_saved, expires_at)
-       VALUES ($1, $2, $3, $2, $4, $5, $6, NOW() + ($7 || ' seconds')::INTERVAL)
+      `INSERT INTO proxy_cache (user_id, account_id, cache_key, model, request_hash, response_body, tokens_saved, cost_saved, expires_at)
+       VALUES ($1, $2, $3, $4, $3, $5, $6, $7, NOW() + ($8 || ' seconds')::INTERVAL)
        ON CONFLICT (user_id, cache_key) DO UPDATE SET
          response_body = EXCLUDED.response_body,
          tokens_saved = proxy_cache.tokens_saved + EXCLUDED.tokens_saved,
@@ -153,6 +164,7 @@ export function createProxyRoutes(
          expires_at = EXCLUDED.expires_at`,
       [
         userId,
+        accountId,
         cacheKey,
         model,
         responseBody,
@@ -218,6 +230,17 @@ export function createProxyRoutes(
     const resJson = responseBody ? JSON.stringify(responseBody) : null;
     const totalTokens = inputTokens + outputTokens;
 
+    // Proxy resolves userId from API key — no req.accountId. Fallback: owner's account_id.
+    const accountIdResult = await pool.query(
+      `SELECT account_id FROM user_accounts WHERE user_id = (SELECT id FROM users WHERE visitor_id = $1) AND role = 'owner' LIMIT 1`,
+      [userId],
+    );
+    const accountId: number | null =
+      accountIdResult.rows[0]?.account_id ?? null;
+    if (accountId === null) {
+      console.warn("logProxyEvent: no owner account_id for visitor", userId);
+    }
+
     // Revenue enrichment: feature_pricing > MRR allocation > 0
     let revenue = 0;
     let revenueSource = "none";
@@ -247,14 +270,15 @@ export function createProxyRoutes(
     // 1. Log for the user
     await pool.query(
       `INSERT INTO observe_events (
-        user_id, customer_id, feature_key, event_name, timestamp,
+        user_id, account_id, customer_id, feature_key, event_name, timestamp,
         cost_amount, cost_unit, revenue_amount, usage_units,
         model, model_provider, source, granularity, is_inferred, properties,
         request_body, response_body, revenue_source, agent_id,
         trace_id, span_id, parent_span_id, duration_ms, cost_type
-      ) VALUES ($1, $2, $3, 'cost', NOW(), $4, 'usd', $5, $6, $7, $8, 'proxy', 'event', false, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)`,
+      ) VALUES ($1, $2, $3, $4, 'cost', NOW(), $5, 'usd', $6, $7, $8, $9, 'proxy', 'event', false, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)`,
       [
         userId,
+        accountId,
         customerId,
         featureKey,
         cost,
@@ -281,19 +305,33 @@ export function createProxyRoutes(
     // 2. Mirror to admin account so admin@example.com sees all activity
     deps
       .getAdminVisitorId()
-      .then((adminId) => {
+      .then(async (adminId) => {
         if (!adminId || adminId === userId) return;
+        // Resolve admin's account_id via the same owner lookup pattern.
+        const adminAcctResult = await pool.query(
+          `SELECT account_id FROM user_accounts WHERE user_id = (SELECT id FROM users WHERE visitor_id = $1) AND role = 'owner' LIMIT 1`,
+          [adminId],
+        );
+        const adminAccountId: number | null =
+          adminAcctResult.rows[0]?.account_id ?? null;
+        if (adminAccountId === null) {
+          console.warn(
+            "logProxyEvent admin mirror: no owner account_id for visitor",
+            adminId,
+          );
+        }
         pool
           .query(
             `INSERT INTO observe_events (
-          user_id, customer_id, feature_key, event_name, timestamp,
+          user_id, account_id, customer_id, feature_key, event_name, timestamp,
           cost_amount, cost_unit, revenue_amount, usage_units,
           model, model_provider, source, granularity, is_inferred, properties,
           request_body, response_body, revenue_source, agent_id,
           trace_id, span_id, parent_span_id, duration_ms, cost_type
-        ) VALUES ($1, $2, $3, 'cost', NOW(), $4, 'usd', $5, $6, $7, $8, 'proxy', 'event', false, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)`,
+        ) VALUES ($1, $2, $3, $4, 'cost', NOW(), $5, 'usd', $6, $7, $8, $9, 'proxy', 'event', false, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)`,
             [
               adminId,
+              adminAccountId,
               customerId,
               featureKey,
               cost,

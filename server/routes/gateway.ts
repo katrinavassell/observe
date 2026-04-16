@@ -614,6 +614,17 @@ export function createGatewayRoutes(
   ): Promise<void> {
     const totalTokens = inputTokens + outputTokens;
 
+    // Gateway resolves userId from API key — no req.accountId. Fallback: owner's account_id.
+    const accountIdResult = await pool.query(
+      `SELECT account_id FROM user_accounts WHERE user_id = (SELECT id FROM users WHERE visitor_id = $1) AND role = 'owner' LIMIT 1`,
+      [userId],
+    );
+    const accountId: number | null =
+      accountIdResult.rows[0]?.account_id ?? null;
+    if (accountId === null) {
+      console.warn("logGatewayEvent: no owner account_id for visitor", userId);
+    }
+
     // Revenue enrichment
     let revenue = 0;
     let revenueSource = "none";
@@ -645,14 +656,15 @@ export function createGatewayRoutes(
 
     await pool.query(
       `INSERT INTO observe_events (
-        user_id, customer_id, feature_key, event_name, timestamp,
+        user_id, account_id, customer_id, feature_key, event_name, timestamp,
         cost_amount, cost_unit, revenue_amount, usage_units,
         model, model_provider, source, granularity, is_inferred, properties,
         request_body, response_body, revenue_source, agent_id,
         trace_id, span_id, parent_span_id, duration_ms, cost_type
-      ) VALUES ($1, $2, $3, 'cost', NOW(), $4, 'usd', $5, $6, $7, $8, 'gateway', 'event', false, $9, $10, $11, $12, $13, $14, $15, $16, $17, 'llm')`,
+      ) VALUES ($1, $2, $3, $4, 'cost', NOW(), $5, 'usd', $6, $7, $8, $9, 'gateway', 'event', false, $10, $11, $12, $13, $14, $15, $16, $17, $18, 'llm')`,
       [
         userId,
+        accountId,
         customerId,
         featureKey,
         cost,
@@ -922,8 +934,13 @@ export function createGatewayRoutes(
           return res.status(400).json({ error: "name is required" });
         }
         const result = await pool.query(
-          "INSERT INTO routing_configs (user_id, name, description) VALUES ($1, $2, $3) RETURNING *",
-          [req.visitorId, name.trim(), description || null],
+          "INSERT INTO routing_configs (user_id, account_id, name, description) VALUES ($1, $2, $3, $4) RETURNING *",
+          [
+            req.visitorId,
+            req.accountId ?? null,
+            name.trim(),
+            description || null,
+          ],
         );
         res.status(201).json(result.rows[0]);
       } catch (error: any) {

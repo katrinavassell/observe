@@ -52,6 +52,19 @@ export async function syncStripeDataForUser(
   userId: string,
   apiKey?: string,
 ): Promise<{ customers: number; subscriptions: number; plans: number }> {
+  // Helper is called from handlers without plumbing req — resolve owner's account_id.
+  const accountIdResult = await pool.query(
+    `SELECT account_id FROM user_accounts WHERE user_id = (SELECT id FROM users WHERE visitor_id = $1) AND role = 'owner' LIMIT 1`,
+    [userId],
+  );
+  const accountId: number | null = accountIdResult.rows[0]?.account_id ?? null;
+  if (accountId === null) {
+    console.warn(
+      "syncStripeDataForUser: no owner account_id for visitor",
+      userId,
+    );
+  }
+
   const stripe = apiKey
     ? createStripeClientFromKey(apiKey)
     : await getStripeClientForUser(pool, userId);
@@ -114,10 +127,11 @@ export async function syncStripeDataForUser(
     let idx = 1;
     for (const p of batch) {
       placeholders.push(
-        `($${idx++}, $${idx++}, $${idx++}, $${idx++}, $${idx++}, $${idx++})`,
+        `($${idx++}, $${idx++}, $${idx++}, $${idx++}, $${idx++}, $${idx++}, $${idx++})`,
       );
       values.push(
         userId,
+        accountId,
         p.planId,
         p.name,
         p.amount,
@@ -126,7 +140,7 @@ export async function syncStripeDataForUser(
       );
     }
     await pool.query(
-      `INSERT INTO plans (user_id, plan_id, name, price_amount, interval_months, billing_model) VALUES ${placeholders.join(", ")} ON CONFLICT DO NOTHING`,
+      `INSERT INTO plans (user_id, account_id, plan_id, name, price_amount, interval_months, billing_model) VALUES ${placeholders.join(", ")} ON CONFLICT DO NOTHING`,
       values,
     );
   }
@@ -141,16 +155,19 @@ export async function syncStripeDataForUser(
     const placeholders: string[] = [];
     let idx = 1;
     for (const customer of batch) {
-      placeholders.push(`($${idx++}, $${idx++}, $${idx++}, $${idx++})`);
+      placeholders.push(
+        `($${idx++}, $${idx++}, $${idx++}, $${idx++}, $${idx++})`,
+      );
       values.push(
         userId,
+        accountId,
         customer.id,
         customer.name || customer.email || customer.id,
         customer.email || null,
       );
     }
     await pool.query(
-      `INSERT INTO customers (user_id, customer_id, name, email) VALUES ${placeholders.join(", ")} ON CONFLICT DO NOTHING`,
+      `INSERT INTO customers (user_id, account_id, customer_id, name, email) VALUES ${placeholders.join(", ")} ON CONFLICT DO NOTHING`,
       values,
     );
   }
@@ -267,10 +284,11 @@ export async function syncStripeDataForUser(
     let eventIdx = 1;
     for (const s of batch) {
       subPlaceholders.push(
-        `($${subIdx++}, $${subIdx++}, $${subIdx++}, $${subIdx++}, $${subIdx++}, $${subIdx++}, $${subIdx++}, $${subIdx++}, $${subIdx++})`,
+        `($${subIdx++}, $${subIdx++}, $${subIdx++}, $${subIdx++}, $${subIdx++}, $${subIdx++}, $${subIdx++}, $${subIdx++}, $${subIdx++}, $${subIdx++})`,
       );
       subValues.push(
         userId,
+        accountId,
         s.id,
         s.customerId,
         s.priceId,
@@ -284,18 +302,18 @@ export async function syncStripeDataForUser(
       // Analytics can roll up subscription revenue alongside events.
       if (s.mrr > 0) {
         eventPlaceholders.push(
-          `($${eventIdx++}, $${eventIdx++}, 'subscription', 'revenue', NOW(), $${eventIdx++}, 'stripe', 'monthly_aggregate')`,
+          `($${eventIdx++}, $${eventIdx++}, $${eventIdx++}, 'subscription', 'revenue', NOW(), $${eventIdx++}, 'stripe', 'monthly_aggregate')`,
         );
-        eventValues.push(userId, s.customerId, s.mrr);
+        eventValues.push(userId, accountId, s.customerId, s.mrr);
       }
     }
     await pool.query(
-      `INSERT INTO subscriptions (user_id, subscription_id, customer_id, plan_id, is_active, mrr_override, pricing_model, pricing_tiers, unit_price) VALUES ${subPlaceholders.join(", ")} ON CONFLICT DO NOTHING`,
+      `INSERT INTO subscriptions (user_id, account_id, subscription_id, customer_id, plan_id, is_active, mrr_override, pricing_model, pricing_tiers, unit_price) VALUES ${subPlaceholders.join(", ")} ON CONFLICT DO NOTHING`,
       subValues,
     );
     if (eventPlaceholders.length > 0) {
       await pool.query(
-        `INSERT INTO observe_events (user_id, customer_id, feature_key, event_name, timestamp, revenue_amount, source, granularity) VALUES ${eventPlaceholders.join(", ")}`,
+        `INSERT INTO observe_events (user_id, account_id, customer_id, feature_key, event_name, timestamp, revenue_amount, source, granularity) VALUES ${eventPlaceholders.join(", ")}`,
         eventValues,
       );
     }
@@ -405,10 +423,11 @@ export function createIntegrationsRoutes(
 
                     if (cost > 0) {
                       await pool.query(
-                        `INSERT INTO observe_events (user_id, customer_id, feature_key, event_name, timestamp, cost_amount, cost_unit, revenue_amount, usage_units, model, model_provider, source, granularity)
-                       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+                        `INSERT INTO observe_events (user_id, account_id, customer_id, feature_key, event_name, timestamp, cost_amount, cost_unit, revenue_amount, usage_units, model, model_provider, source, granularity)
+                       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
                         [
                           visitorId,
+                          req.accountId ?? null,
                           "system",
                           "openai_usage",
                           "cost",
@@ -435,8 +454,8 @@ export function createIntegrationsRoutes(
             if (eventsSynced > 0) {
               await clearSampleData(pool, visitorId);
               await pool.query(
-                `INSERT INTO user_data_status (user_id, data_mode) VALUES ($1, $2) ON CONFLICT (user_id) DO UPDATE SET data_mode = $2, updated_at = NOW()`,
-                [visitorId, "user"],
+                `INSERT INTO user_data_status (user_id, account_id, data_mode) VALUES ($1, $2, $3) ON CONFLICT (user_id) DO UPDATE SET data_mode = $3, updated_at = NOW()`,
+                [visitorId, req.accountId ?? null, "user"],
               );
             }
           } else if (usageResponse.status === 403) {
@@ -456,11 +475,17 @@ export function createIntegrationsRoutes(
         // can call the usage API later without the user re-entering it.
         const encryptedOpenAIKey = encryptApiKey(api_key);
         await pool.query(
-          `INSERT INTO integrations (user_id, provider, api_key_prefix, has_usage_access, connected_at, encrypted_api_key)
-         VALUES ($1, 'openai', $2, $3, NOW(), $4)
+          `INSERT INTO integrations (user_id, account_id, provider, api_key_prefix, has_usage_access, connected_at, encrypted_api_key)
+         VALUES ($1, $2, 'openai', $3, $4, NOW(), $5)
          ON CONFLICT (user_id, provider)
-         DO UPDATE SET api_key_prefix = $2, has_usage_access = $3, connected_at = NOW(), encrypted_api_key = $4`,
-          [visitorId, keyPrefix, hasUsageAccess, encryptedOpenAIKey],
+         DO UPDATE SET api_key_prefix = $3, has_usage_access = $4, connected_at = NOW(), encrypted_api_key = $5`,
+          [
+            visitorId,
+            req.accountId ?? null,
+            keyPrefix,
+            hasUsageAccess,
+            encryptedOpenAIKey,
+          ],
         );
 
         // Track OpenAI sync usage in Tanso
@@ -620,10 +645,11 @@ export function createIntegrationsRoutes(
 
                 if (cost > 0) {
                   await pool.query(
-                    `INSERT INTO observe_events (user_id, customer_id, feature_key, event_name, timestamp, cost_amount, cost_unit, revenue_amount, usage_units, model, model_provider, source, granularity)
-                   VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+                    `INSERT INTO observe_events (user_id, account_id, customer_id, feature_key, event_name, timestamp, cost_amount, cost_unit, revenue_amount, usage_units, model, model_provider, source, granularity)
+                   VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
                     [
                       visitorId,
+                      req.accountId ?? null,
                       "system",
                       "anthropic_usage",
                       "cost",
@@ -648,8 +674,8 @@ export function createIntegrationsRoutes(
             if (eventsSynced > 0) {
               await clearSampleData(pool, visitorId);
               await pool.query(
-                `INSERT INTO user_data_status (user_id, data_mode) VALUES ($1, $2) ON CONFLICT (user_id) DO UPDATE SET data_mode = $2, updated_at = NOW()`,
-                [visitorId, "user"],
+                `INSERT INTO user_data_status (user_id, account_id, data_mode) VALUES ($1, $2, $3) ON CONFLICT (user_id) DO UPDATE SET data_mode = $3, updated_at = NOW()`,
+                [visitorId, req.accountId ?? null, "user"],
               );
             }
           } else if (usageResponse.status === 403) {
@@ -669,11 +695,17 @@ export function createIntegrationsRoutes(
         // can call the usage API later without the user re-entering it.
         const encryptedAnthropicKey = encryptApiKey(api_key);
         await pool.query(
-          `INSERT INTO integrations (user_id, provider, api_key_prefix, has_usage_access, connected_at, encrypted_api_key)
-         VALUES ($1, 'anthropic', $2, $3, NOW(), $4)
+          `INSERT INTO integrations (user_id, account_id, provider, api_key_prefix, has_usage_access, connected_at, encrypted_api_key)
+         VALUES ($1, $2, 'anthropic', $3, $4, NOW(), $5)
          ON CONFLICT (user_id, provider)
-         DO UPDATE SET api_key_prefix = $2, has_usage_access = $3, connected_at = NOW(), encrypted_api_key = $4`,
-          [visitorId, keyPrefix, hasUsageAccess, encryptedAnthropicKey],
+         DO UPDATE SET api_key_prefix = $3, has_usage_access = $4, connected_at = NOW(), encrypted_api_key = $5`,
+          [
+            visitorId,
+            req.accountId ?? null,
+            keyPrefix,
+            hasUsageAccess,
+            encryptedAnthropicKey,
+          ],
         );
 
         // Track Anthropic sync usage in Tanso
@@ -942,11 +974,18 @@ export function createIntegrationsRoutes(
 
         // Store the integration with encrypted key
         await pool.query(
-          `INSERT INTO integrations (user_id, provider, api_key_prefix, has_usage_access, connected_at, encrypted_api_key, stripe_account_id, stripe_account_name)
-         VALUES ($1, 'stripe', $2, true, NOW(), $3, $4, $5)
+          `INSERT INTO integrations (user_id, account_id, provider, api_key_prefix, has_usage_access, connected_at, encrypted_api_key, stripe_account_id, stripe_account_name)
+         VALUES ($1, $2, 'stripe', $3, true, NOW(), $4, $5, $6)
          ON CONFLICT (user_id, provider)
-         DO UPDATE SET api_key_prefix = $2, has_usage_access = true, connected_at = NOW(), encrypted_api_key = $3, stripe_account_id = $4, stripe_account_name = $5`,
-          [visitorId, keyPrefix, encryptedKey, accountId, accountName],
+         DO UPDATE SET api_key_prefix = $3, has_usage_access = true, connected_at = NOW(), encrypted_api_key = $4, stripe_account_id = $5, stripe_account_name = $6`,
+          [
+            visitorId,
+            req.accountId ?? null,
+            keyPrefix,
+            encryptedKey,
+            accountId,
+            accountName,
+          ],
         );
 
         // Trigger initial sync
@@ -955,8 +994,8 @@ export function createIntegrationsRoutes(
           syncResult = await syncStripeDataForUser(pool, visitorId, api_key);
           await clearSampleData(pool, visitorId);
           await pool.query(
-            "INSERT INTO user_data_status (user_id, data_mode) VALUES ($1, $2) ON CONFLICT (user_id) DO UPDATE SET data_mode = $2, updated_at = NOW()",
-            [visitorId, "user"],
+            "INSERT INTO user_data_status (user_id, account_id, data_mode) VALUES ($1, $2, $3) ON CONFLICT (user_id) DO UPDATE SET data_mode = $3, updated_at = NOW()",
+            [visitorId, req.accountId ?? null, "user"],
           );
           convertReferralIfPending(visitorId);
         } catch (syncErr) {

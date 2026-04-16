@@ -105,11 +105,17 @@ export function createBillingApiRoutes(
       }
       try {
         await pool.query(
-          `INSERT INTO feature_pricing (user_id, feature_key, revenue_per_unit, unit_label)
-           VALUES ($1, $2, $3, $4)
+          `INSERT INTO feature_pricing (user_id, account_id, feature_key, revenue_per_unit, unit_label)
+           VALUES ($1, $2, $3, $4, $5)
            ON CONFLICT (user_id, feature_key)
-           DO UPDATE SET revenue_per_unit = $3, unit_label = $4`,
-          [req.visitorId, feature_key, revenue_per_unit, unit_label || "call"],
+           DO UPDATE SET revenue_per_unit = $4, unit_label = $5`,
+          [
+            req.visitorId,
+            req.accountId ?? null,
+            feature_key,
+            revenue_per_unit,
+            unit_label || "call",
+          ],
         );
         res.json({ ok: true });
       } catch (error) {
@@ -460,11 +466,18 @@ export function createBillingApiRoutes(
         const encryptedKey = encryptApiKey(api_key);
 
         await pool.query(
-          `INSERT INTO integrations (user_id, provider, api_key_prefix, has_usage_access, connected_at, encrypted_api_key, stripe_account_id, stripe_account_name)
-         VALUES ($1, 'stripe', $2, true, NOW(), $3, $4, $5)
+          `INSERT INTO integrations (user_id, account_id, provider, api_key_prefix, has_usage_access, connected_at, encrypted_api_key, stripe_account_id, stripe_account_name)
+         VALUES ($1, $2, 'stripe', $3, true, NOW(), $4, $5, $6)
          ON CONFLICT (user_id, provider)
-         DO UPDATE SET api_key_prefix = $2, has_usage_access = true, connected_at = NOW(), encrypted_api_key = $3, stripe_account_id = $4, stripe_account_name = $5`,
-          [visitorId, keyPrefix, encryptedKey, accountId, accountName],
+         DO UPDATE SET api_key_prefix = $3, has_usage_access = true, connected_at = NOW(), encrypted_api_key = $4, stripe_account_id = $5, stripe_account_name = $6`,
+          [
+            visitorId,
+            req.accountId ?? null,
+            keyPrefix,
+            encryptedKey,
+            accountId,
+            accountName,
+          ],
         );
 
         let syncResult = { customers: 0, subscriptions: 0, plans: 0 };
@@ -472,8 +485,8 @@ export function createBillingApiRoutes(
           syncResult = await syncStripeDataForUser(pool, visitorId, api_key);
           await clearSampleData(pool, visitorId);
           await pool.query(
-            "INSERT INTO user_data_status (user_id, data_mode) VALUES ($1, $2) ON CONFLICT (user_id) DO UPDATE SET data_mode = $2, updated_at = NOW()",
-            [visitorId, "user"],
+            "INSERT INTO user_data_status (user_id, account_id, data_mode) VALUES ($1, $2, $3) ON CONFLICT (user_id) DO UPDATE SET data_mode = $3, updated_at = NOW()",
+            [visitorId, req.accountId ?? null, "user"],
           );
           deps.convertReferralIfPending(visitorId);
         } catch (syncErr) {
@@ -683,10 +696,11 @@ export function createBillingApiRoutes(
           let idx = 1;
           for (const p of batch) {
             placeholders.push(
-              `($${idx++}, $${idx++}, $${idx++}, $${idx++}, $${idx++}, $${idx++})`,
+              `($${idx++}, $${idx++}, $${idx++}, $${idx++}, $${idx++}, $${idx++}, $${idx++})`,
             );
             values.push(
               req.visitorId,
+              req.accountId ?? null,
               p.planId,
               p.name,
               p.amount,
@@ -695,7 +709,7 @@ export function createBillingApiRoutes(
             );
           }
           await client.query(
-            `INSERT INTO plans (user_id, plan_id, name, price_amount, interval_months, billing_model) VALUES ${placeholders.join(", ")} ON CONFLICT DO NOTHING`,
+            `INSERT INTO plans (user_id, account_id, plan_id, name, price_amount, interval_months, billing_model) VALUES ${placeholders.join(", ")} ON CONFLICT DO NOTHING`,
             values,
           );
         }
@@ -709,16 +723,19 @@ export function createBillingApiRoutes(
           const placeholders: string[] = [];
           let idx = 1;
           for (const customer of batch) {
-            placeholders.push(`($${idx++}, $${idx++}, $${idx++}, $${idx++})`);
+            placeholders.push(
+              `($${idx++}, $${idx++}, $${idx++}, $${idx++}, $${idx++})`,
+            );
             values.push(
               req.visitorId,
+              req.accountId ?? null,
               customer.id,
               customer.email || customer.id,
               customer.email || null,
             );
           }
           await client.query(
-            `INSERT INTO customers (user_id, customer_id, name, email) VALUES ${placeholders.join(", ")} ON CONFLICT DO NOTHING`,
+            `INSERT INTO customers (user_id, account_id, customer_id, name, email) VALUES ${placeholders.join(", ")} ON CONFLICT DO NOTHING`,
             values,
           );
         }
@@ -758,10 +775,11 @@ export function createBillingApiRoutes(
           let eventIdx = 1;
           for (const s of batch) {
             subPlaceholders.push(
-              `($${subIdx++}, $${subIdx++}, $${subIdx++}, $${subIdx++}, $${subIdx++}, $${subIdx++})`,
+              `($${subIdx++}, $${subIdx++}, $${subIdx++}, $${subIdx++}, $${subIdx++}, $${subIdx++}, $${subIdx++})`,
             );
             subValues.push(
               req.visitorId,
+              req.accountId ?? null,
               s.id,
               s.customerId,
               s.priceId,
@@ -769,23 +787,28 @@ export function createBillingApiRoutes(
               s.mrr,
             );
             eventPlaceholders.push(
-              `($${eventIdx++}, $${eventIdx++}, 'subscription', 'revenue', NOW(), $${eventIdx++}, 'stripe', 'monthly_aggregate')`,
+              `($${eventIdx++}, $${eventIdx++}, $${eventIdx++}, 'subscription', 'revenue', NOW(), $${eventIdx++}, 'stripe', 'monthly_aggregate')`,
             );
-            eventValues.push(req.visitorId, s.customerId, s.mrr);
+            eventValues.push(
+              req.visitorId,
+              req.accountId ?? null,
+              s.customerId,
+              s.mrr,
+            );
           }
           await client.query(
-            `INSERT INTO subscriptions (user_id, subscription_id, customer_id, plan_id, is_active, mrr_override) VALUES ${subPlaceholders.join(", ")} ON CONFLICT DO NOTHING`,
+            `INSERT INTO subscriptions (user_id, account_id, subscription_id, customer_id, plan_id, is_active, mrr_override) VALUES ${subPlaceholders.join(", ")} ON CONFLICT DO NOTHING`,
             subValues,
           );
           await client.query(
-            `INSERT INTO observe_events (user_id, customer_id, feature_key, event_name, timestamp, revenue_amount, source, granularity) VALUES ${eventPlaceholders.join(", ")}`,
+            `INSERT INTO observe_events (user_id, account_id, customer_id, feature_key, event_name, timestamp, revenue_amount, source, granularity) VALUES ${eventPlaceholders.join(", ")}`,
             eventValues,
           );
         }
 
         await client.query(
-          "INSERT INTO user_data_status (user_id, data_mode) VALUES ($1, $2) ON CONFLICT (user_id) DO UPDATE SET data_mode = $2, updated_at = NOW()",
-          [req.visitorId, "user"],
+          "INSERT INTO user_data_status (user_id, account_id, data_mode) VALUES ($1, $2, $3) ON CONFLICT (user_id) DO UPDATE SET data_mode = $3, updated_at = NOW()",
+          [req.visitorId, req.accountId ?? null, "user"],
         );
         await client.query("COMMIT");
         deps.convertReferralIfPending(req.visitorId!);
@@ -878,9 +901,10 @@ export function createBillingApiRoutes(
                     );
                     if (cost > 0) {
                       await pool.query(
-                        `INSERT INTO observe_events (user_id, customer_id, feature_key, event_name, timestamp, cost_amount, cost_unit, revenue_amount, usage_units, model, model_provider, source, granularity) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+                        `INSERT INTO observe_events (user_id, account_id, customer_id, feature_key, event_name, timestamp, cost_amount, cost_unit, revenue_amount, usage_units, model, model_provider, source, granularity) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
                         [
                           visitorId,
+                          req.accountId ?? null,
                           "system",
                           "openai_usage",
                           "cost",
@@ -908,8 +932,8 @@ export function createBillingApiRoutes(
                 await txClient.query("BEGIN");
                 await clearSampleData(txClient, visitorId);
                 await txClient.query(
-                  `INSERT INTO user_data_status (user_id, data_mode) VALUES ($1, $2) ON CONFLICT (user_id) DO UPDATE SET data_mode = $2, updated_at = NOW()`,
-                  [visitorId, "user"],
+                  `INSERT INTO user_data_status (user_id, account_id, data_mode) VALUES ($1, $2, $3) ON CONFLICT (user_id) DO UPDATE SET data_mode = $3, updated_at = NOW()`,
+                  [visitorId, req.accountId ?? null, "user"],
                 );
                 await txClient.query("COMMIT");
               } catch (err) {
@@ -937,8 +961,14 @@ export function createBillingApiRoutes(
         }
 
         await pool.query(
-          `INSERT INTO integrations (user_id, provider, api_key_prefix, has_usage_access, connected_at, encrypted_api_key) VALUES ($1, 'openai', $2, $3, NOW(), $4) ON CONFLICT (user_id, provider) DO UPDATE SET api_key_prefix = $2, has_usage_access = $3, connected_at = NOW(), encrypted_api_key = $4`,
-          [visitorId, keyPrefix, hasUsageAccess, encryptApiKey(api_key)],
+          `INSERT INTO integrations (user_id, account_id, provider, api_key_prefix, has_usage_access, connected_at, encrypted_api_key) VALUES ($1, $2, 'openai', $3, $4, NOW(), $5) ON CONFLICT (user_id, provider) DO UPDATE SET api_key_prefix = $3, has_usage_access = $4, connected_at = NOW(), encrypted_api_key = $5`,
+          [
+            visitorId,
+            req.accountId ?? null,
+            keyPrefix,
+            hasUsageAccess,
+            encryptApiKey(api_key),
+          ],
         );
         deps.trackBillingUsage(visitorId, "openai_sync", "openai_connected");
         res.json({
@@ -1077,9 +1107,10 @@ export function createBillingApiRoutes(
                 );
                 if (cost > 0) {
                   await pool.query(
-                    `INSERT INTO observe_events (user_id, customer_id, feature_key, event_name, timestamp, cost_amount, cost_unit, revenue_amount, usage_units, model, model_provider, source, granularity) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+                    `INSERT INTO observe_events (user_id, account_id, customer_id, feature_key, event_name, timestamp, cost_amount, cost_unit, revenue_amount, usage_units, model, model_provider, source, granularity) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
                     [
                       visitorId,
+                      req.accountId ?? null,
                       "system",
                       "anthropic_usage",
                       "cost",
@@ -1105,8 +1136,8 @@ export function createBillingApiRoutes(
                 await txClient.query("BEGIN");
                 await clearSampleData(txClient, visitorId);
                 await txClient.query(
-                  `INSERT INTO user_data_status (user_id, data_mode) VALUES ($1, $2) ON CONFLICT (user_id) DO UPDATE SET data_mode = $2, updated_at = NOW()`,
-                  [visitorId, "user"],
+                  `INSERT INTO user_data_status (user_id, account_id, data_mode) VALUES ($1, $2, $3) ON CONFLICT (user_id) DO UPDATE SET data_mode = $3, updated_at = NOW()`,
+                  [visitorId, req.accountId ?? null, "user"],
                 );
                 await txClient.query("COMMIT");
               } catch (err) {
@@ -1134,8 +1165,14 @@ export function createBillingApiRoutes(
         }
 
         await pool.query(
-          `INSERT INTO integrations (user_id, provider, api_key_prefix, has_usage_access, connected_at, encrypted_api_key) VALUES ($1, 'anthropic', $2, $3, NOW(), $4) ON CONFLICT (user_id, provider) DO UPDATE SET api_key_prefix = $2, has_usage_access = $3, connected_at = NOW(), encrypted_api_key = $4`,
-          [visitorId, keyPrefix, hasUsageAccess, encryptApiKey(api_key)],
+          `INSERT INTO integrations (user_id, account_id, provider, api_key_prefix, has_usage_access, connected_at, encrypted_api_key) VALUES ($1, $2, 'anthropic', $3, $4, NOW(), $5) ON CONFLICT (user_id, provider) DO UPDATE SET api_key_prefix = $3, has_usage_access = $4, connected_at = NOW(), encrypted_api_key = $5`,
+          [
+            visitorId,
+            req.accountId ?? null,
+            keyPrefix,
+            hasUsageAccess,
+            encryptApiKey(api_key),
+          ],
         );
         deps.trackBillingUsage(
           visitorId,
