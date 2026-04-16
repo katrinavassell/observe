@@ -1364,6 +1364,13 @@ export async function getEventDetail(id: number): Promise<EventDetail> {
   return request(`/events/${id}`);
 }
 
+export async function sendTestEvent(featureKey: string): Promise<ObserveEvent> {
+  return request("/events/test", {
+    method: "POST",
+    body: JSON.stringify({ featureKey }),
+  });
+}
+
 export interface TraceListItem {
   trace_id: string;
   start_time: string;

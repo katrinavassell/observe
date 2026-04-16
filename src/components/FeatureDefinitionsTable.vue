@@ -17,8 +17,7 @@ import {
   createFeatureDefinition,
   updateFeatureDefinition,
   deleteFeatureDefinition,
-  upsertFeaturePricing,
-  deleteFeaturePricing,
+  sendTestEvent as apiSendTestEvent,
   type FeatureDefinition,
 } from "@/lib/api";
 import { formatCurrency as fmt } from "@/lib/format";
@@ -50,7 +49,6 @@ const form = ref({
   name: "",
   feature_key: "",
   description: "",
-  revenue_per_unit: "",
 });
 const submitting = ref(false);
 
@@ -59,7 +57,6 @@ function resetForm() {
     name: "",
     feature_key: "",
     description: "",
-    revenue_per_unit: "",
   };
   editingId.value = null;
 }
@@ -77,8 +74,6 @@ function openEdit(def: FeatureDefinition) {
     name: def.name,
     feature_key: def.feature_key,
     description: def.description ?? "",
-    revenue_per_unit:
-      def.revenue_per_unit !== null ? String(def.revenue_per_unit) : "",
   };
   dialogOpen.value = true;
 }
@@ -89,35 +84,19 @@ async function handleSubmit() {
     return;
   }
 
-  const revenueStr = form.value.revenue_per_unit.trim();
-  const revenueNum = revenueStr ? Number(revenueStr) : null;
-  if (revenueStr && (!Number.isFinite(revenueNum) || (revenueNum ?? 0) < 0)) {
-    toast.error("Revenue per unit must be a positive number");
-    return;
-  }
-
   submitting.value = true;
   try {
-    let featureKey: string;
     if (mode.value === "edit" && editingId.value !== null) {
       await updateFeatureDefinition(editingId.value, {
         name: form.value.name.trim(),
         description: form.value.description.trim() || null,
       });
-      featureKey = form.value.feature_key;
     } else {
-      const res = await createFeatureDefinition({
+      await createFeatureDefinition({
         name: form.value.name.trim(),
         feature_key: form.value.feature_key.trim() || undefined,
         description: form.value.description.trim() || null,
       });
-      featureKey = res.definition.feature_key;
-    }
-
-    if (revenueNum !== null && revenueNum > 0) {
-      await upsertFeaturePricing(featureKey, revenueNum);
-    } else if (mode.value === "edit" && revenueStr === "") {
-      await deleteFeaturePricing(featureKey).catch(() => {});
     }
 
     queryClient.invalidateQueries({ queryKey: ["feature-definitions"] });
@@ -156,38 +135,7 @@ async function sendTestEvent() {
   const first = definitions.value[0];
   sendingTestEvent.value = true;
   try {
-    const { supabase } = await import("@/lib/supabase");
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-    const res = await fetch("/api/events/ingest", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...(session?.access_token
-          ? { Authorization: `Bearer ${session.access_token}` }
-          : {}),
-      },
-      body: JSON.stringify({
-        events: [
-          {
-            eventName: "test_event",
-            customerReferenceId: "test_customer",
-            featureKey: first.feature_key,
-            model: "gpt-4o-mini",
-            modelProvider: "openai",
-            inputTokens: 100,
-            outputTokens: 50,
-            durationMs: 500,
-            idempotencyKey: `test-${Date.now()}`,
-          },
-        ],
-      }),
-    });
-    if (!res.ok) {
-      const body = await res.text();
-      throw new Error(`ingest failed (${res.status}): ${body}`);
-    }
+    await apiSendTestEvent(first.feature_key);
     toast.success(`Test event sent as "${first.feature_key}"`);
     queryClient.invalidateQueries({ queryKey: ["feature-definitions"] });
   } catch (err) {
@@ -332,16 +280,6 @@ async function sendTestEvent() {
               </div>
             </div>
           </div>
-
-          <div class="text-xs border-t border-border/60 pt-2">
-            <span class="text-muted-foreground">Revenue: </span>
-            <span v-if="def.revenue_per_unit" class="font-medium">
-              {{ fmt(def.revenue_per_unit) }} / {{ def.feature_key }}
-            </span>
-            <span v-else class="text-muted-foreground italic"
-              >not set — click to add</span
-            >
-          </div>
         </div>
       </div>
     </CardContent>
@@ -383,26 +321,6 @@ async function sendTestEvent() {
               v-model="form.description"
               placeholder="Optional — what this measures"
             />
-          </div>
-          <div>
-            <Label>Revenue per unit (optional)</Label>
-            <div class="relative">
-              <span
-                class="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground text-sm"
-                >$</span
-              >
-              <Input
-                v-model="form.revenue_per_unit"
-                type="number"
-                step="0.0001"
-                min="0"
-                placeholder="0.02"
-                class="pl-7"
-              />
-            </div>
-            <p class="text-[11px] text-muted-foreground mt-1">
-              Used to calculate margin. Leave blank to only track cost.
-            </p>
           </div>
         </div>
 
