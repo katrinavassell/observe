@@ -320,8 +320,39 @@ async function _doDbInit() {
       console.error("Sample CHECK constraint setup failed:", err);
     }
 
+    // ── Stage 1 schema migration ─────────────────────────────────────────
+    // Split the old `accounts` table (which was really a users/auth table) into:
+    //   users         — auth identity (renamed from the old accounts)
+    //   accounts      — billing/data owner (new table)
+    //   user_accounts — join table (role, status)
+    // Data tables get a nullable account_id column; backfill runs below.
+    // Idempotent: safe to re-run on every boot.
+
+    // 1. Rename accounts → users if needed.
+    try {
+      const check = await pool.query(
+        `SELECT
+           EXISTS (SELECT 1 FROM information_schema.tables
+                    WHERE table_schema = 'public' AND table_name = 'users') AS has_users,
+           EXISTS (SELECT 1 FROM information_schema.tables
+                    WHERE table_schema = 'public' AND table_name = 'accounts') AS has_accounts`,
+      );
+      const hasUsers = check.rows[0]?.has_users;
+      const hasAccounts = check.rows[0]?.has_accounts;
+      if (!hasUsers && hasAccounts) {
+        await pool.query(`ALTER TABLE accounts RENAME TO users`);
+        console.warn("Stage 1 migration: renamed accounts → users");
+      }
+    } catch (err) {
+      console.error("Stage 1 rename (accounts→users) failed:", err);
+    }
+
+    // 2. Ensure users table + all its columns exist before FK references
+    // and backfill. On fresh installs this creates the table outright; on
+    // existing (post-rename) DBs it's a no-op and the ALTERs add any missing
+    // columns.
     await pool.query(`
-      CREATE TABLE IF NOT EXISTS accounts (
+      CREATE TABLE IF NOT EXISTS users (
         id SERIAL PRIMARY KEY,
         email TEXT UNIQUE NOT NULL,
         password_hash TEXT NOT NULL,
@@ -332,31 +363,135 @@ async function _doDbInit() {
         updated_at TIMESTAMPTZ DEFAULT NOW()
       )
     `);
-
-    // Add stripe columns if missing (migration for existing DBs)
     await pool.query(
-      `ALTER TABLE accounts ADD COLUMN IF NOT EXISTS stripe_customer_id TEXT`,
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_customer_id TEXT`,
     );
     await pool.query(
-      `ALTER TABLE accounts ADD COLUMN IF NOT EXISTS stripe_plan TEXT DEFAULT 'free'`,
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_plan TEXT DEFAULT 'free'`,
     );
     await pool.query(
-      `ALTER TABLE accounts ADD COLUMN IF NOT EXISTS bonus_credits INTEGER DEFAULT 0`,
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS bonus_credits INTEGER DEFAULT 0`,
     );
     await pool.query(
-      `ALTER TABLE accounts ADD COLUMN IF NOT EXISTS feedback_submitted BOOLEAN DEFAULT false`,
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS feedback_submitted BOOLEAN DEFAULT false`,
     );
     await pool.query(
-      `ALTER TABLE accounts ADD COLUMN IF NOT EXISTS invite_credits_granted INTEGER DEFAULT 0`,
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS invite_credits_granted INTEGER DEFAULT 0`,
     );
     await pool.query(
-      `ALTER TABLE accounts ADD COLUMN IF NOT EXISTS is_internal BOOLEAN DEFAULT false`,
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS is_internal BOOLEAN DEFAULT false`,
     );
     // Activation-funnel milestone: when a user's first real SDK event lands.
     // Used to compute activation rate via SQL without relying on PostHog.
     await pool.query(
-      `ALTER TABLE accounts ADD COLUMN IF NOT EXISTS first_sdk_event_at TIMESTAMPTZ`,
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS first_sdk_event_at TIMESTAMPTZ`,
     );
+
+    // 3. New billing/data owner accounts table.
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS accounts (
+        id SERIAL PRIMARY KEY,
+        name TEXT NOT NULL DEFAULT 'My Account',
+        stripe_customer_id TEXT,
+        stripe_plan TEXT DEFAULT 'free',
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    // 4. User ↔ Account join table.
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS user_accounts (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        account_id INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+        role TEXT NOT NULL DEFAULT 'viewer' CHECK (role IN ('owner','admin','viewer')),
+        status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','active')),
+        joined_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(user_id, account_id)
+      )
+    `);
+
+    // 5. Add nullable account_id FK to all data tables. Some may not exist
+    // yet on fresh installs (created further down); log + continue.
+    const dataTablesNeedingAccountId = [
+      "observe_events",
+      "customers",
+      "subscriptions",
+      "plans",
+      "alert_rules",
+      "alert_history",
+      "feature_definitions",
+      "feature_pricing",
+      "simulations",
+      "ai_insights",
+      "customer_health_snapshots",
+      "integrations",
+      "sdk_api_keys",
+      "cost_records",
+      "usage_records",
+      "user_data_status",
+      "routing_configs",
+      "cloud_integrations",
+      "inference_profiles",
+      "proxy_cache",
+    ];
+    for (const t of dataTablesNeedingAccountId) {
+      await pool
+        .query(
+          `ALTER TABLE ${t} ADD COLUMN IF NOT EXISTS account_id INTEGER REFERENCES accounts(id)`,
+        )
+        .catch((err) => console.error(`Stage 1 add account_id on ${t}:`, err));
+    }
+
+    // 6. Backfill. For each user not already in user_accounts, create an
+    // accounts row (copying stripe_customer_id + stripe_plan, which remain
+    // on users for Stage 1), link via user_accounts, then tag their data
+    // rows by matching users.visitor_id → <table>.user_id (TEXT column).
+    try {
+      const usersToBackfill = await pool.query(
+        `SELECT u.id, u.visitor_id, u.stripe_customer_id, u.stripe_plan
+           FROM users u
+          WHERE NOT EXISTS (
+            SELECT 1 FROM user_accounts ua WHERE ua.user_id = u.id
+          )`,
+      );
+      for (const u of usersToBackfill.rows) {
+        try {
+          const inserted = await pool.query(
+            `INSERT INTO accounts (stripe_customer_id, stripe_plan)
+             VALUES ($1, COALESCE($2, 'free'))
+             RETURNING id`,
+            [u.stripe_customer_id ?? null, u.stripe_plan ?? null],
+          );
+          const newAccountId = inserted.rows[0].id;
+          await pool.query(
+            `INSERT INTO user_accounts (user_id, account_id, role, status, joined_at)
+             VALUES ($1, $2, 'owner', 'active', NOW())
+             ON CONFLICT (user_id, account_id) DO NOTHING`,
+            [u.id, newAccountId],
+          );
+          if (u.visitor_id) {
+            for (const t of dataTablesNeedingAccountId) {
+              await pool
+                .query(
+                  `UPDATE ${t} SET account_id = $1
+                    WHERE account_id IS NULL AND user_id = $2`,
+                  [newAccountId, u.visitor_id],
+                )
+                .catch((err) =>
+                  console.error(`Stage 1 backfill ${t} for user ${u.id}:`, err),
+                );
+            }
+          }
+        } catch (err) {
+          console.error(`Stage 1 backfill failed for user ${u.id}:`, err);
+        }
+      }
+    } catch (err) {
+      console.error("Stage 1 backfill outer loop failed:", err);
+    }
+    // ── end Stage 1 migration ───────────────────────────────────────────
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS feedback (
@@ -370,7 +505,7 @@ async function _doDbInit() {
     await pool.query(`
       CREATE TABLE IF NOT EXISTS password_reset_tokens (
         id SERIAL PRIMARY KEY,
-        account_id INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+        account_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
         token_hash TEXT NOT NULL,
         expires_at TIMESTAMPTZ NOT NULL,
         used_at TIMESTAMPTZ,
@@ -1062,6 +1197,14 @@ async function _doDbInit() {
         UNIQUE(cohort_id, customer_id)
       )
     `);
+
+    // Stage 1 migration indexes (added at end so referenced tables exist).
+    await pool.query(
+      `CREATE INDEX IF NOT EXISTS idx_user_accounts_user ON user_accounts(user_id)`,
+    );
+    await pool.query(
+      `CREATE INDEX IF NOT EXISTS idx_user_accounts_account ON user_accounts(account_id)`,
+    );
 
     // Initialize model pricing table
     await initModelPricing(pool);
