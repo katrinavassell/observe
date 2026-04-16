@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from "vue";
+import { ref, computed, watch } from "vue";
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
 import { useRouter } from "vue-router";
 import {
@@ -7,7 +7,6 @@ import {
   getEventsByModel,
   getEventsByCustomer,
   getEventsByAgent,
-  getEventsByCostType,
   getMrrMovements,
   listInsights,
   generateInsights,
@@ -32,7 +31,7 @@ const router = useRouter();
 const queryClient = useQueryClient();
 const { isLoggedIn } = useAuth();
 
-type Tab = "feature" | "model" | "customer" | "agent" | "cost_type" | "mrr";
+type Tab = "feature" | "model" | "customer" | "agent" | "mrr";
 const activeTab = ref<Tab>("feature");
 
 // Insights drawer state
@@ -202,19 +201,6 @@ const sortedAgents = computed(() => {
   return [...agentData.value].sort((a, b) => b.total_cost - a.total_cost);
 });
 
-const { data: costTypeData } = useQuery({
-  queryKey: ["events-by-cost-type"],
-  queryFn: () => getEventsByCostType(),
-  enabled: computed(() => activeTab.value === "cost_type"),
-});
-
-const sortedCostTypes = computed(() => {
-  if (!costTypeData.value?.breakdown) return [];
-  return [...costTypeData.value.breakdown].sort(
-    (a, b) => b.total_cost - a.total_cost,
-  );
-});
-
 const {
   data: mrrData,
   isLoading: mrrLoading,
@@ -314,6 +300,39 @@ const sortedCustomers = computed(() => {
 const maxCustomerCost = computed(() => {
   if (!sortedCustomers.value.length) return 1;
   return Math.max(...sortedCustomers.value.map((c) => c.total_cost), 0.01);
+});
+
+// Tabs — hide Agent / MRR when empty; Cost Type is gone (overlapped By Feature).
+const visibleTabs = computed(() => {
+  const tabs: Array<{ key: Tab; label: string; count: number }> = [
+    { key: "feature", label: "By Feature", count: sortedFeatures.value.length },
+    { key: "model", label: "By Model", count: sortedModels.value.length },
+    {
+      key: "customer",
+      label: "By Customer",
+      count: sortedCustomers.value.length,
+    },
+  ];
+  if (sortedAgents.value.length > 0) {
+    tabs.push({
+      key: "agent",
+      label: "By Agent",
+      count: sortedAgents.value.length,
+    });
+  }
+  const movements = mrrMovements.value.filter(
+    (m) => m.category !== "stable",
+  ).length;
+  if (movements > 0) {
+    tabs.push({ key: "mrr", label: "MRR Movement", count: movements });
+  }
+  return tabs;
+});
+
+watch(visibleTabs, (tabs) => {
+  if (!tabs.some((t) => t.key === activeTab.value)) {
+    activeTab.value = "feature";
+  }
 });
 
 // Data quality for insights
@@ -609,34 +628,7 @@ const insightCategories = [
       <!-- Tab bar -->
       <div class="flex gap-1 border-b">
         <button
-          v-for="tab in [
-            {
-              key: 'feature',
-              label: 'By Feature',
-              count: sortedFeatures.length,
-            },
-            { key: 'model', label: 'By Model', count: sortedModels.length },
-            {
-              key: 'customer',
-              label: 'By Customer',
-              count: sortedCustomers.length,
-            },
-            {
-              key: 'agent',
-              label: 'By Agent',
-              count: sortedAgents.length,
-            },
-            {
-              key: 'cost_type',
-              label: 'By Cost Type',
-              count: sortedCostTypes.length,
-            },
-            {
-              key: 'mrr',
-              label: 'MRR Movement',
-              count: mrrMovements.filter((m) => m.category !== 'stable').length,
-            },
-          ] as const"
+          v-for="tab in visibleTabs"
           :key="tab.key"
           class="px-4 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px"
           :class="
@@ -840,51 +832,6 @@ const insightCategories = [
           >
             {{ a.margin_pct != null ? fmtPct(a.margin_pct) : "—" }}
           </span>
-        </div>
-      </div>
-
-      <!-- By Cost Type tab -->
-      <div v-if="activeTab === 'cost_type'" class="space-y-1">
-        <div
-          class="flex items-center gap-3 text-xs text-muted-foreground px-3 py-2 border-b"
-        >
-          <span class="w-28">Type</span>
-          <span class="flex-1"></span>
-          <span class="w-16 text-right">Events</span>
-          <span class="w-20 text-right">Cost</span>
-          <span class="w-20 text-right">Revenue</span>
-        </div>
-        <div
-          v-if="!sortedCostTypes.length"
-          class="py-8 text-center text-sm text-muted-foreground"
-        >
-          No cost type data yet. Events will be categorized as they arrive.
-        </div>
-        <div
-          v-for="ct in sortedCostTypes"
-          :key="ct.cost_type"
-          class="flex items-center gap-3 rounded-md px-3 py-2.5 hover:bg-muted/50 transition-colors"
-        >
-          <span class="w-28 text-sm font-medium">{{ ct.cost_type }}</span>
-          <div class="flex-1 h-3 bg-muted rounded-full overflow-hidden">
-            <div
-              class="h-full rounded-full bg-foreground"
-              :style="{
-                width: `${sortedCostTypes.length ? (ct.total_cost / sortedCostTypes[0].total_cost) * 100 : 0}%`,
-              }"
-            />
-          </div>
-          <span
-            class="w-16 text-right text-sm tabular-nums text-muted-foreground"
-            >{{ ct.event_count.toLocaleString() }}</span
-          >
-          <span class="w-20 text-right text-sm tabular-nums">{{
-            fmt(ct.total_cost)
-          }}</span>
-          <span
-            class="w-20 text-right text-sm tabular-nums text-muted-foreground"
-            >{{ fmt(ct.total_revenue) }}</span
-          >
         </div>
       </div>
 
