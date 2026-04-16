@@ -28,7 +28,6 @@ import {
   Bot,
   User,
 } from "lucide-vue-next";
-import MarginBadge from "@/components/shared/MarginBadge.vue";
 import SourceBadge from "@/components/shared/SourceBadge.vue";
 import { Select, Input, Button, Skeleton } from "@/components/ui";
 import { useAuth } from "@/composables/useAuth";
@@ -79,8 +78,7 @@ const DEFAULT_COLUMNS: TableColumn[] = [
   { id: "trace", label: "Trace", visible: true, align: "left" },
   { id: "usage", label: "Usage", visible: true, align: "right" },
   { id: "cost", label: "Cost", visible: true, align: "right" },
-  { id: "revenue", label: "Revenue", visible: true, align: "right" },
-  { id: "margin", label: "Margin", visible: true, align: "right" },
+  { id: "margin", label: "Customer margin", visible: true, align: "right" },
   { id: "duration", label: "Duration", visible: false, align: "right" },
   { id: "cost_type", label: "Cost Type", visible: false, align: "left" },
   { id: "properties", label: "Properties", visible: false, align: "left" },
@@ -142,7 +140,6 @@ const SORT_FIELD_MAP: Record<string, string> = {
   source: "source",
   usage: "usage_units",
   cost: "cost_amount",
-  revenue: "revenue_amount",
   duration: "duration_ms",
 };
 
@@ -401,11 +398,45 @@ function formatDate(ts: string) {
   });
 }
 
-function marginForEvent(event: ObserveEvent): number | null {
-  if (!event.revenue_amount || !event.cost_amount) return null;
-  return Math.round(
-    ((event.revenue_amount - event.cost_amount) / event.revenue_amount) * 100,
-  );
+const customerAggById = computed(() => {
+  const map = new Map<string, { revenue: number; cost: number }>();
+  for (const c of customerAgg.value ?? []) {
+    map.set(c.customer_id, {
+      revenue: c.total_revenue,
+      cost: c.total_cost,
+    });
+  }
+  return map;
+});
+
+function customerMarginForEvent(event: ObserveEvent): {
+  pct: number | null;
+  revenue: number;
+  cost: number;
+} | null {
+  if (!event.customer_id) return null;
+  const agg = customerAggById.value.get(event.customer_id);
+  if (!agg) return null;
+  const pct =
+    agg.revenue > 0
+      ? Math.round(((agg.revenue - agg.cost) / agg.revenue) * 100)
+      : null;
+  return { pct, revenue: agg.revenue, cost: agg.cost };
+}
+
+function customerMarginTooltip(event: ObserveEvent): string {
+  const m = customerMarginForEvent(event);
+  if (!m) return "No customer data yet";
+  if (m.pct === null)
+    return `No revenue tracked for this customer ($${m.cost.toFixed(2)} cost)`;
+  return `Customer margin this month: ${m.pct}% ($${m.revenue.toFixed(2)} revenue / $${m.cost.toFixed(2)} cost)`;
+}
+
+function customerMarginClass(pct: number | null): string {
+  if (pct === null) return "text-muted-foreground";
+  if (pct >= 50) return "text-green-600 font-medium";
+  if (pct >= 20) return "text-yellow-600 font-medium";
+  return "text-red-600 font-medium";
 }
 </script>
 
@@ -415,7 +446,8 @@ function marginForEvent(event: ObserveEvent): number | null {
       <div>
         <h1 class="text-2xl font-semibold tracking-tight">Events</h1>
         <p class="text-sm text-muted-foreground mt-1">
-          All observed feature usage events with cost and revenue attribution
+          Per-event cost with customer-level margin. Stripe subscription rows
+          are hidden unless you filter Source → Stripe.
         </p>
       </div>
       <div
@@ -834,20 +866,25 @@ function marginForEvent(event: ObserveEvent): number | null {
                     {{ formatCost(event.cost_amount) }}
                   </td>
 
-                  <!-- Revenue -->
-                  <td
-                    v-else-if="col.id === 'revenue'"
-                    class="px-4 py-3 text-right text-xs text-foreground tabular-nums"
-                  >
-                    {{ formatCost(event.revenue_amount) }}
-                  </td>
-
-                  <!-- Margin -->
+                  <!-- Customer margin (aggregate, not per-event) -->
                   <td
                     v-else-if="col.id === 'margin'"
-                    class="px-4 py-3 text-right"
+                    class="px-4 py-3 text-right text-xs tabular-nums"
                   >
-                    <MarginBadge :margin="marginForEvent(event)" />
+                    <span
+                      :title="customerMarginTooltip(event)"
+                      :class="
+                        customerMarginClass(
+                          customerMarginForEvent(event)?.pct ?? null,
+                        )
+                      "
+                    >
+                      {{
+                        customerMarginForEvent(event)?.pct != null
+                          ? `${customerMarginForEvent(event)!.pct}%`
+                          : "—"
+                      }}
+                    </span>
                   </td>
 
                   <!-- Duration -->

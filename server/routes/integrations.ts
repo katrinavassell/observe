@@ -145,7 +145,7 @@ export async function syncStripeDataForUser(
       values.push(
         userId,
         customer.id,
-        customer.email || customer.id,
+        customer.name || customer.email || customer.id,
         customer.email || null,
       );
     }
