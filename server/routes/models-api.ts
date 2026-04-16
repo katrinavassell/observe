@@ -46,7 +46,9 @@ export function createModelsApiRoutes(pool: Pool, ensureVisitor: any) {
           `SELECT model, model_provider, COUNT(*) as event_count,
            COUNT(DISTINCT customer_id) as customer_count, COUNT(DISTINCT feature_key) as feature_count,
            COALESCE(SUM(cost_amount), 0) as total_cost, COALESCE(SUM(revenue_amount), 0) as total_revenue,
-           COALESCE(SUM(usage_units), 0) as total_usage, COALESCE(AVG(cost_amount), 0) as avg_cost_per_event,
+           COALESCE(SUM(usage_units), 0) as total_usage,
+           SUM(input_tokens) as total_input_tokens, SUM(output_tokens) as total_output_tokens,
+           COALESCE(AVG(cost_amount), 0) as avg_cost_per_event,
            MAX(timestamp) as last_seen
          FROM observe_events WHERE user_id = $1 AND model IS NOT NULL
          GROUP BY model, model_provider ORDER BY total_cost DESC`,
@@ -66,6 +68,14 @@ export function createModelsApiRoutes(pool: Pool, ensureVisitor: any) {
               total_cost: cost,
               total_revenue: revenue,
               total_usage: parseFloat(row.total_usage) || 0,
+              total_input_tokens:
+                row.total_input_tokens == null
+                  ? null
+                  : parseFloat(row.total_input_tokens),
+              total_output_tokens:
+                row.total_output_tokens == null
+                  ? null
+                  : parseFloat(row.total_output_tokens),
               avg_cost_per_event: parseFloat(row.avg_cost_per_event) || 0,
               margin_pct:
                 revenue > 0

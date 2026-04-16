@@ -386,6 +386,8 @@ export interface ModelSummary {
   total_cost: number;
   total_revenue: number;
   total_usage: number;
+  total_input_tokens: number | null;
+  total_output_tokens: number | null;
   avg_cost_per_event: number;
   margin_pct: number | null;
   last_seen: string;
@@ -417,6 +419,8 @@ export interface CustomerDetail {
     total_cost: number;
     total_revenue: number;
     total_usage: number;
+    total_input_tokens: number | null;
+    total_output_tokens: number | null;
   }>;
 }
 

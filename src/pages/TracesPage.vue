@@ -2,7 +2,7 @@
 import { ref, computed } from "vue";
 import { useQuery } from "@tanstack/vue-query";
 import { useRouter } from "vue-router";
-import { getTraces, getTrace } from "@/lib/api";
+import { getTraces, getTrace, type EventDetail } from "@/lib/api";
 import { useAuth } from "@/composables/useAuth";
 import { GUEST_TRACES, getGuestTraceDetail } from "@/lib/guest-preview";
 import { Activity, ChevronLeft, Layers, Plug } from "lucide-vue-next";
@@ -67,6 +67,26 @@ function formatDuration(ms: number | null) {
   if (ms < 1000) return `${ms}ms`;
   return `${(ms / 1000).toFixed(1)}s`;
 }
+function spanTokens(span: EventDetail): string {
+  if (span.input_tokens != null || span.output_tokens != null) {
+    return `${((span.input_tokens ?? 0) + (span.output_tokens ?? 0)).toLocaleString()}`;
+  }
+  if (span.usage_units) return span.usage_units.toLocaleString();
+  return "—";
+}
+
+function spanTokensTooltip(span: EventDetail): string {
+  if (span.input_tokens != null || span.output_tokens != null) {
+    const inp = (span.input_tokens ?? 0).toLocaleString();
+    const out = (span.output_tokens ?? 0).toLocaleString();
+    return `${inp} in / ${out} out`;
+  }
+  if (span.usage_units) {
+    return `${span.usage_units.toLocaleString()} units (token split unavailable)`;
+  }
+  return "No usage recorded";
+}
+
 function costTypeBadgeClass(type: string) {
   switch (type) {
     case "llm":
@@ -360,6 +380,7 @@ const maxDuration = computed(() => {
             <span class="w-20">Type</span>
             <span class="flex-1">Duration</span>
             <span class="w-20 text-right">Cost</span>
+            <span class="w-20 text-right">Tokens</span>
             <span class="w-16 text-right">Model</span>
           </div>
           <div
@@ -399,6 +420,11 @@ const maxDuration = computed(() => {
             <span class="w-20 text-right tabular-nums">{{
               formatCost(parseFloat(String(span.cost_amount || 0)))
             }}</span>
+            <span
+              class="w-20 text-right tabular-nums text-xs text-muted-foreground"
+              :title="spanTokensTooltip(span)"
+              >{{ spanTokens(span) }}</span
+            >
             <span class="w-32 text-right text-xs text-muted-foreground">{{
               span.model || "—"
             }}</span>

@@ -2,7 +2,7 @@
 import { ref, computed } from "vue";
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
 import { useRouter } from "vue-router";
-import { getModels } from "@/lib/api";
+import { getModels, type ModelSummary } from "@/lib/api";
 import {
   Cpu,
   AlertCircle,
@@ -40,6 +40,7 @@ const DEFAULT_COLUMNS: TableColumn[] = [
   { id: "events", label: "Events", visible: true, align: "right" },
   { id: "customers", label: "Customers", visible: true, align: "right" },
   { id: "features", label: "Features", visible: true, align: "right" },
+  { id: "usage", label: "Usage", visible: true, align: "right" },
   { id: "total_cost", label: "Total Cost", visible: true, align: "right" },
   { id: "avg_cost", label: "Avg Cost/Event", visible: true, align: "right" },
   {
@@ -52,7 +53,7 @@ const DEFAULT_COLUMNS: TableColumn[] = [
   { id: "last_seen", label: "Last Seen", visible: true, align: "right" },
 ];
 
-const STORAGE_KEY = "observe:models-columns";
+const STORAGE_KEY = "observe:models-columns:v2";
 
 function loadColumns(): TableColumn[] {
   const saved = window.localStorage.getItem(STORAGE_KEY);
@@ -182,6 +183,18 @@ const costByProvider = computed(() => {
 
 function goToModel(model: string) {
   router.push({ path: "/events", query: { model } });
+}
+
+function usageTooltip(m: ModelSummary): string {
+  if (m.total_input_tokens != null || m.total_output_tokens != null) {
+    const inp = (m.total_input_tokens ?? 0).toLocaleString();
+    const out = (m.total_output_tokens ?? 0).toLocaleString();
+    return `${inp} in / ${out} out`;
+  }
+  if (m.total_usage) {
+    return `${m.total_usage.toLocaleString()} units (token split unavailable)`;
+  }
+  return "No usage recorded";
 }
 
 // ── Pricing table ───────────────────────────────────────────────────────────
@@ -620,6 +633,15 @@ const filteredPricing = computed(() => {
                   class="px-4 py-3 text-right text-muted-foreground"
                 >
                   {{ m.feature_count }}
+                </td>
+
+                <!-- Usage -->
+                <td
+                  v-else-if="col.id === 'usage'"
+                  class="px-4 py-3 text-right text-muted-foreground text-xs tabular-nums"
+                  :title="usageTooltip(m)"
+                >
+                  {{ m.total_usage ? m.total_usage.toLocaleString() : "—" }}
                 </td>
 
                 <!-- Total Cost -->
