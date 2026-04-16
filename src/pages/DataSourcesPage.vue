@@ -188,7 +188,7 @@ If there is no gateway, use Path 1 (direct ingest) below. **Direct ingest is the
 
 ## Step 1 — environment
 
-Add \`OBSERVE_API_KEY=${apiKey}\` to \`.env\` and \`.env.example\` (placeholder in the example file). Do not hardcode it anywhere.
+If \`.env\` doesn't exist yet, create it. Add \`OBSERVE_API_KEY=${apiKey}\` to \`.env\`, and a placeholder line \`OBSERVE_API_KEY=\` to \`.env.example\` (create that file too if it's missing). Do not hardcode the key anywhere else.
 
 ## Step 2 — direct ingest (Path 1, the default)
 
@@ -545,9 +545,14 @@ watch(
               </h2>
             </div>
             <p class="text-sm text-muted-foreground max-w-prose">
-              Copy this prompt and paste it into Cursor, Claude Code, or
-              Copilot. Your AI agent will wire up Observe in your repo — API key
-              included. No config to read, no boilerplate to copy.
+              Open your project in Cursor, Claude Code, or Copilot, then paste
+              this prompt.
+            </p>
+            <p class="text-sm text-muted-foreground max-w-prose">
+              The prompt includes your API key and tells the agent to wire
+              Observe into the repo, create <code class="font-mono">.env</code>,
+              and make the first ingest call. You don't need to touch any
+              config.
             </p>
           </div>
           <Button

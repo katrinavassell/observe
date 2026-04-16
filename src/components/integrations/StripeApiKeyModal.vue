@@ -5,7 +5,7 @@
  * Uses a restricted API key to pull customers, subscriptions, and MRR.
  * Revenue is then auto-enriched on SDK events.
  */
-import { ref, computed } from "vue";
+import { ref, computed, watch } from "vue";
 import { toast } from "vue-sonner";
 import { X, Key, Loader2, ExternalLink, Eye, EyeOff } from "lucide-vue-next";
 import { Button, Input } from "@/components/ui";
@@ -23,6 +23,15 @@ const emit = defineEmits<{
 const apiKey = ref("");
 const showKey = ref(false);
 const isConnecting = ref(false);
+
+watch(apiKey, (value) => {
+  const trimmed = value.trim();
+  const normalized = trimmed.replace(
+    /^(sk_|rk_|sk_(?:live|test)_|rk_(?:live|test)_)+(?=(?:sk|rk)_(?:live|test)_)/,
+    "",
+  );
+  if (normalized !== value) apiKey.value = normalized;
+});
 
 const isKeyValid = computed(() => {
   const key = apiKey.value.trim();
