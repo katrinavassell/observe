@@ -229,6 +229,17 @@ async function sendAlertWebhook(
 
 export async function checkAlerts(pool: Pool, userId: string) {
   try {
+    // Background job — no req.accountId. Fallback: resolve owner's account_id.
+    const accountIdResult = await pool.query(
+      `SELECT account_id FROM user_accounts WHERE user_id = (SELECT id FROM users WHERE visitor_id = $1) AND role = 'owner' LIMIT 1`,
+      [userId],
+    );
+    const accountId: number | null =
+      accountIdResult.rows[0]?.account_id ?? null;
+    if (accountId === null) {
+      console.warn("checkAlerts: no owner account_id for visitor", userId);
+    }
+
     const { rows: rules } = await pool.query(
       `SELECT * FROM alert_rules WHERE user_id = $1 AND enabled = true AND (evaluation = 'aggregate' OR evaluation IS NULL)`,
       [userId],
@@ -282,10 +293,11 @@ export async function checkAlerts(pool: Pool, userId: string) {
 
           // Write to history — customer_id/customer_name NULL for aggregate alerts.
           await pool.query(
-            `INSERT INTO alert_history (user_id, alert_rule_id, customer_id, customer_name, trigger_type, current_value, threshold, delivery_status)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+            `INSERT INTO alert_history (user_id, account_id, alert_rule_id, customer_id, customer_name, trigger_type, current_value, threshold, delivery_status)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
             [
               userId,
+              accountId,
               rule.id,
               null,
               null,
@@ -437,6 +449,20 @@ export async function checkCustomerAlerts(
   customerId: string,
 ) {
   try {
+    // Background job — no req.accountId. Fallback: resolve owner's account_id.
+    const accountIdResult = await pool.query(
+      `SELECT account_id FROM user_accounts WHERE user_id = (SELECT id FROM users WHERE visitor_id = $1) AND role = 'owner' LIMIT 1`,
+      [userId],
+    );
+    const accountId: number | null =
+      accountIdResult.rows[0]?.account_id ?? null;
+    if (accountId === null) {
+      console.warn(
+        "checkCustomerAlerts: no owner account_id for visitor",
+        userId,
+      );
+    }
+
     const { rows: rules } = await pool.query(
       `SELECT * FROM alert_rules WHERE user_id = $1 AND enabled = true AND evaluation = 'per_customer'`,
       [userId],
@@ -507,10 +533,11 @@ export async function checkCustomerAlerts(
 
           // Write to history regardless
           await pool.query(
-            `INSERT INTO alert_history (user_id, alert_rule_id, customer_id, customer_name, trigger_type, current_value, threshold, delivery_status)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+            `INSERT INTO alert_history (user_id, account_id, alert_rule_id, customer_id, customer_name, trigger_type, current_value, threshold, delivery_status)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
             [
               userId,
+              accountId,
               rule.id,
               customerId,
               customerName,
@@ -593,10 +620,11 @@ export function createAlertRoutes(
           });
         }
         const { rows } = await pool.query(
-          `INSERT INTO alert_rules (user_id, name, metric, operator, threshold, email, webhook_url, cooldown_minutes, trigger_type, segment_type, segment_value, evaluation)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING *`,
+          `INSERT INTO alert_rules (user_id, account_id, name, metric, operator, threshold, email, webhook_url, cooldown_minutes, trigger_type, segment_type, segment_value, evaluation)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING *`,
           [
             req.visitorId,
+            req.accountId ?? null,
             parsed.name,
             parsed.metric,
             parsed.operator,
