@@ -415,7 +415,7 @@ function isActive(path: string) {
         v-if="!isLoggedIn && isMobileLanding"
         class="md:hidden px-6 pt-8 pb-20"
       >
-        <h1 class="text-2xl font-bold tracking-tight leading-tight mb-2">
+        <h1 class="text-3xl font-bold tracking-tight leading-tight mb-3">
           Know the true cost of every feature you ship
         </h1>
         <p class="text-muted-foreground text-sm leading-relaxed mb-6">
@@ -465,7 +465,7 @@ function isActive(path: string) {
             <div
               class="w-8 h-8 rounded-lg bg-muted flex items-center justify-center shrink-0"
             >
-              <Zap class="h-4 w-4" />
+              <CreditCard class="h-4 w-4" />
             </div>
             <div>
               <p class="text-sm font-semibold">Margin and pricing analysis</p>
@@ -506,10 +506,12 @@ function isActive(path: string) {
         </div>
       </div>
 
-      <!-- Page content — always renders except when mobile landing is shown -->
+      <!-- Page content -->
       <div
-        v-if="isLoggedIn || !isMobileLanding"
-        :class="isLoggedIn ? 'p-6 pb-24 md:pb-6' : 'p-6 pb-6'"
+        :class="[
+          isLoggedIn ? 'p-6 pb-24 md:pb-6' : 'p-6 pb-6',
+          !isLoggedIn && isMobileLanding ? 'hidden md:block' : '',
+        ]"
       >
         <ErrorBoundary>
           <slot />
