@@ -25,7 +25,7 @@ async function handleSubmit() {
     window.posthog?.capture("feedback_submitted", {
       credits_granted: result.granted,
     });
-    toast.success(`Thanks! You earned ${result.granted} bonus messages`);
+    toast.success(`Thanks! You earned ${result.granted} bonus events`);
     emit("credited", result.granted);
     emit("close");
     message.value = "";
@@ -70,7 +70,9 @@ async function handleSubmit() {
           class="flex items-center gap-2 text-xs bg-primary/5 border border-primary/20 rounded-md px-3 py-2"
         >
           <Sparkles class="h-3 w-3 text-primary shrink-0" />
-          <span>Earn <strong>5 bonus messages</strong> for your feedback</span>
+          <span
+            >Earn <strong>1,000 bonus events</strong> for your feedback</span
+          >
         </div>
 
         <div class="space-y-1">
