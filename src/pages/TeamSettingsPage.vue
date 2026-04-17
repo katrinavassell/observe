@@ -12,6 +12,8 @@ import {
   Link as LinkIcon,
   Loader2,
 } from "lucide-vue-next";
+import { useRouter } from "vue-router";
+import { useAuth } from "@/composables/useAuth";
 import { useTeam } from "@/composables/useTeam";
 import type { OrgMember } from "@/lib/api";
 import {
@@ -36,6 +38,9 @@ const {
   removeMember,
 } = useTeam();
 
+const router = useRouter();
+const { isLoggedIn } = useAuth();
+
 const inviteEmail = ref("");
 const isInviting = ref(false);
 const inviteLink = ref("");
@@ -46,7 +51,7 @@ const nameInput = ref("");
 const isSavingName = ref(false);
 
 onMounted(() => {
-  fetchTeamInfo();
+  if (isLoggedIn.value) fetchTeamInfo();
 });
 
 function startEditName() {
@@ -131,8 +136,25 @@ function memberLabel(member: OrgMember) {
       </p>
     </div>
 
+    <!-- Guest CTA -->
+    <Card v-if="!isLoggedIn" class="border-primary/40 bg-primary/5">
+      <CardContent class="p-6 text-center space-y-3">
+        <h2 class="font-semibold text-lg">Sign in to manage your team</h2>
+        <p class="text-sm text-muted-foreground max-w-md mx-auto">
+          Invite teammates, assign roles, and share customer data + alerts
+          across your account. Free to start.
+        </p>
+        <div class="flex justify-center gap-2 pt-1">
+          <Button @click="router.push('/signup')">Sign up free</Button>
+          <Button variant="outline" @click="router.push('/login')">
+            Log in
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+
     <div
-      v-if="isLoading"
+      v-else-if="isLoading"
       class="flex items-center gap-2 text-muted-foreground py-8"
     >
       <Loader2 class="h-4 w-4 animate-spin" />
