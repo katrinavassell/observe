@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from "vue";
+import { ref, computed, onMounted } from "vue";
 import { toast } from "vue-sonner";
 import {
   Users,
@@ -32,19 +32,24 @@ const {
   error,
   org,
   members,
+  inviteToken,
   fetchTeamInfo,
   renameTeam,
-  inviteMember,
+  rotateInvite,
   removeMember,
 } = useTeam();
 
 const router = useRouter();
 const { isLoggedIn } = useAuth();
 
-const inviteEmail = ref("");
-const isInviting = ref(false);
-const inviteLink = ref("");
+const isRotating = ref(false);
 const copiedLink = ref(false);
+
+const inviteLink = computed(() =>
+  inviteToken.value
+    ? `${window.location.origin}/join/${inviteToken.value}`
+    : "",
+);
 
 const editingName = ref(false);
 const nameInput = ref("");
@@ -73,30 +78,33 @@ async function saveName() {
   }
 }
 
-async function handleInvite() {
-  isInviting.value = true;
-  inviteLink.value = "";
-  try {
-    const result = await inviteMember(inviteEmail.value.trim());
-    inviteLink.value = `${window.location.origin}/join/${result.invite_token}`;
-    inviteEmail.value = "";
-    toast.success("Invite link generated");
-    window.posthog?.capture("team_invite_sent");
-    await fetchTeamInfo();
-  } catch (e) {
-    toast.error(e instanceof Error ? e.message : "Failed to create invite");
-  } finally {
-    isInviting.value = false;
-  }
-}
-
 async function copyInviteLink() {
+  if (!inviteLink.value) return;
   await window.navigator.clipboard.writeText(inviteLink.value);
   copiedLink.value = true;
   toast.success("Link copied to clipboard");
+  window.posthog?.capture("team_invite_link_copied");
   setTimeout(() => {
     copiedLink.value = false;
   }, 2000);
+}
+
+async function handleRotate() {
+  if (
+    !window.confirm(
+      "Rotate invite link? The old link will stop working immediately.",
+    )
+  )
+    return;
+  isRotating.value = true;
+  try {
+    await rotateInvite();
+    toast.success("New invite link generated");
+  } catch (e) {
+    toast.error(e instanceof Error ? e.message : "Failed to rotate link");
+  } finally {
+    isRotating.value = false;
+  }
 }
 
 async function handleRemove(member: OrgMember) {
@@ -207,49 +215,43 @@ function memberLabel(member: OrgMember) {
         <CardHeader class="pb-3">
           <CardTitle class="text-base flex items-center gap-2">
             <UserPlus class="h-4 w-4" />
-            Invite Teammate
+            Invite link
           </CardTitle>
-          <CardDescription
-            >Generate a shareable invite link for your team</CardDescription
-          >
+          <CardDescription>
+            Share this link with anyone you want on your team. They sign up (or
+            log in) and join automatically.
+          </CardDescription>
         </CardHeader>
-        <CardContent class="space-y-4">
-          <div class="flex gap-2 flex-wrap">
-            <Input
-              v-model="inviteEmail"
-              type="email"
-              placeholder="teammate@example.com (optional)"
-              class="flex-1 min-w-[200px]"
-              @keydown.enter="handleInvite"
-            />
-            <Button
-              size="sm"
-              :disabled="isInviting"
-              class="h-9 px-4"
-              @click="handleInvite"
-            >
-              <Loader2 v-if="isInviting" class="h-4 w-4 animate-spin mr-1.5" />
-              Generate Link
-            </Button>
-          </div>
-
+        <CardContent class="space-y-3">
           <div
-            v-if="inviteLink"
             class="flex items-center gap-2 rounded-md border bg-muted/50 p-3"
           >
             <LinkIcon class="h-4 w-4 text-muted-foreground shrink-0" />
             <code
               class="flex-1 text-xs break-all text-muted-foreground select-all"
-              >{{ inviteLink }}</code
             >
+              {{ inviteLink || "Loading…" }}
+            </code>
             <Button
               variant="ghost"
               size="icon"
               class="shrink-0 h-8 w-8"
+              :disabled="!inviteLink"
               @click="copyInviteLink"
             >
               <Check v-if="copiedLink" class="h-4 w-4 text-success" />
               <Copy v-else class="h-4 w-4" />
+            </Button>
+          </div>
+          <div class="flex justify-end">
+            <Button
+              variant="ghost"
+              size="sm"
+              :disabled="isRotating"
+              @click="handleRotate"
+            >
+              <Loader2 v-if="isRotating" class="h-3 w-3 animate-spin mr-1.5" />
+              Rotate link
             </Button>
           </div>
         </CardContent>
