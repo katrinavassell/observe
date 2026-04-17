@@ -199,8 +199,8 @@ export async function checkFeatureAccess(
 // =============================================================================
 
 export const CREDIT_REWARDS = {
-  feedback: 5,
-  invite_accepted: 10,
+  feedback: 1000,
+  invite_accepted: 1000,
 } as const;
 
 export type CreditRewardType = keyof typeof CREDIT_REWARDS;
