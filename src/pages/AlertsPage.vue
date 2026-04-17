@@ -330,11 +330,29 @@ function relativeTime(dateStr: string) {
           Get notified when costs spike, margins drop, or customers go quiet
         </p>
       </div>
-      <Button v-if="!showForm" size="sm" @click="showForm = true">
+      <Button v-if="!showForm && isLoggedIn" size="sm" @click="showForm = true">
         <Plus class="h-3.5 w-3.5 mr-1.5" />
         New Alert
       </Button>
     </div>
+
+    <!-- Guest CTA — page is viewable but creating alerts needs an account -->
+    <Card v-if="!isLoggedIn" class="border-primary/40 bg-primary/5">
+      <CardContent class="p-6 text-center space-y-3">
+        <h2 class="font-semibold text-lg">Sign in to set up alerts</h2>
+        <p class="text-sm text-muted-foreground max-w-md mx-auto">
+          Get email or webhook notifications when daily cost overruns your
+          budget, a customer goes quiet, or a single customer's monthly cost
+          spikes. Free to start.
+        </p>
+        <div class="flex justify-center gap-2 pt-1">
+          <Button @click="router.push('/signup')">Sign up free</Button>
+          <Button variant="outline" @click="router.push('/login')">
+            Log in
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
 
     <!-- Create form -->
     <Card v-if="showForm">

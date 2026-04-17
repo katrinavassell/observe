@@ -570,6 +570,23 @@ watch(
       </p>
     </div>
 
+    <!-- Guest CTA — page is viewable but the actionable steps need an account -->
+    <Card v-if="!isLoggedIn" class="border-primary/40 bg-primary/5">
+      <CardContent class="p-6 text-center space-y-3">
+        <h2 class="font-semibold text-lg">Sign in to connect data sources</h2>
+        <p class="text-sm text-muted-foreground max-w-md mx-auto">
+          Generate an SDK key, copy the install prompt, and verify events — all
+          in 30 seconds. Free to start.
+        </p>
+        <div class="flex justify-center gap-2 pt-1">
+          <Button @click="router.push('/signup')">Sign up free</Button>
+          <Button variant="outline" @click="router.push('/login')">
+            Log in
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+
     <!-- ================================================================== -->
     <!-- STEP 1: Install — hero prompt + API key                            -->
     <!-- ================================================================== -->
