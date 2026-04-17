@@ -28,29 +28,29 @@ const alertRuleSchema = z.object({
 });
 
 const METRIC_QUERIES: Record<string, string> = {
-  daily_cost: `SELECT COALESCE(SUM(cost_amount), 0) as value FROM observe_events WHERE user_id = $1 AND timestamp >= NOW() - INTERVAL '24 hours'`,
-  margin_percent: `SELECT CASE WHEN COALESCE(SUM(revenue_amount), 0) = 0 THEN 0 ELSE ((SUM(revenue_amount) - SUM(cost_amount)) / SUM(revenue_amount) * 100) END as value FROM observe_events WHERE user_id = $1 AND timestamp >= NOW() - INTERVAL '30 days'`,
-  customer_margin: `SELECT CASE WHEN COALESCE(SUM(revenue_amount), 0) = 0 THEN 0 ELSE MIN((revenue_amount - cost_amount) / NULLIF(revenue_amount, 0) * 100) END as value FROM observe_events WHERE user_id = $1 AND timestamp >= NOW() - INTERVAL '30 days' AND customer_id IS NOT NULL GROUP BY customer_id ORDER BY value ASC LIMIT 1`,
-  usage_velocity: `SELECT CASE WHEN COUNT(*) = 0 THEN 0 ELSE (SELECT COUNT(*)::float / NULLIF((SELECT COUNT(*)::float / 7 FROM observe_events WHERE user_id = $1 AND timestamp >= NOW() - INTERVAL '30 days' AND timestamp < NOW() - INTERVAL '1 day'), 0) FROM observe_events WHERE user_id = $1 AND timestamp >= NOW() - INTERVAL '24 hours' GROUP BY customer_id ORDER BY 1 DESC LIMIT 1) END as value FROM observe_events WHERE user_id = $1`,
-  customer_cost_share: `SELECT CASE WHEN COALESCE(SUM(cost_amount), 0) = 0 THEN 0 ELSE (SELECT SUM(cost_amount) FROM observe_events WHERE user_id = $1 AND timestamp >= NOW() - INTERVAL '30 days' GROUP BY customer_id ORDER BY 1 DESC LIMIT 1) / SUM(cost_amount) * 100 END as value FROM observe_events WHERE user_id = $1 AND timestamp >= NOW() - INTERVAL '30 days'`,
-  top_customer_unprofitable: `SELECT COUNT(*) as value FROM (SELECT customer_id, SUM(revenue_amount) - SUM(cost_amount) as profit FROM observe_events WHERE user_id = $1 AND timestamp >= NOW() - INTERVAL '30 days' AND customer_id IS NOT NULL GROUP BY customer_id ORDER BY SUM(cost_amount) DESC LIMIT 10) t WHERE profit < 0`,
-  model_cost_increase: `SELECT COALESCE((SELECT AVG(cost_amount) FROM observe_events WHERE user_id = $1 AND timestamp >= NOW() - INTERVAL '7 days' AND model IS NOT NULL) / NULLIF((SELECT AVG(cost_amount) FROM observe_events WHERE user_id = $1 AND timestamp >= NOW() - INTERVAL '14 days' AND timestamp < NOW() - INTERVAL '7 days' AND model IS NOT NULL), 0) * 100 - 100, 0) as value`,
-  customer_concentration: `SELECT CASE WHEN COALESCE(SUM(cost_amount), 0) = 0 THEN 0 ELSE (SELECT SUM(cost_amount) FROM observe_events WHERE user_id = $1 AND timestamp >= NOW() - INTERVAL '30 days' GROUP BY customer_id ORDER BY 1 DESC LIMIT 1) / SUM(cost_amount) * 100 END as value FROM observe_events WHERE user_id = $1 AND timestamp >= NOW() - INTERVAL '30 days'`,
+  daily_cost: `SELECT COALESCE(SUM(cost_amount), 0) as value FROM observe_events WHERE account_id = $1 AND timestamp >= NOW() - INTERVAL '24 hours'`,
+  margin_percent: `SELECT CASE WHEN COALESCE(SUM(revenue_amount), 0) = 0 THEN 0 ELSE ((SUM(revenue_amount) - SUM(cost_amount)) / SUM(revenue_amount) * 100) END as value FROM observe_events WHERE account_id = $1 AND timestamp >= NOW() - INTERVAL '30 days'`,
+  customer_margin: `SELECT CASE WHEN COALESCE(SUM(revenue_amount), 0) = 0 THEN 0 ELSE MIN((revenue_amount - cost_amount) / NULLIF(revenue_amount, 0) * 100) END as value FROM observe_events WHERE account_id = $1 AND timestamp >= NOW() - INTERVAL '30 days' AND customer_id IS NOT NULL GROUP BY customer_id ORDER BY value ASC LIMIT 1`,
+  usage_velocity: `SELECT CASE WHEN COUNT(*) = 0 THEN 0 ELSE (SELECT COUNT(*)::float / NULLIF((SELECT COUNT(*)::float / 7 FROM observe_events WHERE account_id = $1 AND timestamp >= NOW() - INTERVAL '30 days' AND timestamp < NOW() - INTERVAL '1 day'), 0) FROM observe_events WHERE account_id = $1 AND timestamp >= NOW() - INTERVAL '24 hours' GROUP BY customer_id ORDER BY 1 DESC LIMIT 1) END as value FROM observe_events WHERE account_id = $1`,
+  customer_cost_share: `SELECT CASE WHEN COALESCE(SUM(cost_amount), 0) = 0 THEN 0 ELSE (SELECT SUM(cost_amount) FROM observe_events WHERE account_id = $1 AND timestamp >= NOW() - INTERVAL '30 days' GROUP BY customer_id ORDER BY 1 DESC LIMIT 1) / SUM(cost_amount) * 100 END as value FROM observe_events WHERE account_id = $1 AND timestamp >= NOW() - INTERVAL '30 days'`,
+  top_customer_unprofitable: `SELECT COUNT(*) as value FROM (SELECT customer_id, SUM(revenue_amount) - SUM(cost_amount) as profit FROM observe_events WHERE account_id = $1 AND timestamp >= NOW() - INTERVAL '30 days' AND customer_id IS NOT NULL GROUP BY customer_id ORDER BY SUM(cost_amount) DESC LIMIT 10) t WHERE profit < 0`,
+  model_cost_increase: `SELECT COALESCE((SELECT AVG(cost_amount) FROM observe_events WHERE account_id = $1 AND timestamp >= NOW() - INTERVAL '7 days' AND model IS NOT NULL) / NULLIF((SELECT AVG(cost_amount) FROM observe_events WHERE account_id = $1 AND timestamp >= NOW() - INTERVAL '14 days' AND timestamp < NOW() - INTERVAL '7 days' AND model IS NOT NULL), 0) * 100 - 100, 0) as value`,
+  customer_concentration: `SELECT CASE WHEN COALESCE(SUM(cost_amount), 0) = 0 THEN 0 ELSE (SELECT SUM(cost_amount) FROM observe_events WHERE account_id = $1 AND timestamp >= NOW() - INTERVAL '30 days' GROUP BY customer_id ORDER BY 1 DESC LIMIT 1) / SUM(cost_amount) * 100 END as value FROM observe_events WHERE account_id = $1 AND timestamp >= NOW() - INTERVAL '30 days'`,
 };
 
 const CUSTOMER_TRIGGER_QUERIES: Record<string, string> = {
   usage_decline: `SELECT CASE WHEN prev.cnt = 0 THEN 0 ELSE ((curr.cnt - prev.cnt)::float / prev.cnt * 100) END as value
-    FROM (SELECT COUNT(*) as cnt FROM observe_events WHERE user_id = $1 AND customer_id = $2 AND timestamp >= NOW() - INTERVAL '30 days') curr,
-         (SELECT COUNT(*) as cnt FROM observe_events WHERE user_id = $1 AND customer_id = $2 AND timestamp >= NOW() - INTERVAL '60 days' AND timestamp < NOW() - INTERVAL '30 days') prev`,
+    FROM (SELECT COUNT(*) as cnt FROM observe_events WHERE account_id = $1 AND customer_id = $2 AND timestamp >= NOW() - INTERVAL '30 days') curr,
+         (SELECT COUNT(*) as cnt FROM observe_events WHERE account_id = $1 AND customer_id = $2 AND timestamp >= NOW() - INTERVAL '60 days' AND timestamp < NOW() - INTERVAL '30 days') prev`,
   usage_growth: `SELECT CASE WHEN prev.cnt = 0 THEN 0 ELSE ((curr.cnt - prev.cnt)::float / prev.cnt * 100) END as value
-    FROM (SELECT COUNT(*) as cnt FROM observe_events WHERE user_id = $1 AND customer_id = $2 AND timestamp >= NOW() - INTERVAL '30 days') curr,
-         (SELECT COUNT(*) as cnt FROM observe_events WHERE user_id = $1 AND customer_id = $2 AND timestamp >= NOW() - INTERVAL '60 days' AND timestamp < NOW() - INTERVAL '30 days') prev`,
-  margin_negative: `SELECT CASE WHEN COALESCE(SUM(revenue_amount), 0) = 0 THEN 0 ELSE ((SUM(revenue_amount) - SUM(cost_amount)) / SUM(revenue_amount) * 100) END as value FROM observe_events WHERE user_id = $1 AND customer_id = $2 AND timestamp >= NOW() - INTERVAL '30 days'`,
-  inactive: `SELECT COALESCE(EXTRACT(EPOCH FROM (NOW() - MAX(timestamp))) / 86400, 999999) as value FROM observe_events WHERE user_id = $1 AND customer_id = $2`,
+    FROM (SELECT COUNT(*) as cnt FROM observe_events WHERE account_id = $1 AND customer_id = $2 AND timestamp >= NOW() - INTERVAL '30 days') curr,
+         (SELECT COUNT(*) as cnt FROM observe_events WHERE account_id = $1 AND customer_id = $2 AND timestamp >= NOW() - INTERVAL '60 days' AND timestamp < NOW() - INTERVAL '30 days') prev`,
+  margin_negative: `SELECT CASE WHEN COALESCE(SUM(revenue_amount), 0) = 0 THEN 0 ELSE ((SUM(revenue_amount) - SUM(cost_amount)) / SUM(revenue_amount) * 100) END as value FROM observe_events WHERE account_id = $1 AND customer_id = $2 AND timestamp >= NOW() - INTERVAL '30 days'`,
+  inactive: `SELECT COALESCE(EXTRACT(EPOCH FROM (NOW() - MAX(timestamp))) / 86400, 999999) as value FROM observe_events WHERE account_id = $1 AND customer_id = $2`,
   cost_spike: `SELECT CASE WHEN prev.cost = 0 THEN 0 ELSE ((curr.cost - prev.cost) / prev.cost * 100) END as value
-    FROM (SELECT COALESCE(SUM(cost_amount), 0) as cost FROM observe_events WHERE user_id = $1 AND customer_id = $2 AND timestamp >= NOW() - INTERVAL '7 days') curr,
-         (SELECT COALESCE(SUM(cost_amount), 0) as cost FROM observe_events WHERE user_id = $1 AND customer_id = $2 AND timestamp >= NOW() - INTERVAL '14 days' AND timestamp < NOW() - INTERVAL '7 days') prev`,
-  customer_cost_budget: `SELECT COALESCE(SUM(cost_amount), 0) as value FROM observe_events WHERE user_id = $1 AND customer_id = $2 AND timestamp >= NOW() - INTERVAL '30 days'`,
+    FROM (SELECT COALESCE(SUM(cost_amount), 0) as cost FROM observe_events WHERE account_id = $1 AND customer_id = $2 AND timestamp >= NOW() - INTERVAL '7 days') curr,
+         (SELECT COALESCE(SUM(cost_amount), 0) as cost FROM observe_events WHERE account_id = $1 AND customer_id = $2 AND timestamp >= NOW() - INTERVAL '14 days' AND timestamp < NOW() - INTERVAL '7 days') prev`,
+  customer_cost_budget: `SELECT COALESCE(SUM(cost_amount), 0) as value FROM observe_events WHERE account_id = $1 AND customer_id = $2 AND timestamp >= NOW() - INTERVAL '30 days'`,
 };
 
 const OPERATOR_FNS: Record<
@@ -238,11 +238,12 @@ export async function checkAlerts(pool: Pool, userId: string) {
       accountIdResult.rows[0]?.account_id ?? null;
     if (accountId === null) {
       console.warn("checkAlerts: no owner account_id for visitor", userId);
+      return;
     }
 
     const { rows: rules } = await pool.query(
-      `SELECT * FROM alert_rules WHERE user_id = $1 AND enabled = true AND (evaluation = 'aggregate' OR evaluation IS NULL)`,
-      [userId],
+      `SELECT * FROM alert_rules WHERE account_id = $1 AND enabled = true AND (evaluation = 'aggregate' OR evaluation IS NULL)`,
+      [accountId],
     );
 
     for (const rule of rules) {
@@ -260,7 +261,7 @@ export async function checkAlerts(pool: Pool, userId: string) {
         const query = METRIC_QUERIES[rule.metric];
         if (!query) continue;
 
-        const { rows } = await pool.query(query, [userId]);
+        const { rows } = await pool.query(query, [accountId]);
         const currentValue = parseFloat(rows[0]?.value) || 0;
         const operatorFn = OPERATOR_FNS[rule.operator];
         if (!operatorFn) continue;
@@ -461,19 +462,20 @@ export async function checkCustomerAlerts(
         "checkCustomerAlerts: no owner account_id for visitor",
         userId,
       );
+      return;
     }
 
     const { rows: rules } = await pool.query(
-      `SELECT * FROM alert_rules WHERE user_id = $1 AND enabled = true AND evaluation = 'per_customer'`,
-      [userId],
+      `SELECT * FROM alert_rules WHERE account_id = $1 AND enabled = true AND evaluation = 'per_customer'`,
+      [accountId],
     );
 
     if (rules.length === 0) return;
 
     // Get customer info for notifications
     const { rows: custRows } = await pool.query(
-      `SELECT name, email, segment FROM customers WHERE user_id = $1 AND customer_id = $2`,
-      [userId, customerId],
+      `SELECT name, email, segment FROM customers WHERE account_id = $1 AND customer_id = $2`,
+      [accountId, customerId],
     );
     const customerName = custRows[0]?.name || customerId;
 
@@ -495,7 +497,7 @@ export async function checkCustomerAlerts(
         const query = CUSTOMER_TRIGGER_QUERIES[rule.trigger_type];
         if (!query) continue;
 
-        const { rows } = await pool.query(query, [userId, customerId]);
+        const { rows } = await pool.query(query, [accountId, customerId]);
         const currentValue = parseFloat(rows[0]?.value) || 0;
 
         // For usage_decline, value is negative when declining — trigger when below threshold (e.g. < -30)
@@ -586,8 +588,8 @@ export function createAlertRoutes(
           return res.status(401).json({ error: "Authentication required" });
         }
         const { rows } = await pool.query(
-          "SELECT * FROM alert_rules WHERE user_id = $1 ORDER BY created_at DESC",
-          [req.visitorId],
+          "SELECT * FROM alert_rules WHERE account_id = $1 ORDER BY created_at DESC",
+          [req.accountId],
         );
         res.json({ rules: rows, gated: false });
       } catch (err) {
@@ -670,8 +672,8 @@ export function createAlertRoutes(
 
         // Verify ownership
         const existing = await pool.query(
-          "SELECT id FROM alert_rules WHERE id = $1 AND user_id = $2",
-          [id, req.visitorId],
+          "SELECT id FROM alert_rules WHERE id = $1 AND account_id = $2",
+          [id, req.accountId],
         );
         if (existing.rows.length === 0)
           return res.status(404).json({ error: "Alert not found" });
@@ -733,8 +735,8 @@ export function createAlertRoutes(
         }
         const id = parseInt(req.params.id);
         const result = await pool.query(
-          "DELETE FROM alert_rules WHERE id = $1 AND user_id = $2",
-          [id, req.visitorId],
+          "DELETE FROM alert_rules WHERE id = $1 AND account_id = $2",
+          [id, req.accountId],
         );
         if (result.rowCount === 0)
           return res.status(404).json({ error: "Alert not found" });
@@ -756,8 +758,8 @@ export function createAlertRoutes(
         const offset = parseInt(req.query.offset as string) || 0;
         const customerId = req.query.customer_id as string;
 
-        let where = "WHERE h.user_id = $1";
-        const params: unknown[] = [req.visitorId];
+        let where = "WHERE h.account_id = $1";
+        const params: unknown[] = [req.accountId];
         if (customerId) {
           params.push(customerId);
           where += ` AND h.customer_id = $${params.length}`;
@@ -799,8 +801,8 @@ export function createAlertRoutes(
     async (req: AuthRequest, res: Response) => {
       try {
         const { rows } = await pool.query(
-          `SELECT COUNT(*) as count FROM alert_history WHERE user_id = $1 AND fired_at >= NOW() - INTERVAL '24 hours'`,
-          [req.visitorId],
+          `SELECT COUNT(*) as count FROM alert_history WHERE account_id = $1 AND fired_at >= NOW() - INTERVAL '24 hours'`,
+          [req.accountId],
         );
         res.json({ count: parseInt(rows[0].count) });
       } catch (err) {

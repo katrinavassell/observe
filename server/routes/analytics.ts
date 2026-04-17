@@ -27,19 +27,19 @@ export function createAnalyticsRoutes(pool: Pool, ensureVisitor: any) {
                 COALESCE(SUM(oe.cost_amount), 0) as total_cost
          FROM observe_events oe
          LEFT JOIN customers c ON oe.user_id = c.user_id AND oe.customer_id = c.customer_id
-         WHERE oe.user_id = $1 AND oe.customer_id IS NOT NULL
+         WHERE oe.account_id = $1 AND oe.customer_id IS NOT NULL
          GROUP BY oe.customer_id, c.name
          ORDER BY COALESCE(SUM(oe.revenue_amount), 0) - COALESCE(SUM(oe.cost_amount), 0) ASC`,
-          [userId],
+          [req.accountId],
         );
 
         const topFeatureResult = await pool.query(
           `SELECT DISTINCT ON (customer_id) customer_id, feature_key, SUM(cost_amount) as feat_cost
          FROM observe_events
-         WHERE user_id = $1 AND customer_id IS NOT NULL AND feature_key IS NOT NULL
+         WHERE account_id = $1 AND customer_id IS NOT NULL AND feature_key IS NOT NULL
          GROUP BY customer_id, feature_key
          ORDER BY customer_id, feat_cost DESC`,
-          [userId],
+          [req.accountId],
         );
         const topFeatureMap: Record<string, string> = {};
         for (const row of topFeatureResult.rows) {
@@ -107,10 +107,10 @@ export function createAnalyticsRoutes(pool: Pool, ensureVisitor: any) {
                 COALESCE(SUM(oe.cost_amount), 0) as total_cost
          FROM observe_events oe
          LEFT JOIN customers c ON oe.user_id = c.user_id AND oe.customer_id = c.customer_id
-         WHERE oe.user_id = $1 AND oe.customer_id IS NOT NULL
+         WHERE oe.account_id = $1 AND oe.customer_id IS NOT NULL
          GROUP BY oe.customer_id, c.name
          HAVING COALESCE(SUM(oe.cost_amount), 0) > COALESCE(SUM(oe.revenue_amount), 0)`,
-          [userId],
+          [req.accountId],
         );
         for (const row of custResult.rows) {
           const rev = parseFloat(row.total_revenue) || 0;
@@ -133,10 +133,10 @@ export function createAnalyticsRoutes(pool: Pool, ensureVisitor: any) {
                 COALESCE(SUM(cost_amount), 0) as total_cost,
                 COALESCE(SUM(revenue_amount), 0) as total_revenue
          FROM observe_events
-         WHERE user_id = $1 AND feature_key IS NOT NULL
+         WHERE account_id = $1 AND feature_key IS NOT NULL
          GROUP BY feature_key
          HAVING COALESCE(SUM(cost_amount), 0) > COALESCE(SUM(revenue_amount), 0)`,
-          [userId],
+          [req.accountId],
         );
         for (const row of featResult.rows) {
           const cost = parseFloat(row.total_cost) || 0;
@@ -158,10 +158,10 @@ export function createAnalyticsRoutes(pool: Pool, ensureVisitor: any) {
                 COALESCE(SUM(CASE WHEN timestamp >= NOW() - INTERVAL '30 days' THEN cost_amount ELSE 0 END), 0) as current_cost,
                 COALESCE(SUM(CASE WHEN timestamp >= NOW() - INTERVAL '60 days' AND timestamp < NOW() - INTERVAL '30 days' THEN cost_amount ELSE 0 END), 0) as prior_cost
          FROM observe_events
-         WHERE user_id = $1 AND model IS NOT NULL AND timestamp >= NOW() - INTERVAL '60 days'
+         WHERE account_id = $1 AND model IS NOT NULL AND timestamp >= NOW() - INTERVAL '60 days'
          GROUP BY model
          HAVING COALESCE(SUM(CASE WHEN timestamp >= NOW() - INTERVAL '60 days' AND timestamp < NOW() - INTERVAL '30 days' THEN cost_amount ELSE 0 END), 0) > 0`,
-          [userId],
+          [req.accountId],
         );
         for (const row of modelResult.rows) {
           const current = parseFloat(row.current_cost) || 0;
@@ -185,18 +185,18 @@ export function createAnalyticsRoutes(pool: Pool, ensureVisitor: any) {
                 COALESCE(SUM(oe.cost_amount), 0) as total_cost
          FROM observe_events oe
          LEFT JOIN customers c ON oe.user_id = c.user_id AND oe.customer_id = c.customer_id
-         WHERE oe.user_id = $1 AND oe.customer_id IS NOT NULL
+         WHERE oe.account_id = $1 AND oe.customer_id IS NOT NULL
          GROUP BY oe.customer_id, c.name`,
-          [userId],
+          [req.accountId],
         );
         const subRevMap: Record<string, number> = {};
         const subRows = await pool.query(
           `SELECT s.customer_id, COALESCE(SUM(COALESCE(s.mrr_override, p.price_amount)), 0) as sub_revenue
          FROM subscriptions s
          LEFT JOIN plans p ON s.user_id = p.user_id AND s.plan_id = p.plan_id
-         WHERE s.user_id = $1 AND s.is_active = true
+         WHERE s.account_id = $1 AND s.is_active = true
          GROUP BY s.customer_id`,
-          [userId],
+          [req.accountId],
         );
         for (const row of subRows.rows) {
           subRevMap[row.customer_id] = parseFloat(row.sub_revenue) || 0;
@@ -247,13 +247,13 @@ export function createAnalyticsRoutes(pool: Pool, ensureVisitor: any) {
            COALESCE(AVG(cost_amount), 0) AS avg_cost_per_event,
            COALESCE(SUM(usage_units), 0) AS total_usage_units
          FROM observe_events
-         WHERE user_id = $1
+         WHERE account_id = $1
            AND model IS NOT NULL
            AND cost_amount > 0
            AND timestamp > NOW() - MAKE_INTERVAL(days => $2)
          GROUP BY feature_key, model, model_provider
          ORDER BY total_cost DESC`,
-          [req.visitorId, days],
+          [req.accountId, days],
         );
 
         const recommendations: Array<{
@@ -388,12 +388,12 @@ export function createAnalyticsRoutes(pool: Pool, ensureVisitor: any) {
            COUNT(*) AS event_count
          FROM observe_events oe
          LEFT JOIN customers c ON oe.user_id = c.user_id AND oe.customer_id = c.customer_id
-         WHERE oe.user_id = $1
+         WHERE oe.account_id = $1
            AND oe.timestamp > NOW() - MAKE_INTERVAL(days => $2)
          GROUP BY oe.customer_id, c.name
          HAVING SUM(oe.cost_amount) > SUM(oe.revenue_amount)
          ORDER BY (SUM(oe.cost_amount) - SUM(oe.revenue_amount)) DESC`,
-          [req.visitorId, days],
+          [req.accountId, days],
         );
 
         const customers = result.rows.map((r) => ({
@@ -436,9 +436,9 @@ export function createAnalyticsRoutes(pool: Pool, ensureVisitor: any) {
            COALESCE(SUM(revenue_amount), 0) as total_revenue,
            COUNT(*) as event_count
          FROM observe_events
-         WHERE user_id = $1 AND feature_key IS NOT NULL
+         WHERE account_id = $1 AND feature_key IS NOT NULL
          GROUP BY feature_key`,
-          [req.visitorId],
+          [req.accountId],
         );
 
         const opportunities: Array<{
@@ -504,9 +504,9 @@ export function createAnalyticsRoutes(pool: Pool, ensureVisitor: any) {
              COALESCE(SUM(cost_amount), 0) as total_cost,
              COALESCE(SUM(revenue_amount), 0) as total_revenue,
              COALESCE(SUM(usage_units), 0) as total_usage
-           FROM observe_events WHERE user_id = $1 AND feature_key IS NOT NULL
+           FROM observe_events WHERE account_id = $1 AND feature_key IS NOT NULL
            GROUP BY feature_key ORDER BY total_cost DESC`,
-            [req.visitorId],
+            [req.accountId],
           ),
           pool.query(
             `SELECT oe.customer_id, c.name as customer_name, c.segment,
@@ -514,9 +514,9 @@ export function createAnalyticsRoutes(pool: Pool, ensureVisitor: any) {
              COALESCE(SUM(oe.revenue_amount), 0) as total_revenue
            FROM observe_events oe
            LEFT JOIN customers c ON oe.user_id = c.user_id AND oe.customer_id = c.customer_id
-           WHERE oe.user_id = $1
+           WHERE oe.account_id = $1
            GROUP BY oe.customer_id, c.name, c.segment ORDER BY total_revenue DESC LIMIT 10`,
-            [req.visitorId],
+            [req.accountId],
           ),
         ]);
 
@@ -741,8 +741,8 @@ Return ONLY the JSON object, no markdown or explanation.`;
     async (req: AuthRequest, res: Response) => {
       try {
         const result = await pool.query(
-          "SELECT * FROM simulations WHERE user_id = $1 ORDER BY created_at DESC",
-          [req.visitorId],
+          "SELECT * FROM simulations WHERE account_id = $1 ORDER BY created_at DESC",
+          [req.accountId],
         );
         res.json(
           result.rows.map((row: Record<string, unknown>) => ({
@@ -808,8 +808,8 @@ Return ONLY the JSON object, no markdown or explanation.`;
       try {
         const { id } = req.params;
         const result = await pool.query(
-          "SELECT * FROM simulations WHERE id = $1 AND user_id = $2",
-          [id, req.visitorId],
+          "SELECT * FROM simulations WHERE id = $1 AND account_id = $2",
+          [id, req.accountId],
         );
         if (result.rows.length === 0) {
           return res.status(404).json({ error: "Simulation not found" });
@@ -839,8 +839,8 @@ Return ONLY the JSON object, no markdown or explanation.`;
         const updates = req.body;
 
         const existing = await client.query(
-          "SELECT * FROM simulations WHERE id = $1 AND user_id = $2",
-          [id, req.visitorId],
+          "SELECT * FROM simulations WHERE id = $1 AND account_id = $2",
+          [id, req.accountId],
         );
         if (existing.rows.length === 0) {
           return res.status(404).json({ error: "Simulation not found" });
@@ -865,9 +865,9 @@ Return ONLY the JSON object, no markdown or explanation.`;
              COALESCE(SUM(usage_units), 0) as total_usage,
              COUNT(*) as event_count
            FROM observe_events
-           WHERE user_id = $1 AND feature_key IS NOT NULL
+           WHERE account_id = $1 AND feature_key IS NOT NULL
            GROUP BY feature_key`,
-            [req.visitorId],
+            [req.accountId],
           );
 
           const customerResult = await client.query(
@@ -876,9 +876,9 @@ Return ONLY the JSON object, no markdown or explanation.`;
              COALESCE(SUM(oe.revenue_amount), 0) as total_revenue
            FROM observe_events oe
            LEFT JOIN customers c ON oe.user_id = c.user_id AND oe.customer_id = c.customer_id
-           WHERE oe.user_id = $1
+           WHERE oe.account_id = $1
            GROUP BY oe.customer_id, c.name, c.segment`,
-            [req.visitorId],
+            [req.accountId],
           );
 
           const featureMap = new Map<
@@ -1221,8 +1221,8 @@ Return ONLY the JSON object, no markdown or explanation.`;
       try {
         const { id } = req.params;
         const result = await pool.query(
-          "DELETE FROM simulations WHERE id = $1 AND user_id = $2 RETURNING id",
-          [id, req.visitorId],
+          "DELETE FROM simulations WHERE id = $1 AND account_id = $2 RETURNING id",
+          [id, req.accountId],
         );
         if (result.rows.length === 0) {
           return res.status(404).json({ error: "Simulation not found" });
@@ -1252,21 +1252,21 @@ Return ONLY the JSON object, no markdown or explanation.`;
                   COALESCE(AVG(cost_amount), 0) as avg_cost_per_event,
                   COALESCE(SUM(revenue_amount), 0) as current_revenue
            FROM observe_events
-           WHERE user_id = $1 AND feature_key IS NOT NULL
+           WHERE account_id = $1 AND feature_key IS NOT NULL
            GROUP BY feature_key
            ORDER BY total_cost DESC`,
-            [userId],
+            [req.accountId],
           ),
           pool.query(
-            `SELECT feature_key, revenue_per_unit FROM feature_pricing WHERE user_id = $1`,
-            [userId],
+            `SELECT feature_key, revenue_per_unit FROM feature_pricing WHERE account_id = $1`,
+            [req.accountId],
           ),
           pool.query(
             `SELECT COALESCE(SUM(COALESCE(s.mrr_override, p.price_amount)), 0) as total_mrr
            FROM subscriptions s
            LEFT JOIN plans p ON s.user_id = p.user_id AND s.plan_id = p.plan_id
-           WHERE s.user_id = $1 AND s.is_active = true`,
-            [userId],
+           WHERE s.account_id = $1 AND s.is_active = true`,
+            [req.accountId],
           ),
         ]);
 
@@ -1378,10 +1378,10 @@ Only return the JSON array, no other text.`;
             COALESCE(SUM(revenue_amount), 0) as total_revenue,
             COALESCE(SUM(cost_amount), 0) as total_cost
           FROM observe_events
-          WHERE user_id = $1
+          WHERE account_id = $1
           GROUP BY revenue_source
           ORDER BY total_revenue DESC`,
-          [userId],
+          [req.accountId],
         );
 
         const totalRevenue = result.rows.reduce(
@@ -1445,10 +1445,10 @@ Only return the JSON array, no other text.`;
             COUNT(DISTINCT feature_key) as active_features,
             COUNT(DISTINCT model) as models_used
           FROM observe_events
-          WHERE user_id = $1 AND timestamp >= NOW() - MAKE_INTERVAL(months => $2)
+          WHERE account_id = $1 AND timestamp >= NOW() - MAKE_INTERVAL(months => $2)
           GROUP BY month
           ORDER BY month ASC`,
-          [userId, months],
+          [req.accountId, months],
         );
 
         const rows = result.rows.map((r) => {
@@ -1491,16 +1491,16 @@ Only return the JSON array, no other text.`;
           pool.query(
             `SELECT customer_id, DATE_TRUNC('month', MIN(timestamp)) as cohort_month
              FROM observe_events
-             WHERE user_id = $1 AND customer_id IS NOT NULL
+             WHERE account_id = $1 AND customer_id IS NOT NULL
              GROUP BY customer_id`,
-            [userId],
+            [req.accountId],
           ),
           pool.query(
             `SELECT customer_id, DATE_TRUNC('month', timestamp) as active_month
              FROM observe_events
-             WHERE user_id = $1 AND customer_id IS NOT NULL
+             WHERE account_id = $1 AND customer_id IS NOT NULL
              GROUP BY customer_id, DATE_TRUNC('month', timestamp)`,
-            [userId],
+            [req.accountId],
           ),
         ]);
 
@@ -1585,9 +1585,9 @@ Only return the JSON array, no other text.`;
                   COALESCE(SUM(COALESCE(s.mrr_override, p.price_amount)), 0) as mrr
            FROM subscriptions s
            LEFT JOIN plans p ON s.user_id = p.user_id AND s.plan_id = p.plan_id
-           WHERE s.user_id = $1 AND s.is_active = true
+           WHERE s.account_id = $1 AND s.is_active = true
            GROUP BY s.customer_id`,
-            [userId],
+            [req.accountId],
           ),
 
           // Prior period: subs created 60+ days ago (whether active or not)
@@ -1596,15 +1596,15 @@ Only return the JSON array, no other text.`;
                   COALESCE(SUM(COALESCE(s.mrr_override, p.price_amount)), 0) as mrr
            FROM subscriptions s
            LEFT JOIN plans p ON s.user_id = p.user_id AND s.plan_id = p.plan_id
-           WHERE s.user_id = $1 AND s.created_at <= NOW() - INTERVAL '60 days'
+           WHERE s.account_id = $1 AND s.created_at <= NOW() - INTERVAL '60 days'
            GROUP BY s.customer_id`,
-            [userId],
+            [req.accountId],
           ),
 
           // Customer names
           pool.query(
-            `SELECT customer_id, name FROM customers WHERE user_id = $1`,
-            [userId],
+            `SELECT customer_id, name FROM customers WHERE account_id = $1`,
+            [req.accountId],
           ),
         ]);
 
@@ -1724,7 +1724,7 @@ Only return the JSON array, no other text.`;
              SUM(input_tokens) AS total_input,
              SUM(output_tokens) AS total_output
            FROM observe_events
-           WHERE user_id = $1
+           WHERE account_id = $1
              AND timestamp > NOW() - MAKE_INTERVAL(days => $2)
              AND input_tokens IS NOT NULL
              AND output_tokens IS NOT NULL
@@ -1732,7 +1732,7 @@ Only return the JSON array, no other text.`;
              AND (source IS NULL OR source <> 'stripe')
            GROUP BY day, model
            ORDER BY day ASC`,
-          [userId, days],
+          [req.accountId, days],
         );
 
         // Per-request pricing cache so repeated models don't re-query

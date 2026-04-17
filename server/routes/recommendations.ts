@@ -91,6 +91,20 @@ export async function computeRecommendations(
   pool: Pool,
   userId: string,
 ): Promise<void> {
+  // Background job — no req.accountId. Fallback: resolve owner's account_id.
+  const accountIdResult = await pool.query(
+    `SELECT account_id FROM user_accounts WHERE user_id = (SELECT id FROM users WHERE visitor_id = $1) AND role = 'owner' LIMIT 1`,
+    [userId],
+  );
+  const accountId: number | null = accountIdResult.rows[0]?.account_id ?? null;
+  if (accountId === null) {
+    console.warn(
+      "computeRecommendations: no owner account_id for visitor",
+      userId,
+    );
+    return;
+  }
+
   // 1. Find customers with negative margins (routing_cost_optimization)
   await runRule("customer_margin", async () => {
     const marginResult = await pool.query(
@@ -102,11 +116,11 @@ export async function computeRecommendations(
           ELSE NULL END as margin_pct,
         COUNT(*) as event_count
        FROM observe_events
-       WHERE user_id = $1 AND timestamp > NOW() - INTERVAL '30 days'
+       WHERE account_id = $1 AND timestamp > NOW() - INTERVAL '30 days'
          AND customer_id IS NOT NULL AND customer_id != 'default'
        GROUP BY customer_id
        HAVING SUM(cost_amount) > 0`,
-      [userId],
+      [accountId],
     );
 
     for (const row of marginResult.rows) {
@@ -178,12 +192,12 @@ export async function computeRecommendations(
         SUM(cost_amount) as total_cost,
         AVG(cost_amount) as avg_cost_per_event
        FROM observe_events
-       WHERE user_id = $1 AND timestamp > NOW() - INTERVAL '30 days'
+       WHERE account_id = $1 AND timestamp > NOW() - INTERVAL '30 days'
          AND model IS NOT NULL AND cost_amount > 0
        GROUP BY model, model_provider
        ORDER BY total_cost DESC
        LIMIT 10`,
-      [userId],
+      [accountId],
     );
 
     // Only consider chat/completion models for this rule. Cost/event is only
@@ -200,7 +214,7 @@ export async function computeRecommendations(
       const cheaperResult = await pool.query(
         `SELECT DISTINCT model, model_provider, AVG(cost_amount) as avg_cost
          FROM observe_events
-         WHERE user_id = $1 AND timestamp > NOW() - INTERVAL '30 days'
+         WHERE account_id = $1 AND timestamp > NOW() - INTERVAL '30 days'
            AND model IS NOT NULL AND cost_amount > 0
            AND model != $2
            AND model NOT ILIKE '%embedding%'
@@ -211,7 +225,7 @@ export async function computeRecommendations(
          HAVING AVG(cost_amount) < $3 * 0.5
          ORDER BY avg_cost ASC
          LIMIT 1`,
-        [userId, model.model, model.avg_cost_per_event],
+        [accountId, model.model, model.avg_cost_per_event],
       );
 
       if (cheaperResult.rows.length === 0) continue;
@@ -282,10 +296,10 @@ export async function computeRecommendations(
       `SELECT model_provider, COUNT(*) as event_count,
         SUM(cost_amount) as total_cost
        FROM observe_events
-       WHERE user_id = $1 AND timestamp > NOW() - INTERVAL '30 days'
+       WHERE account_id = $1 AND timestamp > NOW() - INTERVAL '30 days'
          AND model_provider IS NOT NULL
        GROUP BY model_provider`,
-      [userId],
+      [accountId],
     );
 
     if (
@@ -339,12 +353,12 @@ export async function computeRecommendations(
         CASE WHEN COUNT(*) > 0 THEN SUM(cost_amount) / COUNT(*) ELSE 0 END as cost_per_call,
         CASE WHEN COUNT(*) > 0 THEN SUM(revenue_amount) / COUNT(*) ELSE 0 END as revenue_per_call
        FROM observe_events
-       WHERE user_id = $1 AND timestamp > NOW() - INTERVAL '30 days'
+       WHERE account_id = $1 AND timestamp > NOW() - INTERVAL '30 days'
          AND feature_key IS NOT NULL AND feature_key != 'unknown'
          AND cost_amount > 0
        GROUP BY feature_key
        HAVING SUM(revenue_amount) > 0 AND COUNT(*) >= 20`,
-      [userId],
+      [accountId],
     );
 
     for (const row of featurePricingResult.rows) {
@@ -406,12 +420,12 @@ export async function computeRecommendations(
         COUNT(*) as event_count,
         SUM(cost_amount) as total_cost
        FROM observe_events
-       WHERE user_id = $1 AND timestamp > NOW() - INTERVAL '30 days'
+       WHERE account_id = $1 AND timestamp > NOW() - INTERVAL '30 days'
          AND customer_id IS NOT NULL AND customer_id != 'default' AND customer_id != 'unknown'
          AND cost_amount > 0
        GROUP BY customer_id
        HAVING SUM(revenue_amount) = 0 AND SUM(cost_amount) > 1`,
-      [userId],
+      [accountId],
     );
 
     for (const row of leakageResult.rows) {
@@ -457,14 +471,14 @@ export async function computeRecommendations(
       `WITH recent AS (
         SELECT customer_id, COUNT(*) as recent_count
         FROM observe_events
-        WHERE user_id = $1 AND timestamp > NOW() - INTERVAL '14 days'
+        WHERE account_id = $1 AND timestamp > NOW() - INTERVAL '14 days'
           AND customer_id IS NOT NULL AND customer_id != 'default' AND customer_id != 'unknown'
         GROUP BY customer_id
       ),
       prior AS (
         SELECT customer_id, COUNT(*) as prior_count
         FROM observe_events
-        WHERE user_id = $1 AND timestamp BETWEEN NOW() - INTERVAL '28 days' AND NOW() - INTERVAL '14 days'
+        WHERE account_id = $1 AND timestamp BETWEEN NOW() - INTERVAL '28 days' AND NOW() - INTERVAL '14 days'
           AND customer_id IS NOT NULL AND customer_id != 'default' AND customer_id != 'unknown'
         GROUP BY customer_id
       )
@@ -476,7 +490,7 @@ export async function computeRecommendations(
       LEFT JOIN recent r ON p.customer_id = r.customer_id
       WHERE p.prior_count >= 10
         AND COALESCE(r.recent_count, 0) < p.prior_count * 0.5`,
-      [userId],
+      [accountId],
     );
 
     for (const row of churnResult.rows) {
@@ -523,14 +537,14 @@ export async function computeRecommendations(
       `WITH recent AS (
         SELECT customer_id, COUNT(*) as recent_count
         FROM observe_events
-        WHERE user_id = $1 AND timestamp > NOW() - INTERVAL '14 days'
+        WHERE account_id = $1 AND timestamp > NOW() - INTERVAL '14 days'
           AND customer_id IS NOT NULL AND customer_id != 'default' AND customer_id != 'unknown'
         GROUP BY customer_id
       ),
       prior AS (
         SELECT customer_id, COUNT(*) as prior_count
         FROM observe_events
-        WHERE user_id = $1 AND timestamp BETWEEN NOW() - INTERVAL '28 days' AND NOW() - INTERVAL '14 days'
+        WHERE account_id = $1 AND timestamp BETWEEN NOW() - INTERVAL '28 days' AND NOW() - INTERVAL '14 days'
           AND customer_id IS NOT NULL AND customer_id != 'default' AND customer_id != 'unknown'
         GROUP BY customer_id
       )
@@ -542,7 +556,7 @@ export async function computeRecommendations(
       LEFT JOIN prior p ON r.customer_id = p.customer_id
       WHERE r.recent_count >= 20
         AND r.recent_count > COALESCE(p.prior_count, 0) * 1.5`,
-      [userId],
+      [accountId],
     );
 
     for (const row of expansionResult.rows) {
@@ -591,7 +605,7 @@ export async function computeRecommendations(
           DATE(timestamp) as day,
           SUM(cost_amount) as daily_cost
         FROM observe_events
-        WHERE user_id = $1 AND timestamp > NOW() - INTERVAL '7 days'
+        WHERE account_id = $1 AND timestamp > NOW() - INTERVAL '7 days'
           AND feature_key IS NOT NULL AND feature_key != 'unknown'
           AND cost_amount > 0
         GROUP BY feature_key, DATE(timestamp)
@@ -608,7 +622,7 @@ export async function computeRecommendations(
         ROUND((max_daily_cost / NULLIF(avg_daily_cost, 0))::numeric, 1) as spike_ratio
       FROM averages
       WHERE max_daily_cost > avg_daily_cost * 3 AND avg_daily_cost > 0.5`,
-      [userId],
+      [accountId],
     );
 
     for (const row of anomalyResult.rows) {
@@ -750,8 +764,8 @@ export function createRecommendationsRoutes(pool: Pool, ensureVisitor: any) {
           case "create_routing_rule": {
             // Find user's default config, create rule
             const configResult = await pool.query(
-              "SELECT id FROM routing_configs WHERE user_id = $1 AND is_active = true ORDER BY created_at ASC LIMIT 1",
-              [req.visitorId],
+              "SELECT id FROM routing_configs WHERE account_id = $1 AND is_active = true ORDER BY created_at ASC LIMIT 1",
+              [req.accountId],
             );
             if (configResult.rows.length > 0) {
               const configId = configResult.rows[0].id;
@@ -795,13 +809,13 @@ export function createRecommendationsRoutes(pool: Pool, ensureVisitor: any) {
               `SELECT rt.id, rt.config_id, rc.name as config_name
                FROM routing_targets rt
                JOIN routing_configs rc ON rc.id = rt.config_id
-               WHERE rc.user_id = $1
+               WHERE rc.account_id = $1
                  AND rt.model = $2
                  AND rt.enabled = true
                  AND rc.is_active = true
                ORDER BY rt.created_at ASC
                LIMIT 1`,
-              [req.visitorId, payload.current_model],
+              [req.accountId, payload.current_model],
             );
             if (targetResult.rows.length === 0) {
               actionResult = {
