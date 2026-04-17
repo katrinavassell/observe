@@ -344,6 +344,9 @@ required to start tracking costs. A user can:
 3. Or skip Stripe entirely and provide `revenueAmount` explicitly per event (Path 1)
    or via the Feature Pricing table in the dashboard.
 
+If using a restricted Stripe API key, enable **read-only** access to:
+Customers, Subscriptions, Invoices, Products, and Prices. No write permissions needed.
+
 If the user is on Clerk, Paddle, Lago, or any other billing tool, they can either
 connect Stripe separately, or use explicit `revenueAmount` / Feature Pricing.
 
