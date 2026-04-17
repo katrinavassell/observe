@@ -576,5 +576,41 @@ export function createAuthRoutes(
     },
   );
 
+  router.get(
+    "/me/accounts",
+    ensureVisitor,
+    async (req: AuthRequest, res: Response) => {
+      if (!req.visitorId) {
+        return res.status(401).json({ error: "Not authenticated" });
+      }
+      try {
+        const result = await pool.query(
+          `SELECT a.id, a.name, ua.role, ua.status, ua.joined_at
+             FROM user_accounts ua
+             JOIN accounts a ON a.id = ua.account_id
+             JOIN users u ON u.id = ua.user_id
+            WHERE u.visitor_id = $1 AND ua.status = 'active'
+            ORDER BY CASE ua.role WHEN 'owner' THEN 0 WHEN 'admin' THEN 1 ELSE 2 END,
+                     ua.joined_at ASC NULLS LAST`,
+          [req.visitorId],
+        );
+        res.json({
+          accounts: result.rows.map((r) => ({
+            id: r.id,
+            name: r.name,
+            role: r.role,
+            status: r.status,
+            joined_at: r.joined_at,
+            is_current: req.accountId === r.id,
+          })),
+          current_account_id: req.accountId ?? null,
+        });
+      } catch (err) {
+        console.error("GET /me/accounts error:", err);
+        res.status(500).json({ error: "Failed to load accounts" });
+      }
+    },
+  );
+
   return router;
 }
