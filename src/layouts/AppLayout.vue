@@ -36,6 +36,10 @@ const router = useRouter();
 const { isViewer, fetchTeamInfo } = useTeam();
 const { account, isLoggedIn, logout } = useAuth();
 const { reset: resetDataMode } = useDataMode();
+
+const isMobileLanding = computed(
+  () => route.path === "/" || route.path === "/analytics",
+);
 const { accounts: myAccounts } = useAccounts();
 const showAccountSwitcher = computed(() => (myAccounts.value?.length ?? 0) > 1);
 
@@ -405,9 +409,9 @@ function isActive(path: string) {
 
     <!-- Main Content -->
     <main class="flex-1 min-h-screen overflow-x-hidden pt-14 md:pt-0 md:ml-64">
-      <!-- Mobile landing for logged-out visitors -->
+      <!-- Mobile landing — only on home route for logged-out visitors -->
       <div
-        v-if="!isLoggedIn"
+        v-if="!isLoggedIn && isMobileLanding"
         class="md:hidden flex flex-col items-center justify-center min-h-[80vh] px-6 text-center"
       >
         <div
@@ -477,15 +481,11 @@ function isActive(path: string) {
         </div>
       </div>
 
-      <!-- Regular content (desktop, or logged-in mobile) -->
-      <div v-else class="p-6 pb-24 md:pb-6">
-        <ErrorBoundary>
-          <slot />
-        </ErrorBoundary>
-      </div>
-
-      <!-- Desktop logged-out still shows dashboard with slot -->
-      <div v-if="!isLoggedIn" class="hidden md:block p-6 pb-6">
+      <!-- Page content — always renders except when mobile landing is shown -->
+      <div
+        v-if="isLoggedIn || !isMobileLanding"
+        :class="isLoggedIn ? 'p-6 pb-24 md:pb-6' : 'p-6 pb-6'"
+      >
         <ErrorBoundary>
           <slot />
         </ErrorBoundary>
