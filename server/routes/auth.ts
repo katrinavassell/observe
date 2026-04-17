@@ -530,7 +530,7 @@ export function createAuthRoutes(
           await Promise.allSettled([
             resendPost({
               from: "Observe <kat@tansohq.com>",
-              to: "kat@tansohq.com",
+              to: ["kat@tansohq.com", "doug@tansohq.com"],
               subject: `New signup: ${email}`,
               html: `<p><strong>New user signed up for Observe</strong></p><p>Email: ${email}</p><p>Name: ${name?.trim() || "(not provided)"}</p><p>Time: ${new Date().toISOString()}</p>`,
             }),

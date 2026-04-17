@@ -299,7 +299,7 @@ export function createBillingApiRoutes(
             },
             body: JSON.stringify({
               from: "Observe <notifications@updates.tanso.io>",
-              to: "kat@tansohq.com",
+              to: ["kat@tansohq.com", "doug@tansohq.com"],
               subject: `Feedback from ${senderName}`,
               html: `<p><strong>From:</strong> ${senderName} (${sender})</p><p>${message.trim()}</p>`,
             }),
