@@ -816,20 +816,6 @@ watch(
       </CardContent>
     </Card>
 
-    <!-- Signed-out nudge -->
-    <Card v-else class="border-dashed border-muted-foreground/30">
-      <CardContent class="p-6 text-center">
-        <Key class="h-5 w-5 text-muted-foreground mx-auto mb-2" />
-        <p class="text-sm text-muted-foreground mb-3">
-          Sign up to get your Observe API key — you'll see it here immediately
-          after.
-        </p>
-        <Button size="sm" @click="router.push('/signup')"
-          >Sign up to get started</Button
-        >
-      </CardContent>
-    </Card>
-
     <!-- ================================================================== -->
     <!-- STEP 2: Verify — listening for events                              -->
     <!-- ================================================================== -->
