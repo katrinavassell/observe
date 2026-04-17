@@ -943,8 +943,11 @@ async function _doDbInit() {
     await pool.query(
       `ALTER TABLE organizations ADD COLUMN IF NOT EXISTS invite_token TEXT UNIQUE`,
     );
+    await pool.query(`CREATE EXTENSION IF NOT EXISTS pgcrypto`);
     await pool.query(
-      `UPDATE organizations SET invite_token = encode(gen_random_bytes(16), 'hex') WHERE invite_token IS NULL`,
+      `UPDATE organizations
+          SET invite_token = md5(random()::text || clock_timestamp()::text || id::text)
+        WHERE invite_token IS NULL`,
     );
     // Drop pre-#139 phantom rows (pending, no visitor, no email, legacy token)
     await pool.query(
