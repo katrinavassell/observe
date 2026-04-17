@@ -943,7 +943,7 @@ async function _doDbInit() {
     await pool.query(
       `ALTER TABLE organizations ADD COLUMN IF NOT EXISTS invite_token TEXT UNIQUE`,
     );
-    await pool.query(`CREATE EXTENSION IF NOT EXISTS pgcrypto`);
+    // md5 is built-in; no pgcrypto extension needed.
     await pool.query(
       `UPDATE organizations
           SET invite_token = md5(random()::text || clock_timestamp()::text || id::text)
