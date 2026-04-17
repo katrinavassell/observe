@@ -49,7 +49,7 @@ export function createFeatureDefinitionsRoutes(pool: Pool, ensureVisitor: any) {
              GROUP BY feature_key
            ) ev ON ev.feature_key = fd.feature_key
            LEFT JOIN feature_pricing fp
-             ON fp.user_id = fd.user_id AND fp.feature_key = fd.feature_key
+             ON fp.account_id = fd.account_id AND fp.feature_key = fd.feature_key
            WHERE fd.account_id = $1
            ORDER BY fd.created_at ASC`,
           [req.accountId],

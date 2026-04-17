@@ -105,7 +105,7 @@ export function createChatRoutes(
          COUNT(*) as events, COALESCE(SUM(oe.cost_amount),0) as cost,
          COALESCE(SUM(oe.revenue_amount),0) as revenue
        FROM observe_events oe
-       LEFT JOIN customers c ON oe.user_id = c.user_id AND oe.customer_id = c.customer_id
+       LEFT JOIN customers c ON oe.account_id = c.account_id AND oe.customer_id = c.customer_id
        WHERE oe.account_id = $1 AND oe.customer_id IS NOT NULL
        GROUP BY oe.customer_id, c.name ORDER BY cost DESC LIMIT 10`,
           [accountId],
