@@ -248,6 +248,55 @@ h3 { font-size: 18px; margin: 30px 0 15px; color: #374151; }
 <div id="flows" class="tab">
 <h2>Key Flows</h2>
 
+<h3>Cost + Revenue Calculation</h3>
+
+<div class="flow">
+  <div class="flow-title">Cost Calculation <span class="badge">Automatic</span></div>
+  <div class="steps">
+    <div class="step"><div class="step-num">1</div><div class="step-text">Event includes <code>model</code> + <code>inputTokens</code> + <code>outputTokens</code></div></div>
+    <div class="step"><div class="step-num">2</div><div class="step-text">Observe looks up per-token pricing from OpenRouter pricing tables (updated on boot)</div></div>
+    <div class="step"><div class="step-num">3</div><div class="step-text"><code>cost = inputTokens * inputPrice + outputTokens * outputPrice</code></div></div>
+    <div class="step"><div class="step-num">4</div><div class="step-text">If <code>costAmount</code> is sent explicitly, it overrides auto-calculation</div></div>
+    <div class="step"><div class="step-num accept">OK</div><div class="step-text">Cost shown per event, per customer, per feature, per model</div></div>
+  </div>
+</div>
+
+<div class="flow">
+  <div class="flow-title">Revenue Attribution <span class="badge">3 Sources</span></div>
+  <div class="steps">
+    <div class="step"><div class="step-num">1</div><div class="step-text"><strong>Explicit:</strong> <code>revenueAmount</code> sent in the event payload. Highest priority.</div></div>
+    <div class="step"><div class="step-num">2</div><div class="step-text"><strong>Feature Pricing:</strong> Rules in <code>feature_pricing</code> table (e.g. blog_post = $0.05/event). Applied when <code>revenueAmount</code> is omitted.</div></div>
+    <div class="step"><div class="step-num">3</div><div class="step-text"><strong>Stripe Subscription:</strong> MRR from customer's active subscription. Allocated differently by type:</div></div>
+    <div class="step"><div class="step-num">-</div><div class="step-text">Flat subscription → MRR / 30, allocated per day (<code>revenue_source: "allocated"</code>)</div></div>
+    <div class="step"><div class="step-num">-</div><div class="step-text">Metered/usage-based → exact per-unit revenue (<code>revenue_source: "per_unit"</code>)</div></div>
+    <div class="step"><div class="step-num">-</div><div class="step-text">Tiered/graduated → tier lookup by month-to-date usage (<code>revenue_source: "tiered"</code>)</div></div>
+    <div class="step"><div class="step-num accept">OK</div><div class="step-text">Revenue shown per customer in Customers page. Stored in observe_events.revenue_amount.</div></div>
+  </div>
+</div>
+
+<div class="flow">
+  <div class="flow-title">Margin Calculation <span class="badge">Derived</span></div>
+  <div class="steps">
+    <div class="step"><div class="step-num">1</div><div class="step-text"><code>margin = revenue - cost</code> per customer (summed across all events)</div></div>
+    <div class="step"><div class="step-num">2</div><div class="step-text"><code>margin_pct = (revenue - cost) / revenue * 100</code></div></div>
+    <div class="step"><div class="step-num">3</div><div class="step-text">If revenue = 0 and cost > 0 → margin = -100% (unprofitable)</div></div>
+    <div class="step"><div class="step-num">4</div><div class="step-text">If revenue = 0 and cost = 0 → margin = 0% (no data)</div></div>
+    <div class="step"><div class="step-num accept">OK</div><div class="step-text">Drives health scores and cohort assignment (champion, at_risk, unprofitable, etc.)</div></div>
+  </div>
+</div>
+
+<div class="flow">
+  <div class="flow-title">Health Score <span class="badge">0-100</span></div>
+  <div class="steps">
+    <div class="step"><div class="step-num">1</div><div class="step-text">Weighted: margin_pct (60%) + active_days_30d (40%)</div></div>
+    <div class="step"><div class="step-num">2</div><div class="step-text">Cohort assignment: margin >= 50% + 10+ active days → Champion</div></div>
+    <div class="step"><div class="step-num">3</div><div class="step-text">margin < 0 → Unprofitable | inactive 30+ days → Inactive | cost rising > 50% WoW → Rising Cost</div></div>
+    <div class="step"><div class="step-num accept">OK</div><div class="step-text">Shown on Customers page with color-coded badges</div></div>
+  </div>
+</div>
+
+<h3>Core Flows</h3>
+
 <div class="flow">
   <div class="flow-title">Signup <span class="badge">POST /auth/signup-complete</span></div>
   <div class="steps">
@@ -310,6 +359,45 @@ h3 { font-size: 18px; margin: 30px 0 15px; color: #374151; }
     <div class="step"><div class="step-num">5</div><div class="step-text">If triggered: send email (Resend) and/or webhook (Slack-compatible)</div></div>
     <div class="step"><div class="step-num">6</div><div class="step-text">Write to <code>alert_history</code>. Update <code>last_triggered_at</code> for cooldown.</div></div>
     <div class="step"><div class="step-num accept">OK</div><div class="step-text">Alert fires once per cooldown period. History visible on Alerts page.</div></div>
+  </div>
+</div>
+</div>
+
+<div class="flow">
+  <div class="flow-title">Invite: New User (no account) <span class="badge">Scenario A</span></div>
+  <div class="steps">
+    <div class="step"><div class="step-num">1</div><div class="step-text">Invitee clicks invite link, lands on <code>/join/:token</code></div></div>
+    <div class="step"><div class="step-num">2</div><div class="step-text">Not logged in → redirected to signup</div></div>
+    <div class="step"><div class="step-num">3</div><div class="step-text">Signup creates: <code>users</code> + <code>accounts</code> + <code>user_accounts</code> (owner of their own account)</div></div>
+    <div class="step"><div class="step-num">4</div><div class="step-text">After signup, join handler fires: adds invitee to <code>organization_members</code></div></div>
+    <div class="step"><div class="step-num">5</div><div class="step-text">Adds invitee to <code>user_accounts</code> for inviter's account (role=admin)</div></div>
+    <div class="step"><div class="step-num accept">OK</div><div class="step-text">Invitee has 2 accounts: their own (owner) + inviter's (admin). Both in account switcher.</div></div>
+  </div>
+</div>
+
+<div class="flow">
+  <div class="flow-title">Invite: Existing User (has account) <span class="badge">Scenario B</span></div>
+  <div class="steps">
+    <div class="step"><div class="step-num">1</div><div class="step-text">Invitee clicks invite link, already logged in</div></div>
+    <div class="step"><div class="step-num">2</div><div class="step-text">Join handler finds org by token, resolves inviter's account_id</div></div>
+    <div class="step"><div class="step-num">3</div><div class="step-text">INSERT into <code>organization_members</code> (if already member, reactivates)</div></div>
+    <div class="step"><div class="step-num">4</div><div class="step-text">INSERT into <code>user_accounts</code> with <code>ON CONFLICT DO UPDATE SET status='active'</code></div></div>
+    <div class="step"><div class="step-num">5</div><div class="step-text"><code>visitor_org_map</code> uses <code>DO NOTHING</code> — invitee's own org mapping preserved</div></div>
+    <div class="step"><div class="step-num accept">OK</div><div class="step-text">Invitee's own account untouched. Inviter's account added to switcher.</div></div>
+  </div>
+</div>
+
+<h3 style="margin-top:40px">Dogfood Account</h3>
+<div class="flow">
+  <div class="flow-title">Observe Self-Tracking <span class="badge">Internal</span></div>
+  <div class="steps">
+    <div class="step"><div class="step-num">1</div><div class="step-text">Dogfood account: <code>dogfood@tansohq.com</code> (account_id=18). Login: password set via Supabase Auth.</div></div>
+    <div class="step"><div class="step-num">2</div><div class="step-text"><code>OBSERVE_SELF_API_KEY</code> env var on Vercel points to dogfood's SDK key</div></div>
+    <div class="step"><div class="step-num">3</div><div class="step-text"><code>trackSelfLLM()</code> in <code>server/lib/track-self-llm.ts</code> POSTs to <code>/api/events/ingest</code> after each LLM call</div></div>
+    <div class="step"><div class="step-num">4</div><div class="step-text">Two call sites: AI Chat (gpt-4o-mini, featureKey=ai_chat) + Nightly PostHog Audit (claude-opus-4-7, featureKey=posthog_audit)</div></div>
+    <div class="step"><div class="step-num">5</div><div class="step-text"><code>ADMIN_EMAILS=dogfood@tansohq.com</code> — only dogfood sees the /admin page</div></div>
+    <div class="step"><div class="step-num">6</div><div class="step-text">Doug added as admin on dogfood account — sees same data in account switcher</div></div>
+    <div class="step"><div class="step-num accept">OK</div><div class="step-text">Observe tracks its own LLM costs. Dogfood data is separate from customer data.</div></div>
   </div>
 </div>
 </div>
