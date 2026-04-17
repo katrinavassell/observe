@@ -68,7 +68,7 @@ const {
   executeReset,
 } = useAccountReset();
 
-const isOwner = computed(() => {
+const isAccountOwner = computed(() => {
   const current = accounts.value.find((a) => a.id === currentAccountId.value);
   return current?.role === "owner";
 });
@@ -421,7 +421,7 @@ function memberLabel(member: OrgMember) {
       </Card>
 
       <!-- Danger Zone — owner only -->
-      <Card v-if="isOwner" class="border-red-500/20">
+      <Card v-if="isAccountOwner" class="border-red-500/20">
         <CardHeader class="pb-3">
           <CardTitle class="text-base flex items-center gap-2 text-destructive">
             <AlertTriangle class="h-4 w-4" />
