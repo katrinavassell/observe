@@ -4,6 +4,27 @@ import { readFileSync } from "fs";
 import { join } from "path";
 import { type AuthRequest } from "./auth.js";
 
+async function resolveAccountIdForUser(
+  pool: Pool,
+  userId: string,
+  accountId?: number,
+): Promise<number | null> {
+  if (accountId !== undefined) return accountId;
+  try {
+    const result = await pool.query(
+      `SELECT account_id FROM user_accounts
+        WHERE user_id = (SELECT id FROM users WHERE visitor_id = $1)
+          AND role = 'owner' LIMIT 1`,
+      [userId],
+    );
+    if (result.rows[0]) return result.rows[0].account_id;
+  } catch (err) {
+    console.error("chat: account_id fallback lookup failed:", err);
+  }
+  console.warn("chat: no account_id resolved for user", userId);
+  return null;
+}
+
 // ── Agent loader ─────────────────────────────────────────────────────────
 // Agent personas live in `files/agents/*.md` which is gitignored — the
 // OSS repo ships with sensible defaults and private deployments can drop
@@ -66,15 +87,18 @@ export function createChatRoutes(
 
   // ── Gather context for the LLM ─────────────────────────────────────────
 
-  async function gatherDataContext(userId: string): Promise<string> {
+  async function gatherDataContext(
+    userId: string,
+    accountId: number | null,
+  ): Promise<string> {
     const [features, customers, models, overall, routing, alerts, recs] =
       await Promise.all([
         pool.query(
           `SELECT feature_key, COUNT(*) as events,
          COALESCE(SUM(cost_amount),0) as cost, COALESCE(SUM(revenue_amount),0) as revenue
-       FROM observe_events WHERE user_id = $1 AND feature_key IS NOT NULL
+       FROM observe_events WHERE account_id = $1 AND feature_key IS NOT NULL
        GROUP BY feature_key ORDER BY cost DESC LIMIT 10`,
-          [userId],
+          [accountId],
         ),
         pool.query(
           `SELECT oe.customer_id, c.name as customer_name,
@@ -82,35 +106,35 @@ export function createChatRoutes(
          COALESCE(SUM(oe.revenue_amount),0) as revenue
        FROM observe_events oe
        LEFT JOIN customers c ON oe.user_id = c.user_id AND oe.customer_id = c.customer_id
-       WHERE oe.user_id = $1 AND oe.customer_id IS NOT NULL
+       WHERE oe.account_id = $1 AND oe.customer_id IS NOT NULL
        GROUP BY oe.customer_id, c.name ORDER BY cost DESC LIMIT 10`,
-          [userId],
+          [accountId],
         ),
         pool.query(
           `SELECT model, model_provider, COUNT(*) as events,
          COALESCE(SUM(cost_amount),0) as cost
-       FROM observe_events WHERE user_id = $1 AND model IS NOT NULL
+       FROM observe_events WHERE account_id = $1 AND model IS NOT NULL
        GROUP BY model, model_provider ORDER BY cost DESC LIMIT 10`,
-          [userId],
+          [accountId],
         ),
         pool.query(
           `SELECT COUNT(*) as total_events,
          COALESCE(SUM(cost_amount),0) as total_cost,
          COALESCE(SUM(revenue_amount),0) as total_revenue
-       FROM observe_events WHERE user_id = $1`,
-          [userId],
+       FROM observe_events WHERE account_id = $1`,
+          [accountId],
         ),
         pool.query(
           `SELECT rc.name, rc.is_active,
          (SELECT COUNT(*) FROM routing_targets rt WHERE rt.config_id = rc.id) as target_count,
          (SELECT COUNT(*) FROM routing_rules rr WHERE rr.config_id = rc.id) as rule_count
-       FROM routing_configs rc WHERE rc.user_id = $1`,
-          [userId],
+       FROM routing_configs rc WHERE rc.account_id = $1`,
+          [accountId],
         ),
         pool.query(
           `SELECT name, metric, operator, threshold, enabled
-       FROM alert_rules WHERE user_id = $1 LIMIT 10`,
-          [userId],
+       FROM alert_rules WHERE account_id = $1 LIMIT 10`,
+          [accountId],
         ),
         pool.query(
           `SELECT type, title, severity, status FROM recommendations
@@ -295,7 +319,10 @@ Only include action blocks when the user explicitly asks you to do something. Fo
         }
 
         // Gather data context
-        const dataContext = await gatherDataContext(req.visitorId!);
+        const dataContext = await gatherDataContext(
+          req.visitorId!,
+          await resolveAccountIdForUser(pool, req.visitorId!, req.accountId),
+        );
 
         const systemMessage = `${buildSystemPrompt(agentKey)}\n\n${dataContext}`;
 
@@ -431,8 +458,8 @@ Only include action blocks when the user explicitly asks you to do something. Fo
         switch (action.type) {
           case "create_routing_rule": {
             const configResult = await pool.query(
-              "SELECT id FROM routing_configs WHERE user_id = $1 AND name = $2 AND is_active = true",
-              [req.visitorId, action.config_name || "default"],
+              "SELECT id FROM routing_configs WHERE account_id = $1 AND name = $2 AND is_active = true",
+              [req.accountId ?? null, action.config_name || "default"],
             );
             if (configResult.rows.length === 0) {
               return res.json({

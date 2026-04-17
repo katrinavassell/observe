@@ -140,10 +140,11 @@ export function createBackfillRoutes(pool: Pool, ensureVisitor: any) {
       }
 
       // Look up the encrypted key from the user's integration row.
+      const acct = req.accountId ?? null;
       const integResult = await pool.query(
         `SELECT encrypted_api_key FROM integrations
-         WHERE user_id = $1 AND provider = $2`,
-        [userId, provider],
+         WHERE account_id = $1 AND provider = $2`,
+        [acct, provider],
       );
       if (integResult.rows.length === 0) {
         return res
@@ -163,11 +164,11 @@ export function createBackfillRoutes(pool: Pool, ensureVisitor: any) {
       const retentionDays = RETENTION_DAYS[provider];
       const oorResult = await pool.query(
         `SELECT COUNT(*)::int AS n FROM observe_events
-         WHERE user_id = $1
+         WHERE account_id = $1
            AND model_provider = $2
            AND tokens_source IS NULL
            AND timestamp < NOW() - ($3 || ' days')::interval`,
-        [userId, provider, retentionDays],
+        [acct, provider, retentionDays],
       );
       const rowsOutOfRetention: number = oorResult.rows[0]?.n ?? 0;
 
@@ -194,12 +195,12 @@ export function createBackfillRoutes(pool: Pool, ensureVisitor: any) {
                 usage_units,
                 (timestamp AT TIME ZONE 'UTC')::date::text AS day
          FROM observe_events
-         WHERE user_id = $1
+         WHERE account_id = $1
            AND model_provider = $2
            AND tokens_source IS NULL
            AND model IS NOT NULL
            AND timestamp >= NOW() - ($3 || ' days')::interval`,
-        [userId, provider, retentionDays],
+        [acct, provider, retentionDays],
       );
 
       interface CandidateRow {

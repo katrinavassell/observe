@@ -1,6 +1,27 @@
 import type { Pool } from "pg";
 import { getUncachableStripeClient } from "./stripe-client.js";
 
+async function resolveAccountIdForUser(
+  pool: Pool,
+  userId: string,
+  accountId?: number,
+): Promise<number | null> {
+  if (accountId !== undefined) return accountId;
+  try {
+    const result = await pool.query(
+      `SELECT account_id FROM user_accounts
+        WHERE user_id = (SELECT id FROM users WHERE visitor_id = $1)
+          AND role = 'owner' LIMIT 1`,
+      [userId],
+    );
+    if (result.rows[0]) return result.rows[0].account_id;
+  } catch (err) {
+    console.error("billing: account_id fallback lookup failed:", err);
+  }
+  console.warn("billing: no account_id resolved for user", userId);
+  return null;
+}
+
 // =============================================================================
 // Plan definitions — single source of truth for feature limits
 // =============================================================================
@@ -69,6 +90,7 @@ export async function checkFeatureAccess(
   visitorId: string,
   featureKey: string,
   _email?: string,
+  accountId?: number,
 ): Promise<{
   allowed: boolean;
   reason?: string;
@@ -99,22 +121,28 @@ export async function checkFeatureAccess(
   }
 
   // Metered — count usage this month
+  const resolvedAccountId = await resolveAccountIdForUser(
+    pool,
+    visitorId,
+    accountId,
+  );
   let used = 0;
   if (featureKey === "ai_insights") {
     const countResult = await pool.query(
       `SELECT COUNT(*) as count FROM ai_insights
-       WHERE user_id = $1 AND created_at >= date_trunc('month', NOW())`,
-      [visitorId],
+       WHERE account_id = $1 AND created_at >= date_trunc('month', NOW())`,
+      [resolvedAccountId],
     );
     used = parseInt(countResult.rows[0]?.count || "0", 10);
   } else if (featureKey === "event_ingest") {
     const countResult = await pool.query(
       `SELECT COUNT(*) as count FROM observe_events
-       WHERE user_id = $1 AND timestamp >= date_trunc('month', NOW()) AND source != 'sample'`,
-      [visitorId],
+       WHERE account_id = $1 AND timestamp >= date_trunc('month', NOW()) AND source != 'sample'`,
+      [resolvedAccountId],
     );
     used = parseInt(countResult.rows[0]?.count || "0", 10);
   } else if (featureKey === "cost_alerts") {
+    // `alerts` is not in the Stage 1 allowlist; leave user_id filter.
     const countResult = await pool.query(
       `SELECT COUNT(*) as count FROM alerts WHERE user_id = $1`,
       [visitorId],
