@@ -804,7 +804,7 @@ Return ONLY the JSON array, no markdown or explanation.`;
           SELECT
             a.email,
             a.name,
-            a.stripe_plan,
+            acc.stripe_plan,
             a.created_at,
             a.is_internal,
             COALESCE(e.event_count, 0) as events_this_month,
@@ -812,6 +812,8 @@ Return ONLY the JSON array, no markdown or explanation.`;
             COALESCE(e.total_revenue, 0) as total_revenue_this_month,
             COALESCE(i.insight_count, 0) as insights_this_month
           FROM users a
+          LEFT JOIN user_accounts ua ON ua.user_id = a.id AND ua.role = 'owner'
+          LEFT JOIN accounts acc ON acc.id = ua.account_id
           LEFT JOIN (
             SELECT user_id,
               COUNT(*) as event_count,
@@ -960,7 +962,11 @@ Return ONLY the JSON array, no markdown or explanation.`;
         }
 
         const freeUsers = await pool.query(
-          `SELECT visitor_id FROM users WHERE stripe_plan = 'free' OR stripe_plan IS NULL`,
+          `SELECT u.visitor_id
+             FROM users u
+             JOIN user_accounts ua ON ua.user_id = u.id AND ua.role = 'owner'
+             JOIN accounts a ON a.id = ua.account_id
+            WHERE a.stripe_plan = 'free' OR a.stripe_plan IS NULL`,
         );
 
         let cleaned = 0;
