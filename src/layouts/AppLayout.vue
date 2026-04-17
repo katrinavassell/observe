@@ -59,6 +59,7 @@ function dismissOnboarding() {
 }
 
 const feedbackOpen = ref(false);
+const mobileLandingEmail = ref("");
 const queryClient = useQueryClient();
 
 function handleFeedbackCredited() {
@@ -414,29 +415,58 @@ function isActive(path: string) {
         v-if="!isLoggedIn && isMobileLanding"
         class="md:hidden px-6 pt-8 pb-20"
       >
-        <h1 class="text-2xl font-bold tracking-tight leading-tight mb-3">
+        <h1 class="text-2xl font-bold tracking-tight leading-tight mb-2">
           Know the true cost of every feature you ship
         </h1>
-        <p class="text-muted-foreground text-sm leading-relaxed mb-8">
-          Observe gives SaaS teams real-time visibility into margins, usage
-          costs, and pricing health — so you can price with confidence, not
-          guesswork.
+        <p class="text-muted-foreground text-sm leading-relaxed mb-6">
+          Track AI costs per customer. See margins in real time. Install in 30
+          seconds.
         </p>
-        <router-link
-          to="/signup"
-          class="w-full flex items-center justify-center gap-2 rounded-lg bg-primary text-primary-foreground px-6 py-3.5 text-sm font-semibold transition-all hover:opacity-90"
+
+        <!-- Email capture -->
+        <form
+          class="mb-4"
+          @submit.prevent="
+            $router.push({
+              path: '/signup',
+              query: { email: mobileLandingEmail },
+            })
+          "
         >
-          Start Free
-        </router-link>
+          <input
+            v-model="mobileLandingEmail"
+            type="email"
+            placeholder="you@company.com"
+            required
+            class="w-full rounded-lg border border-input bg-background px-4 py-3 text-sm placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary mb-3"
+          />
+          <button
+            type="submit"
+            class="w-full rounded-lg bg-primary text-primary-foreground px-6 py-3.5 text-sm font-semibold transition-all hover:opacity-90"
+          >
+            Start Free
+          </button>
+        </form>
         <router-link
           to="/login"
-          class="mt-3 w-full flex items-center justify-center text-sm text-muted-foreground hover:text-foreground transition-colors py-2"
+          class="w-full flex items-center justify-center text-xs text-muted-foreground hover:text-foreground transition-colors py-1 mb-8"
         >
           Already have an account? Log in
         </router-link>
-        <div class="mt-10 space-y-5">
+
+        <!-- Social proof -->
+        <p class="text-xs text-muted-foreground mb-6">
+          Free tier includes 10,000 events/month. No credit card required.
+        </p>
+
+        <!-- Features -->
+        <div class="space-y-5 border-t pt-6">
           <div class="flex items-start gap-3">
-            <Zap class="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
+            <div
+              class="w-8 h-8 rounded-lg bg-muted flex items-center justify-center shrink-0"
+            >
+              <Zap class="h-4 w-4" />
+            </div>
             <div>
               <p class="text-sm font-semibold">Margin and pricing analysis</p>
               <p class="text-xs text-muted-foreground leading-relaxed">
@@ -446,7 +476,11 @@ function isActive(path: string) {
             </div>
           </div>
           <div class="flex items-start gap-3">
-            <Eye class="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
+            <div
+              class="w-8 h-8 rounded-lg bg-muted flex items-center justify-center shrink-0"
+            >
+              <Eye class="h-4 w-4" />
+            </div>
             <div>
               <p class="text-sm font-semibold">Revenue and cost analytics</p>
               <p class="text-xs text-muted-foreground leading-relaxed">
@@ -456,7 +490,11 @@ function isActive(path: string) {
             </div>
           </div>
           <div class="flex items-start gap-3">
-            <CreditCard class="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
+            <div
+              class="w-8 h-8 rounded-lg bg-muted flex items-center justify-center shrink-0"
+            >
+              <CreditCard class="h-4 w-4" />
+            </div>
             <div>
               <p class="text-sm font-semibold">Feature-level cost tracking</p>
               <p class="text-xs text-muted-foreground leading-relaxed">
