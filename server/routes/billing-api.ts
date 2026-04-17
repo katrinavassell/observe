@@ -261,31 +261,22 @@ export function createBillingApiRoutes(
             .json({ error: "Feedback must be at least 10 characters" });
         }
 
-        // Check if already submitted feedback this month
-        const check = await pool.query(
-          `SELECT created_at FROM feedback
-           WHERE user_id = $1 AND created_at >= date_trunc('month', NOW())
-           LIMIT 1`,
-          [req.visitorId],
-        );
-        if (check.rows.length > 0) {
-          return res
-            .status(409)
-            .json({ error: "Feedback credits already claimed this month" });
-        }
-
-        // Store feedback
+        // Always store feedback
         await pool.query(
           `INSERT INTO feedback (user_id, message) VALUES ($1, $2)`,
           [req.visitorId, message.trim()],
         );
 
-        // Grant credits and mark as submitted
-        const result = await grantBonusCredits(
-          pool,
-          req.visitorId!,
-          "feedback",
+        // Grant credits only on first-ever feedback
+        const priorFeedback = await pool.query(
+          `SELECT COUNT(*) FROM feedback WHERE user_id = $1`,
+          [req.visitorId],
         );
+        const isFirstFeedback = parseInt(priorFeedback.rows[0].count) <= 1;
+        let result = { bonus_credits: 0, granted: 0 };
+        if (isFirstFeedback) {
+          result = await grantBonusCredits(pool, req.visitorId!, "feedback");
+        }
         await pool.query(
           `UPDATE users SET feedback_submitted = true WHERE visitor_id = $1`,
           [req.visitorId],

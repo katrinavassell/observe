@@ -25,18 +25,18 @@ async function handleSubmit() {
     window.posthog?.capture("feedback_submitted", {
       credits_granted: result.granted,
     });
-    toast.success(`Thanks! You earned ${result.granted} bonus events`);
+    if (result.granted > 0) {
+      toast.success(`Thanks! You earned ${result.granted} bonus events`);
+    } else {
+      toast.success("Thanks for your feedback!");
+    }
     emit("credited", result.granted);
     emit("close");
     message.value = "";
   } catch (error) {
     const msg =
       error instanceof Error ? error.message : "Failed to submit feedback";
-    if (msg.includes("already claimed")) {
-      toast.error("You've already earned feedback credits this month");
-    } else {
-      toast.error(msg);
-    }
+    toast.error(msg);
   } finally {
     isSubmitting.value = false;
   }
