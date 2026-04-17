@@ -356,10 +356,17 @@ async function handleStripeConnected() {
 async function handleStripeSync() {
   isSyncingStripe.value = true;
   try {
-    await syncStripeData();
+    const result = await syncStripeData();
     await loadStripeStatus();
     await refetchDataMode();
-    toast.success("Stripe data synced");
+    const warnings = (result as { warnings?: string[] }).warnings;
+    if (warnings?.length) {
+      toast.warning(warnings[0]);
+    } else {
+      toast.success(
+        `Synced ${result.synced?.customers ?? 0} customers, ${result.synced?.subscriptions ?? 0} subscriptions`,
+      );
+    }
   } catch (error) {
     toast.error("Failed to sync Stripe data", {
       description: error instanceof Error ? error.message : "Please try again.",

@@ -854,6 +854,18 @@ export function createBillingApiRoutes(
           "stripe_data_synced",
         );
 
+        const warnings: string[] = [];
+        if (stripeCustomers.data.length === 0) {
+          warnings.push(
+            "No customers found in this Stripe account. Check that you're using the correct API key.",
+          );
+        }
+        if (syncedSubs === 0 && stripeCustomers.data.length > 0) {
+          warnings.push(
+            "Customers found but no active subscriptions. Revenue attribution requires at least one active subscription.",
+          );
+        }
+
         res.json({
           success: true,
           synced: {
@@ -861,6 +873,7 @@ export function createBillingApiRoutes(
             subscriptions: syncedSubs,
             plans: planIds.size,
           },
+          ...(warnings.length > 0 && { warnings }),
         });
       } catch (error) {
         await client.query("ROLLBACK");
