@@ -953,6 +953,15 @@ async function _doDbInit() {
          AND visitor_id IS NULL
          AND invited_email IS NULL`,
     );
+    // Backfill invited_email from users.email so /team doesn't render "Anonymous"
+    await pool.query(
+      `UPDATE organization_members om
+          SET invited_email = u.email
+         FROM users u
+        WHERE om.visitor_id = u.visitor_id
+          AND om.invited_email IS NULL
+          AND u.email IS NOT NULL`,
+    );
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS visitor_org_map (
