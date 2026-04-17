@@ -405,9 +405,25 @@ const repoUrl = "https://github.com/katrinalaszlo/observe";
 
             <div
               v-if="!isLoggedIn"
-              class="text-sm text-muted-foreground text-center py-4"
+              class="rounded-lg border border-primary/40 bg-primary/5 p-5 text-center space-y-3 my-2"
             >
-              Sign up to track your usage.
+              <p class="font-semibold text-sm">Sign in to track your usage</p>
+              <p class="text-xs text-muted-foreground max-w-sm mx-auto">
+                See events, traces, and team-member usage against your plan
+                limits. Free to start.
+              </p>
+              <div class="flex justify-center gap-2 pt-1">
+                <Button size="sm" @click="router.push('/signup')">
+                  Sign up free
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  @click="router.push('/login')"
+                >
+                  Log in
+                </Button>
+              </div>
             </div>
             <div
               v-else-if="usageLimitsError || billingError"

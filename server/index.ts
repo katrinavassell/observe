@@ -946,6 +946,13 @@ async function _doDbInit() {
     await pool.query(
       `UPDATE organizations SET invite_token = encode(gen_random_bytes(16), 'hex') WHERE invite_token IS NULL`,
     );
+    // Drop pre-#139 phantom rows (pending, no visitor, no email, legacy token)
+    await pool.query(
+      `DELETE FROM organization_members
+       WHERE status = 'pending'
+         AND visitor_id IS NULL
+         AND invited_email IS NULL`,
+    );
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS visitor_org_map (
