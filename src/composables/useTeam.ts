@@ -8,6 +8,7 @@ const error = ref<string | null>(null);
 export function useTeam() {
   const org = computed(() => teamInfo.value?.org ?? null);
   const members = computed(() => teamInfo.value?.members ?? []);
+  const inviteToken = computed(() => teamInfo.value?.invite_token ?? "");
 
   async function fetchTeamInfo() {
     isLoading.value = true;
@@ -28,8 +29,12 @@ export function useTeam() {
     }
   }
 
-  async function inviteMember(email: string) {
-    return api.createInvite(email);
+  async function rotateInvite() {
+    const result = await api.rotateInviteToken();
+    if (teamInfo.value) {
+      teamInfo.value.invite_token = result.invite_token;
+    }
+    return result;
   }
 
   async function removeMember(memberId: string) {
@@ -47,9 +52,10 @@ export function useTeam() {
     error,
     org,
     members,
+    inviteToken,
     fetchTeamInfo,
     renameTeam,
-    inviteMember,
+    rotateInvite,
     removeMember,
   };
 }

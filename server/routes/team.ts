@@ -2,7 +2,7 @@ import { Router, Request, Response } from "express";
 import type { Pool } from "pg";
 import crypto from "crypto";
 import { type AuthRequest } from "./auth.js";
-import { grantBonusCredits, checkFeatureAccess } from "../billing.js";
+import { grantBonusCredits } from "../billing.js";
 
 export function createTeamRoutes(pool: Pool, ensureVisitor: any) {
   const router = Router();
@@ -18,12 +18,22 @@ export function createTeamRoutes(pool: Pool, ensureVisitor: any) {
         "SELECT * FROM organizations WHERE id = $1",
         [orgId],
       );
-      return orgResult.rows[0];
+      const org = orgResult.rows[0];
+      if (org && !org.invite_token) {
+        const tok = crypto.randomBytes(16).toString("hex");
+        await pool.query(
+          "UPDATE organizations SET invite_token = $1 WHERE id = $2",
+          [tok, org.id],
+        );
+        org.invite_token = tok;
+      }
+      return org;
     }
 
+    const inviteToken = crypto.randomBytes(16).toString("hex");
     const orgResult = await pool.query(
-      "INSERT INTO organizations (name, owner_visitor_id) VALUES ($1, $2) RETURNING *",
-      ["My Team", visitorId],
+      "INSERT INTO organizations (name, owner_visitor_id, invite_token) VALUES ($1, $2, $3) RETURNING *",
+      ["My Team", visitorId, inviteToken],
     );
     const org = orgResult.rows[0];
 
@@ -68,7 +78,7 @@ export function createTeamRoutes(pool: Pool, ensureVisitor: any) {
           role: undefined,
         }));
 
-        res.json({ org, members });
+        res.json({ org, members, invite_token: org.invite_token });
       } catch (err) {
         console.error("GET /team error:", err);
         res.status(500).json({ error: "Failed to load team info" });
@@ -117,15 +127,13 @@ export function createTeamRoutes(pool: Pool, ensureVisitor: any) {
     },
   );
 
-  // POST /team/invite - create an invite
+  // POST /team/invite/rotate - rotate shared invite token
   router.post(
-    "/team/invite",
+    "/team/invite/rotate",
     ensureVisitor,
     async (req: AuthRequest, res: Response) => {
       try {
         const visitorId = req.visitorId!;
-        const { email } = req.body;
-
         const org = await getOrCreateOrg(visitorId);
 
         const memberResult = await pool.query(
@@ -135,58 +143,18 @@ export function createTeamRoutes(pool: Pool, ensureVisitor: any) {
         if (!memberResult.rows.length) {
           return res
             .status(403)
-            .json({ error: "Only team members can invite new members" });
+            .json({ error: "Only team members can rotate the invite link" });
         }
 
-        // Check team member limit before allowing invite
-        const access = await checkFeatureAccess(
-          pool,
-          visitorId,
-          "team_members",
-        );
-        if (!access.allowed) {
-          return res.status(403).json({
-            error:
-              "Free plan allows 1 team member. Upgrade to Growth for unlimited.",
-          });
-        }
-
-        // Roles are no longer surfaced in the product — every invited
-        // member is provisioned as 'admin' so the DB column retains a
-        // legal value (the CHECK constraint still requires admin|viewer).
-        const validRole = "admin";
-        const normalizedEmail = email ? email.trim().toLowerCase() : null;
-
-        if (normalizedEmail) {
-          const existing = await pool.query(
-            `SELECT id, status FROM organization_members WHERE org_id = $1 AND LOWER(invited_email) = $2`,
-            [org.id, normalizedEmail],
-          );
-          if (existing.rows.length > 0) {
-            const match = existing.rows[0];
-            if (match.status === "active") {
-              return res
-                .status(409)
-                .json({ error: "This person is already a team member" });
-            }
-            await pool.query("DELETE FROM organization_members WHERE id = $1", [
-              match.id,
-            ]);
-          }
-        }
-
-        const inviteToken = crypto.randomUUID();
-
+        const newToken = crypto.randomBytes(16).toString("hex");
         await pool.query(
-          `INSERT INTO organization_members (org_id, invited_email, invite_token, role, status)
-         VALUES ($1, $2, $3, $4, 'pending')`,
-          [org.id, normalizedEmail, inviteToken, validRole],
+          "UPDATE organizations SET invite_token = $1 WHERE id = $2",
+          [newToken, org.id],
         );
-
-        res.json({ success: true, invite_token: inviteToken });
+        res.json({ success: true, invite_token: newToken });
       } catch (err) {
-        console.error("POST /team/invite error:", err);
-        res.status(500).json({ error: "Failed to create invite" });
+        console.error("POST /team/invite/rotate error:", err);
+        res.status(500).json({ error: "Failed to rotate invite link" });
       }
     },
   );
@@ -196,23 +164,19 @@ export function createTeamRoutes(pool: Pool, ensureVisitor: any) {
     try {
       const { token } = req.params;
       const result = await pool.query(
-        `SELECT om.invited_email, o.name AS org_name
-         FROM organization_members om
-         JOIN organizations o ON o.id = om.org_id
-         WHERE om.invite_token = $1 AND om.status = 'pending'`,
+        `SELECT name AS org_name FROM organizations WHERE invite_token = $1`,
         [token],
       );
 
       if (!result.rows.length) {
         return res
           .status(404)
-          .json({ error: "Invite not found or already used" });
+          .json({ error: "Invite link not found or rotated" });
       }
 
-      const row = result.rows[0];
       res.json({
-        org_name: row.org_name,
-        invited_email: row.invited_email,
+        org_name: result.rows[0].org_name,
+        invited_email: null,
       });
     } catch (err) {
       console.error("GET /team/invite/:token error:", err);
@@ -220,15 +184,12 @@ export function createTeamRoutes(pool: Pool, ensureVisitor: any) {
     }
   });
 
-  // POST /team/join/:token - accept an invite
+  // POST /team/join/:token - accept an invite (anyone signed in with link)
   router.post(
     "/team/join/:token",
     ensureVisitor,
     async (req: AuthRequest, res: Response) => {
       try {
-        // Must be a logged-in user — otherwise ensureVisitor would stamp the
-        // invite onto a throwaway anonymous UUID, consuming the token without
-        // ever attaching the real human to the org.
         if (!req.accountEmail) {
           return res
             .status(401)
@@ -237,46 +198,44 @@ export function createTeamRoutes(pool: Pool, ensureVisitor: any) {
         const visitorId = req.visitorId!;
         const { token } = req.params;
 
-        const result = await pool.query(
-          `SELECT om.*, o.id AS organization_id
-         FROM organization_members om
-         JOIN organizations o ON o.id = om.org_id
-         WHERE om.invite_token = $1 AND om.status = 'pending'`,
+        const orgResult = await pool.query(
+          `SELECT id, owner_visitor_id FROM organizations WHERE invite_token = $1`,
           [token],
         );
-
-        if (!result.rows.length) {
+        if (!orgResult.rows.length) {
           return res
             .status(404)
-            .json({ error: "Invite not found or already used" });
+            .json({ error: "Invite link not found or rotated" });
         }
+        const orgId = orgResult.rows[0].id;
+        const ownerVisitorId = orgResult.rows[0].owner_visitor_id;
 
-        const invite = result.rows[0];
-
-        // If the invite was addressed to a specific email, the accepting
-        // user's email must match — prevents anyone-with-the-link joins.
-        if (
-          invite.invited_email &&
-          invite.invited_email.toLowerCase() !== req.accountEmail.toLowerCase()
-        ) {
-          return res.status(403).json({
-            error: `This invite is for ${invite.invited_email}. Sign in with that email to accept.`,
-          });
-        }
+        const existing = await pool.query(
+          `SELECT id, status FROM organization_members WHERE org_id = $1 AND visitor_id = $2`,
+          [orgId, visitorId],
+        );
 
         const client = await pool.connect();
         try {
           await client.query("BEGIN");
-          await client.query(
-            `UPDATE organization_members
-           SET visitor_id = $1, status = 'active', joined_at = NOW(), invite_token = NULL
-           WHERE id = $2`,
-            [visitorId, invite.id],
-          );
+          if (existing.rows.length > 0) {
+            await client.query(
+              `UPDATE organization_members
+               SET status = 'active', joined_at = COALESCE(joined_at, NOW())
+               WHERE id = $1`,
+              [existing.rows[0].id],
+            );
+          } else {
+            await client.query(
+              `INSERT INTO organization_members (org_id, visitor_id, invited_email, role, status, joined_at)
+               VALUES ($1, $2, $3, 'admin', 'active', NOW())`,
+              [orgId, visitorId, req.accountEmail],
+            );
+          }
           await client.query(
             `INSERT INTO visitor_org_map (visitor_id, org_id) VALUES ($1, $2)
-           ON CONFLICT (visitor_id) DO UPDATE SET org_id = $2`,
-            [visitorId, invite.organization_id],
+             ON CONFLICT (visitor_id) DO UPDATE SET org_id = $2`,
+            [visitorId, orgId],
           );
           await client.query("COMMIT");
         } catch (txErr) {
@@ -286,28 +245,19 @@ export function createTeamRoutes(pool: Pool, ensureVisitor: any) {
           client.release();
         }
 
-        // Grant bonus credits to the org owner who invited
-        try {
-          const orgOwner = await pool.query(
-            `SELECT owner_visitor_id FROM organizations WHERE id = $1`,
-            [invite.organization_id],
-          );
-          const ownerVisitorId = orgOwner.rows[0]?.owner_visitor_id;
-          if (ownerVisitorId) {
+        if (existing.rows.length === 0 && ownerVisitorId) {
+          try {
             await grantBonusCredits(pool, ownerVisitorId, "invite_accepted");
             await pool.query(
               `UPDATE users SET invite_credits_granted = COALESCE(invite_credits_granted, 0) + 1 WHERE visitor_id = $1`,
               [ownerVisitorId],
             );
+          } catch (creditErr) {
+            console.error("Failed to grant invite bonus credits:", creditErr);
           }
-        } catch (creditErr) {
-          console.error("Failed to grant invite bonus credits:", creditErr);
         }
 
-        res.json({
-          success: true,
-          org_id: String(invite.organization_id),
-        });
+        res.json({ success: true, org_id: String(orgId) });
       } catch (err) {
         console.error("POST /team/join/:token error:", err);
         res.status(500).json({ error: "Failed to accept invite" });

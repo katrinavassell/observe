@@ -736,6 +736,7 @@ export interface Organization {
 export interface TeamInfo {
   org: Organization;
   members: OrgMember[];
+  invite_token: string;
 }
 
 export async function getTeamInfo(): Promise<TeamInfo> {
@@ -754,11 +755,8 @@ export interface InviteResult {
   invite_token: string;
 }
 
-export async function createInvite(email: string): Promise<InviteResult> {
-  return request("/team/invite", {
-    method: "POST",
-    body: JSON.stringify({ email }),
-  });
+export async function rotateInviteToken(): Promise<InviteResult> {
+  return request("/team/invite/rotate", { method: "POST" });
 }
 
 export interface InviteInfo {

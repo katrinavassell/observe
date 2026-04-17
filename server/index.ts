@@ -939,6 +939,14 @@ async function _doDbInit() {
       )
     `);
 
+    // Shared org-scoped invite token (anyone-with-link joins)
+    await pool.query(
+      `ALTER TABLE organizations ADD COLUMN IF NOT EXISTS invite_token TEXT UNIQUE`,
+    );
+    await pool.query(
+      `UPDATE organizations SET invite_token = encode(gen_random_bytes(16), 'hex') WHERE invite_token IS NULL`,
+    );
+
     await pool.query(`
       CREATE TABLE IF NOT EXISTS visitor_org_map (
         visitor_id TEXT PRIMARY KEY,
