@@ -1,4 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { trackSelfLLM } from "./lib/track-self-llm.js";
 
 const POSTHOG_HOST = process.env.POSTHOG_HOST || "https://us.posthog.com";
 
@@ -118,10 +119,22 @@ Top sessions: ${JSON.stringify(data.sessions).slice(0, 4000)}
 
 Output: a Slack-formatted message (mrkdwn). Lead with ONE sentence of the most important finding. Then up to 5 bulleted findings, each with (a) what you saw, (b) specific hypothesis, (c) suggested next step. If the signal is too weak to say anything useful, say so in one line — don't invent. No preamble, no emojis unless genuinely useful.`;
 
+  const auditStarted = Date.now();
   const response = await anthropic.messages.create({
     model: "claude-opus-4-7",
     max_tokens: 1500,
     messages: [{ role: "user", content: prompt }],
+  });
+
+  trackSelfLLM({
+    featureKey: "posthog_audit",
+    eventName: "nightly_audit",
+    model: "claude-opus-4-7",
+    modelProvider: "anthropic",
+    inputTokens: response.usage?.input_tokens,
+    outputTokens: response.usage?.output_tokens,
+    durationMs: Date.now() - auditStarted,
+    idempotencyKey: response.id,
   });
 
   const block = response.content[0];

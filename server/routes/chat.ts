@@ -3,6 +3,7 @@ import type { Pool } from "pg";
 import { readFileSync } from "fs";
 import { join } from "path";
 import { type AuthRequest } from "./auth.js";
+import { trackSelfLLM } from "../lib/track-self-llm.js";
 
 async function resolveAccountIdForUser(
   pool: Pool,
@@ -326,6 +327,7 @@ Only include action blocks when the user explicitly asks you to do something. Fo
 
         const systemMessage = `${buildSystemPrompt(agentKey)}\n\n${dataContext}`;
 
+        const chatStarted = Date.now();
         const response = await fetch(
           "https://api.openai.com/v1/chat/completions",
           {
@@ -338,7 +340,7 @@ Only include action blocks when the user explicitly asks you to do something. Fo
               model: "gpt-4o-mini",
               messages: [
                 { role: "system", content: systemMessage },
-                ...messages.slice(-10), // last 10 messages for context window
+                ...messages.slice(-10),
               ],
               temperature: 0.3,
               max_tokens: 1000,
@@ -360,7 +362,6 @@ Only include action blocks when the user explicitly asks you to do something. Fo
         )?.[0];
         const content = choice?.message?.content || "";
 
-        // Parse action blocks if present
         const actionMatch = content.match(/```action\n([\s\S]*?)\n```/);
         let action = null;
         if (actionMatch) {
@@ -375,38 +376,20 @@ Only include action blocks when the user explicitly asks you to do something. Fo
           }
         }
 
-        // Log chat usage
         const usage = data.usage as
-          | {
-              prompt_tokens?: number;
-              completion_tokens?: number;
-            }
+          | { prompt_tokens?: number; completion_tokens?: number }
           | undefined;
-        const requestBodyForLog = {
+
+        trackSelfLLM({
+          featureKey: "ai_chat",
+          eventName: "chat",
           model: "gpt-4o-mini",
-          messages: messages.slice(-10),
-        };
-        const responseBodyForLog = {
-          content,
-          usage,
-        };
-        pool
-          .query(
-            `INSERT INTO observe_events (user_id, account_id, feature_key, event_name, timestamp, cost_amount, cost_unit, usage_units, model, model_provider, source, granularity, is_inferred, request_body, response_body)
-           VALUES ($1, $2, 'ai_chat', 'chat', NOW(), $3, 'usd', $4, 'gpt-4o-mini', 'openai', 'internal', 'event', false, $5, $6)`,
-            [
-              req.visitorId,
-              req.accountId ?? null,
-              (
-                (usage?.prompt_tokens || 0) * 0.00000015 +
-                (usage?.completion_tokens || 0) * 0.0000006
-              ).toFixed(6),
-              (usage?.prompt_tokens || 0) + (usage?.completion_tokens || 0),
-              JSON.stringify(requestBodyForLog),
-              JSON.stringify(responseBodyForLog),
-            ],
-          )
-          .catch((err) => console.error("Chat usage logging failed:", err));
+          modelProvider: "openai",
+          inputTokens: usage?.prompt_tokens,
+          outputTokens: usage?.completion_tokens,
+          durationMs: Date.now() - chatStarted,
+          idempotencyKey: (data as { id?: string }).id,
+        });
 
         // Count against AI message quota (ai_insights table is what billing checks)
         pool
