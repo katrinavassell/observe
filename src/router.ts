@@ -68,6 +68,11 @@ const router = createRouter({
       component: () => import("@/pages/AlertsPage.vue"),
     },
     {
+      path: "/help",
+      name: "help",
+      component: () => import("@/pages/HelpPage.vue"),
+    },
+    {
       // Routing is hidden pending QA. Existing links redirect home.
       path: "/routing",
       redirect: "/analytics",

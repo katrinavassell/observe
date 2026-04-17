@@ -18,6 +18,7 @@ import {
   Menu,
   X,
   MessageSquare,
+  HelpCircle,
   Shield,
   UserCircle,
 } from "lucide-vue-next";
@@ -380,8 +381,15 @@ function isActive(path: string) {
               <LogOut class="h-4 w-4" />
             </button>
           </div>
-          <!-- Feedback -->
+          <!-- Help + Feedback -->
           <div class="flex items-center gap-1 px-2 pt-1">
+            <router-link
+              to="/help"
+              class="flex items-center gap-1.5 px-2 py-1 text-xs text-sidebar-foreground/40 hover:text-sidebar-foreground hover:bg-sidebar-accent/50 transition-all duration-150 rounded-md"
+            >
+              <HelpCircle class="h-3 w-3" />
+              Help
+            </router-link>
             <button
               v-if="isLoggedIn"
               class="flex items-center gap-1.5 px-2 py-1 text-xs text-sidebar-foreground/40 hover:text-sidebar-foreground hover:bg-sidebar-accent/50 transition-all duration-150 rounded-md"
