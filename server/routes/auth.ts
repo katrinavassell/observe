@@ -262,8 +262,8 @@ export function createEnsureVisitor(pool: Pool) {
       // ephemeral guest UUIDs don't need persistent rows).
       if (req.accountEmail) {
         await pool.query(
-          "INSERT INTO user_data_status (user_id, data_mode) VALUES ($1, $2) ON CONFLICT DO NOTHING",
-          [req.visitorId, "none"],
+          "INSERT INTO user_data_status (user_id, account_id, data_mode) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING",
+          [req.visitorId, req.accountId ?? null, "none"],
         );
       }
 

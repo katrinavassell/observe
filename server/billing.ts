@@ -145,10 +145,11 @@ export async function checkFeatureAccess(
     );
     used = parseInt(countResult.rows[0]?.count || "0", 10);
   } else if (featureKey === "cost_alerts") {
-    // `alerts` is not in the Stage 1 allowlist; leave user_id filter.
+    // Count active alert_rules per account. Previous code queried a
+    // non-existent `alerts` table — counter was effectively dead.
     const countResult = await pool.query(
-      `SELECT COUNT(*) as count FROM alerts WHERE user_id = $1`,
-      [visitorId],
+      `SELECT COUNT(*) as count FROM alert_rules WHERE account_id = $1 AND enabled = true`,
+      [resolvedAccountId],
     );
     used = parseInt(countResult.rows[0]?.count || "0", 10);
   } else if (featureKey === "team_members") {

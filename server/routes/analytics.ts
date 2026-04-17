@@ -26,7 +26,7 @@ export function createAnalyticsRoutes(pool: Pool, ensureVisitor: any) {
                 COALESCE(SUM(oe.revenue_amount), 0) as total_revenue,
                 COALESCE(SUM(oe.cost_amount), 0) as total_cost
          FROM observe_events oe
-         LEFT JOIN customers c ON oe.user_id = c.user_id AND oe.customer_id = c.customer_id
+         LEFT JOIN customers c ON oe.account_id = c.account_id AND oe.customer_id = c.customer_id
          WHERE oe.account_id = $1 AND oe.customer_id IS NOT NULL
          GROUP BY oe.customer_id, c.name
          ORDER BY COALESCE(SUM(oe.revenue_amount), 0) - COALESCE(SUM(oe.cost_amount), 0) ASC`,
@@ -106,7 +106,7 @@ export function createAnalyticsRoutes(pool: Pool, ensureVisitor: any) {
                 COALESCE(SUM(oe.revenue_amount), 0) as total_revenue,
                 COALESCE(SUM(oe.cost_amount), 0) as total_cost
          FROM observe_events oe
-         LEFT JOIN customers c ON oe.user_id = c.user_id AND oe.customer_id = c.customer_id
+         LEFT JOIN customers c ON oe.account_id = c.account_id AND oe.customer_id = c.customer_id
          WHERE oe.account_id = $1 AND oe.customer_id IS NOT NULL
          GROUP BY oe.customer_id, c.name
          HAVING COALESCE(SUM(oe.cost_amount), 0) > COALESCE(SUM(oe.revenue_amount), 0)`,
@@ -184,7 +184,7 @@ export function createAnalyticsRoutes(pool: Pool, ensureVisitor: any) {
           `SELECT oe.customer_id, COALESCE(c.name, oe.customer_id) as customer_name,
                 COALESCE(SUM(oe.cost_amount), 0) as total_cost
          FROM observe_events oe
-         LEFT JOIN customers c ON oe.user_id = c.user_id AND oe.customer_id = c.customer_id
+         LEFT JOIN customers c ON oe.account_id = c.account_id AND oe.customer_id = c.customer_id
          WHERE oe.account_id = $1 AND oe.customer_id IS NOT NULL
          GROUP BY oe.customer_id, c.name`,
           [req.accountId],
@@ -193,7 +193,7 @@ export function createAnalyticsRoutes(pool: Pool, ensureVisitor: any) {
         const subRows = await pool.query(
           `SELECT s.customer_id, COALESCE(SUM(COALESCE(s.mrr_override, p.price_amount)), 0) as sub_revenue
          FROM subscriptions s
-         LEFT JOIN plans p ON s.user_id = p.user_id AND s.plan_id = p.plan_id
+         LEFT JOIN plans p ON s.account_id = p.account_id AND s.plan_id = p.plan_id
          WHERE s.account_id = $1 AND s.is_active = true
          GROUP BY s.customer_id`,
           [req.accountId],
@@ -387,7 +387,7 @@ export function createAnalyticsRoutes(pool: Pool, ensureVisitor: any) {
            COALESCE(SUM(oe.cost_amount), 0) - COALESCE(SUM(oe.revenue_amount), 0) AS loss_amount,
            COUNT(*) AS event_count
          FROM observe_events oe
-         LEFT JOIN customers c ON oe.user_id = c.user_id AND oe.customer_id = c.customer_id
+         LEFT JOIN customers c ON oe.account_id = c.account_id AND oe.customer_id = c.customer_id
          WHERE oe.account_id = $1
            AND oe.timestamp > NOW() - MAKE_INTERVAL(days => $2)
          GROUP BY oe.customer_id, c.name
@@ -513,7 +513,7 @@ export function createAnalyticsRoutes(pool: Pool, ensureVisitor: any) {
              COALESCE(SUM(oe.cost_amount), 0) as total_cost,
              COALESCE(SUM(oe.revenue_amount), 0) as total_revenue
            FROM observe_events oe
-           LEFT JOIN customers c ON oe.user_id = c.user_id AND oe.customer_id = c.customer_id
+           LEFT JOIN customers c ON oe.account_id = c.account_id AND oe.customer_id = c.customer_id
            WHERE oe.account_id = $1
            GROUP BY oe.customer_id, c.name, c.segment ORDER BY total_revenue DESC LIMIT 10`,
             [req.accountId],
@@ -875,7 +875,7 @@ Return ONLY the JSON object, no markdown or explanation.`;
              COALESCE(SUM(oe.cost_amount), 0) as total_cost,
              COALESCE(SUM(oe.revenue_amount), 0) as total_revenue
            FROM observe_events oe
-           LEFT JOIN customers c ON oe.user_id = c.user_id AND oe.customer_id = c.customer_id
+           LEFT JOIN customers c ON oe.account_id = c.account_id AND oe.customer_id = c.customer_id
            WHERE oe.account_id = $1
            GROUP BY oe.customer_id, c.name, c.segment`,
             [req.accountId],
@@ -1264,7 +1264,7 @@ Return ONLY the JSON object, no markdown or explanation.`;
           pool.query(
             `SELECT COALESCE(SUM(COALESCE(s.mrr_override, p.price_amount)), 0) as total_mrr
            FROM subscriptions s
-           LEFT JOIN plans p ON s.user_id = p.user_id AND s.plan_id = p.plan_id
+           LEFT JOIN plans p ON s.account_id = p.account_id AND s.plan_id = p.plan_id
            WHERE s.account_id = $1 AND s.is_active = true`,
             [req.accountId],
           ),
@@ -1584,7 +1584,7 @@ Only return the JSON array, no other text.`;
             `SELECT s.customer_id,
                   COALESCE(SUM(COALESCE(s.mrr_override, p.price_amount)), 0) as mrr
            FROM subscriptions s
-           LEFT JOIN plans p ON s.user_id = p.user_id AND s.plan_id = p.plan_id
+           LEFT JOIN plans p ON s.account_id = p.account_id AND s.plan_id = p.plan_id
            WHERE s.account_id = $1 AND s.is_active = true
            GROUP BY s.customer_id`,
             [req.accountId],
@@ -1595,7 +1595,7 @@ Only return the JSON array, no other text.`;
             `SELECT s.customer_id,
                   COALESCE(SUM(COALESCE(s.mrr_override, p.price_amount)), 0) as mrr
            FROM subscriptions s
-           LEFT JOIN plans p ON s.user_id = p.user_id AND s.plan_id = p.plan_id
+           LEFT JOIN plans p ON s.account_id = p.account_id AND s.plan_id = p.plan_id
            WHERE s.account_id = $1 AND s.created_at <= NOW() - INTERVAL '60 days'
            GROUP BY s.customer_id`,
             [req.accountId],
