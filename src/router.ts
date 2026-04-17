@@ -42,8 +42,7 @@ const router = createRouter({
     },
     {
       path: "/customers",
-      name: "customers",
-      component: () => import("@/pages/CustomersPage.vue"),
+      redirect: "/cohorts",
     },
     {
       path: "/customers/:id",
