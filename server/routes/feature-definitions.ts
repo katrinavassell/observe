@@ -45,14 +45,14 @@ export function createFeatureDefinitionsRoutes(pool: Pool, ensureVisitor: any) {
                     SUM(cost_amount) AS total_cost,
                     MAX(timestamp) AS last_seen
              FROM observe_events
-             WHERE user_id = $1
+             WHERE account_id = $1
              GROUP BY feature_key
            ) ev ON ev.feature_key = fd.feature_key
            LEFT JOIN feature_pricing fp
              ON fp.user_id = fd.user_id AND fp.feature_key = fd.feature_key
-           WHERE fd.user_id = $1
+           WHERE fd.account_id = $1
            ORDER BY fd.created_at ASC`,
-          [req.visitorId],
+          [req.accountId],
         );
 
         res.json({
@@ -175,7 +175,7 @@ export function createFeatureDefinitionsRoutes(pool: Pool, ensureVisitor: any) {
              description = COALESCE($3, description),
              code_location = COALESCE($4, code_location),
              updated_at = NOW()
-           WHERE id = $5 AND user_id = $6
+           WHERE id = $5 AND account_id = $6
            RETURNING *`,
           [
             name?.trim() || null,
@@ -183,7 +183,7 @@ export function createFeatureDefinitionsRoutes(pool: Pool, ensureVisitor: any) {
             description?.trim() || null,
             code_location?.trim() || null,
             id,
-            req.visitorId,
+            req.accountId,
           ],
         );
 
@@ -214,8 +214,8 @@ export function createFeatureDefinitionsRoutes(pool: Pool, ensureVisitor: any) {
 
       try {
         const result = await pool.query(
-          `DELETE FROM feature_definitions WHERE id = $1 AND user_id = $2`,
-          [id, req.visitorId],
+          `DELETE FROM feature_definitions WHERE id = $1 AND account_id = $2`,
+          [id, req.accountId],
         );
         if (result.rowCount === 0) {
           return res.status(404).json({ error: "not found" });

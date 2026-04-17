@@ -37,10 +37,10 @@ export function createFeaturesRoutes(pool: Pool, ensureVisitor: any) {
            COALESCE(AVG(revenue_amount), 0) as avg_revenue_per_event,
            MAX(timestamp) as last_seen
          FROM observe_events
-         WHERE user_id = $1 AND feature_key IS NOT NULL
+         WHERE account_id = $1 AND feature_key IS NOT NULL
          GROUP BY feature_key
          ORDER BY total_cost DESC`,
-          [req.visitorId],
+          [req.accountId],
         );
 
         const features = result.rows.map((row) => {
@@ -84,15 +84,15 @@ export function createFeaturesRoutes(pool: Pool, ensureVisitor: any) {
               `SELECT feature_key, COUNT(*) as event_count, COUNT(DISTINCT customer_id) as customer_count,
              COALESCE(SUM(cost_amount), 0) as total_cost, COALESCE(SUM(revenue_amount), 0) as total_revenue,
              COALESCE(SUM(usage_units), 0) as total_usage, MAX(timestamp) as last_seen
-           FROM observe_events WHERE user_id = $1 AND feature_key = $2
+           FROM observe_events WHERE account_id = $1 AND feature_key = $2
            GROUP BY feature_key`,
-              [req.visitorId, key],
+              [req.accountId, key],
             ),
             pool.query(
               `SELECT oe.*, c.name as customer_name FROM observe_events oe
            LEFT JOIN customers c ON oe.user_id = c.user_id AND oe.customer_id = c.customer_id
-           WHERE oe.user_id = $1 AND oe.feature_key = $2 ORDER BY oe.timestamp DESC LIMIT 50`,
-              [req.visitorId, key],
+           WHERE oe.account_id = $1 AND oe.feature_key = $2 ORDER BY oe.timestamp DESC LIMIT 50`,
+              [req.accountId, key],
             ),
             pool.query(
               `SELECT oe.customer_id, c.name as customer_name,
@@ -100,16 +100,16 @@ export function createFeaturesRoutes(pool: Pool, ensureVisitor: any) {
              COALESCE(SUM(oe.revenue_amount), 0) as total_revenue
            FROM observe_events oe
            LEFT JOIN customers c ON oe.user_id = c.user_id AND oe.customer_id = c.customer_id
-           WHERE oe.user_id = $1 AND oe.feature_key = $2
+           WHERE oe.account_id = $1 AND oe.feature_key = $2
            GROUP BY oe.customer_id, c.name ORDER BY total_cost DESC`,
-              [req.visitorId, key],
+              [req.accountId, key],
             ),
             pool.query(
               `SELECT model, model_provider, COUNT(*) as event_count,
              COALESCE(SUM(cost_amount), 0) as total_cost, COALESCE(SUM(revenue_amount), 0) as total_revenue
-           FROM observe_events WHERE user_id = $1 AND feature_key = $2 AND model IS NOT NULL
+           FROM observe_events WHERE account_id = $1 AND feature_key = $2 AND model IS NOT NULL
            GROUP BY model, model_provider ORDER BY total_cost DESC`,
-              [req.visitorId, key],
+              [req.accountId, key],
             ),
             pool.query(
               `SELECT DATE_TRUNC('month', timestamp) as month,
@@ -117,9 +117,9 @@ export function createFeaturesRoutes(pool: Pool, ensureVisitor: any) {
              COALESCE(SUM(cost_amount), 0) as total_cost,
              COALESCE(SUM(revenue_amount), 0) as total_revenue,
              COALESCE(SUM(usage_units), 0) as total_usage
-           FROM observe_events WHERE user_id = $1 AND feature_key = $2
+           FROM observe_events WHERE account_id = $1 AND feature_key = $2
            GROUP BY month ORDER BY month ASC`,
-              [req.visitorId, key],
+              [req.accountId, key],
             ),
           ]);
 

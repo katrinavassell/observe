@@ -54,8 +54,8 @@ export function createInsightsRoutes(
     async (req: AuthRequest, res: Response) => {
       try {
         const result = await pool.query(
-          "SELECT * FROM ai_insights WHERE user_id = $1 ORDER BY created_at DESC",
-          [req.visitorId],
+          "SELECT * FROM ai_insights WHERE account_id = $1 ORDER BY created_at DESC",
+          [req.accountId],
         );
         res.json(result.rows);
       } catch (error) {
@@ -107,9 +107,9 @@ export function createInsightsRoutes(
              COALESCE(SUM(usage_units), 0) as total_usage,
              CASE WHEN COUNT(*) > 0 THEN COALESCE(SUM(cost_amount), 0) / COUNT(*) ELSE 0 END as cost_per_call,
              CASE WHEN COUNT(*) > 0 THEN COALESCE(SUM(revenue_amount), 0) / COUNT(*) ELSE 0 END as revenue_per_call
-           FROM observe_events WHERE user_id = $1 AND feature_key IS NOT NULL
+           FROM observe_events WHERE account_id = $1 AND feature_key IS NOT NULL
            GROUP BY feature_key ORDER BY total_cost DESC`,
-            [req.visitorId],
+            [req.accountId],
           ),
           pool.query(
             `SELECT oe.customer_id, c.name as customer_name, c.segment,
@@ -119,25 +119,25 @@ export function createInsightsRoutes(
              CASE WHEN COUNT(*) > 0 THEN COALESCE(SUM(oe.cost_amount), 0) / COUNT(*) ELSE 0 END as cost_per_call
            FROM observe_events oe
            LEFT JOIN customers c ON oe.user_id = c.user_id AND oe.customer_id = c.customer_id
-           WHERE oe.user_id = $1
+           WHERE oe.account_id = $1
            GROUP BY oe.customer_id, c.name, c.segment ORDER BY total_cost DESC LIMIT 15`,
-            [req.visitorId],
+            [req.accountId],
           ),
           pool.query(
             `SELECT model, model_provider,
              COUNT(*) as event_count,
              COALESCE(SUM(cost_amount), 0) as total_cost
-           FROM observe_events WHERE user_id = $1 AND model IS NOT NULL
+           FROM observe_events WHERE account_id = $1 AND model IS NOT NULL
            GROUP BY model, model_provider ORDER BY total_cost DESC`,
-            [req.visitorId],
+            [req.accountId],
           ),
           pool.query(
             `SELECT
              COUNT(*) as total_events,
              COALESCE(SUM(cost_amount), 0) as total_cost,
              COALESCE(SUM(revenue_amount), 0) as total_revenue
-           FROM observe_events WHERE user_id = $1`,
-            [req.visitorId],
+           FROM observe_events WHERE account_id = $1`,
+            [req.accountId],
           ),
           pool.query(
             `SELECT feature_key, model,
@@ -145,9 +145,9 @@ export function createInsightsRoutes(
              COALESCE(SUM(cost_amount), 0) as total_cost,
              CASE WHEN COUNT(*) > 0 THEN COALESCE(SUM(cost_amount), 0) / COUNT(*) ELSE 0 END as cost_per_call
            FROM observe_events
-           WHERE user_id = $1 AND feature_key IS NOT NULL AND model IS NOT NULL
+           WHERE account_id = $1 AND feature_key IS NOT NULL AND model IS NOT NULL
            GROUP BY feature_key, model ORDER BY feature_key, total_cost DESC`,
-            [req.visitorId],
+            [req.accountId],
           ),
           pool.query(
             `SELECT feature_key,
@@ -157,20 +157,20 @@ export function createInsightsRoutes(
            FROM (
              SELECT feature_key, customer_id, COUNT(*) as calls
              FROM observe_events
-             WHERE user_id = $1 AND feature_key IS NOT NULL
+             WHERE account_id = $1 AND feature_key IS NOT NULL
              GROUP BY feature_key, customer_id
            ) ct
            GROUP BY feature_key`,
-            [req.visitorId],
+            [req.accountId],
           ),
           pool.query(
             `SELECT DATE_TRUNC('month', timestamp) as month,
              COALESCE(SUM(cost_amount), 0) as total_cost,
              COALESCE(SUM(revenue_amount), 0) as total_revenue,
              COUNT(*) as event_count
-           FROM observe_events WHERE user_id = $1
+           FROM observe_events WHERE account_id = $1
            GROUP BY month ORDER BY month DESC LIMIT 6`,
-            [req.visitorId],
+            [req.accountId],
           ),
         ]);
 
@@ -269,13 +269,13 @@ export function createInsightsRoutes(
               pool.query(
                 `SELECT cost_type, SUM(amount)::numeric as total, COUNT(*)::int as records,
                MIN(period_start) as earliest, MAX(period_end) as latest
-             FROM cost_records WHERE user_id = $1 GROUP BY cost_type`,
-                [req.visitorId],
+             FROM cost_records WHERE account_id = $1 GROUP BY cost_type`,
+                [req.accountId],
               ),
               pool.query(
                 `SELECT metric_name, SUM(value)::numeric as total, COUNT(*)::int as records
-             FROM usage_records WHERE user_id = $1 GROUP BY metric_name`,
-                [req.visitorId],
+             FROM usage_records WHERE account_id = $1 GROUP BY metric_name`,
+                [req.accountId],
               ),
               pool.query(
                 `SELECT source, model, model_provider,
@@ -283,9 +283,9 @@ export function createInsightsRoutes(
                COALESCE(SUM(cost_amount), 0)::numeric as total_cost,
                MIN(timestamp) as earliest, MAX(timestamp) as latest
              FROM observe_events
-             WHERE user_id = $1 AND source IN ('openai', 'anthropic', 'csv') AND granularity != 'event'
+             WHERE account_id = $1 AND source IN ('openai', 'anthropic', 'csv') AND granularity != 'event'
              GROUP BY source, model, model_provider`,
-                [req.visitorId],
+                [req.accountId],
               ),
             ],
           );
@@ -731,8 +731,8 @@ Return ONLY the JSON array, no markdown or explanation.`;
     ensureVisitor,
     async (req: AuthRequest, res: Response) => {
       try {
-        await pool.query("DELETE FROM ai_insights WHERE user_id = $1", [
-          req.visitorId,
+        await pool.query("DELETE FROM ai_insights WHERE account_id = $1", [
+          req.accountId,
         ]);
         res.json({ success: true });
       } catch (error) {
@@ -967,9 +967,23 @@ Return ONLY the JSON array, no markdown or explanation.`;
         let deletedEvents = 0;
 
         for (const row of freeUsers.rows) {
-          const result = await pool.query(
-            `DELETE FROM observe_events WHERE user_id = $1 AND timestamp < NOW() - INTERVAL '30 days' AND source != 'sample'`,
+          // Admin cleanup — no req.accountId. Resolve owner's account_id.
+          const accountIdResult = await pool.query(
+            `SELECT account_id FROM user_accounts WHERE user_id = (SELECT id FROM users WHERE visitor_id = $1) AND role = 'owner' LIMIT 1`,
             [row.visitor_id],
+          );
+          const accountId: number | null =
+            accountIdResult.rows[0]?.account_id ?? null;
+          if (accountId === null) {
+            console.warn(
+              "admin/cleanup: no owner account_id for visitor",
+              row.visitor_id,
+            );
+            continue;
+          }
+          const result = await pool.query(
+            `DELETE FROM observe_events WHERE account_id = $1 AND timestamp < NOW() - INTERVAL '30 days' AND source != 'sample'`,
+            [accountId],
           );
           const count = result.rowCount ?? 0;
           if (count > 0) {
