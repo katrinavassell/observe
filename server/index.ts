@@ -493,6 +493,35 @@ async function _doDbInit() {
     }
     // ── end Stage 1 migration ───────────────────────────────────────────
 
+    // ── Stage 4: copy Stripe fields users → accounts ────────────────────
+    // Additive + idempotent. Columns stay on `users` for rollback safety.
+    // Runs after Stage 1 so accounts/user_accounts exist and owners are set.
+    await pool.query(
+      `ALTER TABLE accounts ADD COLUMN IF NOT EXISTS bonus_credits INTEGER DEFAULT 0`,
+    );
+    try {
+      await pool.query(
+        `UPDATE accounts a
+            SET stripe_customer_id = COALESCE(a.stripe_customer_id, u.stripe_customer_id),
+                stripe_plan        = COALESCE(NULLIF(a.stripe_plan, 'free'), u.stripe_plan, 'free'),
+                bonus_credits      = COALESCE(a.bonus_credits, u.bonus_credits, 0)
+           FROM users u
+           JOIN user_accounts ua ON ua.user_id = u.id AND ua.role = 'owner'
+          WHERE ua.account_id = a.id
+            AND (
+              (u.stripe_customer_id IS NOT NULL AND a.stripe_customer_id IS NULL)
+              OR (u.stripe_plan IS NOT NULL AND a.stripe_plan = 'free' AND u.stripe_plan != 'free')
+              OR (u.bonus_credits > 0 AND COALESCE(a.bonus_credits, 0) = 0)
+            )`,
+      );
+    } catch (err) {
+      console.error("Stage 4 stripe field copy failed:", err);
+    }
+    await pool.query(
+      `CREATE INDEX IF NOT EXISTS idx_accounts_stripe_customer ON accounts(stripe_customer_id) WHERE stripe_customer_id IS NOT NULL`,
+    );
+    // ── end Stage 4 migration ───────────────────────────────────────────
+
     await pool.query(`
       CREATE TABLE IF NOT EXISTS feedback (
         id SERIAL PRIMARY KEY,
