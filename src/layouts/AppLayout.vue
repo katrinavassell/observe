@@ -135,7 +135,7 @@ const navItems = computed(() => [
 ]);
 
 const ADMIN_EMAILS = [
-  "tansoadmin@tansohq.com",
+  "dogfood@tansohq.com",
   "kat@tansohq.com",
   "doug@tansohq.com",
 ];
