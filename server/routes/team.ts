@@ -65,6 +65,7 @@ export function createTeamRoutes(pool: Pool, ensureVisitor: any) {
          FROM organization_members om
          LEFT JOIN users a ON a.visitor_id = om.visitor_id
          WHERE om.org_id = $1
+           AND (om.status = 'active' OR om.invited_email IS NOT NULL)
          ORDER BY om.created_at ASC`,
           [org.id],
         );

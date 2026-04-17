@@ -154,7 +154,8 @@ export function useAuth() {
     account.value = me.account;
 
     if (account.value && window.posthog) {
-      window.posthog.identify(account.value.id, {
+      window.posthog.identify(account.value.email, {
+        account_id: account.value.id,
         email: account.value.email,
         name: account.value.name,
       });
@@ -205,7 +206,8 @@ export function useAuth() {
     }
 
     if (account.value && window.posthog) {
-      window.posthog.identify(account.value.id, {
+      window.posthog.identify(account.value.email, {
+        account_id: account.value.id,
         email: account.value.email,
         name: account.value.name,
       });
