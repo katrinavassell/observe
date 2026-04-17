@@ -104,8 +104,8 @@ const SOURCE_PRIORITY_CTE = `
         ORDER BY CASE oe.source WHEN 'proxy' THEN 1 WHEN 'sdk' THEN 2 WHEN 'csv' THEN 3 WHEN 'sample' THEN 4 ELSE 5 END
       ) AS _src_rank
     FROM observe_events oe
-    LEFT JOIN user_data_status uds ON uds.user_id = oe.user_id
-    WHERE oe.user_id = $1
+    LEFT JOIN user_data_status uds ON uds.account_id = oe.account_id
+    WHERE oe.account_id = $1
       AND oe.timestamp >= NOW() - INTERVAL '90 days'
       AND (oe.source != 'sample' OR COALESCE(uds.data_mode, 'none') = 'sample')
   ),
@@ -214,8 +214,8 @@ export function createEventsRoutes(
             ? "ASC"
             : "DESC";
 
-        let where = "WHERE oe.user_id = $1";
-        const params: unknown[] = [req.visitorId];
+        let where = "WHERE oe.account_id = $1";
+        const params: unknown[] = [req.accountId!];
         let paramIdx = 2;
 
         if (featureKey) {
@@ -246,7 +246,7 @@ export function createEventsRoutes(
         const eventsResult = await pool.query(
           `SELECT oe.*, c.name as customer_name
          FROM observe_events oe
-         LEFT JOIN customers c ON oe.user_id = c.user_id AND oe.customer_id = c.customer_id
+         LEFT JOIN customers c ON oe.account_id = c.account_id AND oe.customer_id = c.customer_id
          ${where}
          ORDER BY ${sortBy} ${sortDir}
          LIMIT $${paramIdx++} OFFSET $${paramIdx}`,
@@ -289,7 +289,7 @@ export function createEventsRoutes(
            MAX(timestamp) as last_seen
          FROM deduped WHERE feature_key IS NOT NULL
          GROUP BY feature_key ORDER BY total_cost DESC`,
-          [req.visitorId],
+          [req.accountId!],
         );
         res.json(
           result.rows.map((row) => {
@@ -330,9 +330,9 @@ export function createEventsRoutes(
              THEN ROUND((1 - SUM(cost_amount)/SUM(revenue_amount)) * 100, 1)
              ELSE NULL END as margin_pct,
            MAX(timestamp) as last_seen
-           FROM observe_events WHERE user_id = $1 AND agent_id IS NOT NULL AND agent_id != ''
+           FROM observe_events WHERE account_id = $1 AND agent_id IS NOT NULL AND agent_id != ''
            GROUP BY agent_id ORDER BY total_cost DESC`,
-          [req.visitorId],
+          [req.accountId!],
         );
         res.json(
           result.rows.map((r) => ({
@@ -365,9 +365,9 @@ export function createEventsRoutes(
            COALESCE(SUM(d.revenue_amount), 0) as total_revenue,
            MAX(d.timestamp) as last_seen
          FROM deduped d
-         LEFT JOIN customers c ON d.user_id = c.user_id AND d.customer_id = c.customer_id
+         LEFT JOIN customers c ON d.account_id = c.account_id AND d.customer_id = c.customer_id
          GROUP BY d.customer_id, c.name ORDER BY total_cost DESC`,
-          [req.visitorId],
+          [req.accountId!],
         );
         res.json(
           result.rows.map((row) => {
@@ -409,7 +409,7 @@ export function createEventsRoutes(
            MAX(timestamp) as last_seen
          FROM deduped WHERE model IS NOT NULL
          GROUP BY model, model_provider ORDER BY total_cost DESC`,
-          [req.visitorId],
+          [req.accountId!],
         );
         res.json(
           result.rows.map((row) => {
@@ -444,8 +444,8 @@ export function createEventsRoutes(
     async (req: Request, res: Response) => {
       try {
         const authReq = req as AuthRequest;
-        const userId = authReq.visitorId;
-        if (!userId) {
+        const accountId = authReq.accountId;
+        if (!accountId) {
           return res.json({ traces: [] });
         }
         const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
@@ -460,11 +460,11 @@ export function createEventsRoutes(
            (array_agg(event_name ORDER BY timestamp ASC))[1] as root_event,
            (array_agg(DISTINCT cost_type))[1:5] as cost_types
            FROM observe_events
-           WHERE user_id = $1 AND trace_id IS NOT NULL AND source IS DISTINCT FROM 'sample'
+           WHERE account_id = $1 AND trace_id IS NOT NULL AND source IS DISTINCT FROM 'sample'
            GROUP BY trace_id
            ORDER BY start_time DESC
            LIMIT $2 OFFSET $3`,
-          [userId, limit, offset],
+          [accountId, limit, offset],
         );
         res.json({
           traces: result.rows.map((r) => ({
@@ -494,8 +494,8 @@ export function createEventsRoutes(
     async (req: Request, res: Response) => {
       try {
         const authReq = req as AuthRequest;
-        const userId = authReq.visitorId;
-        if (!userId) {
+        const accountId = authReq.accountId;
+        if (!accountId) {
           return res.status(404).json({ error: "Trace not found" });
         }
         const { traceId } = req.params;
@@ -512,9 +512,9 @@ export function createEventsRoutes(
            model, model_provider, source, properties, agent_id,
            trace_id, span_id, parent_span_id, duration_ms, cost_type
            FROM observe_events
-           WHERE user_id = $1 AND trace_id = $2 AND source IS DISTINCT FROM 'sample'
+           WHERE account_id = $1 AND trace_id = $2 AND source IS DISTINCT FROM 'sample'
            ORDER BY timestamp ASC`,
-          [userId, traceId],
+          [accountId, traceId],
         );
         res.json({ trace_id: traceId, spans: result.rows });
       } catch (error) {
@@ -531,8 +531,8 @@ export function createEventsRoutes(
     async (req: Request, res: Response) => {
       try {
         const authReq = req as AuthRequest;
-        const userId = authReq.visitorId;
-        if (!userId) {
+        const accountId = authReq.accountId;
+        if (!accountId) {
           return res.status(401).json({ error: "Authentication required" });
         }
         const days = parseInt(req.query.days as string) || 30;
@@ -543,10 +543,10 @@ export function createEventsRoutes(
            COALESCE(SUM(revenue_amount), 0) as total_revenue,
            COALESCE(SUM(usage_units), 0) as total_usage
            FROM observe_events
-           WHERE user_id = $1 AND timestamp >= NOW() - make_interval(days => $2)
+           WHERE account_id = $1 AND timestamp >= NOW() - make_interval(days => $2)
            GROUP BY COALESCE(cost_type, 'llm')
            ORDER BY total_cost DESC`,
-          [userId, days],
+          [accountId, days],
         );
         res.json({
           breakdown: result.rows.map((r) => ({
@@ -576,9 +576,9 @@ export function createEventsRoutes(
         const result = await pool.query(
           `SELECT oe.*, c.name as customer_name
          FROM observe_events oe
-         LEFT JOIN customers c ON oe.user_id = c.user_id AND oe.customer_id = c.customer_id
-         WHERE oe.id = $1 AND oe.user_id = $2`,
-          [eventId, req.visitorId],
+         LEFT JOIN customers c ON oe.account_id = c.account_id AND oe.customer_id = c.customer_id
+         WHERE oe.id = $1 AND oe.account_id = $2`,
+          [eventId, req.accountId!],
         );
         if (result.rows.length === 0)
           return res.status(404).json({ error: "Event not found" });
@@ -621,8 +621,8 @@ export function createEventsRoutes(
         for (let attempt = 0; attempt < 10; attempt++) {
           const candidate = attempt === 0 ? name : `${name}-${attempt + 1}`;
           const conflict = await pool.query(
-            "SELECT 1 FROM sdk_api_keys WHERE user_id = $1 AND name = $2",
-            [userId, candidate],
+            "SELECT 1 FROM sdk_api_keys WHERE account_id = $1 AND name = $2",
+            [req.accountId!, candidate],
           );
           if (conflict.rows.length === 0) {
             finalName = candidate;
@@ -656,10 +656,9 @@ export function createEventsRoutes(
     ensureVisitor,
     async (req: AuthRequest, res: Response) => {
       try {
-        const userId = req.visitorId!;
         const result = await pool.query(
-          "SELECT id, key_prefix, encrypted_key, name, created_at, last_used_at FROM sdk_api_keys WHERE user_id = $1 AND revoked_at IS NULL ORDER BY created_at DESC",
-          [userId],
+          "SELECT id, key_prefix, encrypted_key, name, created_at, last_used_at FROM sdk_api_keys WHERE account_id = $1 AND revoked_at IS NULL ORDER BY created_at DESC",
+          [req.accountId!],
         );
         const keys = result.rows.map((row) => {
           let fullKey: string | null = null;
@@ -704,8 +703,8 @@ export function createEventsRoutes(
 
         // Get the old key's name
         const old = await pool.query(
-          "SELECT name FROM sdk_api_keys WHERE id = $1 AND user_id = $2 AND revoked_at IS NULL",
-          [keyId, userId],
+          "SELECT name FROM sdk_api_keys WHERE id = $1 AND account_id = $2 AND revoked_at IS NULL",
+          [keyId, req.accountId!],
         );
         if (old.rows.length === 0) {
           return res.status(404).json({ error: "Key not found" });
@@ -714,8 +713,8 @@ export function createEventsRoutes(
 
         // Revoke old key
         await pool.query(
-          "UPDATE sdk_api_keys SET revoked_at = NOW() WHERE id = $1 AND user_id = $2",
-          [keyId, userId],
+          "UPDATE sdk_api_keys SET revoked_at = NOW() WHERE id = $1 AND account_id = $2",
+          [keyId, req.accountId!],
         );
 
         // Generate new key (same name, unique constraint is partial on
@@ -759,15 +758,14 @@ export function createEventsRoutes(
     ensureVisitor,
     async (req: AuthRequest, res: Response) => {
       try {
-        const userId = req.visitorId!;
         const keyId = parseInt(req.params.id, 10);
         if (isNaN(keyId)) {
           return res.status(400).json({ error: "Invalid key ID" });
         }
 
         const result = await pool.query(
-          "UPDATE sdk_api_keys SET revoked_at = NOW() WHERE id = $1 AND user_id = $2 AND revoked_at IS NULL",
-          [keyId, userId],
+          "UPDATE sdk_api_keys SET revoked_at = NOW() WHERE id = $1 AND account_id = $2 AND revoked_at IS NULL",
+          [keyId, req.accountId!],
         );
 
         if (result.rowCount === 0) {
@@ -839,6 +837,27 @@ export function createEventsRoutes(
             error:
               "Authentication required. Provide a Bearer token or use a session.",
           });
+        }
+
+        // Resolve account_id for this ingest request. Bearer auth doesn't run
+        // ensureVisitor so req.accountId isn't set; look up the owner account
+        // for this visitor. Used for all data-table SELECTs below.
+        let accountId: number | null = (req as AuthRequest).accountId ?? null;
+        if (accountId == null) {
+          const acctResult = await pool.query(
+            `SELECT account_id FROM user_accounts
+             WHERE user_id = (SELECT id FROM users WHERE visitor_id = $1)
+               AND role = 'owner'
+             LIMIT 1`,
+            [userId],
+          );
+          if (acctResult.rows.length > 0) {
+            accountId = acctResult.rows[0].account_id;
+          } else {
+            console.warn(
+              `ingest: no owner account_id for visitor_id=${userId}; data-table reads will be skipped`,
+            );
+          }
         }
 
         const { events } = req.body;
@@ -930,19 +949,21 @@ export function createEventsRoutes(
 
         // Load feature pricing rules for this user
         const featurePricingMap = new Map<string, number>();
-        try {
-          const fpResult = await pool.query(
-            `SELECT feature_key, revenue_per_unit FROM feature_pricing WHERE user_id = $1`,
-            [userId],
-          );
-          for (const row of fpResult.rows) {
-            featurePricingMap.set(
-              row.feature_key,
-              parseFloat(row.revenue_per_unit),
+        if (accountId != null) {
+          try {
+            const fpResult = await pool.query(
+              `SELECT feature_key, revenue_per_unit FROM feature_pricing WHERE account_id = $1`,
+              [accountId],
             );
+            for (const row of fpResult.rows) {
+              featurePricingMap.set(
+                row.feature_key,
+                parseFloat(row.revenue_per_unit),
+              );
+            }
+          } catch (err) {
+            console.error("Feature pricing lookup failed:", err);
           }
-        } catch (err) {
-          console.error("Feature pricing lookup failed:", err);
         }
 
         // Auto-enrich revenue from Stripe: look up subscriptions for customers
@@ -958,7 +979,7 @@ export function createEventsRoutes(
           unitPrice: number | null;
         }
         const subByCustomer = new Map<string, SubMeta>();
-        if (customerIds.length > 0) {
+        if (customerIds.length > 0 && accountId != null) {
           try {
             const subResult = await pool.query(
               `SELECT s.customer_id,
@@ -968,9 +989,9 @@ export function createEventsRoutes(
                                THEN s.pricing_tiers::text END) AS pricing_tiers,
                       MAX(s.unit_price) AS unit_price
                FROM subscriptions s
-               WHERE s.user_id = $1 AND s.is_active = true AND s.customer_id = ANY($2)
+               WHERE s.account_id = $1 AND s.is_active = true AND s.customer_id = ANY($2)
                GROUP BY s.customer_id`,
-              [userId, customerIds],
+              [accountId, customerIds],
             );
             for (const row of subResult.rows) {
               subByCustomer.set(row.customer_id, {
@@ -998,16 +1019,16 @@ export function createEventsRoutes(
           )
           .map(([cid]) => cid);
         const mtdUsageByCustomer = new Map<string, number>();
-        if (tieredCustomers.length > 0) {
+        if (tieredCustomers.length > 0 && accountId != null) {
           try {
             const usageResult = await pool.query(
               `SELECT customer_id, COALESCE(SUM(usage_units), 0) AS usage
                FROM observe_events
-               WHERE user_id = $1
+               WHERE account_id = $1
                  AND customer_id = ANY($2)
                  AND timestamp >= date_trunc('month', NOW())
                GROUP BY customer_id`,
-              [userId, tieredCustomers],
+              [accountId, tieredCustomers],
             );
             for (const row of usageResult.rows) {
               mtdUsageByCustomer.set(row.customer_id, parseFloat(row.usage));
@@ -1197,14 +1218,19 @@ export function createEventsRoutes(
         // Activation-funnel instrumentation: note whether the user had any
         // non-sample SDK events BEFORE this batch. If they didn't, and this
         // batch lands a row, we'll fire the first_event_ingested milestone.
-        // Checked pre-insert so the "first ever" flag is race-free.
-        const priorEventCheck = await pool.query(
-          `SELECT 1 FROM observe_events
-           WHERE user_id = $1 AND source = 'sdk'
-           LIMIT 1`,
-          [userId],
-        );
-        const wasPreviouslyEmpty = priorEventCheck.rows.length === 0;
+        // Checked pre-insert so the "first ever" flag is race-free. If we
+        // couldn't resolve an account_id, default to false rather than firing
+        // an activation event we can't verify.
+        let wasPreviouslyEmpty = false;
+        if (accountId != null) {
+          const priorEventCheck = await pool.query(
+            `SELECT 1 FROM observe_events
+             WHERE account_id = $1 AND source = 'sdk'
+             LIMIT 1`,
+            [accountId],
+          );
+          wasPreviouslyEmpty = priorEventCheck.rows.length === 0;
+        }
 
         const result = await pool.query(insertQuery, values);
         const inserted = result.rowCount ?? 0;

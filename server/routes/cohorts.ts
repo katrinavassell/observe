@@ -78,7 +78,7 @@ function evaluateRules(
 
 async function getCustomerDataForRules(
   pool: Pool,
-  userId: string,
+  accountId: number,
 ): Promise<CustomerData[]> {
   const result = await pool.query(
     `SELECT oe.customer_id,
@@ -87,10 +87,10 @@ async function getCustomerDataForRules(
             COALESCE(SUM(oe.cost_amount), 0) AS total_cost,
             COUNT(DISTINCT CASE WHEN oe.timestamp >= NOW() - INTERVAL '30 days' THEN DATE(oe.timestamp) END) AS active_days_30d
      FROM observe_events oe
-     LEFT JOIN customers c ON oe.user_id = c.user_id AND oe.customer_id = c.customer_id
-     WHERE oe.user_id = $1 AND oe.customer_id IS NOT NULL
+     LEFT JOIN customers c ON oe.account_id = c.account_id AND oe.customer_id = c.customer_id
+     WHERE oe.account_id = $1 AND oe.customer_id IS NOT NULL
      GROUP BY oe.customer_id, c.name`,
-    [userId],
+    [accountId],
   );
   return result.rows.map((r) => {
     const revenue = parseFloat(r.total_revenue) || 0;
@@ -132,6 +132,7 @@ export function createCohortsRoutes(pool: Pool, ensureVisitor: any) {
     async (req: AuthRequest, res: Response) => {
       try {
         const userId = req.visitorId!;
+        const accountId = req.accountId!;
         const showInternal = req.query.show_internal === "true";
         const internalFilter = showInternal
           ? ""
@@ -164,7 +165,7 @@ export function createCohortsRoutes(pool: Pool, ensureVisitor: any) {
             `WITH all_customers AS (
                SELECT c.customer_id, c.name, c.email, c.segment, c.is_internal
                FROM customers c
-               WHERE c.user_id = $1 ${internalFilter}
+               WHERE c.account_id = $1 ${internalFilter}
                UNION
                SELECT DISTINCT oe.customer_id,
                       NULL::text AS name,
@@ -172,11 +173,11 @@ export function createCohortsRoutes(pool: Pool, ensureVisitor: any) {
                       NULL::text AS segment,
                       FALSE AS is_internal
                FROM observe_events oe
-               WHERE oe.user_id = $1
+               WHERE oe.account_id = $1
                  AND oe.customer_id IS NOT NULL
                  AND NOT EXISTS (
                    SELECT 1 FROM customers c2
-                   WHERE c2.user_id = oe.user_id AND c2.customer_id = oe.customer_id
+                   WHERE c2.account_id = oe.account_id AND c2.customer_id = oe.customer_id
                  )
              )
              SELECT ac.customer_id,
@@ -193,26 +194,26 @@ export function createCohortsRoutes(pool: Pool, ensureVisitor: any) {
                     MAX(oe.timestamp) AS last_seen
              FROM all_customers ac
              LEFT JOIN observe_events oe
-               ON oe.user_id = $1 AND oe.customer_id = ac.customer_id
+               ON oe.account_id = $1 AND oe.customer_id = ac.customer_id
              GROUP BY ac.customer_id, ac.name, ac.email, ac.segment, ac.is_internal`,
-            [userId],
+            [accountId],
           ),
           // 2. Total distinct features
           pool.query(
             `SELECT COUNT(DISTINCT feature_key) AS total_features
              FROM observe_events
-             WHERE user_id = $1 AND feature_key IS NOT NULL`,
-            [userId],
+             WHERE account_id = $1 AND feature_key IS NOT NULL`,
+            [accountId],
           ),
           // 3. Subscription revenue per customer
           pool.query(
             `SELECT s.customer_id,
                     COALESCE(SUM(COALESCE(s.mrr_override, p.price_amount)), 0) AS sub_revenue
              FROM subscriptions s
-             LEFT JOIN plans p ON s.user_id = p.user_id AND s.plan_id = p.plan_id
-             WHERE s.user_id = $1 AND s.is_active = true
+             LEFT JOIN plans p ON s.account_id = p.account_id AND s.plan_id = p.plan_id
+             WHERE s.account_id = $1 AND s.is_active = true
              GROUP BY s.customer_id`,
-            [userId],
+            [accountId],
           ),
           // 4. Cost trend: current 30d vs prior 30d per customer
           pool.query(
@@ -220,47 +221,47 @@ export function createCohortsRoutes(pool: Pool, ensureVisitor: any) {
                     COALESCE(SUM(CASE WHEN timestamp >= NOW() - INTERVAL '30 days' THEN cost_amount ELSE 0 END), 0) AS current_cost,
                     COALESCE(SUM(CASE WHEN timestamp >= NOW() - INTERVAL '60 days' AND timestamp < NOW() - INTERVAL '30 days' THEN cost_amount ELSE 0 END), 0) AS prior_cost
              FROM observe_events
-             WHERE user_id = $1 AND customer_id IS NOT NULL AND timestamp >= NOW() - INTERVAL '60 days'
+             WHERE account_id = $1 AND customer_id IS NOT NULL AND timestamp >= NOW() - INTERVAL '60 days'
              GROUP BY customer_id`,
-            [userId],
+            [accountId],
           ),
           // 5. Stickiness: distinct active days in last 30d
           pool.query(
             `SELECT customer_id,
                     COUNT(DISTINCT DATE(timestamp)) AS active_days
              FROM observe_events
-             WHERE user_id = $1 AND customer_id IS NOT NULL AND timestamp >= NOW() - INTERVAL '30 days'
+             WHERE account_id = $1 AND customer_id IS NOT NULL AND timestamp >= NOW() - INTERVAL '30 days'
              GROUP BY customer_id`,
-            [userId],
+            [accountId],
           ),
           // 6. Top model by cost per customer
           pool.query(
             `SELECT DISTINCT ON (customer_id) customer_id, model, SUM(cost_amount) AS model_cost
              FROM observe_events
-             WHERE user_id = $1 AND customer_id IS NOT NULL AND model IS NOT NULL
+             WHERE account_id = $1 AND customer_id IS NOT NULL AND model IS NOT NULL
              GROUP BY customer_id, model
              ORDER BY customer_id, model_cost DESC`,
-            [userId],
+            [accountId],
           ),
           // 7. Current MRR per customer (active subs)
           pool.query(
             `SELECT s.customer_id,
                     COALESCE(SUM(COALESCE(s.mrr_override, p.price_amount)), 0) AS mrr
              FROM subscriptions s
-             LEFT JOIN plans p ON s.user_id = p.user_id AND s.plan_id = p.plan_id
-             WHERE s.user_id = $1 AND s.is_active = true
+             LEFT JOIN plans p ON s.account_id = p.account_id AND s.plan_id = p.plan_id
+             WHERE s.account_id = $1 AND s.is_active = true
              GROUP BY s.customer_id`,
-            [userId],
+            [accountId],
           ),
           // 8. Prior MRR per customer (subs created 60+ days ago)
           pool.query(
             `SELECT s.customer_id,
                     COALESCE(SUM(COALESCE(s.mrr_override, p.price_amount)), 0) AS mrr
              FROM subscriptions s
-             LEFT JOIN plans p ON s.user_id = p.user_id AND s.plan_id = p.plan_id
-             WHERE s.user_id = $1 AND s.created_at <= NOW() - INTERVAL '60 days'
+             LEFT JOIN plans p ON s.account_id = p.account_id AND s.plan_id = p.plan_id
+             WHERE s.account_id = $1 AND s.created_at <= NOW() - INTERVAL '60 days'
              GROUP BY s.customer_id`,
-            [userId],
+            [accountId],
           ),
           // 9. Prior-months active-days average — used to contextualize
           // "inactive" signals. Excludes the current month (partial) and caps
@@ -272,7 +273,7 @@ export function createCohortsRoutes(pool: Pool, ensureVisitor: any) {
                       DATE_TRUNC('month', timestamp) AS month,
                       COUNT(DISTINCT DATE(timestamp)) AS active_days_per_month
                FROM observe_events
-               WHERE user_id = $1
+               WHERE account_id = $1
                  AND customer_id IS NOT NULL
                  AND timestamp < DATE_TRUNC('month', NOW())
                  AND timestamp >= DATE_TRUNC('month', NOW()) - INTERVAL '4 months'
@@ -280,7 +281,7 @@ export function createCohortsRoutes(pool: Pool, ensureVisitor: any) {
              ) monthly
              GROUP BY customer_id
              HAVING COUNT(*) >= 2`,
-            [userId],
+            [accountId],
           ),
         ]);
 
@@ -610,7 +611,7 @@ export function createCohortsRoutes(pool: Pool, ensureVisitor: any) {
     ensureVisitor,
     async (req: AuthRequest, res: Response) => {
       try {
-        const userId = req.visitorId!;
+        const accountId = req.accountId!;
 
         // Gather customer summaries
         const [pnlResult, costTrendResult, stickinessResult] =
@@ -624,26 +625,26 @@ export function createCohortsRoutes(pool: Pool, ensureVisitor: any) {
                       COUNT(*) AS event_count,
                       COUNT(DISTINCT oe.feature_key) AS feature_count
                FROM observe_events oe
-               LEFT JOIN customers c ON oe.user_id = c.user_id AND oe.customer_id = c.customer_id
-               WHERE oe.user_id = $1 AND oe.customer_id IS NOT NULL
+               LEFT JOIN customers c ON oe.account_id = c.account_id AND oe.customer_id = c.customer_id
+               WHERE oe.account_id = $1 AND oe.customer_id IS NOT NULL
                GROUP BY oe.customer_id, c.name, c.segment`,
-              [userId],
+              [accountId],
             ),
             pool.query(
               `SELECT customer_id,
                       COALESCE(SUM(CASE WHEN timestamp >= NOW() - INTERVAL '30 days' THEN cost_amount ELSE 0 END), 0) AS current_cost,
                       COALESCE(SUM(CASE WHEN timestamp >= NOW() - INTERVAL '60 days' AND timestamp < NOW() - INTERVAL '30 days' THEN cost_amount ELSE 0 END), 0) AS prior_cost
                FROM observe_events
-               WHERE user_id = $1 AND customer_id IS NOT NULL AND timestamp >= NOW() - INTERVAL '60 days'
+               WHERE account_id = $1 AND customer_id IS NOT NULL AND timestamp >= NOW() - INTERVAL '60 days'
                GROUP BY customer_id`,
-              [userId],
+              [accountId],
             ),
             pool.query(
               `SELECT customer_id, COUNT(DISTINCT DATE(timestamp)) AS active_days
                FROM observe_events
-               WHERE user_id = $1 AND customer_id IS NOT NULL AND timestamp >= NOW() - INTERVAL '30 days'
+               WHERE account_id = $1 AND customer_id IS NOT NULL AND timestamp >= NOW() - INTERVAL '30 days'
                GROUP BY customer_id`,
-              [userId],
+              [accountId],
             ),
           ]);
 
@@ -830,16 +831,15 @@ Return ONLY valid JSON array, no markdown.`,
     ensureVisitor,
     async (req: AuthRequest, res: Response) => {
       try {
-        const userId = req.visitorId!;
         const customerId = req.params.customerId;
 
         const result = await pool.query(
           `SELECT snapshot_date, health_score, margin_pct, adoption_depth, active_days
            FROM customer_health_snapshots
-           WHERE user_id = $1 AND customer_id = $2
+           WHERE account_id = $1 AND customer_id = $2
            ORDER BY snapshot_date DESC
            LIMIT 90`,
-          [userId, customerId],
+          [req.accountId!, customerId],
         );
 
         res.json({ history: result.rows });
@@ -875,7 +875,7 @@ Return ONLY valid JSON array, no markdown.`,
           (c) => c.cohort_type === "dynamic" && c.rules,
         );
         if (dynamicCohorts.length > 0) {
-          const customers = await getCustomerDataForRules(pool, req.visitorId!);
+          const customers = await getCustomerDataForRules(pool, req.accountId!);
           for (const cohort of result.rows) {
             if (cohort.cohort_type === "dynamic" && cohort.rules) {
               const matched = evaluateRules(customers, cohort.rules);
@@ -967,7 +967,7 @@ Return ONLY valid JSON array, no markdown.`,
 
         if (cohort.cohort_type === "dynamic" && cohort.rules) {
           // Evaluate rules to compute members dynamically
-          const customers = await getCustomerDataForRules(pool, req.visitorId!);
+          const customers = await getCustomerDataForRules(pool, req.accountId!);
           const matched = evaluateRules(customers, cohort.rules);
           members = matched.map((c) => ({
             customer_id: c.customer_id,
@@ -981,10 +981,10 @@ Return ONLY valid JSON array, no markdown.`,
           const result = await pool.query(
             `SELECT cm.customer_id, c.name as customer_name, cm.added_at
              FROM cohort_members cm
-             LEFT JOIN customers c ON c.user_id = $2 AND c.customer_id = cm.customer_id
+             LEFT JOIN customers c ON c.account_id = $2 AND c.customer_id = cm.customer_id
              WHERE cm.cohort_id = $1
              ORDER BY cm.added_at DESC`,
-            [req.params.id, req.visitorId],
+            [req.params.id, req.accountId!],
           );
           members = result.rows;
         }
