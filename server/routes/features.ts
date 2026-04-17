@@ -90,7 +90,7 @@ export function createFeaturesRoutes(pool: Pool, ensureVisitor: any) {
             ),
             pool.query(
               `SELECT oe.*, c.name as customer_name FROM observe_events oe
-           LEFT JOIN customers c ON oe.user_id = c.user_id AND oe.customer_id = c.customer_id
+           LEFT JOIN customers c ON oe.account_id = c.account_id AND oe.customer_id = c.customer_id
            WHERE oe.account_id = $1 AND oe.feature_key = $2 ORDER BY oe.timestamp DESC LIMIT 50`,
               [req.accountId, key],
             ),
@@ -99,7 +99,7 @@ export function createFeaturesRoutes(pool: Pool, ensureVisitor: any) {
              COUNT(*) as event_count, COALESCE(SUM(oe.cost_amount), 0) as total_cost,
              COALESCE(SUM(oe.revenue_amount), 0) as total_revenue
            FROM observe_events oe
-           LEFT JOIN customers c ON oe.user_id = c.user_id AND oe.customer_id = c.customer_id
+           LEFT JOIN customers c ON oe.account_id = c.account_id AND oe.customer_id = c.customer_id
            WHERE oe.account_id = $1 AND oe.feature_key = $2
            GROUP BY oe.customer_id, c.name ORDER BY total_cost DESC`,
               [req.accountId, key],

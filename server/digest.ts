@@ -199,9 +199,11 @@ export async function runWeeklyDigest(pool: Pool): Promise<void> {
 
   // Get all accounts with data in the last 30 days
   const accounts = await pool.query(
-    `SELECT DISTINCT a.visitor_id
-     FROM users a
-     JOIN observe_events oe ON oe.user_id = a.visitor_id
+    `SELECT DISTINCT u.visitor_id
+     FROM users u
+     JOIN user_accounts ua ON ua.user_id = u.id AND ua.role = 'owner'
+     JOIN accounts a ON a.id = ua.account_id
+     JOIN observe_events oe ON oe.user_id = u.visitor_id
      WHERE oe.timestamp > NOW() - INTERVAL '30 days'
        AND oe.source != 'sample'
        AND a.stripe_plan IN ('growth', 'pro')`,

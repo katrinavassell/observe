@@ -278,7 +278,7 @@ export function createDataRoutes(
         const offset = parseInt(req.query.offset as string) || 0;
         const [result, countResult] = await Promise.all([
           pool.query(
-            "SELECT s.*, c.name as customer_name, c.email as customer_email, p.name as plan_name, p.price_amount FROM subscriptions s LEFT JOIN customers c ON s.user_id = c.user_id AND s.customer_id = c.customer_id LEFT JOIN plans p ON s.user_id = p.user_id AND s.plan_id = p.plan_id WHERE s.account_id = $1 ORDER BY s.created_at DESC LIMIT $2 OFFSET $3",
+            "SELECT s.*, c.name as customer_name, c.email as customer_email, p.name as plan_name, p.price_amount FROM subscriptions s LEFT JOIN customers c ON s.account_id = c.account_id AND s.customer_id = c.customer_id LEFT JOIN plans p ON s.account_id = p.account_id AND s.plan_id = p.plan_id WHERE s.account_id = $1 ORDER BY s.created_at DESC LIMIT $2 OFFSET $3",
             [req.accountId ?? null, limit, offset],
           ),
           pool.query(
@@ -1004,7 +1004,7 @@ export function createDataRoutes(
           [acct],
         );
         const mrrResult = await pool.query(
-          "SELECT COALESCE(SUM(COALESCE(s.mrr_override, p.price_amount)), 0) as mrr FROM subscriptions s LEFT JOIN plans p ON s.user_id = p.user_id AND s.plan_id = p.plan_id WHERE s.account_id = $1 AND s.is_active = true",
+          "SELECT COALESCE(SUM(COALESCE(s.mrr_override, p.price_amount)), 0) as mrr FROM subscriptions s LEFT JOIN plans p ON s.account_id = p.account_id AND s.plan_id = p.plan_id WHERE s.account_id = $1 AND s.is_active = true",
           [acct],
         );
 

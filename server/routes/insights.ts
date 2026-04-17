@@ -118,7 +118,7 @@ export function createInsightsRoutes(
              COALESCE(SUM(oe.revenue_amount), 0) as total_revenue,
              CASE WHEN COUNT(*) > 0 THEN COALESCE(SUM(oe.cost_amount), 0) / COUNT(*) ELSE 0 END as cost_per_call
            FROM observe_events oe
-           LEFT JOIN customers c ON oe.user_id = c.user_id AND oe.customer_id = c.customer_id
+           LEFT JOIN customers c ON oe.account_id = c.account_id AND oe.customer_id = c.customer_id
            WHERE oe.account_id = $1
            GROUP BY oe.customer_id, c.name, c.segment ORDER BY total_cost DESC LIMIT 15`,
             [req.accountId],
