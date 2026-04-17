@@ -23,29 +23,53 @@ type TrackBillingUsageFn = (
 ) => void;
 type ConvertReferralFn = (visitorId: string) => Promise<void>;
 
+async function resolveAccountIdForUser(
+  pool: Pool,
+  userId: string,
+  accountId?: number,
+): Promise<number | null> {
+  if (accountId !== undefined) return accountId;
+  try {
+    const result = await pool.query(
+      `SELECT account_id FROM user_accounts
+        WHERE user_id = (SELECT id FROM users WHERE visitor_id = $1)
+          AND role = 'owner' LIMIT 1`,
+      [userId],
+    );
+    if (result.rows[0]) return result.rows[0].account_id;
+  } catch (err) {
+    console.error("billing-api: account_id fallback lookup failed:", err);
+  }
+  console.warn("billing-api: no account_id resolved for user", userId);
+  return null;
+}
+
 async function clearSampleData(
   db: { query: (text: string, params: unknown[]) => Promise<unknown> },
+  pool: Pool,
   userId: string,
+  accountId?: number,
 ): Promise<void> {
+  const resolved = await resolveAccountIdForUser(pool, userId, accountId);
   await db.query(
-    "DELETE FROM observe_events WHERE user_id = $1 AND source = 'sample'",
-    [userId],
+    "DELETE FROM observe_events WHERE account_id = $1 AND source = 'sample'",
+    [resolved],
   );
   await db.query(
-    "DELETE FROM cost_records WHERE user_id = $1 AND cost_type = 'ai_inference' AND customer_id IS NULL AND period_start IS NOT NULL",
-    [userId],
+    "DELETE FROM cost_records WHERE account_id = $1 AND cost_type = 'ai_inference' AND customer_id IS NULL AND period_start IS NOT NULL",
+    [resolved],
   );
   await db.query(
-    "DELETE FROM subscriptions WHERE user_id = $1 AND subscription_id IN ('sub_001','sub_002','sub_003','sub_004','sub_005','sub_acme','sub_acme_addon','sub_tidewater','sub_neon','sub_neon_addon','sub_circle','sub_blaze','sub_quantum')",
-    [userId],
+    "DELETE FROM subscriptions WHERE account_id = $1 AND subscription_id IN ('sub_001','sub_002','sub_003','sub_004','sub_005','sub_acme','sub_acme_addon','sub_tidewater','sub_neon','sub_neon_addon','sub_circle','sub_blaze','sub_quantum')",
+    [resolved],
   );
   await db.query(
-    "DELETE FROM customers WHERE user_id = $1 AND customer_id IN ('cus_001','cus_002','cus_003','cus_004','cus_005','acme_saas','tidewater_ai','neondata','circleops','blazeml','quantumhr')",
-    [userId],
+    "DELETE FROM customers WHERE account_id = $1 AND customer_id IN ('cus_001','cus_002','cus_003','cus_004','cus_005','acme_saas','tidewater_ai','neondata','circleops','blazeml','quantumhr')",
+    [resolved],
   );
   await db.query(
-    "DELETE FROM plans WHERE user_id = $1 AND plan_id IN ('starter', 'pro', 'enterprise')",
-    [userId],
+    "DELETE FROM plans WHERE account_id = $1 AND plan_id IN ('starter', 'pro', 'enterprise')",
+    [resolved],
   );
 }
 
@@ -75,8 +99,8 @@ export function createBillingApiRoutes(
       try {
         const result = await pool.query(
           `SELECT feature_key, revenue_per_unit, unit_label, effective_from, created_at
-           FROM feature_pricing WHERE user_id = $1 ORDER BY feature_key`,
-          [req.visitorId],
+           FROM feature_pricing WHERE account_id = $1 ORDER BY feature_key`,
+          [req.accountId ?? null],
         );
         res.json({
           rules: result.rows.map((r: Record<string, unknown>) => ({
@@ -132,8 +156,8 @@ export function createBillingApiRoutes(
     async (req: AuthRequest, res: Response) => {
       try {
         await pool.query(
-          `DELETE FROM feature_pricing WHERE user_id = $1 AND feature_key = $2`,
-          [req.visitorId, req.params.featureKey],
+          `DELETE FROM feature_pricing WHERE account_id = $1 AND feature_key = $2`,
+          [req.accountId ?? null, req.params.featureKey],
         );
         res.json({ ok: true });
       } catch (error) {
@@ -151,9 +175,9 @@ export function createBillingApiRoutes(
       try {
         const result = await pool.query(
           `SELECT DISTINCT feature_key FROM observe_events
-           WHERE user_id = $1 AND feature_key != 'unknown'
+           WHERE account_id = $1 AND feature_key != 'unknown'
            ORDER BY feature_key LIMIT 100`,
-          [req.visitorId],
+          [req.accountId ?? null],
         );
         res.json({
           features: result.rows.map(
@@ -488,7 +512,7 @@ export function createBillingApiRoutes(
             api_key,
             req.accountId,
           );
-          await clearSampleData(pool, visitorId);
+          await clearSampleData(pool, pool, visitorId, req.accountId);
           await pool.query(
             "INSERT INTO user_data_status (user_id, account_id, data_mode) VALUES ($1, $2, $3) ON CONFLICT (user_id) DO UPDATE SET data_mode = $3, updated_at = NOW()",
             [visitorId, req.accountId ?? null, "user"],
@@ -524,8 +548,8 @@ export function createBillingApiRoutes(
       try {
         const result = await pool.query(
           `SELECT api_key_prefix, has_usage_access, connected_at, last_synced_at, stripe_account_id, stripe_account_name
-         FROM integrations WHERE user_id = $1 AND provider = 'stripe'`,
-          [req.visitorId],
+         FROM integrations WHERE account_id = $1 AND provider = 'stripe'`,
+          [req.accountId ?? null],
         );
 
         if (result.rows.length === 0) {
@@ -562,8 +586,8 @@ export function createBillingApiRoutes(
         );
 
         await pool.query(
-          `UPDATE integrations SET last_synced_at = NOW() WHERE user_id = $1 AND provider = 'stripe'`,
-          [visitorId],
+          `UPDATE integrations SET last_synced_at = NOW() WHERE account_id = $1 AND provider = 'stripe'`,
+          [req.accountId ?? null],
         );
 
         deps.trackBillingUsage(visitorId, "stripe_sync", "stripe_data_synced");
@@ -590,26 +614,26 @@ export function createBillingApiRoutes(
     ensureVisitor,
     async (req: AuthRequest, res: Response) => {
       try {
-        const visitorId = req.visitorId!;
         const { clear_data } = req.body;
+        const acct = req.accountId ?? null;
 
         await pool.query(
-          "DELETE FROM integrations WHERE user_id = $1 AND provider = $2",
-          [visitorId, "stripe"],
+          "DELETE FROM integrations WHERE account_id = $1 AND provider = $2",
+          [acct, "stripe"],
         );
 
         if (clear_data) {
           await pool.query(
-            "DELETE FROM observe_events WHERE user_id = $1 AND source = 'stripe'",
-            [visitorId],
+            "DELETE FROM observe_events WHERE account_id = $1 AND source = 'stripe'",
+            [acct],
           );
-          await pool.query("DELETE FROM subscriptions WHERE user_id = $1", [
-            visitorId,
+          await pool.query("DELETE FROM subscriptions WHERE account_id = $1", [
+            acct,
           ]);
-          await pool.query("DELETE FROM customers WHERE user_id = $1", [
-            visitorId,
+          await pool.query("DELETE FROM customers WHERE account_id = $1", [
+            acct,
           ]);
-          await pool.query("DELETE FROM plans WHERE user_id = $1", [visitorId]);
+          await pool.query("DELETE FROM plans WHERE account_id = $1", [acct]);
         }
 
         res.json({
@@ -661,18 +685,17 @@ export function createBillingApiRoutes(
 
         await client.query("BEGIN");
 
-        await client.query("DELETE FROM subscriptions WHERE user_id = $1", [
-          req.visitorId,
+        const acct = req.accountId ?? null;
+        await client.query("DELETE FROM subscriptions WHERE account_id = $1", [
+          acct,
         ]);
-        await client.query("DELETE FROM customers WHERE user_id = $1", [
-          req.visitorId,
+        await client.query("DELETE FROM customers WHERE account_id = $1", [
+          acct,
         ]);
-        await client.query("DELETE FROM plans WHERE user_id = $1", [
-          req.visitorId,
-        ]);
+        await client.query("DELETE FROM plans WHERE account_id = $1", [acct]);
         await client.query(
-          "DELETE FROM observe_events WHERE user_id = $1 AND source = 'stripe'",
-          [req.visitorId],
+          "DELETE FROM observe_events WHERE account_id = $1 AND source = 'stripe'",
+          [acct],
         );
 
         const planIds = new Set<string>();
@@ -940,7 +963,7 @@ export function createBillingApiRoutes(
               const txClient = await pool.connect();
               try {
                 await txClient.query("BEGIN");
-                await clearSampleData(txClient, visitorId);
+                await clearSampleData(txClient, pool, visitorId, req.accountId);
                 await txClient.query(
                   `INSERT INTO user_data_status (user_id, account_id, data_mode) VALUES ($1, $2, $3) ON CONFLICT (user_id) DO UPDATE SET data_mode = $3, updated_at = NOW()`,
                   [visitorId, req.accountId ?? null, "user"],
@@ -1001,8 +1024,8 @@ export function createBillingApiRoutes(
     async (req: AuthRequest, res: Response) => {
       try {
         const result = await pool.query(
-          `SELECT api_key_prefix, has_usage_access, connected_at, last_synced_at FROM integrations WHERE user_id = $1 AND provider = 'openai'`,
-          [req.visitorId],
+          `SELECT api_key_prefix, has_usage_access, connected_at, last_synced_at FROM integrations WHERE account_id = $1 AND provider = 'openai'`,
+          [req.accountId ?? null],
         );
         if (result.rows.length === 0)
           return res.json({ connected: false, has_usage_access: false });
@@ -1027,8 +1050,8 @@ export function createBillingApiRoutes(
     async (req: AuthRequest, res: Response) => {
       try {
         await pool.query(
-          "DELETE FROM integrations WHERE user_id = $1 AND provider = $2",
-          [req.visitorId, "openai"],
+          "DELETE FROM integrations WHERE account_id = $1 AND provider = $2",
+          [req.accountId ?? null, "openai"],
         );
         res.json({ success: true });
       } catch (err) {
@@ -1144,7 +1167,7 @@ export function createBillingApiRoutes(
               const txClient = await pool.connect();
               try {
                 await txClient.query("BEGIN");
-                await clearSampleData(txClient, visitorId);
+                await clearSampleData(txClient, pool, visitorId, req.accountId);
                 await txClient.query(
                   `INSERT INTO user_data_status (user_id, account_id, data_mode) VALUES ($1, $2, $3) ON CONFLICT (user_id) DO UPDATE SET data_mode = $3, updated_at = NOW()`,
                   [visitorId, req.accountId ?? null, "user"],
@@ -1209,8 +1232,8 @@ export function createBillingApiRoutes(
     async (req: AuthRequest, res: Response) => {
       try {
         const result = await pool.query(
-          `SELECT api_key_prefix, has_usage_access, connected_at, last_synced_at FROM integrations WHERE user_id = $1 AND provider = 'anthropic'`,
-          [req.visitorId],
+          `SELECT api_key_prefix, has_usage_access, connected_at, last_synced_at FROM integrations WHERE account_id = $1 AND provider = 'anthropic'`,
+          [req.accountId ?? null],
         );
         if (result.rows.length === 0)
           return res.json({ connected: false, has_usage_access: false });
@@ -1235,8 +1258,8 @@ export function createBillingApiRoutes(
     async (req: AuthRequest, res: Response) => {
       try {
         await pool.query(
-          "DELETE FROM integrations WHERE user_id = $1 AND provider = $2",
-          [req.visitorId, "anthropic"],
+          "DELETE FROM integrations WHERE account_id = $1 AND provider = $2",
+          [req.accountId ?? null, "anthropic"],
         );
         res.json({ success: true });
       } catch (err) {

@@ -144,11 +144,12 @@ export function createProxyRoutes(
     userId: string,
     cacheKey: string,
   ): Promise<Record<string, unknown> | null> {
+    const accountId = await resolveAccountIdForUser(pool, userId);
     const result = await pool.query(
       `SELECT response_body FROM proxy_cache
-       WHERE user_id = $1 AND cache_key = $2
+       WHERE account_id = $1 AND cache_key = $2
          AND (expires_at IS NULL OR expires_at > NOW())`,
-      [userId, cacheKey],
+      [accountId, cacheKey],
     );
     return result.rows[0]?.response_body ?? null;
   }
@@ -238,14 +239,15 @@ export function createProxyRoutes(
     const reqJson = requestBody ? JSON.stringify(requestBody) : null;
     const resJson = responseBody ? JSON.stringify(responseBody) : null;
     const totalTokens = inputTokens + outputTokens;
+    const accountId = await resolveAccountIdForUser(pool, userId);
 
     // Revenue enrichment: feature_pricing > MRR allocation > 0
     let revenue = 0;
     let revenueSource = "none";
     try {
       const fpResult = await pool.query(
-        `SELECT revenue_per_unit FROM feature_pricing WHERE user_id = $1 AND feature_key = $2`,
-        [userId, featureKey],
+        `SELECT revenue_per_unit FROM feature_pricing WHERE account_id = $1 AND feature_key = $2`,
+        [accountId, featureKey],
       );
       if (fpResult.rows.length > 0) {
         revenue = parseFloat(fpResult.rows[0].revenue_per_unit);
@@ -253,8 +255,8 @@ export function createProxyRoutes(
       } else if (customerId && customerId !== "unknown") {
         const mrrResult = await pool.query(
           `SELECT SUM(mrr_override) as mrr FROM subscriptions
-           WHERE user_id = $1 AND is_active = true AND customer_id = $2`,
-          [userId, customerId],
+           WHERE account_id = $1 AND is_active = true AND customer_id = $2`,
+          [accountId, customerId],
         );
         if (mrrResult.rows[0]?.mrr) {
           revenue = parseFloat(mrrResult.rows[0].mrr) / 30;
@@ -264,8 +266,6 @@ export function createProxyRoutes(
     } catch (err) {
       console.error("Proxy revenue enrichment failed:", err);
     }
-
-    const accountId = await resolveAccountIdForUser(pool, userId);
 
     // 1. Log for the user
     await pool.query(
@@ -1171,22 +1171,23 @@ export function createProxyRoutes(
     ensureVisitor,
     async (req: AuthRequest, res: Response) => {
       try {
+        const acct = req.accountId ?? null;
         const [cacheRows, hitRows, totalRows] = await Promise.all([
           pool.query(
             `SELECT COUNT(*) FILTER (WHERE expires_at IS NULL OR expires_at > NOW()) AS total_cached,
                   COALESCE(SUM(tokens_saved), 0) AS tokens_saved,
                   COALESCE(SUM(cost_saved), 0) AS cost_saved
-           FROM proxy_cache WHERE user_id = $1`,
-            [req.visitorId],
+           FROM proxy_cache WHERE account_id = $1`,
+            [acct],
           ),
           pool.query(
             `SELECT COUNT(*) AS hit_count FROM observe_events
-           WHERE user_id = $1 AND source = 'proxy' AND properties->>'cache_hit' = 'true'`,
-            [req.visitorId],
+           WHERE account_id = $1 AND source = 'proxy' AND properties->>'cache_hit' = 'true'`,
+            [acct],
           ),
           pool.query(
-            `SELECT COUNT(*) AS total FROM observe_events WHERE user_id = $1 AND source = 'proxy'`,
-            [req.visitorId],
+            `SELECT COUNT(*) AS total FROM observe_events WHERE account_id = $1 AND source = 'proxy'`,
+            [acct],
           ),
         ]);
 

@@ -36,9 +36,9 @@ export async function computeInferenceProfiles(
             COUNT(*)::int as event_count,
             SUM(cost_amount)::numeric as total_cost
      FROM observe_events
-     WHERE user_id = $1 AND source = 'sdk' AND model_provider IS NOT NULL
+     WHERE account_id = $1 AND source = 'sdk' AND model_provider IS NOT NULL
      GROUP BY model_provider, feature_key`,
-    [userId],
+    [resolvedAccountId],
   );
 
   if (result.rows.length === 0) return 0;
@@ -76,8 +76,8 @@ export async function computeInferenceProfiles(
     const windowResult = await pool.query(
       `SELECT MIN(timestamp) as window_start, MAX(timestamp) as window_end
        FROM observe_events
-       WHERE user_id = $1 AND source = 'sdk' AND model_provider = $2`,
-      [userId, provider],
+       WHERE account_id = $1 AND source = 'sdk' AND model_provider = $2`,
+      [resolvedAccountId, provider],
     );
 
     await pool.query(
@@ -115,12 +115,12 @@ async function applyInference(
     `SELECT id, customer_id, feature_key, event_name, timestamp, cost_amount, cost_unit,
             revenue_amount, usage_units, model, model_provider, source, granularity, properties
      FROM observe_events
-     WHERE user_id = $1
+     WHERE account_id = $1
        AND source IN ('csv', 'openai', 'anthropic')
        AND granularity IN ('monthly_aggregate', 'daily')
        AND is_inferred = false
        AND (properties->>'inference_status') IS NULL`,
-    [userId],
+    [resolvedAccountId],
   );
 
   if (coarseRows.rows.length === 0) return { rows_inferred: 0, rows_split: 0 };
@@ -128,8 +128,8 @@ async function applyInference(
   const profiles = await pool.query(
     `SELECT scope_key, distribution, sample_count
      FROM inference_profiles
-     WHERE user_id = $1 AND profile_type = 'feature_distribution'`,
-    [userId],
+     WHERE account_id = $1 AND profile_type = 'feature_distribution'`,
+    [resolvedAccountId],
   );
 
   if (profiles.rows.length === 0) return { rows_inferred: 0, rows_split: 0 };
@@ -284,9 +284,9 @@ export function createInferenceRoutes(pool: Pool, ensureVisitor: any) {
           `SELECT id, profile_type, scope_key, distribution, sample_count,
                 time_window_start, time_window_end, created_at
          FROM inference_profiles
-         WHERE user_id = $1
+         WHERE account_id = $1
          ORDER BY created_at DESC`,
-          [req.visitorId],
+          [req.accountId ?? null],
         );
         res.json(result.rows);
       } catch (err) {

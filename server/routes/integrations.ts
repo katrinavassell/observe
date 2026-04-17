@@ -40,27 +40,30 @@ type TrackBillingUsageFn = (
 // Clear sample/demo data when transitioning to real user data
 async function clearSampleData(
   db: { query: (text: string, params: unknown[]) => Promise<unknown> },
+  pool: Pool,
   userId: string,
+  accountId?: number,
 ): Promise<void> {
+  const resolved = await resolveAccountIdForUser(pool, userId, accountId);
   await db.query(
-    "DELETE FROM observe_events WHERE user_id = $1 AND source = 'sample'",
-    [userId],
+    "DELETE FROM observe_events WHERE account_id = $1 AND source = 'sample'",
+    [resolved],
   );
   await db.query(
-    "DELETE FROM cost_records WHERE user_id = $1 AND cost_type = 'ai_inference' AND customer_id IS NULL",
-    [userId],
+    "DELETE FROM cost_records WHERE account_id = $1 AND cost_type = 'ai_inference' AND customer_id IS NULL",
+    [resolved],
   );
   await db.query(
-    "DELETE FROM subscriptions WHERE user_id = $1 AND subscription_id LIKE 'sub_%'",
-    [userId],
+    "DELETE FROM subscriptions WHERE account_id = $1 AND subscription_id LIKE 'sub_%'",
+    [resolved],
   );
   await db.query(
-    "DELETE FROM customers WHERE user_id = $1 AND customer_id LIKE 'cus_%'",
-    [userId],
+    "DELETE FROM customers WHERE account_id = $1 AND customer_id LIKE 'cus_%'",
+    [resolved],
   );
   await db.query(
-    "DELETE FROM plans WHERE user_id = $1 AND plan_id IN ('starter', 'pro', 'enterprise')",
-    [userId],
+    "DELETE FROM plans WHERE account_id = $1 AND plan_id IN ('starter', 'pro', 'enterprise')",
+    [resolved],
   );
 }
 
@@ -102,12 +105,18 @@ export async function syncStripeDataForUser(
   ]);
 
   // Clear existing Stripe-sourced data before re-syncing
-  await pool.query("DELETE FROM subscriptions WHERE user_id = $1", [userId]);
-  await pool.query("DELETE FROM customers WHERE user_id = $1", [userId]);
-  await pool.query("DELETE FROM plans WHERE user_id = $1", [userId]);
+  await pool.query("DELETE FROM subscriptions WHERE account_id = $1", [
+    resolvedAccountId,
+  ]);
+  await pool.query("DELETE FROM customers WHERE account_id = $1", [
+    resolvedAccountId,
+  ]);
+  await pool.query("DELETE FROM plans WHERE account_id = $1", [
+    resolvedAccountId,
+  ]);
   await pool.query(
-    "DELETE FROM observe_events WHERE user_id = $1 AND source = 'stripe'",
-    [userId],
+    "DELETE FROM observe_events WHERE account_id = $1 AND source = 'stripe'",
+    [resolvedAccountId],
   );
 
   const batchSize = 500;
@@ -335,8 +344,8 @@ export async function syncStripeDataForUser(
 
   // Update last_synced_at
   await pool.query(
-    `UPDATE integrations SET last_synced_at = NOW() WHERE user_id = $1 AND provider = 'stripe'`,
-    [userId],
+    `UPDATE integrations SET last_synced_at = NOW() WHERE account_id = $1 AND provider = 'stripe'`,
+    [resolvedAccountId],
   );
 
   return {
@@ -466,7 +475,7 @@ export function createIntegrationsRoutes(
 
             // Update has_usage_access and last_synced_at
             if (eventsSynced > 0) {
-              await clearSampleData(pool, visitorId);
+              await clearSampleData(pool, pool, visitorId, req.accountId);
               await pool.query(
                 `INSERT INTO user_data_status (user_id, account_id, data_mode) VALUES ($1, $2, $3) ON CONFLICT (user_id) DO UPDATE SET data_mode = $3, updated_at = NOW()`,
                 [visitorId, req.accountId ?? null, "user"],
@@ -525,11 +534,10 @@ export function createIntegrationsRoutes(
     ensureVisitor,
     async (req: AuthRequest, res: Response) => {
       try {
-        const visitorId = req.visitorId!;
         const result = await pool.query(
           `SELECT api_key_prefix, has_usage_access, connected_at, last_synced_at
-         FROM integrations WHERE user_id = $1 AND provider = 'openai'`,
-          [visitorId],
+         FROM integrations WHERE account_id = $1 AND provider = 'openai'`,
+          [req.accountId ?? null],
         );
 
         if (result.rows.length === 0) {
@@ -558,8 +566,8 @@ export function createIntegrationsRoutes(
     async (req: AuthRequest, res: Response) => {
       try {
         await pool.query(
-          "DELETE FROM integrations WHERE user_id = $1 AND provider = $2",
-          [req.visitorId, "openai"],
+          "DELETE FROM integrations WHERE account_id = $1 AND provider = $2",
+          [req.accountId ?? null, "openai"],
         );
         res.json({ success: true });
       } catch (err) {
@@ -686,7 +694,7 @@ export function createIntegrationsRoutes(
 
             // Update data_mode to 'user' if we synced any data
             if (eventsSynced > 0) {
-              await clearSampleData(pool, visitorId);
+              await clearSampleData(pool, pool, visitorId, req.accountId);
               await pool.query(
                 `INSERT INTO user_data_status (user_id, account_id, data_mode) VALUES ($1, $2, $3) ON CONFLICT (user_id) DO UPDATE SET data_mode = $3, updated_at = NOW()`,
                 [visitorId, req.accountId ?? null, "user"],
@@ -745,11 +753,10 @@ export function createIntegrationsRoutes(
     ensureVisitor,
     async (req: AuthRequest, res: Response) => {
       try {
-        const visitorId = req.visitorId!;
         const result = await pool.query(
           `SELECT api_key_prefix, has_usage_access, connected_at, last_synced_at
-         FROM integrations WHERE user_id = $1 AND provider = 'anthropic'`,
-          [visitorId],
+         FROM integrations WHERE account_id = $1 AND provider = 'anthropic'`,
+          [req.accountId ?? null],
         );
 
         if (result.rows.length === 0) {
@@ -778,8 +785,8 @@ export function createIntegrationsRoutes(
     async (req: AuthRequest, res: Response) => {
       try {
         await pool.query(
-          "DELETE FROM integrations WHERE user_id = $1 AND provider = $2",
-          [req.visitorId, "anthropic"],
+          "DELETE FROM integrations WHERE account_id = $1 AND provider = $2",
+          [req.accountId ?? null, "anthropic"],
         );
         res.json({ success: true });
       } catch (err) {
@@ -1011,7 +1018,7 @@ export function createIntegrationsRoutes(
             api_key,
             req.accountId,
           );
-          await clearSampleData(pool, visitorId);
+          await clearSampleData(pool, pool, visitorId, req.accountId);
           await pool.query(
             "INSERT INTO user_data_status (user_id, account_id, data_mode) VALUES ($1, $2, $3) ON CONFLICT (user_id) DO UPDATE SET data_mode = $3, updated_at = NOW()",
             [visitorId, req.accountId ?? null, "user"],
@@ -1046,11 +1053,10 @@ export function createIntegrationsRoutes(
     ensureVisitor,
     async (req: AuthRequest, res: Response) => {
       try {
-        const visitorId = req.visitorId!;
         const result = await pool.query(
           `SELECT api_key_prefix, has_usage_access, connected_at, last_synced_at, stripe_account_id, stripe_account_name
-         FROM integrations WHERE user_id = $1 AND provider = 'stripe'`,
-          [visitorId],
+         FROM integrations WHERE account_id = $1 AND provider = 'stripe'`,
+          [req.accountId ?? null],
         );
 
         if (result.rows.length === 0) {
@@ -1089,8 +1095,8 @@ export function createIntegrationsRoutes(
 
         // Update last_synced_at
         await pool.query(
-          `UPDATE integrations SET last_synced_at = NOW() WHERE user_id = $1 AND provider = 'stripe'`,
-          [visitorId],
+          `UPDATE integrations SET last_synced_at = NOW() WHERE account_id = $1 AND provider = 'stripe'`,
+          [req.accountId ?? null],
         );
 
         trackBillingUsage(visitorId, "stripe_sync", "stripe_data_synced");
@@ -1118,26 +1124,26 @@ export function createIntegrationsRoutes(
     ensureVisitor,
     async (req: AuthRequest, res: Response) => {
       try {
-        const visitorId = req.visitorId!;
         const { clear_data } = req.body;
+        const acct = req.accountId ?? null;
 
         await pool.query(
-          "DELETE FROM integrations WHERE user_id = $1 AND provider = $2",
-          [visitorId, "stripe"],
+          "DELETE FROM integrations WHERE account_id = $1 AND provider = $2",
+          [acct, "stripe"],
         );
 
         if (clear_data) {
           await pool.query(
-            "DELETE FROM observe_events WHERE user_id = $1 AND source = 'stripe'",
-            [visitorId],
+            "DELETE FROM observe_events WHERE account_id = $1 AND source = 'stripe'",
+            [acct],
           );
-          await pool.query("DELETE FROM subscriptions WHERE user_id = $1", [
-            visitorId,
+          await pool.query("DELETE FROM subscriptions WHERE account_id = $1", [
+            acct,
           ]);
-          await pool.query("DELETE FROM customers WHERE user_id = $1", [
-            visitorId,
+          await pool.query("DELETE FROM customers WHERE account_id = $1", [
+            acct,
           ]);
-          await pool.query("DELETE FROM plans WHERE user_id = $1", [visitorId]);
+          await pool.query("DELETE FROM plans WHERE account_id = $1", [acct]);
         }
 
         res.json({

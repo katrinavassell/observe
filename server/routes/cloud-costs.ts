@@ -78,7 +78,6 @@ export function createCloudCostRoutes(pool: Pool, ensureVisitor: any) {
     ensureVisitor,
     async (req: AuthRequest, res: Response) => {
       try {
-        const visitorId = req.visitorId!;
         const { provider } = req.params;
 
         if (provider !== "aws" && provider !== "gcp") {
@@ -90,8 +89,8 @@ export function createCloudCostRoutes(pool: Pool, ensureVisitor: any) {
         // Retrieve and decrypt stored credentials
         const result = await pool.query(
           `SELECT encrypted_credentials FROM cloud_integrations
-           WHERE user_id = $1 AND provider = $2`,
-          [visitorId, provider],
+           WHERE account_id = $1 AND provider = $2`,
+          [req.accountId ?? null, provider],
         );
         if (result.rows.length === 0) {
           return res.status(404).json({
@@ -125,8 +124,8 @@ export function createCloudCostRoutes(pool: Pool, ensureVisitor: any) {
           //   cost_amount, 'aws_cost_explorer', 'daily_aggregate', '{"service": "..."}')
 
           await pool.query(
-            `UPDATE cloud_integrations SET last_sync_at = NOW() WHERE user_id = $1 AND provider = $2`,
-            [visitorId, provider],
+            `UPDATE cloud_integrations SET last_sync_at = NOW() WHERE account_id = $1 AND provider = $2`,
+            [req.accountId ?? null, provider],
           );
 
           res.json({
@@ -157,8 +156,8 @@ export function createCloudCostRoutes(pool: Pool, ensureVisitor: any) {
           // Then insert into observe_events with source = 'gcp_billing', cost_type = 'compute'
 
           await pool.query(
-            `UPDATE cloud_integrations SET last_sync_at = NOW() WHERE user_id = $1 AND provider = $2`,
-            [visitorId, provider],
+            `UPDATE cloud_integrations SET last_sync_at = NOW() WHERE account_id = $1 AND provider = $2`,
+            [req.accountId ?? null, provider],
           );
 
           res.json({
@@ -185,13 +184,11 @@ export function createCloudCostRoutes(pool: Pool, ensureVisitor: any) {
     ensureVisitor,
     async (req: AuthRequest, res: Response) => {
       try {
-        const visitorId = req.visitorId!;
-
         const result = await pool.query(
           `SELECT provider, last_sync_at, created_at
            FROM cloud_integrations
-           WHERE user_id = $1`,
-          [visitorId],
+           WHERE account_id = $1`,
+          [req.accountId ?? null],
         );
 
         const providers = ["aws", "gcp"];
@@ -219,7 +216,6 @@ export function createCloudCostRoutes(pool: Pool, ensureVisitor: any) {
     ensureVisitor,
     async (req: AuthRequest, res: Response) => {
       try {
-        const visitorId = req.visitorId!;
         const { provider } = req.params;
 
         if (provider !== "aws" && provider !== "gcp") {
@@ -229,8 +225,8 @@ export function createCloudCostRoutes(pool: Pool, ensureVisitor: any) {
         }
 
         await pool.query(
-          `DELETE FROM cloud_integrations WHERE user_id = $1 AND provider = $2`,
-          [visitorId, provider],
+          `DELETE FROM cloud_integrations WHERE account_id = $1 AND provider = $2`,
+          [req.accountId ?? null, provider],
         );
 
         res.json({ success: true });

@@ -30,13 +30,14 @@ export function createA2ARoutes(pool: Pool, _ensureVisitor: any) {
 
     const keyHash = crypto.createHash("sha256").update(apiKey).digest("hex");
     const result = await pool.query(
-      "SELECT user_id FROM sdk_api_keys WHERE key_hash = $1 AND revoked_at IS NULL",
+      "SELECT user_id, account_id FROM sdk_api_keys WHERE key_hash = $1 AND revoked_at IS NULL",
       [keyHash],
     );
     if (result.rows.length === 0) {
       return res.status(401).json({ error: "Invalid API key" });
     }
     req.visitorId = result.rows[0].user_id;
+    req.accountId = result.rows[0].account_id ?? undefined;
     next();
   }
 
@@ -90,7 +91,7 @@ export function createA2ARoutes(pool: Pool, _ensureVisitor: any) {
           });
         }
 
-        const userId = req.visitorId!;
+        const accountId = req.accountId ?? null;
         const period = params?.period || "last_30d";
         const feature = params?.feature;
         const agent = params?.agent;
@@ -106,7 +107,7 @@ export function createA2ARoutes(pool: Pool, _ensureVisitor: any) {
 
         // Build optional filters
         const filters: string[] = [];
-        const filterValues: unknown[] = [userId];
+        const filterValues: unknown[] = [accountId];
         let paramIdx = 2;
 
         if (feature) {
@@ -126,7 +127,7 @@ export function createA2ARoutes(pool: Pool, _ensureVisitor: any) {
           filterValues.push(params.cost_type);
         }
 
-        const whereClause = `WHERE user_id = $1 ${dateFilter} ${filters.join(" ")}`;
+        const whereClause = `WHERE account_id = $1 ${dateFilter} ${filters.join(" ")}`;
 
         if (action === "cost_query") {
           const result = await pool.query(
@@ -215,9 +216,9 @@ export function createA2ARoutes(pool: Pool, _ensureVisitor: any) {
              cost_amount, revenue_amount, usage_units, model, model_provider,
              agent_id, trace_id, span_id, parent_span_id, duration_ms, cost_type
              FROM observe_events
-             WHERE user_id = $1 AND trace_id = $2
+             WHERE account_id = $1 AND trace_id = $2
              ORDER BY timestamp ASC`,
-            [userId, traceId],
+            [accountId, traceId],
           );
           res.json({
             action: "trace_query",

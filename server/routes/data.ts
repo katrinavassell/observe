@@ -57,30 +57,54 @@ const SAMPLE_CUSTOMER_IDS = [
 ];
 const SAMPLE_PLAN_IDS = ["starter", "pro", "enterprise"];
 
+async function resolveAccountIdForUser(
+  pool: Pool,
+  userId: string,
+  accountId?: number,
+): Promise<number | null> {
+  if (accountId !== undefined) return accountId;
+  try {
+    const result = await pool.query(
+      `SELECT account_id FROM user_accounts
+        WHERE user_id = (SELECT id FROM users WHERE visitor_id = $1)
+          AND role = 'owner' LIMIT 1`,
+      [userId],
+    );
+    if (result.rows[0]) return result.rows[0].account_id;
+  } catch (err) {
+    console.error("data: account_id fallback lookup failed:", err);
+  }
+  console.warn("data: no account_id resolved for user", userId);
+  return null;
+}
+
 async function clearSampleData(
   db: { query: (text: string, params: unknown[]) => Promise<unknown> },
+  pool: Pool,
   userId: string,
+  accountId?: number,
 ): Promise<void> {
+  const resolved = await resolveAccountIdForUser(pool, userId, accountId);
   await db.query(
-    "DELETE FROM observe_events WHERE user_id = $1 AND source = 'sample'",
-    [userId],
+    "DELETE FROM observe_events WHERE account_id = $1 AND source = 'sample'",
+    [resolved],
   );
   await db.query(
-    "DELETE FROM cost_records WHERE user_id = $1 AND cost_type = 'ai_inference' AND customer_id IS NULL AND period_start IS NOT NULL",
-    [userId],
+    "DELETE FROM cost_records WHERE account_id = $1 AND cost_type = 'ai_inference' AND customer_id IS NULL AND period_start IS NOT NULL",
+    [resolved],
   );
   await db.query(
-    `DELETE FROM subscriptions WHERE user_id = $1 AND subscription_id = ANY($2)`,
-    [userId, SAMPLE_SUBSCRIPTION_IDS],
+    `DELETE FROM subscriptions WHERE account_id = $1 AND subscription_id = ANY($2)`,
+    [resolved, SAMPLE_SUBSCRIPTION_IDS],
   );
   await db.query(
-    `DELETE FROM customers WHERE user_id = $1 AND customer_id = ANY($2)`,
-    [userId, SAMPLE_CUSTOMER_IDS],
+    `DELETE FROM customers WHERE account_id = $1 AND customer_id = ANY($2)`,
+    [resolved, SAMPLE_CUSTOMER_IDS],
   );
-  await db.query(`DELETE FROM plans WHERE user_id = $1 AND plan_id = ANY($2)`, [
-    userId,
-    SAMPLE_PLAN_IDS,
-  ]);
+  await db.query(
+    `DELETE FROM plans WHERE account_id = $1 AND plan_id = ANY($2)`,
+    [resolved, SAMPLE_PLAN_IDS],
+  );
 }
 
 // Upload validation schemas
@@ -166,26 +190,27 @@ export function createDataRoutes(
     ensureVisitor,
     async (req: AuthRequest, res: Response) => {
       try {
+        const acct = req.accountId ?? null;
         const statusResult = await pool.query(
-          "SELECT * FROM user_data_status WHERE user_id = $1",
-          [req.visitorId],
+          "SELECT * FROM user_data_status WHERE account_id = $1",
+          [acct],
         );
         const customersResult = await pool.query(
-          "SELECT COUNT(*) FROM customers WHERE user_id = $1",
-          [req.visitorId],
+          "SELECT COUNT(*) FROM customers WHERE account_id = $1",
+          [acct],
         );
         const costsResult = await pool.query(
-          "SELECT COUNT(*) FROM cost_records WHERE user_id = $1",
-          [req.visitorId],
+          "SELECT COUNT(*) FROM cost_records WHERE account_id = $1",
+          [acct],
         );
         const usageResult = await pool.query(
-          "SELECT COUNT(*) FROM usage_records WHERE user_id = $1",
-          [req.visitorId],
+          "SELECT COUNT(*) FROM usage_records WHERE account_id = $1",
+          [acct],
         );
 
         const eventsResult = await pool.query(
-          "SELECT COUNT(*) FROM observe_events WHERE user_id = $1",
-          [req.visitorId],
+          "SELECT COUNT(*) FROM observe_events WHERE account_id = $1",
+          [acct],
         );
 
         const status = statusResult.rows[0] || { data_mode: "none" };
@@ -223,11 +248,11 @@ export function createDataRoutes(
         const offset = parseInt(req.query.offset as string) || 0;
         const [result, countResult] = await Promise.all([
           pool.query(
-            "SELECT * FROM customers WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3",
-            [req.visitorId, limit, offset],
+            "SELECT * FROM customers WHERE account_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3",
+            [req.accountId ?? null, limit, offset],
           ),
-          pool.query("SELECT COUNT(*) FROM customers WHERE user_id = $1", [
-            req.visitorId,
+          pool.query("SELECT COUNT(*) FROM customers WHERE account_id = $1", [
+            req.accountId ?? null,
           ]),
         ]);
         res.json({
@@ -253,12 +278,13 @@ export function createDataRoutes(
         const offset = parseInt(req.query.offset as string) || 0;
         const [result, countResult] = await Promise.all([
           pool.query(
-            "SELECT s.*, c.name as customer_name, c.email as customer_email, p.name as plan_name, p.price_amount FROM subscriptions s LEFT JOIN customers c ON s.user_id = c.user_id AND s.customer_id = c.customer_id LEFT JOIN plans p ON s.user_id = p.user_id AND s.plan_id = p.plan_id WHERE s.user_id = $1 ORDER BY s.created_at DESC LIMIT $2 OFFSET $3",
-            [req.visitorId, limit, offset],
+            "SELECT s.*, c.name as customer_name, c.email as customer_email, p.name as plan_name, p.price_amount FROM subscriptions s LEFT JOIN customers c ON s.user_id = c.user_id AND s.customer_id = c.customer_id LEFT JOIN plans p ON s.user_id = p.user_id AND s.plan_id = p.plan_id WHERE s.account_id = $1 ORDER BY s.created_at DESC LIMIT $2 OFFSET $3",
+            [req.accountId ?? null, limit, offset],
           ),
-          pool.query("SELECT COUNT(*) FROM subscriptions WHERE user_id = $1", [
-            req.visitorId,
-          ]),
+          pool.query(
+            "SELECT COUNT(*) FROM subscriptions WHERE account_id = $1",
+            [req.accountId ?? null],
+          ),
         ]);
         res.json({
           data: result.rows,
@@ -282,8 +308,8 @@ export function createDataRoutes(
         const limit = Math.min(parseInt(req.query.limit as string) || 100, 500);
         const offset = parseInt(req.query.offset as string) || 0;
         const result = await pool.query(
-          "SELECT * FROM plans WHERE user_id = $1 ORDER BY price_amount ASC LIMIT $2 OFFSET $3",
-          [req.visitorId, limit, offset],
+          "SELECT * FROM plans WHERE account_id = $1 ORDER BY price_amount ASC LIMIT $2 OFFSET $3",
+          [req.accountId ?? null, limit, offset],
         );
         res.json(result.rows);
       } catch (error) {
@@ -303,12 +329,13 @@ export function createDataRoutes(
         const offset = parseInt(req.query.offset as string) || 0;
         const [result, countResult] = await Promise.all([
           pool.query(
-            "SELECT * FROM usage_records WHERE user_id = $1 ORDER BY period_start DESC LIMIT $2 OFFSET $3",
-            [req.visitorId, limit, offset],
+            "SELECT * FROM usage_records WHERE account_id = $1 ORDER BY period_start DESC LIMIT $2 OFFSET $3",
+            [req.accountId ?? null, limit, offset],
           ),
-          pool.query("SELECT COUNT(*) FROM usage_records WHERE user_id = $1", [
-            req.visitorId,
-          ]),
+          pool.query(
+            "SELECT COUNT(*) FROM usage_records WHERE account_id = $1",
+            [req.accountId ?? null],
+          ),
         ]);
         res.json({
           data: result.rows,
@@ -333,12 +360,13 @@ export function createDataRoutes(
         const offset = parseInt(req.query.offset as string) || 0;
         const [result, countResult] = await Promise.all([
           pool.query(
-            "SELECT * FROM cost_records WHERE user_id = $1 ORDER BY period_start DESC LIMIT $2 OFFSET $3",
-            [req.visitorId, limit, offset],
+            "SELECT * FROM cost_records WHERE account_id = $1 ORDER BY period_start DESC LIMIT $2 OFFSET $3",
+            [req.accountId ?? null, limit, offset],
           ),
-          pool.query("SELECT COUNT(*) FROM cost_records WHERE user_id = $1", [
-            req.visitorId,
-          ]),
+          pool.query(
+            "SELECT COUNT(*) FROM cost_records WHERE account_id = $1",
+            [req.accountId ?? null],
+          ),
         ]);
         res.json({
           data: result.rows,
@@ -360,27 +388,28 @@ export function createDataRoutes(
     async (req: AuthRequest, res: Response) => {
       try {
         const analyzerLimit = 5000;
+        const acct = req.accountId ?? null;
         const [plans, customers, subscriptions, usage, costs] =
           await Promise.all([
-            pool.query("SELECT * FROM plans WHERE user_id = $1 LIMIT $2", [
-              req.visitorId,
-              analyzerLimit,
-            ]),
-            pool.query("SELECT * FROM customers WHERE user_id = $1 LIMIT $2", [
-              req.visitorId,
+            pool.query("SELECT * FROM plans WHERE account_id = $1 LIMIT $2", [
+              acct,
               analyzerLimit,
             ]),
             pool.query(
-              "SELECT * FROM subscriptions WHERE user_id = $1 LIMIT $2",
-              [req.visitorId, analyzerLimit],
+              "SELECT * FROM customers WHERE account_id = $1 LIMIT $2",
+              [acct, analyzerLimit],
             ),
             pool.query(
-              "SELECT * FROM usage_records WHERE user_id = $1 LIMIT $2",
-              [req.visitorId, analyzerLimit],
+              "SELECT * FROM subscriptions WHERE account_id = $1 LIMIT $2",
+              [acct, analyzerLimit],
             ),
             pool.query(
-              "SELECT * FROM cost_records WHERE user_id = $1 LIMIT $2",
-              [req.visitorId, analyzerLimit],
+              "SELECT * FROM usage_records WHERE account_id = $1 LIMIT $2",
+              [acct, analyzerLimit],
+            ),
+            pool.query(
+              "SELECT * FROM cost_records WHERE account_id = $1 LIMIT $2",
+              [acct, analyzerLimit],
             ),
           ]);
 
@@ -447,32 +476,31 @@ export function createDataRoutes(
     async (req: AuthRequest, res: Response) => {
       const client = await pool.connect();
       try {
+        const acct = req.accountId ?? null;
         await client.query("BEGIN");
-        await client.query("DELETE FROM ai_insights WHERE user_id = $1", [
-          req.visitorId,
+        await client.query("DELETE FROM ai_insights WHERE account_id = $1", [
+          acct,
         ]);
 
-        await client.query("DELETE FROM observe_events WHERE user_id = $1", [
-          req.visitorId,
+        await client.query("DELETE FROM observe_events WHERE account_id = $1", [
+          acct,
         ]);
-        await client.query("DELETE FROM usage_records WHERE user_id = $1", [
-          req.visitorId,
+        await client.query("DELETE FROM usage_records WHERE account_id = $1", [
+          acct,
         ]);
-        await client.query("DELETE FROM cost_records WHERE user_id = $1", [
-          req.visitorId,
+        await client.query("DELETE FROM cost_records WHERE account_id = $1", [
+          acct,
         ]);
-        await client.query("DELETE FROM subscriptions WHERE user_id = $1", [
-          req.visitorId,
+        await client.query("DELETE FROM subscriptions WHERE account_id = $1", [
+          acct,
         ]);
-        await client.query("DELETE FROM customers WHERE user_id = $1", [
-          req.visitorId,
+        await client.query("DELETE FROM customers WHERE account_id = $1", [
+          acct,
         ]);
-        await client.query("DELETE FROM plans WHERE user_id = $1", [
-          req.visitorId,
-        ]);
+        await client.query("DELETE FROM plans WHERE account_id = $1", [acct]);
         await client.query(
-          "UPDATE user_data_status SET data_mode = $2, updated_at = NOW() WHERE user_id = $1",
-          [req.visitorId, "none"],
+          "UPDATE user_data_status SET data_mode = $2, updated_at = NOW() WHERE account_id = $1",
+          [acct, "none"],
         );
         await client.query("COMMIT");
         res.json({ success: true });
@@ -493,20 +521,19 @@ export function createDataRoutes(
     async (req: AuthRequest, res: Response) => {
       const client = await pool.connect();
       try {
+        const acct = req.accountId ?? null;
         await client.query("BEGIN");
         await client.query(
-          "DELETE FROM observe_events WHERE user_id = $1 AND event_name = 'revenue'",
-          [req.visitorId],
+          "DELETE FROM observe_events WHERE account_id = $1 AND event_name = 'revenue'",
+          [acct],
         );
-        await client.query("DELETE FROM subscriptions WHERE user_id = $1", [
-          req.visitorId,
+        await client.query("DELETE FROM subscriptions WHERE account_id = $1", [
+          acct,
         ]);
-        await client.query("DELETE FROM customers WHERE user_id = $1", [
-          req.visitorId,
+        await client.query("DELETE FROM customers WHERE account_id = $1", [
+          acct,
         ]);
-        await client.query("DELETE FROM plans WHERE user_id = $1", [
-          req.visitorId,
-        ]);
+        await client.query("DELETE FROM plans WHERE account_id = $1", [acct]);
         await client.query("COMMIT");
         res.json({ success: true });
       } catch (error) {
@@ -526,13 +553,14 @@ export function createDataRoutes(
     async (req: AuthRequest, res: Response) => {
       const client = await pool.connect();
       try {
+        const acct = req.accountId ?? null;
         await client.query("BEGIN");
         await client.query(
-          "DELETE FROM observe_events WHERE user_id = $1 AND event_name = 'cost'",
-          [req.visitorId],
+          "DELETE FROM observe_events WHERE account_id = $1 AND event_name = 'cost'",
+          [acct],
         );
-        await client.query("DELETE FROM cost_records WHERE user_id = $1", [
-          req.visitorId,
+        await client.query("DELETE FROM cost_records WHERE account_id = $1", [
+          acct,
         ]);
         await client.query("COMMIT");
         res.json({ success: true });
@@ -553,13 +581,14 @@ export function createDataRoutes(
     async (req: AuthRequest, res: Response) => {
       const client = await pool.connect();
       try {
+        const acct = req.accountId ?? null;
         await client.query("BEGIN");
         await client.query(
-          "DELETE FROM observe_events WHERE user_id = $1 AND event_name = 'usage'",
-          [req.visitorId],
+          "DELETE FROM observe_events WHERE account_id = $1 AND event_name = 'usage'",
+          [acct],
         );
-        await client.query("DELETE FROM usage_records WHERE user_id = $1", [
-          req.visitorId,
+        await client.query("DELETE FROM usage_records WHERE account_id = $1", [
+          acct,
         ]);
         await client.query("COMMIT");
         res.json({ success: true });
@@ -607,12 +636,12 @@ export function createDataRoutes(
         }
 
         await client.query("BEGIN");
-        await client.query("DELETE FROM cost_records WHERE user_id = $1", [
-          req.visitorId,
+        await client.query("DELETE FROM cost_records WHERE account_id = $1", [
+          req.accountId ?? null,
         ]);
         await client.query(
-          "DELETE FROM observe_events WHERE user_id = $1 AND event_name = 'cost'",
-          [req.visitorId],
+          "DELETE FROM observe_events WHERE account_id = $1 AND event_name = 'cost'",
+          [req.accountId ?? null],
         );
 
         // Batch insert cost_records
@@ -670,10 +699,10 @@ export function createDataRoutes(
           );
         }
 
-        await clearSampleData(client, req.visitorId!);
+        await clearSampleData(client, pool, req.visitorId!, req.accountId);
         await client.query(
-          "UPDATE user_data_status SET data_mode = $2, updated_at = NOW() WHERE user_id = $1",
-          [req.visitorId, "user"],
+          "UPDATE user_data_status SET data_mode = $2, updated_at = NOW() WHERE account_id = $1",
+          [req.accountId ?? null, "user"],
         );
 
         await client.query("COMMIT");
@@ -724,12 +753,12 @@ export function createDataRoutes(
         }
 
         await client.query("BEGIN");
-        await client.query("DELETE FROM usage_records WHERE user_id = $1", [
-          req.visitorId,
+        await client.query("DELETE FROM usage_records WHERE account_id = $1", [
+          req.accountId ?? null,
         ]);
         await client.query(
-          "DELETE FROM observe_events WHERE user_id = $1 AND event_name = 'usage'",
-          [req.visitorId],
+          "DELETE FROM observe_events WHERE account_id = $1 AND event_name = 'usage'",
+          [req.accountId ?? null],
         );
 
         const batchSize = 500;
@@ -788,10 +817,10 @@ export function createDataRoutes(
           );
         }
 
-        await clearSampleData(client, req.visitorId!);
+        await clearSampleData(client, pool, req.visitorId!, req.accountId);
         await client.query(
-          "UPDATE user_data_status SET data_mode = $2, updated_at = NOW() WHERE user_id = $1",
-          [req.visitorId, "user"],
+          "UPDATE user_data_status SET data_mode = $2, updated_at = NOW() WHERE account_id = $1",
+          [req.accountId ?? null, "user"],
         );
 
         await client.query("COMMIT");
@@ -843,18 +872,19 @@ export function createDataRoutes(
         await client.query("BEGIN");
 
         // Clear existing revenue data
-        await client.query("DELETE FROM subscriptions WHERE user_id = $1", [
-          req.visitorId,
+        const acctRev = req.accountId ?? null;
+        await client.query("DELETE FROM subscriptions WHERE account_id = $1", [
+          acctRev,
         ]);
-        await client.query("DELETE FROM customers WHERE user_id = $1", [
-          req.visitorId,
+        await client.query("DELETE FROM customers WHERE account_id = $1", [
+          acctRev,
         ]);
-        await client.query("DELETE FROM plans WHERE user_id = $1", [
-          req.visitorId,
+        await client.query("DELETE FROM plans WHERE account_id = $1", [
+          acctRev,
         ]);
         await client.query(
-          "DELETE FROM observe_events WHERE user_id = $1 AND event_name = 'revenue'",
-          [req.visitorId],
+          "DELETE FROM observe_events WHERE account_id = $1 AND event_name = 'revenue'",
+          [acctRev],
         );
 
         // Insert plans
@@ -931,10 +961,10 @@ export function createDataRoutes(
           }
         }
 
-        await clearSampleData(client, req.visitorId!);
+        await clearSampleData(client, pool, req.visitorId!, req.accountId);
         await client.query(
-          "UPDATE user_data_status SET data_mode = $2, updated_at = NOW() WHERE user_id = $1",
-          [req.visitorId, "user"],
+          "UPDATE user_data_status SET data_mode = $2, updated_at = NOW() WHERE account_id = $1",
+          [req.accountId ?? null, "user"],
         );
 
         await client.query("COMMIT");
@@ -964,17 +994,18 @@ export function createDataRoutes(
     ensureVisitor,
     async (req: AuthRequest, res: Response) => {
       try {
+        const acct = req.accountId ?? null;
         const customersResult = await pool.query(
-          "SELECT COUNT(*) FROM customers WHERE user_id = $1",
-          [req.visitorId],
+          "SELECT COUNT(*) FROM customers WHERE account_id = $1",
+          [acct],
         );
         const activeSubs = await pool.query(
-          "SELECT COUNT(*) FROM subscriptions WHERE user_id = $1 AND is_active = true",
-          [req.visitorId],
+          "SELECT COUNT(*) FROM subscriptions WHERE account_id = $1 AND is_active = true",
+          [acct],
         );
         const mrrResult = await pool.query(
-          "SELECT COALESCE(SUM(COALESCE(s.mrr_override, p.price_amount)), 0) as mrr FROM subscriptions s LEFT JOIN plans p ON s.user_id = p.user_id AND s.plan_id = p.plan_id WHERE s.user_id = $1 AND s.is_active = true",
-          [req.visitorId],
+          "SELECT COALESCE(SUM(COALESCE(s.mrr_override, p.price_amount)), 0) as mrr FROM subscriptions s LEFT JOIN plans p ON s.user_id = p.user_id AND s.plan_id = p.plan_id WHERE s.account_id = $1 AND s.is_active = true",
+          [acct],
         );
 
         const mrr = parseFloat(mrrResult.rows[0].mrr) || 0;
@@ -1006,10 +1037,10 @@ export function createDataRoutes(
                 COALESCE(SUM(cost_amount), 0) as total_cost,
                 COALESCE(SUM(revenue_amount), 0) as total_revenue
          FROM observe_events
-         WHERE user_id = $1
+         WHERE account_id = $1
          GROUP BY source, is_inferred
          ORDER BY total_cost DESC`,
-          [req.visitorId],
+          [req.accountId ?? null],
         );
         const sources = result.rows.map(
           (r: {
@@ -1103,18 +1134,19 @@ export function createDataRoutes(
         await client.query("BEGIN");
 
         // Clear existing revenue data
-        await client.query("DELETE FROM subscriptions WHERE user_id = $1", [
-          req.visitorId,
+        const acctStripe = req.accountId ?? null;
+        await client.query("DELETE FROM subscriptions WHERE account_id = $1", [
+          acctStripe,
         ]);
-        await client.query("DELETE FROM customers WHERE user_id = $1", [
-          req.visitorId,
+        await client.query("DELETE FROM customers WHERE account_id = $1", [
+          acctStripe,
         ]);
-        await client.query("DELETE FROM plans WHERE user_id = $1", [
-          req.visitorId,
+        await client.query("DELETE FROM plans WHERE account_id = $1", [
+          acctStripe,
         ]);
         await client.query(
-          "DELETE FROM observe_events WHERE user_id = $1 AND source = 'stripe'",
-          [req.visitorId],
+          "DELETE FROM observe_events WHERE account_id = $1 AND source = 'stripe'",
+          [acctStripe],
         );
 
         // Insert plans (from Stripe products + prices) — batched
@@ -1261,7 +1293,7 @@ export function createDataRoutes(
           );
         }
 
-        await clearSampleData(client, req.visitorId!);
+        await clearSampleData(client, pool, req.visitorId!, req.accountId);
         await client.query(
           "INSERT INTO user_data_status (user_id, account_id, data_mode) VALUES ($1, $2, $3) ON CONFLICT (user_id) DO UPDATE SET data_mode = $3, updated_at = NOW()",
           [req.visitorId, req.accountId ?? null, "user"],
@@ -1320,8 +1352,8 @@ export function createDataRoutes(
 
         await client.query("BEGIN");
         await client.query(
-          "DELETE FROM observe_events WHERE user_id = $1 AND source = 'stripe' AND granularity = 'invoice'",
-          [req.visitorId],
+          "DELETE FROM observe_events WHERE account_id = $1 AND source = 'stripe' AND granularity = 'invoice'",
+          [req.accountId ?? null],
         );
 
         const lineItemRows: {
@@ -1650,8 +1682,8 @@ Return a JSON object mapping our field names to the CSV column index (0-based). 
 
         await client.query("BEGIN");
         await client.query(
-          "DELETE FROM observe_events WHERE user_id = $1 AND source = 'csv' AND event_name = 'provider_import'",
-          [req.visitorId],
+          "DELETE FROM observe_events WHERE account_id = $1 AND source = 'csv' AND event_name = 'provider_import'",
+          [req.accountId ?? null],
         );
 
         const batchSize = 500;
@@ -1683,10 +1715,10 @@ Return a JSON object mapping our field names to the CSV column index (0-based). 
           );
         }
 
-        await clearSampleData(client, req.visitorId!);
+        await clearSampleData(client, pool, req.visitorId!, req.accountId);
         await client.query(
-          "UPDATE user_data_status SET data_mode = $2, updated_at = NOW() WHERE user_id = $1",
-          [req.visitorId, "user"],
+          "UPDATE user_data_status SET data_mode = $2, updated_at = NOW() WHERE account_id = $1",
+          [req.accountId ?? null, "user"],
         );
         await client.query("COMMIT");
         trackBillingUsage(req.visitorId!, "csv_upload", "csv_upload_provider");

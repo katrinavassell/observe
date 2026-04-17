@@ -50,9 +50,9 @@ export function createModelsApiRoutes(pool: Pool, ensureVisitor: any) {
            SUM(input_tokens) as total_input_tokens, SUM(output_tokens) as total_output_tokens,
            COALESCE(AVG(cost_amount), 0) as avg_cost_per_event,
            MAX(timestamp) as last_seen
-         FROM observe_events WHERE user_id = $1 AND model IS NOT NULL
+         FROM observe_events WHERE account_id = $1 AND model IS NOT NULL
          GROUP BY model, model_provider ORDER BY total_cost DESC`,
-          [req.visitorId],
+          [req.accountId ?? null],
         );
 
         res.json(

@@ -201,9 +201,10 @@ export function createGatewayRoutes(
     const cached = getCachedConfig(cacheKey);
     if (cached) return cached;
 
+    const accountId = await resolveAccountIdForUser(pool, userId);
     const configResult = await pool.query(
-      "SELECT id, name FROM routing_configs WHERE user_id = $1 AND name = $2 AND is_active = true",
-      [userId, configName],
+      "SELECT id, name FROM routing_configs WHERE account_id = $1 AND name = $2 AND is_active = true",
+      [accountId, configName],
     );
     if (configResult.rows.length === 0) return null;
 
@@ -632,14 +633,15 @@ export function createGatewayRoutes(
     durationMs: number | null,
   ): Promise<void> {
     const totalTokens = inputTokens + outputTokens;
+    const accountId = await resolveAccountIdForUser(pool, userId);
 
     // Revenue enrichment
     let revenue = 0;
     let revenueSource = "none";
     try {
       const fpResult = await pool.query(
-        "SELECT revenue_per_unit FROM feature_pricing WHERE user_id = $1 AND feature_key = $2",
-        [userId, featureKey],
+        "SELECT revenue_per_unit FROM feature_pricing WHERE account_id = $1 AND feature_key = $2",
+        [accountId, featureKey],
       );
       if (fpResult.rows.length > 0) {
         revenue = parseFloat(fpResult.rows[0].revenue_per_unit);
@@ -650,8 +652,8 @@ export function createGatewayRoutes(
         customerId !== "default"
       ) {
         const mrrResult = await pool.query(
-          "SELECT SUM(mrr_override) as mrr FROM subscriptions WHERE user_id = $1 AND is_active = true AND customer_id = $2",
-          [userId, customerId],
+          "SELECT SUM(mrr_override) as mrr FROM subscriptions WHERE account_id = $1 AND is_active = true AND customer_id = $2",
+          [accountId, customerId],
         );
         if (mrrResult.rows[0]?.mrr) {
           revenue = parseFloat(mrrResult.rows[0].mrr) / 30;
@@ -661,8 +663,6 @@ export function createGatewayRoutes(
     } catch (err) {
       console.error("Gateway revenue enrichment failed:", err);
     }
-
-    const accountId = await resolveAccountIdForUser(pool, userId);
 
     await pool.query(
       `INSERT INTO observe_events (
@@ -922,8 +922,8 @@ export function createGatewayRoutes(
         const result = await pool.query(
           `SELECT c.id, c.name, c.description, c.is_active, c.created_at, c.updated_at,
           (SELECT COUNT(*) FROM routing_targets t WHERE t.config_id = c.id) as target_count
-         FROM routing_configs c WHERE c.user_id = $1 ORDER BY c.created_at DESC`,
-          [req.visitorId],
+         FROM routing_configs c WHERE c.account_id = $1 ORDER BY c.created_at DESC`,
+          [req.accountId ?? null],
         );
         res.json({ configs: result.rows });
       } catch (error) {
@@ -972,8 +972,8 @@ export function createGatewayRoutes(
     async (req: AuthRequest, res: Response) => {
       try {
         const configResult = await pool.query(
-          "SELECT * FROM routing_configs WHERE id = $1 AND user_id = $2",
-          [req.params.id, req.visitorId],
+          "SELECT * FROM routing_configs WHERE id = $1 AND account_id = $2",
+          [req.params.id, req.accountId ?? null],
         );
         if (configResult.rows.length === 0) {
           return res.status(404).json({ error: "Config not found" });
@@ -1015,8 +1015,8 @@ export function createGatewayRoutes(
           description = COALESCE($4, description),
           is_active = COALESCE($5, is_active),
           updated_at = NOW()
-         WHERE id = $1 AND user_id = $2 RETURNING *`,
-          [req.params.id, req.visitorId, name, description, is_active],
+         WHERE id = $1 AND account_id = $2 RETURNING *`,
+          [req.params.id, req.accountId ?? null, name, description, is_active],
         );
         if (result.rows.length === 0) {
           return res.status(404).json({ error: "Config not found" });
@@ -1038,8 +1038,8 @@ export function createGatewayRoutes(
     async (req: AuthRequest, res: Response) => {
       try {
         const result = await pool.query(
-          "DELETE FROM routing_configs WHERE id = $1 AND user_id = $2 RETURNING id",
-          [req.params.id, req.visitorId],
+          "DELETE FROM routing_configs WHERE id = $1 AND account_id = $2 RETURNING id",
+          [req.params.id, req.accountId ?? null],
         );
         if (result.rows.length === 0) {
           return res.status(404).json({ error: "Config not found" });
@@ -1063,8 +1063,8 @@ export function createGatewayRoutes(
       try {
         // Verify config ownership
         const configCheck = await pool.query(
-          "SELECT id FROM routing_configs WHERE id = $1 AND user_id = $2",
-          [req.params.id, req.visitorId],
+          "SELECT id FROM routing_configs WHERE id = $1 AND account_id = $2",
+          [req.params.id, req.accountId ?? null],
         );
         if (configCheck.rows.length === 0) {
           return res.status(404).json({ error: "Config not found" });
@@ -1118,8 +1118,8 @@ export function createGatewayRoutes(
     async (req: AuthRequest, res: Response) => {
       try {
         const configCheck = await pool.query(
-          "SELECT id FROM routing_configs WHERE id = $1 AND user_id = $2",
-          [req.params.configId, req.visitorId],
+          "SELECT id FROM routing_configs WHERE id = $1 AND account_id = $2",
+          [req.params.configId, req.accountId ?? null],
         );
         if (configCheck.rows.length === 0) {
           return res.status(404).json({ error: "Config not found" });
@@ -1209,8 +1209,8 @@ export function createGatewayRoutes(
     async (req: AuthRequest, res: Response) => {
       try {
         const configCheck = await pool.query(
-          "SELECT id FROM routing_configs WHERE id = $1 AND user_id = $2",
-          [req.params.configId, req.visitorId],
+          "SELECT id FROM routing_configs WHERE id = $1 AND account_id = $2",
+          [req.params.configId, req.accountId ?? null],
         );
         if (configCheck.rows.length === 0) {
           return res.status(404).json({ error: "Config not found" });
@@ -1241,8 +1241,8 @@ export function createGatewayRoutes(
     async (req: AuthRequest, res: Response) => {
       try {
         const configCheck = await pool.query(
-          "SELECT id FROM routing_configs WHERE id = $1 AND user_id = $2",
-          [req.params.id, req.visitorId],
+          "SELECT id FROM routing_configs WHERE id = $1 AND account_id = $2",
+          [req.params.id, req.accountId ?? null],
         );
         if (configCheck.rows.length === 0) {
           return res.status(404).json({ error: "Config not found" });
@@ -1282,8 +1282,8 @@ export function createGatewayRoutes(
     async (req: AuthRequest, res: Response) => {
       try {
         const configCheck = await pool.query(
-          "SELECT id FROM routing_configs WHERE id = $1 AND user_id = $2",
-          [req.params.configId, req.visitorId],
+          "SELECT id FROM routing_configs WHERE id = $1 AND account_id = $2",
+          [req.params.configId, req.accountId ?? null],
         );
         if (configCheck.rows.length === 0) {
           return res.status(404).json({ error: "Config not found" });
@@ -1313,8 +1313,8 @@ export function createGatewayRoutes(
     async (req: AuthRequest, res: Response) => {
       try {
         const configResult = await pool.query(
-          "SELECT id, name FROM routing_configs WHERE id = $1 AND user_id = $2",
-          [req.params.id, req.visitorId],
+          "SELECT id, name FROM routing_configs WHERE id = $1 AND account_id = $2",
+          [req.params.id, req.accountId ?? null],
         );
         if (configResult.rows.length === 0) {
           return res.status(404).json({ error: "Config not found" });
