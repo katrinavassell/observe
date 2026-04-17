@@ -405,26 +405,92 @@ function isActive(path: string) {
 
     <!-- Main Content -->
     <main class="flex-1 min-h-screen overflow-x-hidden pt-14 md:pt-0 md:ml-64">
-      <div class="p-6 pb-24 md:pb-6">
+      <!-- Mobile landing for logged-out visitors -->
+      <div
+        v-if="!isLoggedIn"
+        class="md:hidden flex flex-col items-center justify-center min-h-[80vh] px-6 text-center"
+      >
+        <div
+          class="w-12 h-12 rounded-xl bg-primary flex items-center justify-center text-primary-foreground font-bold text-xl mb-6"
+        >
+          O
+        </div>
+        <h1 class="text-2xl font-bold tracking-tight mb-3">
+          Know what your AI costs per customer
+        </h1>
+        <p class="text-muted-foreground text-sm leading-relaxed mb-8 max-w-sm">
+          Track every LLM call. See cost, revenue, and margin by customer and
+          feature. Install in 30 seconds.
+        </p>
+        <router-link
+          to="/signup"
+          class="w-full max-w-xs flex items-center justify-center gap-2 rounded-lg bg-primary text-primary-foreground px-6 py-3 text-sm font-semibold transition-all hover:opacity-90"
+        >
+          Start Free
+        </router-link>
+        <router-link
+          to="/login"
+          class="mt-3 text-sm text-muted-foreground hover:text-foreground transition-colors"
+        >
+          Already have an account? Log in
+        </router-link>
+        <div class="mt-10 space-y-3 text-left w-full max-w-sm">
+          <div class="flex items-start gap-3">
+            <div
+              class="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mt-0.5"
+            >
+              <Zap class="h-3 w-3 text-primary" />
+            </div>
+            <div>
+              <p class="text-sm font-medium">30-second install</p>
+              <p class="text-xs text-muted-foreground">
+                Paste one prompt into your AI coding agent. No SDK.
+              </p>
+            </div>
+          </div>
+          <div class="flex items-start gap-3">
+            <div
+              class="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mt-0.5"
+            >
+              <Eye class="h-3 w-3 text-primary" />
+            </div>
+            <div>
+              <p class="text-sm font-medium">Cost per customer</p>
+              <p class="text-xs text-muted-foreground">
+                See which customers cost you money and which are profitable.
+              </p>
+            </div>
+          </div>
+          <div class="flex items-start gap-3">
+            <div
+              class="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mt-0.5"
+            >
+              <CreditCard class="h-3 w-3 text-primary" />
+            </div>
+            <div>
+              <p class="text-sm font-medium">Stripe revenue matching</p>
+              <p class="text-xs text-muted-foreground">
+                Connect Stripe to see margins automatically. Optional.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Regular content (desktop, or logged-in mobile) -->
+      <div v-else class="p-6 pb-24 md:pb-6">
+        <ErrorBoundary>
+          <slot />
+        </ErrorBoundary>
+      </div>
+
+      <!-- Desktop logged-out still shows dashboard with slot -->
+      <div v-if="!isLoggedIn" class="hidden md:block p-6 pb-6">
         <ErrorBoundary>
           <slot />
         </ErrorBoundary>
       </div>
     </main>
-
-    <!-- Mobile sticky bottom CTA for guests -->
-    <div
-      v-if="!isLoggedIn"
-      class="fixed bottom-0 left-0 right-0 z-50 md:hidden border-t bg-background/95 backdrop-blur-sm px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
-    >
-      <router-link
-        to="/signup"
-        class="flex items-center justify-center gap-2 w-full rounded-lg bg-primary text-primary-foreground px-4 py-2.5 text-sm font-medium transition-all hover:opacity-90"
-      >
-        <LogIn class="h-4 w-4" />
-        Sign Up Free
-      </router-link>
-    </div>
 
     <FeedbackModal
       :open="feedbackOpen"
