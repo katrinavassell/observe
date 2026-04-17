@@ -198,7 +198,10 @@ export function createBillingApiRoutes(
     async (req: AuthRequest, res: Response) => {
       try {
         const result = await pool.query(
-          `SELECT stripe_plan, stripe_customer_id FROM users WHERE visitor_id = $1`,
+          `SELECT a.stripe_plan, a.stripe_customer_id FROM accounts a
+           JOIN user_accounts ua ON ua.account_id = a.id
+           JOIN users u ON u.id = ua.user_id
+           WHERE u.visitor_id = $1 AND ua.role = 'owner' LIMIT 1`,
           [req.visitorId],
         );
         const plan = result.rows[0]?.stripe_plan || "free";
