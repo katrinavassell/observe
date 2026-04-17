@@ -1262,8 +1262,10 @@ async function _doDbInit() {
       `CREATE INDEX IF NOT EXISTS idx_user_accounts_account ON user_accounts(account_id)`,
     );
 
-    // Initialize model pricing table
-    await initModelPricing(pool);
+    // Initialize model pricing table (non-blocking — don't delay cold start)
+    initModelPricing(pool).catch((err) =>
+      console.error("Initial pricing refresh failed:", err),
+    );
 
     // One-time cleanup: purge stale sample data for users already on 'user' mode
     try {

@@ -55,7 +55,7 @@ if (isLoggedIn.value) {
   router.replace("/");
 }
 
-const email = ref("");
+const email = ref((route.query.email as string) || "");
 const password = ref("");
 const name = ref("");
 const magicLinkSent = ref(false);
