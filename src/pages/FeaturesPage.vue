@@ -2,7 +2,7 @@
 import { useRouter } from "vue-router";
 import { ChevronRight } from "lucide-vue-next";
 import FeatureDefinitionsTable from "@/components/FeatureDefinitionsTable.vue";
-import { Button } from "@/components/ui";
+import { Button, Card, CardContent } from "@/components/ui";
 import { useAuth } from "@/composables/useAuth";
 
 const router = useRouter();
@@ -63,8 +63,20 @@ function goBack() {
 
     <FeatureDefinitionsTable v-if="isLoggedIn" show-test-event-button />
 
-    <div v-else class="text-sm text-muted-foreground">
-      Sign in to manage feature definitions.
-    </div>
+    <Card v-else class="border-primary/40 bg-primary/5">
+      <CardContent class="p-6 text-center space-y-3">
+        <h2 class="font-semibold text-lg">Sign in to manage features</h2>
+        <p class="text-sm text-muted-foreground max-w-md mx-auto">
+          Features auto-detect from your events. Sign up to give them display
+          names + revenue prices for accurate margin per feature.
+        </p>
+        <div class="flex justify-center gap-2 pt-1">
+          <Button @click="router.push('/signup')">Sign up free</Button>
+          <Button variant="outline" @click="router.push('/login')">
+            Log in
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
   </div>
 </template>

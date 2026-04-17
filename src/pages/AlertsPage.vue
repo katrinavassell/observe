@@ -330,7 +330,11 @@ function relativeTime(dateStr: string) {
           Get notified when costs spike, margins drop, or customers go quiet
         </p>
       </div>
-      <Button v-if="!showForm && isLoggedIn" size="sm" @click="showForm = true">
+      <Button
+        v-if="!showForm"
+        size="sm"
+        @click="isLoggedIn ? (showForm = true) : router.push('/signup')"
+      >
         <Plus class="h-3.5 w-3.5 mr-1.5" />
         New Alert
       </Button>
