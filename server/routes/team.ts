@@ -7,7 +7,7 @@ import { grantBonusCredits } from "../billing.js";
 export function createTeamRoutes(pool: Pool, ensureVisitor: any) {
   const router = Router();
 
-  async function getOrCreateOrg(visitorId: string) {
+  async function getOrCreateOrg(visitorId: string, accountEmail?: string) {
     const mapResult = await pool.query(
       "SELECT org_id FROM visitor_org_map WHERE visitor_id = $1",
       [visitorId],
@@ -43,12 +43,26 @@ export function createTeamRoutes(pool: Pool, ensureVisitor: any) {
     );
 
     await pool.query(
-      `INSERT INTO organization_members (org_id, visitor_id, role, status, joined_at)
-       VALUES ($1, $2, 'admin', 'active', NOW())`,
-      [org.id, visitorId],
+      `INSERT INTO organization_members (org_id, visitor_id, invited_email, role, status, joined_at)
+       VALUES ($1, $2, $3, 'admin', 'active', NOW())`,
+      [org.id, visitorId, accountEmail ?? null],
     );
 
     return org;
+  }
+
+  async function backfillMemberEmail(
+    orgId: number,
+    visitorId: string,
+    accountEmail: string | undefined,
+  ) {
+    if (!accountEmail) return;
+    await pool.query(
+      `UPDATE organization_members
+         SET invited_email = $1
+       WHERE org_id = $2 AND visitor_id = $3 AND invited_email IS NULL`,
+      [accountEmail, orgId, visitorId],
+    );
   }
 
   // GET /team - get current user's org info and members
@@ -58,7 +72,8 @@ export function createTeamRoutes(pool: Pool, ensureVisitor: any) {
     async (req: AuthRequest, res: Response) => {
       try {
         const visitorId = req.visitorId!;
-        const org = await getOrCreateOrg(visitorId);
+        const org = await getOrCreateOrg(visitorId, req.accountEmail);
+        await backfillMemberEmail(org.id, visitorId, req.accountEmail);
 
         const membersResult = await pool.query(
           `SELECT om.*, a.email AS account_email, a.name AS account_name
