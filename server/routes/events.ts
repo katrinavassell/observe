@@ -798,11 +798,14 @@ export function createEventsRoutes(
               .update(token)
               .digest("hex");
             const keyResult = await pool.query(
-              "SELECT user_id FROM sdk_api_keys WHERE key_hash = $1 AND revoked_at IS NULL",
+              "SELECT user_id, account_id FROM sdk_api_keys WHERE key_hash = $1 AND revoked_at IS NULL",
               [keyHash],
             );
             if (keyResult.rows.length > 0) {
               userId = keyResult.rows[0].user_id;
+              if (keyResult.rows[0].account_id != null) {
+                (req as AuthRequest).accountId = keyResult.rows[0].account_id;
+              }
               // Update last_used_at
               pool
                 .query(
