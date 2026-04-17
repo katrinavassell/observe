@@ -27,12 +27,16 @@ import OnboardingChecklist from "@/components/onboarding/OnboardingChecklist.vue
 import { useTeam } from "@/composables/useTeam";
 import { useAuth } from "@/composables/useAuth";
 import { useDataMode } from "@/composables/useDataMode";
+import { useAccounts } from "@/composables/useAccounts";
+import AccountSwitcher from "@/components/accounts/AccountSwitcher.vue";
 
 const route = useRoute();
 const router = useRouter();
 const { isViewer, fetchTeamInfo } = useTeam();
 const { account, isLoggedIn, logout } = useAuth();
 const { reset: resetDataMode } = useDataMode();
+const { accounts: myAccounts } = useAccounts();
+const showAccountSwitcher = computed(() => (myAccounts.value?.length ?? 0) > 1);
 
 // Reset data status when auth state changes (signup clears sample data)
 watch(isLoggedIn, (loggedIn) => {
@@ -245,20 +249,21 @@ function isActive(path: string) {
       ]"
     >
       <div class="flex h-full flex-col">
-        <!-- Logo -->
-        <div
-          class="flex h-16 items-center gap-3 border-b border-sidebar-border px-5"
-        >
-          <div
-            class="flex h-8 w-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground font-semibold text-sm"
-          >
-            O
-          </div>
-          <div class="flex flex-col">
-            <span class="text-base font-semibold leading-tight">Observe</span>
-            <span class="text-[10px] text-sidebar-foreground/40 leading-tight"
-              >By Tanso</span
+        <!-- Logo / Account Switcher -->
+        <div class="flex h-16 items-center border-b border-sidebar-border px-3">
+          <AccountSwitcher v-if="showAccountSwitcher" class="w-full" />
+          <div v-else class="flex items-center gap-3 px-2">
+            <div
+              class="flex h-8 w-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground font-semibold text-sm"
             >
+              O
+            </div>
+            <div class="flex flex-col">
+              <span class="text-base font-semibold leading-tight">Observe</span>
+              <span class="text-[10px] text-sidebar-foreground/40 leading-tight"
+                >By Tanso</span
+              >
+            </div>
           </div>
         </div>
 
