@@ -856,11 +856,14 @@ export function createEventsRoutes(
           );
           if (acctResult.rows.length > 0) {
             accountId = acctResult.rows[0].account_id;
-          } else {
-            console.warn(
-              `ingest: no owner account_id for visitor_id=${userId}; data-table reads will be skipped`,
-            );
           }
+        }
+
+        if (accountId == null) {
+          return res.status(500).json({
+            error:
+              "Could not resolve account for this API key. Regenerate the key from Data Sources.",
+          });
         }
 
         const { events } = req.body;
@@ -1260,7 +1263,7 @@ export function createEventsRoutes(
             const fdPlaceholders: string[] = [];
             const fdValues: unknown[] = [];
             let fdIdx = 1;
-            const acctId = req.accountId ?? null;
+            const acctId = accountId;
             for (const fk of uniqueFeatureKeys) {
               fdPlaceholders.push(
                 `($${fdIdx}, $${fdIdx + 1}, $${fdIdx + 2}, $${fdIdx + 3}, 'outcome')`,
@@ -1335,7 +1338,7 @@ export function createEventsRoutes(
               console.error("Auto inference profile update failed:", err),
             );
           // Check alert thresholds
-          checkAlerts(pool, userId).catch((err) =>
+          checkAlerts(pool, userId, accountId).catch((err) =>
             console.error("checkAlerts error (ingest):", err),
           );
           // Check per-customer alerts for each unique customer in this batch
@@ -1352,7 +1355,7 @@ export function createEventsRoutes(
             ),
           ];
           for (const cid of alertCustomerIds) {
-            checkCustomerAlerts(pool, userId, cid).catch((err) =>
+            checkCustomerAlerts(pool, userId, cid, accountId).catch((err) =>
               console.error("checkCustomerAlerts error (ingest):", err),
             );
           }

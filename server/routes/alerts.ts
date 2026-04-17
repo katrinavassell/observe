@@ -227,17 +227,22 @@ async function sendAlertWebhook(
   }
 }
 
-export async function checkAlerts(pool: Pool, userId: string) {
+export async function checkAlerts(
+  pool: Pool,
+  userId: string,
+  resolvedAccountId?: number | null,
+) {
   try {
-    // Background job — no req.accountId. Fallback: resolve owner's account_id.
-    const accountIdResult = await pool.query(
-      `SELECT account_id FROM user_accounts WHERE user_id = (SELECT id FROM users WHERE visitor_id = $1) AND role = 'owner' LIMIT 1`,
-      [userId],
-    );
-    const accountId: number | null =
-      accountIdResult.rows[0]?.account_id ?? null;
+    let accountId = resolvedAccountId ?? null;
     if (accountId === null) {
-      console.warn("checkAlerts: no owner account_id for visitor", userId);
+      const accountIdResult = await pool.query(
+        `SELECT account_id FROM user_accounts WHERE user_id = (SELECT id FROM users WHERE visitor_id = $1) AND role = 'owner' LIMIT 1`,
+        [userId],
+      );
+      accountId = accountIdResult.rows[0]?.account_id ?? null;
+    }
+    if (accountId === null) {
+      console.warn("checkAlerts: no account_id for visitor", userId);
       return;
     }
 
@@ -448,20 +453,19 @@ export async function checkCustomerAlerts(
   pool: Pool,
   userId: string,
   customerId: string,
+  resolvedAccountId?: number | null,
 ) {
   try {
-    // Background job — no req.accountId. Fallback: resolve owner's account_id.
-    const accountIdResult = await pool.query(
-      `SELECT account_id FROM user_accounts WHERE user_id = (SELECT id FROM users WHERE visitor_id = $1) AND role = 'owner' LIMIT 1`,
-      [userId],
-    );
-    const accountId: number | null =
-      accountIdResult.rows[0]?.account_id ?? null;
+    let accountId = resolvedAccountId ?? null;
     if (accountId === null) {
-      console.warn(
-        "checkCustomerAlerts: no owner account_id for visitor",
-        userId,
+      const accountIdResult = await pool.query(
+        `SELECT account_id FROM user_accounts WHERE user_id = (SELECT id FROM users WHERE visitor_id = $1) AND role = 'owner' LIMIT 1`,
+        [userId],
       );
+      accountId = accountIdResult.rows[0]?.account_id ?? null;
+    }
+    if (accountId === null) {
+      console.warn("checkCustomerAlerts: no account_id for visitor", userId);
       return;
     }
 

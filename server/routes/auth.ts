@@ -477,7 +477,7 @@ export function createAuthRoutes(
         const insertResult = await pool.query(
           `INSERT INTO sdk_api_keys (user_id, account_id, key_hash, key_prefix, encrypted_key, name)
              VALUES ($1, $2, $3, $4, $5, $6)
-             ON CONFLICT (user_id, name) DO NOTHING
+             ON CONFLICT (account_id, name) WHERE revoked_at IS NULL DO NOTHING
              RETURNING id`,
           [
             userId,
@@ -511,7 +511,7 @@ export function createAuthRoutes(
         // .catch() chains often race the lambda death and never actually
         // send. Awaiting adds ~400ms to signup but guarantees delivery.
         const resendKey = process.env.RESEND_API_KEY;
-        if (resendKey) {
+        if (isNewAccount && resendKey) {
           const resendPost = (body: Record<string, unknown>) =>
             fetch("https://api.resend.com/emails", {
               method: "POST",

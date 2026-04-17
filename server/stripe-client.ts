@@ -54,11 +54,13 @@ export async function getUncachableStripeClient() {
 export async function getStripeClientForUser(
   pool: Pool,
   userId: string,
+  accountId?: number | null,
 ): Promise<Stripe> {
-  const result = await pool.query(
-    `SELECT encrypted_api_key FROM integrations WHERE user_id = $1 AND provider = 'stripe' AND encrypted_api_key IS NOT NULL`,
-    [userId],
-  );
+  const query =
+    accountId != null
+      ? `SELECT encrypted_api_key FROM integrations WHERE account_id = $1 AND provider = 'stripe' AND encrypted_api_key IS NOT NULL`
+      : `SELECT encrypted_api_key FROM integrations WHERE user_id = $1 AND provider = 'stripe' AND encrypted_api_key IS NOT NULL`;
+  const result = await pool.query(query, [accountId ?? userId]);
   if (result.rows.length === 0) {
     throw new Error(
       "No Stripe integration found. Please connect Stripe first.",
