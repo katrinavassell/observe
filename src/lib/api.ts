@@ -2,6 +2,8 @@ import { supabase } from "@/lib/supabase";
 
 const API_BASE = "/api";
 
+const CURRENT_ACCOUNT_ID_KEY = "observe:current_account_id";
+
 // Anonymous visitor ID — persisted in localStorage so sample data survives page reloads
 function getAnonVisitorId(): string {
   let id = localStorage.getItem("observe_visitor_id");
@@ -10,6 +12,20 @@ function getAnonVisitorId(): string {
     localStorage.setItem("observe_visitor_id", id);
   }
   return id;
+}
+
+export function getCurrentAccountId(): number | null {
+  const raw = localStorage.getItem(CURRENT_ACCOUNT_ID_KEY);
+  if (!raw) return null;
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+export function setCurrentAccountId(id: number): void {
+  localStorage.setItem(CURRENT_ACCOUNT_ID_KEY, String(id));
+  window.dispatchEvent(
+    new CustomEvent("observe:account-changed", { detail: id }),
+  );
 }
 
 async function request<T>(
@@ -27,6 +43,10 @@ async function request<T>(
 
   if (session?.access_token) {
     headers["Authorization"] = `Bearer ${session.access_token}`;
+    const accountId = getCurrentAccountId();
+    if (accountId !== null && !("X-Account-Id" in headers)) {
+      headers["X-Account-Id"] = String(accountId);
+    }
   } else {
     headers["x-visitor-id"] = getAnonVisitorId();
   }
@@ -1184,6 +1204,22 @@ export async function signupComplete(
 
 export async function getMe(): Promise<{ account: Account | null }> {
   return request("/auth/me");
+}
+
+export interface AccountMembership {
+  id: number;
+  name: string;
+  role: "owner" | "admin" | "viewer";
+  status: "active" | "pending";
+  joined_at: string | null;
+  is_current: boolean;
+}
+
+export async function listMyAccounts(): Promise<{
+  accounts: AccountMembership[];
+  current_account_id: number | null;
+}> {
+  return request("/me/accounts");
 }
 
 // ── Recommendations ──────────────────────────────────────────────────────────
