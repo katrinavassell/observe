@@ -24,7 +24,7 @@ import {
 } from "lucide-vue-next";
 import ErrorBoundary from "@/components/shared/ErrorBoundary.vue";
 import FeedbackModal from "@/components/shared/FeedbackModal.vue";
-import OnboardingChecklist from "@/components/onboarding/OnboardingChecklist.vue";
+
 import { useTeam } from "@/composables/useTeam";
 import { useAuth } from "@/composables/useAuth";
 import { useDataMode } from "@/composables/useDataMode";
@@ -49,14 +49,6 @@ watch(isLoggedIn, (loggedIn) => {
     resetDataMode();
   }
 });
-
-const onboardingDismissed = ref(
-  window.localStorage.getItem("observe:onboarding_dismissed") === "true",
-);
-function dismissOnboarding() {
-  window.localStorage.setItem("observe:onboarding_dismissed", "true");
-  onboardingDismissed.value = true;
-}
 
 const feedbackOpen = ref(false);
 const mobileLandingEmail = ref("");
@@ -523,11 +515,6 @@ function isActive(path: string) {
       :open="feedbackOpen"
       @close="feedbackOpen = false"
       @credited="handleFeedbackCredited"
-    />
-
-    <OnboardingChecklist
-      v-if="isLoggedIn && !onboardingDismissed"
-      @dismiss="dismissOnboarding"
     />
   </div>
 </template>
