@@ -412,69 +412,56 @@ function isActive(path: string) {
       <!-- Mobile landing — only on home route for logged-out visitors -->
       <div
         v-if="!isLoggedIn && isMobileLanding"
-        class="md:hidden flex flex-col items-center justify-center min-h-[80vh] px-6 text-center"
+        class="md:hidden px-6 pt-8 pb-20"
       >
-        <div
-          class="w-12 h-12 rounded-xl bg-primary flex items-center justify-center text-primary-foreground font-bold text-xl mb-6"
-        >
-          O
-        </div>
-        <h1 class="text-2xl font-bold tracking-tight mb-3">
-          Know what your AI costs per customer
+        <h1 class="text-2xl font-bold tracking-tight leading-tight mb-3">
+          Know the true cost of every feature you ship
         </h1>
-        <p class="text-muted-foreground text-sm leading-relaxed mb-8 max-w-sm">
-          Track every LLM call. See cost, revenue, and margin by customer and
-          feature. Install in 30 seconds.
+        <p class="text-muted-foreground text-sm leading-relaxed mb-8">
+          Observe gives SaaS teams real-time visibility into margins, usage
+          costs, and pricing health — so you can price with confidence, not
+          guesswork.
         </p>
         <router-link
           to="/signup"
-          class="w-full max-w-xs flex items-center justify-center gap-2 rounded-lg bg-primary text-primary-foreground px-6 py-3 text-sm font-semibold transition-all hover:opacity-90"
+          class="w-full flex items-center justify-center gap-2 rounded-lg bg-primary text-primary-foreground px-6 py-3.5 text-sm font-semibold transition-all hover:opacity-90"
         >
           Start Free
         </router-link>
         <router-link
           to="/login"
-          class="mt-3 text-sm text-muted-foreground hover:text-foreground transition-colors"
+          class="mt-3 w-full flex items-center justify-center text-sm text-muted-foreground hover:text-foreground transition-colors py-2"
         >
           Already have an account? Log in
         </router-link>
-        <div class="mt-10 space-y-3 text-left w-full max-w-sm">
+        <div class="mt-10 space-y-5">
           <div class="flex items-start gap-3">
-            <div
-              class="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mt-0.5"
-            >
-              <Zap class="h-3 w-3 text-primary" />
-            </div>
+            <Zap class="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
             <div>
-              <p class="text-sm font-medium">30-second install</p>
-              <p class="text-xs text-muted-foreground">
-                Paste one prompt into your AI coding agent. No SDK.
+              <p class="text-sm font-semibold">Margin and pricing analysis</p>
+              <p class="text-xs text-muted-foreground leading-relaxed">
+                See exactly how much each plan, feature, and customer costs you
+                — and where you're leaving money on the table.
               </p>
             </div>
           </div>
           <div class="flex items-start gap-3">
-            <div
-              class="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mt-0.5"
-            >
-              <Eye class="h-3 w-3 text-primary" />
-            </div>
+            <Eye class="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
             <div>
-              <p class="text-sm font-medium">Cost per customer</p>
-              <p class="text-xs text-muted-foreground">
-                See which customers cost you money and which are profitable.
+              <p class="text-sm font-semibold">Revenue and cost analytics</p>
+              <p class="text-xs text-muted-foreground leading-relaxed">
+                Track revenue, AI model costs, and unit economics across your
+                entire product in one view.
               </p>
             </div>
           </div>
           <div class="flex items-start gap-3">
-            <div
-              class="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mt-0.5"
-            >
-              <CreditCard class="h-3 w-3 text-primary" />
-            </div>
+            <CreditCard class="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
             <div>
-              <p class="text-sm font-medium">Stripe revenue matching</p>
-              <p class="text-xs text-muted-foreground">
-                Connect Stripe to see margins automatically. Optional.
+              <p class="text-sm font-semibold">Feature-level cost tracking</p>
+              <p class="text-xs text-muted-foreground leading-relaxed">
+                Break down costs per feature so you know which capabilities to
+                invest in — and which to rethink.
               </p>
             </div>
           </div>

@@ -27,7 +27,6 @@ import { useQueryClient } from "@tanstack/vue-query";
 import { useAuth } from "@/composables/useAuth";
 import { useTeam } from "@/composables/useTeam";
 import { useAccounts } from "@/composables/useAccounts";
-import { useAccountReset } from "@/composables/useAccountReset";
 import type { OrgMember } from "@/lib/api";
 import {
   Button,
@@ -60,18 +59,6 @@ function isOwner(member: { visitor_id?: string }) {
   return members.value?.[0]?.visitor_id === member.visitor_id;
 }
 const { accounts, currentAccountId } = useAccounts();
-const {
-  summary: resetSummary,
-  isLoading: resetSummaryLoading,
-  error: resetSummaryError,
-  fetchSummary: fetchResetSummary,
-  executeReset,
-} = useAccountReset();
-
-const isAccountOwner = computed(() => {
-  const current = accounts.value.find((a) => a.id === currentAccountId.value);
-  return current?.role === "owner";
-});
 
 const isRotating = ref(false);
 const copiedLink = ref(false);
