@@ -41,7 +41,7 @@ export function useAccounts() {
   async function switchTo(id: number) {
     if (currentAccountId.value === id) return;
     setCurrentAccountId(id);
-    await queryClient.invalidateQueries();
+    window.location.reload();
   }
 
   return {
