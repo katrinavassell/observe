@@ -108,8 +108,9 @@ export function createEnsureVisitor(pool: Pool) {
                     ? `${user.user_metadata.name}'s Account`
                     : "Personal Account";
                 const insertedAccount = await pool.query(
-                  `INSERT INTO accounts (name) VALUES ($1) RETURNING id`,
-                  [accountName],
+                  `INSERT INTO accounts (name, email, password_hash, visitor_id)
+                   VALUES ($1, $2, 'supabase-managed', $3) RETURNING id`,
+                  [accountName, user.email, user.id],
                 );
                 resolvedAccountId = insertedAccount.rows[0].id as number;
                 await pool.query(
@@ -346,8 +347,9 @@ export function createAuthRoutes(
             ? `${trimmedName}'s Account`
             : "Personal Account";
           const insertedAccount = await pool.query(
-            `INSERT INTO accounts (name) VALUES ($1) RETURNING id`,
-            [accountName],
+            `INSERT INTO accounts (name, email, password_hash, visitor_id)
+             VALUES ($1, $2, 'supabase-managed', $3) RETURNING id`,
+            [accountName, email, userId],
           );
           resolvedAccountId = insertedAccount.rows[0].id as number;
           await pool.query(
