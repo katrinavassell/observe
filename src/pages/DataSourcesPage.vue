@@ -683,7 +683,7 @@ watch(
             <div class="flex items-center gap-2">
               <code
                 class="flex-1 text-sm font-mono bg-background border rounded px-3 py-2 select-all break-all"
-                >{{ generatedKey }}</code
+                >{{ generatedKey.slice(0, 11) }}••••••••••••••••••••</code
               >
               <Button
                 variant="outline"
@@ -715,7 +715,7 @@ watch(
                 }}</span>
                 <code
                   class="font-mono text-xs text-muted-foreground truncate min-w-0 flex-1"
-                  >{{ key.full_key ?? key.key_prefix + "…" }}</code
+                  >{{ key.key_prefix + "••••••••••••" }}</code
                 >
               </div>
               <div class="flex items-center gap-1.5 shrink-0">
