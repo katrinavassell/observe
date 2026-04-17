@@ -1207,10 +1207,8 @@ Observe.identify({ <span class="text-sky-300">customerId</span>: user.stripeId }
       </div>
     </details>
 
-    <!-- ================================================================== -->
-    <!-- IMPORT HISTORICAL DATA (collapsed)                                 -->
-    <!-- ================================================================== -->
-    <details class="group">
+    <!-- IMPORT HISTORICAL DATA — hidden pending QA -->
+    <details v-if="false" class="group">
       <summary
         class="text-sm font-medium text-muted-foreground cursor-pointer hover:text-foreground transition-colors"
       >
