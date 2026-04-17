@@ -1141,7 +1141,7 @@ export function createCustomersRoutes(
           await pool.query(
             `INSERT INTO customers (user_id, account_id, customer_id, name, is_internal)
              VALUES ($1, $2, $3, $3, $4)
-             ON CONFLICT (user_id, customer_id) DO UPDATE SET is_internal = $4, updated_at = NOW()`,
+             ON CONFLICT (account_id, customer_id) DO UPDATE SET is_internal = $4, updated_at = NOW()`,
             [req.visitorId, req.accountId ?? null, customerId, is_internal],
           );
         }

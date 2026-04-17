@@ -30,9 +30,9 @@ onMounted(async () => {
 });
 
 watch(
-  isLoggedIn,
-  (loggedIn) => {
-    if (loggedIn && inviteInfo.value && !joined.value && !isJoining.value) {
+  [isLoggedIn, inviteInfo],
+  ([loggedIn, info]) => {
+    if (loggedIn && info && !joined.value && !isJoining.value) {
       acceptInvite();
     }
   },

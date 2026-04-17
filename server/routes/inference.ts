@@ -83,7 +83,7 @@ export async function computeInferenceProfiles(
     await pool.query(
       `INSERT INTO inference_profiles (user_id, account_id, profile_type, scope_key, distribution, sample_count, time_window_start, time_window_end)
        VALUES ($1, $2, 'feature_distribution', $3, $4, $5, $6, $7)
-       ON CONFLICT (user_id, profile_type, scope_key) DO UPDATE SET
+       ON CONFLICT (account_id, profile_type, scope_key) DO UPDATE SET
          distribution = EXCLUDED.distribution,
          sample_count = EXCLUDED.sample_count,
          time_window_start = EXCLUDED.time_window_start,
@@ -347,7 +347,7 @@ export function createInferenceRoutes(pool: Pool, ensureVisitor: any) {
             model, model_provider, source, granularity, is_inferred, properties,
             idempotency_key
           ) VALUES ($1, $2, $3, $4, 'cost', $5, $6, 'usd', 0, $7, $8, $9, 'helicone_import', 'event', false, $10, $11)
-          ON CONFLICT (user_id, idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING`,
+          ON CONFLICT (account_id, idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING`,
             [
               userId,
               req.accountId ?? null,

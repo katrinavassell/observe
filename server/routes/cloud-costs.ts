@@ -59,7 +59,7 @@ export function createCloudCostRoutes(pool: Pool, ensureVisitor: any) {
         await pool.query(
           `INSERT INTO cloud_integrations (user_id, account_id, provider, encrypted_credentials)
            VALUES ($1, $2, $3, $4)
-           ON CONFLICT (user_id, provider)
+           ON CONFLICT (account_id, provider)
            DO UPDATE SET encrypted_credentials = $4, last_sync_at = NULL`,
           [visitorId, req.accountId ?? null, provider, encrypted],
         );

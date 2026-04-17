@@ -131,7 +131,7 @@ export function createBillingApiRoutes(
         await pool.query(
           `INSERT INTO feature_pricing (user_id, account_id, feature_key, revenue_per_unit, unit_label)
            VALUES ($1, $2, $3, $4, $5)
-           ON CONFLICT (user_id, feature_key)
+           ON CONFLICT (account_id, feature_key)
            DO UPDATE SET revenue_per_unit = $4, unit_label = $5`,
           [
             req.visitorId,
@@ -495,7 +495,7 @@ export function createBillingApiRoutes(
         await pool.query(
           `INSERT INTO integrations (user_id, account_id, provider, api_key_prefix, has_usage_access, connected_at, encrypted_api_key, stripe_account_id, stripe_account_name)
          VALUES ($1, $2, 'stripe', $3, true, NOW(), $4, $5, $6)
-         ON CONFLICT (user_id, provider)
+         ON CONFLICT (account_id, provider)
          DO UPDATE SET api_key_prefix = $3, has_usage_access = true, connected_at = NOW(), encrypted_api_key = $4, stripe_account_id = $5, stripe_account_name = $6`,
           [
             visitorId,
@@ -517,7 +517,7 @@ export function createBillingApiRoutes(
           );
           await clearSampleData(pool, pool, visitorId, req.accountId);
           await pool.query(
-            "INSERT INTO user_data_status (user_id, account_id, data_mode) VALUES ($1, $2, $3) ON CONFLICT (user_id) DO UPDATE SET data_mode = $3, updated_at = NOW()",
+            "INSERT INTO user_data_status (user_id, account_id, data_mode) VALUES ($1, $2, $3) ON CONFLICT (account_id) DO UPDATE SET data_mode = $3, updated_at = NOW()",
             [visitorId, req.accountId ?? null, "user"],
           );
           deps.convertReferralIfPending(visitorId);
@@ -843,7 +843,7 @@ export function createBillingApiRoutes(
         }
 
         await client.query(
-          "INSERT INTO user_data_status (user_id, account_id, data_mode) VALUES ($1, $2, $3) ON CONFLICT (user_id) DO UPDATE SET data_mode = $3, updated_at = NOW()",
+          "INSERT INTO user_data_status (user_id, account_id, data_mode) VALUES ($1, $2, $3) ON CONFLICT (account_id) DO UPDATE SET data_mode = $3, updated_at = NOW()",
           [req.visitorId, req.accountId ?? null, "user"],
         );
         await client.query("COMMIT");
@@ -981,7 +981,7 @@ export function createBillingApiRoutes(
                 await txClient.query("BEGIN");
                 await clearSampleData(txClient, pool, visitorId, req.accountId);
                 await txClient.query(
-                  `INSERT INTO user_data_status (user_id, account_id, data_mode) VALUES ($1, $2, $3) ON CONFLICT (user_id) DO UPDATE SET data_mode = $3, updated_at = NOW()`,
+                  `INSERT INTO user_data_status (user_id, account_id, data_mode) VALUES ($1, $2, $3) ON CONFLICT (account_id) DO UPDATE SET data_mode = $3, updated_at = NOW()`,
                   [visitorId, req.accountId ?? null, "user"],
                 );
                 await txClient.query("COMMIT");
@@ -1010,7 +1010,7 @@ export function createBillingApiRoutes(
         }
 
         await pool.query(
-          `INSERT INTO integrations (user_id, account_id, provider, api_key_prefix, has_usage_access, connected_at, encrypted_api_key) VALUES ($1, $2, 'openai', $3, $4, NOW(), $5) ON CONFLICT (user_id, provider) DO UPDATE SET api_key_prefix = $3, has_usage_access = $4, connected_at = NOW(), encrypted_api_key = $5`,
+          `INSERT INTO integrations (user_id, account_id, provider, api_key_prefix, has_usage_access, connected_at, encrypted_api_key) VALUES ($1, $2, 'openai', $3, $4, NOW(), $5) ON CONFLICT (account_id, provider) DO UPDATE SET api_key_prefix = $3, has_usage_access = $4, connected_at = NOW(), encrypted_api_key = $5`,
           [
             visitorId,
             req.accountId ?? null,
@@ -1185,7 +1185,7 @@ export function createBillingApiRoutes(
                 await txClient.query("BEGIN");
                 await clearSampleData(txClient, pool, visitorId, req.accountId);
                 await txClient.query(
-                  `INSERT INTO user_data_status (user_id, account_id, data_mode) VALUES ($1, $2, $3) ON CONFLICT (user_id) DO UPDATE SET data_mode = $3, updated_at = NOW()`,
+                  `INSERT INTO user_data_status (user_id, account_id, data_mode) VALUES ($1, $2, $3) ON CONFLICT (account_id) DO UPDATE SET data_mode = $3, updated_at = NOW()`,
                   [visitorId, req.accountId ?? null, "user"],
                 );
                 await txClient.query("COMMIT");
@@ -1214,7 +1214,7 @@ export function createBillingApiRoutes(
         }
 
         await pool.query(
-          `INSERT INTO integrations (user_id, account_id, provider, api_key_prefix, has_usage_access, connected_at, encrypted_api_key) VALUES ($1, $2, 'anthropic', $3, $4, NOW(), $5) ON CONFLICT (user_id, provider) DO UPDATE SET api_key_prefix = $3, has_usage_access = $4, connected_at = NOW(), encrypted_api_key = $5`,
+          `INSERT INTO integrations (user_id, account_id, provider, api_key_prefix, has_usage_access, connected_at, encrypted_api_key) VALUES ($1, $2, 'anthropic', $3, $4, NOW(), $5) ON CONFLICT (account_id, provider) DO UPDATE SET api_key_prefix = $3, has_usage_access = $4, connected_at = NOW(), encrypted_api_key = $5`,
           [
             visitorId,
             req.accountId ?? null,
@@ -1408,7 +1408,7 @@ export function createBillingApiRoutes(
             .status(400)
             .json({ error: "integration_name is required" });
         await pool.query(
-          `INSERT INTO integration_requests (user_id, integration_name, request_type) VALUES ($1, $2, $3) ON CONFLICT (user_id, integration_name) DO NOTHING`,
+          `INSERT INTO integration_requests (user_id, integration_name, request_type) VALUES ($1, $2, $3) ON CONFLICT (account_id, integration_name) DO NOTHING`,
           [req.visitorId, integration_name, request_type || "notify"],
         );
         res.json({ success: true });

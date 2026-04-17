@@ -1215,7 +1215,7 @@ export function createEventsRoutes(
           input_tokens, output_tokens, tokens_source,
           request_body, response_body
         ) VALUES ${placeholders.join(", ")}
-        ON CONFLICT (user_id, idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING
+        ON CONFLICT (account_id, idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING
       `;
 
         // Activation-funnel instrumentation: note whether the user had any
@@ -1272,7 +1272,7 @@ export function createEventsRoutes(
               .query(
                 `INSERT INTO feature_definitions (user_id, account_id, feature_key, name, kind)
                  VALUES ${fdPlaceholders.join(", ")}
-                 ON CONFLICT (user_id, feature_key) DO NOTHING`,
+                 ON CONFLICT (account_id, feature_key) DO NOTHING`,
                 fdValues,
               )
               .catch((err) =>
@@ -1428,7 +1428,7 @@ export function createEventsRoutes(
              $7, 'none', 500, 'llm',
              $8, $9, 'direct'
            )
-           ON CONFLICT (user_id, idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING
+           ON CONFLICT (account_id, idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING
            RETURNING *`,
           [
             userId,

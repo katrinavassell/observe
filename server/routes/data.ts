@@ -1295,7 +1295,7 @@ export function createDataRoutes(
 
         await clearSampleData(client, pool, req.visitorId!, req.accountId);
         await client.query(
-          "INSERT INTO user_data_status (user_id, account_id, data_mode) VALUES ($1, $2, $3) ON CONFLICT (user_id) DO UPDATE SET data_mode = $3, updated_at = NOW()",
+          "INSERT INTO user_data_status (user_id, account_id, data_mode) VALUES ($1, $2, $3) ON CONFLICT (account_id) DO UPDATE SET data_mode = $3, updated_at = NOW()",
           [req.visitorId, req.accountId ?? null, "user"],
         );
 

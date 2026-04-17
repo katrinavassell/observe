@@ -167,7 +167,7 @@ export function createProxyRoutes(
     await pool.query(
       `INSERT INTO proxy_cache (user_id, account_id, cache_key, model, request_hash, response_body, tokens_saved, cost_saved, expires_at)
        VALUES ($1, $2, $3, $4, $3, $5, $6, $7, NOW() + ($8 || ' seconds')::INTERVAL)
-       ON CONFLICT (user_id, cache_key) DO UPDATE SET
+       ON CONFLICT (account_id, cache_key) DO UPDATE SET
          response_body = EXCLUDED.response_body,
          tokens_saved = proxy_cache.tokens_saved + EXCLUDED.tokens_saved,
          cost_saved = proxy_cache.cost_saved + EXCLUDED.cost_saved,

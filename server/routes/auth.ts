@@ -137,7 +137,7 @@ export function createEnsureVisitor(pool: Pool) {
                 await pool.query(
                   `INSERT INTO sdk_api_keys (user_id, account_id, key_hash, key_prefix, encrypted_key, name)
                    VALUES ($1, $2, $3, $4, $5, 'default')
-                   ON CONFLICT (user_id, name) WHERE revoked_at IS NULL DO NOTHING`,
+                   ON CONFLICT (account_id, name) WHERE revoked_at IS NULL DO NOTHING`,
                   [
                     user.id,
                     resolvedAccountId,
@@ -416,7 +416,7 @@ export function createAuthRoutes(
                         timestamp, source, granularity, idempotency_key)
                      VALUES ($1, $2, $3, 'observe_signup', 'signup', NOW(),
                              'sdk', 'event', $4)
-                     ON CONFLICT (user_id, idempotency_key)
+                     ON CONFLICT (account_id, idempotency_key)
                        WHERE idempotency_key IS NOT NULL DO NOTHING`,
                     [adminUid, adminAccountId, email, `signup:${email}`],
                   )

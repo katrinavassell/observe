@@ -584,7 +584,7 @@ export function createCohortsRoutes(pool: Pool, ensureVisitor: any) {
               .query(
                 `INSERT INTO customer_health_snapshots (user_id, account_id, customer_id, health_score, margin_pct, adoption_depth, active_days)
                  VALUES ${placeholders.join(", ")}
-                 ON CONFLICT (user_id, customer_id, snapshot_date) DO UPDATE SET
+                 ON CONFLICT (account_id, customer_id, snapshot_date) DO UPDATE SET
                    health_score = EXCLUDED.health_score,
                    margin_pct = EXCLUDED.margin_pct,
                    adoption_depth = EXCLUDED.adoption_depth,
