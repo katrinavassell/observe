@@ -8,6 +8,8 @@ export function createTeamRoutes(pool: Pool, ensureVisitor: any) {
   const router = Router();
 
   async function getOrCreateOrg(visitorId: string, accountEmail?: string) {
+    if (!accountEmail) return null;
+
     const mapResult = await pool.query(
       "SELECT org_id FROM visitor_org_map WHERE visitor_id = $1",
       [visitorId],
