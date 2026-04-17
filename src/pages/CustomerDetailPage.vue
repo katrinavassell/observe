@@ -11,12 +11,14 @@ import {
 import type { CohortCustomer, CohortLabel } from "@/lib/api";
 import {
   ArrowLeft,
+  ChevronRight,
   TrendingUp,
   TrendingDown,
   AlertTriangle,
   Clock,
   Zap,
   Cpu,
+  Activity,
 } from "lucide-vue-next";
 import { Card, CardContent, Skeleton, Button } from "@/components/ui";
 import MarginBadge from "@/components/shared/MarginBadge.vue";
@@ -251,17 +253,24 @@ const costPerEvent = computed(() => {
     </div>
 
     <template v-else-if="detail">
+      <!-- Breadcrumb -->
+      <nav aria-label="Breadcrumb" class="flex items-center gap-1.5 text-sm">
+        <button
+          class="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors"
+          @click="router.push('/customers')"
+        >
+          <ArrowLeft class="h-3.5 w-3.5" />
+          Customers
+        </button>
+        <ChevronRight class="h-3.5 w-3.5 text-muted-foreground/50" />
+        <span class="text-foreground font-medium truncate max-w-[400px]">
+          {{ detail.customer.name }}
+        </span>
+      </nav>
+
       <!-- Header -->
       <div class="flex items-start justify-between gap-4 flex-wrap">
         <div class="flex items-center gap-3">
-          <Button
-            variant="ghost"
-            size="sm"
-            class="h-8 w-8 p-0"
-            @click="router.push('/customers')"
-          >
-            <ArrowLeft class="h-4 w-4" />
-          </Button>
           <div>
             <div class="flex items-center gap-2 flex-wrap">
               <h1 class="text-2xl font-semibold tracking-tight">
@@ -357,6 +366,39 @@ const costPerEvent = computed(() => {
           </CardContent>
         </Card>
       </div>
+
+      <!-- Empty state — no events + no features + no subscriptions -->
+      <Card
+        v-if="
+          !detail.by_feature.length &&
+          !detail.recent_events.length &&
+          !detail.subscriptions.length &&
+          !timeseries?.timeseries.length
+        "
+        class="border-dashed"
+      >
+        <CardContent class="p-10 text-center space-y-3">
+          <div
+            class="mx-auto h-10 w-10 rounded-full bg-muted flex items-center justify-center"
+          >
+            <Activity class="h-5 w-5 text-muted-foreground" />
+          </div>
+          <h2 class="font-semibold">No activity yet</h2>
+          <p class="text-sm text-muted-foreground max-w-sm mx-auto">
+            This customer hasn't sent events, hasn't been tied to a feature, and
+            has no subscriptions. They'll light up here once your app starts
+            emitting events with their customer_id.
+          </p>
+          <div class="flex justify-center gap-2 pt-1">
+            <Button size="sm" @click="router.push('/data-sources')">
+              Set up ingest
+            </Button>
+            <Button size="sm" variant="outline" @click="router.push('/events')">
+              View all events
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
 
       <!-- Signals — hidden until calcs are trustworthy (no revenue guard,
            hardcoded thresholds, no trend magnitude, model-swap compares
