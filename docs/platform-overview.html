@@ -402,6 +402,41 @@ h3 { font-size: 18px; margin: 30px 0 15px; color: #374151; }
 </div>
 </div>
 
+<h3 style="margin-top:40px">Email Notifications</h3>
+
+<div class="flow">
+  <div class="flow-title">Signup Emails <span class="badge">POST /auth/signup-complete</span></div>
+  <div class="steps">
+    <div class="step"><div class="step-num">1</div><div class="step-text">New user signs up (isNewAccount = true)</div></div>
+    <div class="step"><div class="step-num">2</div><div class="step-text">Email to <code>kat@tansohq.com</code> + <code>doug@tansohq.com</code>: "New signup: {email}"</div></div>
+    <div class="step"><div class="step-num">3</div><div class="step-text">Welcome email to the new user from "Kat from Observe" with cal.com link</div></div>
+    <div class="step"><div class="step-num">4</div><div class="step-text">Sent via Resend API. Gated by <code>isNewAccount</code> — re-logins don't trigger.</div></div>
+    <div class="step"><div class="step-num accept">OK</div><div class="step-text">Check delivery at resend.com/emails</div></div>
+  </div>
+</div>
+
+<div class="flow">
+  <div class="flow-title">Feedback Emails <span class="badge">POST /credits/feedback</span></div>
+  <div class="steps">
+    <div class="step"><div class="step-num">1</div><div class="step-text">User submits feedback (min 10 chars)</div></div>
+    <div class="step"><div class="step-num">2</div><div class="step-text">Feedback stored in <code>feedback</code> table (always, even repeat submissions)</div></div>
+    <div class="step"><div class="step-num">3</div><div class="step-text">First-ever feedback: grant 1,000 bonus events. Subsequent: no credits, just "Thanks"</div></div>
+    <div class="step"><div class="step-num">4</div><div class="step-text">Email to <code>kat@tansohq.com</code> + <code>doug@tansohq.com</code>: "Feedback from {name}"</div></div>
+    <div class="step"><div class="step-num accept">OK</div><div class="step-text">User can always give feedback. Credits only once.</div></div>
+  </div>
+</div>
+
+<div class="flow">
+  <div class="flow-title">Alert Emails <span class="badge">checkAlerts</span></div>
+  <div class="steps">
+    <div class="step"><div class="step-num">1</div><div class="step-text">Alert rule triggers (metric crosses threshold)</div></div>
+    <div class="step"><div class="step-num">2</div><div class="step-text">Email sent to address configured on the alert rule (user-specified)</div></div>
+    <div class="step"><div class="step-num">3</div><div class="step-text">Webhook also sent if configured (Slack-compatible JSON)</div></div>
+    <div class="step"><div class="step-num accept">OK</div><div class="step-text">Cooldown prevents spam. History in alert_history table.</div></div>
+  </div>
+</div>
+</div>
+
 <!-- CHANGELOG TAB -->
 <div id="changelog" class="tab">
 <h2>Changelog</h2>
