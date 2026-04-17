@@ -248,11 +248,39 @@ export function createTeamRoutes(pool: Pool, ensureVisitor: any) {
               [orgId, visitorId, req.accountEmail],
             );
           }
+          // Don't clobber an existing mapping — the invitee may already own
+          // another org. They can switch between accounts via the X-Account-Id
+          // header / account switcher once user_accounts has both rows.
           await client.query(
             `INSERT INTO visitor_org_map (visitor_id, org_id) VALUES ($1, $2)
-             ON CONFLICT (visitor_id) DO UPDATE SET org_id = $2`,
+             ON CONFLICT (visitor_id) DO NOTHING`,
             [visitorId, orgId],
           );
+
+          // Add the invitee to the inviter's account in the new
+          // (user_accounts) model so the account switcher shows it and
+          // req.accountId can resolve when X-Account-Id points at it.
+          const ownerAcctResult = await client.query(
+            `SELECT ua.account_id
+               FROM user_accounts ua
+               JOIN users u ON u.id = ua.user_id
+               WHERE u.visitor_id = $1 AND ua.role = 'owner' AND ua.status = 'active'
+               LIMIT 1`,
+            [ownerVisitorId],
+          );
+          const inviterAccountId = ownerAcctResult.rows[0]?.account_id;
+          if (inviterAccountId) {
+            await client.query(
+              `INSERT INTO user_accounts (user_id, account_id, role, status, joined_at)
+               SELECT id, $2, 'admin', 'active', NOW() FROM users WHERE visitor_id = $1
+               ON CONFLICT (user_id, account_id) DO UPDATE SET status = 'active'`,
+              [visitorId, inviterAccountId],
+            );
+          } else {
+            console.warn(
+              `POST /team/join: inviter ${ownerVisitorId} has no owner user_accounts row; invitee not added to new-model account`,
+            );
+          }
           await client.query("COMMIT");
         } catch (txErr) {
           await client.query("ROLLBACK");
