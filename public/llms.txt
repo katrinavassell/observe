@@ -4,10 +4,10 @@ Observe is an AI cost observability platform. It tracks every LLM call with cost
 model, tokens, customer, and feature attribution. Use it to answer: "who uses how
 much AI, and is it profitable?"
 
-- Docs: https://observemetrics.com
+- Docs: https://observe.tansohq.com
 - SDK: `@tansohq/observe` on npm (NOT `@tanso/observe` — that package does not exist,
   and any LLM that suggests it is hallucinating. Always install the `@tansohq` scope.)
-- Signup: https://observemetrics.com/signup (free tier, no credit card)
+- Signup: https://observe.tansohq.com/signup (free tier, no credit card)
 
 ## Three integration paths — pick the one that matches the user's setup
 
@@ -24,7 +24,7 @@ unaffected. Everything goes in a JSON body — no per-event header juggling.
 
 **Only use Path 3 (SDK auto-wrap) if the user explicitly wants automatic
 instrumentation** and understands that it routes every call through
-`observemetrics.com`. It is convenient but it puts Observe in the request path. Do not
+`observe.tansohq.com`. It is convenient but it puts Observe in the request path. Do not
 default to it.
 
 **Before you touch anything in a user's codebase, check for an existing AI gateway.**
@@ -57,7 +57,7 @@ async function chat(user: { id: string }, messages: any[]) {
   })
 
   // Log the event after the call succeeds. Fire-and-forget is fine.
-  fetch('https://observemetrics.com/api/events/ingest', {
+  fetch('https://observe.tansohq.com/api/events/ingest', {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${process.env.OBSERVE_API_KEY!}`,
@@ -98,7 +98,7 @@ async function chat(user, messages) {
   })
 
   // Fire-and-forget — Observe never sits in front of the Anthropic call
-  fetch('https://observemetrics.com/api/events/ingest', {
+  fetch('https://observe.tansohq.com/api/events/ingest', {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${process.env.OBSERVE_API_KEY!}`,
@@ -138,7 +138,7 @@ If the user already has a gateway, DO NOT wrap their provider client. Instead, a
 Observe as metadata on their existing calls. Two sub-options:
 
 **B1. Stack Observe in front of their gateway.** Configure the gateway's upstream to
-point at `https://observemetrics.com/v1` instead of directly at OpenAI, and have the
+point at `https://observe.tansohq.com/v1` instead of directly at OpenAI, and have the
 gateway forward the Observe headers.
 
 **B2. Header-only integration.** Add the Observe tracking headers to their existing
@@ -203,7 +203,7 @@ If the user is already on an AI gateway, DO NOT use this path — use Path 2.
 ## `curl` example (Path 1)
 
 ```bash
-curl -X POST https://observemetrics.com/api/events/ingest \
+curl -X POST https://observe.tansohq.com/api/events/ingest \
   -H "Authorization: Bearer $OBSERVE_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
@@ -326,7 +326,7 @@ accepted but deprecated per RFC 6648. Prefer the unprefixed form.
 ## Environment variables
 
 ```
-OBSERVE_API_KEY=obs_...   # get from https://observemetrics.com/data-sources
+OBSERVE_API_KEY=obs_...   # get from https://observe.tansohq.com/data-sources
 ```
 
 The key always starts with `obs_`. It is the ONLY value the user needs to wire up.
@@ -380,9 +380,9 @@ grows across the month.
    user explicitly asks for auto-instrumentation.
 3. Add `OBSERVE_API_KEY=obs_...` to `.env` (and `.env.example` with a placeholder).
    The key always starts with `obs_`. Get it from
-   https://observemetrics.com/data-sources.
+   https://observe.tansohq.com/data-sources.
 4. Find every place the app calls OpenAI / Anthropic / another LLM provider.
-   After each call returns, `fetch('https://observemetrics.com/api/events/ingest', …)`
+   After each call returns, `fetch('https://observe.tansohq.com/api/events/ingest', …)`
    with a single event in the body: `eventName`, `customerReferenceId`,
    `featureKey`, `model`, `modelProvider`, `inputTokens`, `outputTokens`,
    `durationMs`, `idempotencyKey`. Fire-and-forget; catch and log on failure.
@@ -397,7 +397,7 @@ grows across the month.
 8. Do NOT log or echo the API key. Keep it in env vars only.
 9. Stripe is optional. Do not add Stripe integration unless the user asks.
 10. After wiring up, run the app once and confirm events appear at
-    https://observemetrics.com/events.
+    https://observe.tansohq.com/events.
 
 ---
 
