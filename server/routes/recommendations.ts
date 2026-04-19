@@ -152,10 +152,11 @@ export async function computeRecommendations(
       const totalRevenue = parseFloat(row.total_revenue);
 
       await pool.query(
-        `INSERT INTO recommendations (user_id, type, title, description, severity, action_type, action_payload, context)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        `INSERT INTO recommendations (user_id, account_id, type, title, description, severity, action_type, action_payload, context)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
         [
           userId,
+          accountId,
           "routing_cost_optimization",
           `${row.customer_id} has ${marginPct < 0 ? "negative" : "low"} margin (${marginPct}%)`,
           `This customer generated $${totalCost.toFixed(2)} in costs vs $${totalRevenue.toFixed(2)} in revenue over the last 30 days (${row.event_count} events). Consider routing their requests to a cheaper model.`,
@@ -258,10 +259,11 @@ export async function computeRecommendations(
         parseFloat(model.total_cost) * (1 - cheaperCost / currentCost);
 
       await pool.query(
-        `INSERT INTO recommendations (user_id, type, title, description, severity, action_type, action_payload, context)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        `INSERT INTO recommendations (user_id, account_id, type, title, description, severity, action_type, action_payload, context)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
         [
           userId,
+          accountId,
           "routing_model_swap",
           `Switch ${model.model} to ${cheaper.model} to save ~${savingsPct}%`,
           `${model.model} costs $${currentCost.toFixed(4)}/event avg across ${model.event_count} events. ${cheaper.model} averages $${cheaperCost.toFixed(4)}/event — potential savings of ~$${totalSavings.toFixed(2)}/month.`,
@@ -319,6 +321,7 @@ export async function computeRecommendations(
            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
           [
             userId,
+            accountId,
             "provider_diversification",
             `All traffic goes through ${provider.model_provider}`,
             `100% of your ${provider.event_count} events in the last 30 days used ${provider.model_provider}. Adding a fallback provider protects against outages.`,
@@ -384,10 +387,11 @@ export async function computeRecommendations(
       ).toFixed(1);
 
       await pool.query(
-        `INSERT INTO recommendations (user_id, type, title, description, severity, action_type, action_payload, context)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        `INSERT INTO recommendations (user_id, account_id, type, title, description, severity, action_type, action_payload, context)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
         [
           userId,
+          accountId,
           "feature_underpricing",
           `"${row.feature_key}" costs more than it earns (${marginPct}% margin)`,
           `This feature costs $${costPerCall.toFixed(4)}/call but earns $${revenuePerCall.toFixed(4)}/call. Over ${row.event_count} calls last month, you ${loss > 0 ? "lost" : "barely broke even on"} $${Math.abs(loss).toFixed(2)}.`,
@@ -441,10 +445,11 @@ export async function computeRecommendations(
       const totalCost = parseFloat(row.total_cost);
 
       await pool.query(
-        `INSERT INTO recommendations (user_id, type, title, description, severity, action_type, action_payload, context)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        `INSERT INTO recommendations (user_id, account_id, type, title, description, severity, action_type, action_payload, context)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
         [
           userId,
+          accountId,
           "revenue_leakage",
           `${row.customer_id} has $${totalCost.toFixed(2)} in costs but $0 revenue`,
           `This customer made ${row.event_count} API calls costing $${totalCost.toFixed(2)} in the last 30 days with no revenue attached. They may be unbilled, internal, or on a free trial.`,
@@ -506,10 +511,11 @@ export async function computeRecommendations(
       const declinePct = parseFloat(row.decline_pct);
 
       await pool.query(
-        `INSERT INTO recommendations (user_id, type, title, description, severity, action_type, action_payload, context)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        `INSERT INTO recommendations (user_id, account_id, type, title, description, severity, action_type, action_payload, context)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
         [
           userId,
+          accountId,
           "churn_risk",
           `${row.customer_id} usage down ${declinePct}% — churn risk`,
           `This customer went from ${row.prior_count} events to ${row.recent_count} events over the last 2 weeks. Usage is declining significantly — consider reaching out.`,
@@ -572,10 +578,11 @@ export async function computeRecommendations(
       const growthPct = parseFloat(row.growth_pct);
 
       await pool.query(
-        `INSERT INTO recommendations (user_id, type, title, description, severity, action_type, action_payload, context)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        `INSERT INTO recommendations (user_id, account_id, type, title, description, severity, action_type, action_payload, context)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
         [
           userId,
+          accountId,
           "expansion_signal",
           `${row.customer_id} usage up ${growthPct}% — expansion opportunity`,
           `This customer went from ${row.prior_count} to ${row.recent_count} events over the last 2 weeks. Growing usage signals they may be ready for a higher tier or increased limits.`,
@@ -640,10 +647,11 @@ export async function computeRecommendations(
       const spikeRatio = parseFloat(row.spike_ratio);
 
       await pool.query(
-        `INSERT INTO recommendations (user_id, type, title, description, severity, action_type, action_payload, context)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        `INSERT INTO recommendations (user_id, account_id, type, title, description, severity, action_type, action_payload, context)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
         [
           userId,
+          accountId,
           "cost_anomaly",
           `"${row.feature_key}" cost spiked ${spikeRatio}x above average`,
           `This feature's daily cost hit $${maxCost.toFixed(2)} vs the 7-day average of $${avgCost.toFixed(2)}. Investigate if this is a legitimate usage increase or an anomaly.`,
@@ -685,12 +693,12 @@ export function createRecommendationsRoutes(pool: Pool, ensureVisitor: any) {
         const status = (req.query.status as string) || "pending";
         const result = await pool.query(
           `SELECT * FROM recommendations
-           WHERE user_id = $1 AND status = $2
+           WHERE account_id = $1 AND status = $2
            ORDER BY
              CASE severity WHEN 'critical' THEN 0 WHEN 'warning' THEN 1 WHEN 'info' THEN 2 ELSE 3 END,
              created_at DESC
            LIMIT 50`,
-          [req.visitorId, status],
+          [req.accountId, status],
         );
         res.json({ recommendations: result.rows });
       } catch (error) {
@@ -707,8 +715,8 @@ export function createRecommendationsRoutes(pool: Pool, ensureVisitor: any) {
     async (req: AuthRequest, res: Response) => {
       try {
         const result = await pool.query(
-          "SELECT COUNT(*) as count FROM recommendations WHERE user_id = $1 AND status = 'pending'",
-          [req.visitorId],
+          "SELECT COUNT(*) as count FROM recommendations WHERE account_id = $1 AND status = 'pending'",
+          [req.accountId],
         );
         res.json({ count: parseInt(result.rows[0].count) });
       } catch (error) {
@@ -726,8 +734,8 @@ export function createRecommendationsRoutes(pool: Pool, ensureVisitor: any) {
       try {
         await computeRecommendations(pool, req.visitorId!);
         const result = await pool.query(
-          "SELECT COUNT(*) as count FROM recommendations WHERE user_id = $1 AND status = 'pending'",
-          [req.visitorId],
+          "SELECT COUNT(*) as count FROM recommendations WHERE account_id = $1 AND status = 'pending'",
+          [req.accountId],
         );
         res.json({
           computed: true,
@@ -747,8 +755,8 @@ export function createRecommendationsRoutes(pool: Pool, ensureVisitor: any) {
     async (req: AuthRequest, res: Response) => {
       try {
         const rec = await pool.query(
-          "SELECT * FROM recommendations WHERE id = $1 AND user_id = $2 AND status = 'pending'",
-          [req.params.id, req.visitorId],
+          "SELECT * FROM recommendations WHERE id = $1 AND account_id = $2 AND status = 'pending'",
+          [req.params.id, req.accountId],
         );
         if (rec.rows.length === 0) {
           return res
@@ -875,8 +883,8 @@ export function createRecommendationsRoutes(pool: Pool, ensureVisitor: any) {
     async (req: AuthRequest, res: Response) => {
       try {
         const result = await pool.query(
-          "UPDATE recommendations SET status = 'dismissed', dismissed_at = NOW() WHERE id = $1 AND user_id = $2 AND status = 'pending' RETURNING id",
-          [req.params.id, req.visitorId],
+          "UPDATE recommendations SET status = 'dismissed', dismissed_at = NOW() WHERE id = $1 AND account_id = $2 AND status = 'pending' RETURNING id",
+          [req.params.id, req.accountId],
         );
         if (result.rows.length === 0) {
           return res.status(404).json({ error: "Recommendation not found" });

@@ -287,7 +287,7 @@ async function ensureDbInitialized() {
   }
   return dbInitPromise;
 }
-const SCHEMA_VERSION = 17;
+const SCHEMA_VERSION = 18;
 async function _doDbInit() {
   try {
     await pool.query("SELECT 1");
@@ -440,6 +440,8 @@ async function _doDbInit() {
       "cloud_integrations",
       "inference_profiles",
       "proxy_cache",
+      "recommendations",
+      "custom_cohorts",
     ];
     for (const t of dataTablesNeedingAccountId) {
       await pool
@@ -1206,6 +1208,9 @@ async function _doDbInit() {
     await pool.query(
       `CREATE INDEX IF NOT EXISTS idx_recommendations_user_status ON recommendations(user_id, status)`,
     );
+    await pool.query(
+      `CREATE INDEX IF NOT EXISTS idx_recommendations_account_status ON recommendations(account_id, status)`,
+    );
 
     // ── Custom cohorts ─────────────────────────────────────────────────────
     await pool.query(`
@@ -1231,6 +1236,11 @@ async function _doDbInit() {
       .catch(() => {});
     await pool
       .query(`ALTER TABLE custom_cohorts ADD COLUMN IF NOT EXISTS rules JSONB`)
+      .catch(() => {});
+    await pool
+      .query(
+        `CREATE INDEX IF NOT EXISTS idx_custom_cohorts_account ON custom_cohorts(account_id)`,
+      )
       .catch(() => {});
 
     await pool.query(`
