@@ -313,32 +313,6 @@ function isActive(path: string) {
           </div>
         </nav>
 
-        <!-- Usage meter -->
-        <div
-          v-if="isLoggedIn && usageMeters.length > 0"
-          class="border-t border-sidebar-border px-4 py-3 space-y-2 cursor-pointer hover:bg-sidebar-accent/30 transition-colors"
-          @click="router.push('/plans')"
-          title="View plans & usage"
-        >
-          <div v-for="m in usageMeters" :key="m.label" class="space-y-1">
-            <div class="flex items-center justify-between text-[10px]">
-              <span class="text-sidebar-foreground/50">{{ m.label }}</span>
-              <span class="text-sidebar-foreground/50"
-                >{{ m.used.toLocaleString() }}/{{
-                  m.limit.toLocaleString()
-                }}</span
-              >
-            </div>
-            <div class="h-1 rounded-full bg-sidebar-accent overflow-hidden">
-              <div
-                class="h-full rounded-full transition-all duration-300"
-                :class="meterColor(m.pct)"
-                :style="{ width: `${Math.max(2, m.pct)}%` }"
-              />
-            </div>
-          </div>
-        </div>
-
         <!-- Bottom section: Account & Team Settings -->
         <div class="border-t border-sidebar-border px-3 py-4 space-y-1">
           <!-- Role badge for viewers -->
