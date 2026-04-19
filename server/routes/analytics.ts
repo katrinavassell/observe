@@ -17,8 +17,6 @@ export function createAnalyticsRoutes(pool: Pool, ensureVisitor: any) {
     ensureVisitor,
     async (req: AuthRequest, res: Response) => {
       try {
-        const userId = req.visitorId!;
-
         const result = await pool.query(
           `SELECT oe.customer_id,
                 COALESCE(c.name, oe.customer_id) as customer_name,
@@ -90,7 +88,6 @@ export function createAnalyticsRoutes(pool: Pool, ensureVisitor: any) {
     ensureVisitor,
     async (req: AuthRequest, res: Response) => {
       try {
-        const userId = req.visitorId!;
         const alerts: Array<{
           type: string;
           severity: string;
@@ -1241,8 +1238,6 @@ Return ONLY the JSON object, no markdown or explanation.`;
     ensureVisitor,
     async (req: AuthRequest, res: Response) => {
       try {
-        const userId = req.visitorId!;
-
         const [featureResult, pricingResult, mrrResult] = await Promise.all([
           pool.query(
             `SELECT feature_key,
@@ -1369,8 +1364,6 @@ Only return the JSON array, no other text.`;
     ensureVisitor,
     async (req: AuthRequest, res: Response) => {
       try {
-        const userId = req.visitorId!;
-
         const result = await pool.query(
           `SELECT
             revenue_source,
@@ -1429,7 +1422,6 @@ Only return the JSON array, no other text.`;
     ensureVisitor,
     async (req: AuthRequest, res: Response) => {
       try {
-        const userId = req.visitorId!;
         const months = Math.min(
           Math.max(parseInt(String(req.query.months)) || 12, 1),
           24,
@@ -1485,8 +1477,6 @@ Only return the JSON array, no other text.`;
     ensureVisitor,
     async (req: AuthRequest, res: Response) => {
       try {
-        const userId = req.visitorId!;
-
         const [cohortResult, activeResult] = await Promise.all([
           pool.query(
             `SELECT customer_id, DATE_TRUNC('month', MIN(timestamp)) as cohort_month
@@ -1576,8 +1566,6 @@ Only return the JSON array, no other text.`;
     ensureVisitor,
     async (req: AuthRequest, res: Response) => {
       try {
-        const userId = req.visitorId!;
-
         const [currentResult, priorResult, customerResult] = await Promise.all([
           // Current MRR per customer (active subs)
           pool.query(
@@ -1711,7 +1699,6 @@ Only return the JSON array, no other text.`;
     ensureVisitor,
     async (req: AuthRequest, res: Response) => {
       try {
-        const userId = req.visitorId!;
         const days = Math.min(
           Math.max(parseInt(String(req.query.days)) || 30, 1),
           365,

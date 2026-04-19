@@ -130,7 +130,6 @@ export function createBackfillRoutes(pool: Pool, ensureVisitor: any) {
     "/backfill/tokens",
     ensureVisitor,
     async (req: AuthRequest, res: Response) => {
-      const userId = req.visitorId!;
       const provider = req.body?.provider as "openai" | "anthropic" | undefined;
 
       if (provider !== "openai" && provider !== "anthropic") {
