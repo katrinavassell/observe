@@ -94,7 +94,7 @@ export async function syncStripeDataForUser(
   ] = await Promise.all([
     stripe.customers.list({ limit: 100 }).autoPagingToArray({ limit: 10000 }),
     stripe.subscriptions
-      .list({ limit: 100, status: "all" })
+      .list({ limit: 100, status: "all", expand: ["data.items.data.price"] })
       .autoPagingToArray({ limit: 10000 }),
     stripe.products
       .list({ limit: 100, active: true })
@@ -974,8 +974,8 @@ export function createIntegrationsRoutes(
         // Validate key by calling Stripe
         let accountName = "";
         let accountId = "";
+        const stripe = createStripeClientFromKey(api_key);
         try {
-          const stripe = createStripeClientFromKey(api_key);
           const account = await stripe.accounts.retrieve();
           accountId = account.id;
           accountName =
@@ -983,11 +983,18 @@ export function createIntegrationsRoutes(
             (account as any).display_name ||
             account.id;
         } catch {
-          return res.status(400).json({
-            success: false,
-            message:
-              "Invalid Stripe API key. Please check your key and try again.",
-          });
+          // Restricted keys can't call accounts.retrieve — fall back to
+          // a lightweight customers.list to verify the key is valid.
+          try {
+            await stripe.customers.list({ limit: 1 });
+            accountName = "Stripe Account";
+          } catch {
+            return res.status(400).json({
+              success: false,
+              message:
+                "Invalid Stripe API key. Please check your key and try again.",
+            });
+          }
         }
 
         const keyPrefix = api_key.substring(0, 12) + "...";

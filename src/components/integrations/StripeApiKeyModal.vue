@@ -136,7 +136,7 @@ function handleClose() {
               rel="noopener noreferrer"
               class="inline-flex items-center gap-1 text-primary hover:underline mt-1"
             >
-              Create a restricted key on Stripe
+              Create a restricted key on Stripe (permissions pre-selected)
               <ExternalLink class="h-3 w-3" />
             </a>
           </div>

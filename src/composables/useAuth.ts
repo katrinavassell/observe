@@ -179,7 +179,7 @@ export function useAuth() {
       email,
       password,
       options: {
-        emailRedirectTo: `https://observe.tansohq.com${target}`,
+        emailRedirectTo: `${window.location.origin}${target}`,
         data: name ? { full_name: name } : undefined,
       },
     });
@@ -234,7 +234,7 @@ export function useAuth() {
 
   async function forgotPassword(email: string) {
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `https://observe.tansohq.com/reset-password`,
+      redirectTo: `${window.location.origin}/reset-password`,
     });
     if (error) throw new Error(error.message);
   }
@@ -249,7 +249,7 @@ export function useAuth() {
   async function signInWithGoogle() {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: `https://observe.tansohq.com/` },
+      options: { redirectTo: `${window.location.origin}/` },
     });
     if (error) throw new Error(error.message);
   }
@@ -257,7 +257,7 @@ export function useAuth() {
   async function signInWithGithub() {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "github",
-      options: { redirectTo: `https://observe.tansohq.com/` },
+      options: { redirectTo: `${window.location.origin}/` },
     });
     if (error) throw new Error(error.message);
   }
@@ -265,7 +265,7 @@ export function useAuth() {
   async function signInWithMagicLink(email: string) {
     const { error } = await supabase.auth.signInWithOtp({
       email,
-      options: { emailRedirectTo: `https://observe.tansohq.com/` },
+      options: { emailRedirectTo: `${window.location.origin}/` },
     });
     if (error) throw new Error(error.message);
   }
@@ -275,7 +275,7 @@ export function useAuth() {
     const { error } = await supabase.auth.resend({
       type: "signup",
       email,
-      options: { emailRedirectTo: `https://observe.tansohq.com/` },
+      options: { emailRedirectTo: `${window.location.origin}/` },
     });
     if (error) throw new Error(error.message);
   }

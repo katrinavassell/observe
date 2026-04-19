@@ -1123,7 +1123,11 @@ export function createDataRoutes(
             .list({ limit: 100 })
             .autoPagingToArray({ limit: 10000 }),
           stripe.subscriptions
-            .list({ limit: 100, status: "all" })
+            .list({
+              limit: 100,
+              status: "all",
+              expand: ["data.items.data.price"],
+            })
             .autoPagingToArray({ limit: 10000 }),
           stripe.products
             .list({ limit: 100, active: true })

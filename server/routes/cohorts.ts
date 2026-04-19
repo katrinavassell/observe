@@ -864,10 +864,10 @@ Return ONLY valid JSON array, no markdown.`,
           `SELECT cc.*, COUNT(cm.id) as member_count
            FROM custom_cohorts cc
            LEFT JOIN cohort_members cm ON cm.cohort_id = cc.id
-           WHERE cc.user_id = $1
+           WHERE cc.account_id = $1
            GROUP BY cc.id
            ORDER BY cc.created_at DESC`,
-          [req.visitorId],
+          [req.accountId],
         );
 
         // For dynamic cohorts, compute member_count from rules
@@ -906,9 +906,10 @@ Return ONLY valid JSON array, no markdown.`,
 
         const type = cohort_type === "dynamic" ? "dynamic" : "static";
         const cohortResult = await pool.query(
-          "INSERT INTO custom_cohorts (user_id, name, description, color, cohort_type, rules) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *",
+          "INSERT INTO custom_cohorts (user_id, account_id, name, description, color, cohort_type, rules) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *",
           [
             req.visitorId,
+            req.accountId ?? null,
             name.trim(),
             description || null,
             color || "#6366f1",
@@ -955,8 +956,8 @@ Return ONLY valid JSON array, no markdown.`,
     async (req: AuthRequest, res: Response) => {
       try {
         const cohortResult = await pool.query(
-          "SELECT * FROM custom_cohorts WHERE id = $1 AND user_id = $2",
-          [req.params.id, req.visitorId],
+          "SELECT * FROM custom_cohorts WHERE id = $1 AND account_id = $2",
+          [req.params.id, req.accountId],
         );
         if (cohortResult.rows.length === 0) {
           return res.status(404).json({ error: "Cohort not found" });
@@ -1010,8 +1011,8 @@ Return ONLY valid JSON array, no markdown.`,
 
         // Verify ownership
         const check = await pool.query(
-          "SELECT id FROM custom_cohorts WHERE id = $1 AND user_id = $2",
-          [req.params.id, req.visitorId],
+          "SELECT id FROM custom_cohorts WHERE id = $1 AND account_id = $2",
+          [req.params.id, req.accountId],
         );
         if (check.rows.length === 0) {
           return res.status(404).json({ error: "Cohort not found" });
@@ -1040,8 +1041,8 @@ Return ONLY valid JSON array, no markdown.`,
     async (req: AuthRequest, res: Response) => {
       try {
         const check = await pool.query(
-          "SELECT id FROM custom_cohorts WHERE id = $1 AND user_id = $2",
-          [req.params.id, req.visitorId],
+          "SELECT id FROM custom_cohorts WHERE id = $1 AND account_id = $2",
+          [req.params.id, req.accountId],
         );
         if (check.rows.length === 0) {
           return res.status(404).json({ error: "Cohort not found" });
@@ -1066,8 +1067,8 @@ Return ONLY valid JSON array, no markdown.`,
     async (req: AuthRequest, res: Response) => {
       try {
         const result = await pool.query(
-          "DELETE FROM custom_cohorts WHERE id = $1 AND user_id = $2 RETURNING id",
-          [req.params.id, req.visitorId],
+          "DELETE FROM custom_cohorts WHERE id = $1 AND account_id = $2 RETURNING id",
+          [req.params.id, req.accountId],
         );
         if (result.rows.length === 0) {
           return res.status(404).json({ error: "Cohort not found" });

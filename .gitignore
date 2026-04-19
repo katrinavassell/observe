@@ -41,6 +41,8 @@ screenshots/
 findings.md
 progress.md
 task_plan.md
+clerk_migration_plan.md
+clerk_migration_findings.md
 scripts/diag.mjs
 scripts/fix-schema.mjs
 scripts/take-screenshots.ts
