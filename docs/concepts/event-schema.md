@@ -67,7 +67,7 @@ Most CSV imports are `monthly_aggregate`. Future SDK events will be `event` gran
 ```json
 {
   "customer_id": "cus_001",
-  "feature_key": "subscription",
+  "feature_key": "Pro Plan",
   "event_name": "revenue",
   "timestamp": "2026-03-01T00:00:00Z",
   "revenue_amount": 299.00,

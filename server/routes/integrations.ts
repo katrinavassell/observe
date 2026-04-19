@@ -226,10 +226,19 @@ export async function syncStripeDataForUser(
     }
   }
 
+  const priceToProductName = new Map<string, string>();
+  for (const price of pricesList) {
+    const productId =
+      typeof price.product === "string" ? price.product : price.product?.id;
+    const product = stripeProductsList.find((p) => p.id === productId);
+    if (product?.name) priceToProductName.set(price.id, product.name);
+  }
+
   interface SubRow {
     id: string;
     customerId: string;
     priceId: string;
+    productName: string;
     isActive: boolean;
     mrr: number;
     pricingModel: "flat" | "tiered" | "metered" | "hybrid";
@@ -284,10 +293,12 @@ export async function syncStripeDataForUser(
     else if (hasFlat && !hasMetered && !hasTiered) pricingModel = "flat";
     else pricingModel = "hybrid";
 
+    const firstPriceId = items[0].price?.id ?? "";
     subRows.push({
       id: sub.id,
       customerId: sub.customer as string,
-      priceId: items[0].price?.id ?? "",
+      priceId: firstPriceId,
+      productName: priceToProductName.get(firstPriceId) || "subscription",
       isActive: sub.status === "active",
       mrr: Math.round(aggregatedMrr * 100) / 100,
       pricingModel,
@@ -325,9 +336,15 @@ export async function syncStripeDataForUser(
       // Analytics can roll up subscription revenue alongside events.
       if (s.mrr > 0) {
         eventPlaceholders.push(
-          `($${eventIdx++}, $${eventIdx++}, $${eventIdx++}, 'subscription', 'revenue', NOW(), $${eventIdx++}, 'stripe', 'monthly_aggregate')`,
+          `($${eventIdx++}, $${eventIdx++}, $${eventIdx++}, $${eventIdx++}, 'revenue', NOW(), $${eventIdx++}, 'stripe', 'monthly_aggregate')`,
         );
-        eventValues.push(userId, resolvedAccountId, s.customerId, s.mrr);
+        eventValues.push(
+          userId,
+          resolvedAccountId,
+          s.customerId,
+          s.productName,
+          s.mrr,
+        );
       }
     }
     await pool.query(
