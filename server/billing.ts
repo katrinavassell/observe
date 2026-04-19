@@ -140,7 +140,7 @@ export async function checkFeatureAccess(
   } else if (featureKey === "event_ingest") {
     const countResult = await pool.query(
       `SELECT COUNT(*) as count FROM observe_events
-       WHERE account_id = $1 AND timestamp >= date_trunc('month', NOW()) AND source != 'sample'`,
+       WHERE account_id = $1 AND timestamp >= date_trunc('month', NOW()) AND source != 'sample' AND event_name != 'revenue'`,
       [resolvedAccountId],
     );
     used = parseInt(countResult.rows[0]?.count || "0", 10);

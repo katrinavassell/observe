@@ -4,6 +4,7 @@ import crypto from "crypto";
 import { type AuthRequest } from "./auth.js";
 import { calculateCostFromTokens as calcCostFromDb } from "../model-pricing.js";
 import { checkAlerts } from "./alerts.js";
+import { enrichRevenue } from "../lib/enrich-revenue.js";
 
 type GetAdminVisitorIdFn = () => Promise<string | null>;
 
@@ -241,31 +242,13 @@ export function createProxyRoutes(
     const totalTokens = inputTokens + outputTokens;
     const accountId = await resolveAccountIdForUser(pool, userId);
 
-    // Revenue enrichment: feature_pricing > MRR allocation > 0
-    let revenue = 0;
-    let revenueSource = "none";
-    try {
-      const fpResult = await pool.query(
-        `SELECT revenue_per_unit FROM feature_pricing WHERE account_id = $1 AND feature_key = $2`,
-        [accountId, featureKey],
-      );
-      if (fpResult.rows.length > 0) {
-        revenue = parseFloat(fpResult.rows[0].revenue_per_unit);
-        revenueSource = "feature_pricing";
-      } else if (customerId && customerId !== "unknown") {
-        const mrrResult = await pool.query(
-          `SELECT SUM(mrr_override) as mrr FROM subscriptions
-           WHERE account_id = $1 AND is_active = true AND customer_id = $2`,
-          [accountId, customerId],
-        );
-        if (mrrResult.rows[0]?.mrr) {
-          revenue = parseFloat(mrrResult.rows[0].mrr) / 30;
-          revenueSource = "mrr_allocation";
-        }
-      }
-    } catch (err) {
-      console.error("Proxy revenue enrichment failed:", err);
-    }
+    const { revenue, revenueSource } = await enrichRevenue(
+      pool,
+      accountId,
+      customerId,
+      featureKey,
+      totalTokens,
+    );
 
     // 1. Log for the user
     await pool.query(

@@ -287,7 +287,7 @@ async function ensureDbInitialized() {
   }
   return dbInitPromise;
 }
-const SCHEMA_VERSION = 19;
+const SCHEMA_VERSION = 20;
 async function _doDbInit() {
   try {
     await pool.query("SELECT 1");
@@ -1288,6 +1288,22 @@ async function _doDbInit() {
     initModelPricing(pool).catch((err) =>
       console.error("Initial pricing refresh failed:", err),
     );
+
+    // ── Stage 6: zero out misleading mrr_allocation revenue on gateway/proxy events
+    try {
+      const fixed = await pool.query(
+        `UPDATE observe_events
+         SET revenue_amount = 0, revenue_source = 'subscription'
+         WHERE revenue_source = 'mrr_allocation'
+           AND (source = 'gateway' OR source = 'proxy')`,
+      );
+      if ((fixed.rowCount ?? 0) > 0) {
+        console.warn(`Stage 6: fixed ${fixed.rowCount} mrr_allocation events`);
+      }
+    } catch (err) {
+      console.error("Stage 6 mrr_allocation fix failed:", err);
+    }
+    // ── end Stage 6 migration ───────────────────────────────────────────
 
     // Record schema version so future cold starts skip migrations
     await pool.query(

@@ -77,8 +77,8 @@ const DEFAULT_COLUMNS: TableColumn[] = [
   { id: "source", label: "Source", visible: true, align: "left" },
   { id: "usage", label: "Usage", visible: true, align: "right" },
   { id: "cost", label: "Cost", visible: true, align: "right" },
-  { id: "revenue", label: "Revenue", visible: true, align: "right" },
-  { id: "margin", label: "Margin", visible: true, align: "right" },
+  { id: "revenue", label: "Revenue", visible: false, align: "right" },
+  { id: "margin", label: "Margin", visible: false, align: "right" },
   { id: "trace", label: "Trace", visible: true, align: "left" },
   { id: "duration", label: "Duration", visible: false, align: "right" },
   { id: "cost_type", label: "Cost Type", visible: false, align: "left" },
@@ -537,8 +537,7 @@ function usageTooltip(event: ObserveEvent): string {
       <div>
         <h1 class="text-2xl font-semibold tracking-tight">Events</h1>
         <p class="text-sm text-muted-foreground mt-1">
-          Per-event cost with customer-level margin. Includes Stripe
-          subscription rows that feed revenue — filter by Source to narrow.
+          Per-event cost and usage from SDK, gateway, and CSV imports.
         </p>
       </div>
       <div
@@ -546,7 +545,8 @@ function usageTooltip(event: ObserveEvent): string {
       >
         <Activity class="h-4 w-4" />
         <span v-if="eventsData" class="font-medium text-foreground"
-          >{{ eventsData.total.toLocaleString() }} total events</span
+          >{{ eventsData.total.toLocaleString() }} total
+          {{ eventsData.total === 1 ? "event" : "events" }}</span
         >
       </div>
     </div>
