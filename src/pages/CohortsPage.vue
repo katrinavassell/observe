@@ -86,6 +86,14 @@ const RULE_OPERATORS = [
   { value: "neq", label: "!=" },
 ];
 
+const fieldLabel = (f: string) =>
+  RULE_FIELDS.find((r) => r.value === f)?.label ?? f;
+const opLabel = (o: string) =>
+  RULE_OPERATORS.find((r) => r.value === o)?.label ?? o;
+function formatRule(r: CohortRule) {
+  return `${fieldLabel(r.field)} ${opLabel(r.operator)} ${r.value}`;
+}
+
 function addRule() {
   rules.value.push({ field: "margin_pct", operator: "lt", value: 0 });
 }
@@ -799,6 +807,22 @@ const excludedCount = computed(() => {
         <div class="relative ml-auto flex items-center gap-3">
           <span v-if="activeCohort" class="text-xs text-muted-foreground">
             {{ cohortMeta[activeCohort].criteria }}
+          </span>
+          <span
+            v-else-if="activeCustomCohortId && activeCustomCohortDetail"
+            class="text-xs text-muted-foreground"
+          >
+            <template
+              v-if="
+                activeCustomCohortDetail.cohort_type === 'dynamic' &&
+                activeCustomCohortDetail.rules
+              "
+            >
+              {{ activeCustomCohortDetail.rules.map(formatRule).join(", ") }}
+            </template>
+            <template v-else>
+              {{ activeCustomCohortDetail.member_count }} members (static)
+            </template>
           </span>
           <Button
             variant="outline"
