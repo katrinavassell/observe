@@ -444,8 +444,8 @@ export function createBillingApiRoutes(
 
         let accountName = "";
         let accountId = "";
+        const stripe = createStripeClientFromKey(api_key);
         try {
-          const stripe = createStripeClientFromKey(api_key);
           const account = await stripe.accounts.retrieve();
           accountId = account.id;
           accountName =
@@ -453,11 +453,16 @@ export function createBillingApiRoutes(
             (account as any).display_name ||
             account.id;
         } catch {
-          return res.status(400).json({
-            success: false,
-            message:
-              "Invalid Stripe API key. Please check your key and try again.",
-          });
+          try {
+            await stripe.customers.list({ limit: 1 });
+            accountName = "Stripe Account";
+          } catch {
+            return res.status(400).json({
+              success: false,
+              message:
+                "Invalid Stripe API key. Please check your key and try again.",
+            });
+          }
         }
 
         const keyPrefix = api_key.substring(0, 12) + "...";

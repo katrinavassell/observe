@@ -250,7 +250,7 @@ If they do:
 - Do not replace OpenAI / Anthropic with anything else.
 - Do not change \`baseURL\` on an existing provider client unless the user explicitly chose Path 3.
 - Do not touch an existing AI gateway (Portkey, LiteLLM, etc.) without asking.
-- Do not add Stripe integration as part of Observe setup — Stripe is optional and the user can connect it later from Data Sources → Stripe. If using a restricted Stripe key, it needs read-only access to: Customers, Subscriptions, Invoices, Products, and Prices.
+- Do not add Stripe integration as part of Observe setup — Stripe is optional and the user can connect it later from Data Sources → Stripe. If using a restricted Stripe key, it needs read-only access to: Customers, Subscriptions, Products, and Prices.
 - Do not log the API key.
 
 ## Verify
@@ -1029,7 +1029,7 @@ watch(
                   </p>
                   <p class="text-xs text-muted-foreground/60 mt-1">
                     Using a restricted key? Enable read-only access to:
-                    Customers, Subscriptions, Invoices, Products, and Prices.
+                    Customers, Subscriptions, Products, and Prices.
                   </p>
                 </div>
               </div>

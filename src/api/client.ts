@@ -603,7 +603,6 @@ export interface ConnectStripeResult {
  * The API key should have read permissions for:
  * - Customers
  * - Subscriptions
- * - Invoices
  * - Products/Prices
  *
  * @param apiKey - Stripe restricted API key (rk_live_... or rk_test_...)

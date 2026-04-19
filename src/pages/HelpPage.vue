@@ -72,7 +72,7 @@ const sections = [
     items: [
       {
         q: "Which Stripe key do I use?",
-        a: "Use the same Stripe secret key (sk_test_... or sk_live_...) that your app uses. If using a restricted key, enable read-only access to: Customers, Subscriptions, Invoices, Products, and Prices.",
+        a: "Use the same Stripe secret key (sk_test_... or sk_live_...) that your app uses. If using a restricted key, enable read-only access to: Customers, Subscriptions, Products, and Prices.",
       },
       {
         q: "Why does Stripe sync show 0 customers?",
