@@ -151,7 +151,7 @@ async function handleSubmit() {
         trimmedEmail,
         password.value,
         name.value.trim() || undefined,
-        (route.query.redirect as string) || "/onboarding",
+        (route.query.redirect as string) || "/",
       );
       if (result.needsEmailConfirmation) {
         unconfirmedEmail.value = result.email;
@@ -169,9 +169,7 @@ async function handleSubmit() {
       await login(trimmedEmail, password.value);
       toast.success("Welcome back!");
     }
-    const redirectTo =
-      (route.query.redirect as string) ||
-      (isRegisterMode.value ? "/onboarding" : "/");
+    const redirectTo = (route.query.redirect as string) || "/";
     router.push(redirectTo);
   } catch (error) {
     const message =
