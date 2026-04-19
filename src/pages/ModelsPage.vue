@@ -131,6 +131,7 @@ const {
   queryKey: ["models"],
   queryFn: getModels,
   enabled: computed(() => isLoggedIn.value),
+  placeholderData: [],
 });
 const models = computed(() =>
   isLoggedIn.value ? realModels.value : GUEST_MODELS,
