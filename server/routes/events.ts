@@ -143,8 +143,8 @@ async function sendUsageLimitEmail(
 
   const body =
     threshold === 80
-      ? `<p>You've used ${used.toLocaleString()} of your ${limit.toLocaleString()} monthly events on Observe.</p><p>To keep tracking without interruption, upgrade to Growth for unlimited events.</p><p><a href="https://observemetrics.com/plans">Upgrade now</a></p>`
-      : `<p>You've reached your ${limit.toLocaleString()} monthly event limit on Observe.</p><p>New events will be rejected until next month. Upgrade to Growth for unlimited events.</p><p><a href="https://observemetrics.com/plans">Upgrade now</a></p>`;
+      ? `<p>You've used ${used.toLocaleString()} of your ${limit.toLocaleString()} monthly events on Observe.</p><p>Need more capacity? Check out <a href="https://tansohq.com">Tanso</a> for unlimited events and full monetization tools.</p>`
+      : `<p>You've reached your ${limit.toLocaleString()} monthly event limit on Observe.</p><p>New events will be rejected until next month. Need more? Check out <a href="https://tansohq.com">Tanso</a> for unlimited events.</p>`;
 
   usageAlertsSent.add(key);
 
@@ -887,7 +887,7 @@ export function createEventsRoutes(
         if (!ingestAccess.allowed) {
           return res.status(429).json({
             error:
-              "Monthly event limit reached. Upgrade to Growth for unlimited events.",
+              "Monthly event limit reached. Need more? Check out Tanso at tansohq.com",
             usage: ingestAccess.usage,
             limit: ingestAccess.limit,
           });

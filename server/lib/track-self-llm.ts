@@ -1,5 +1,5 @@
 const OBSERVE_URL =
-  process.env.OBSERVE_BASE_URL || "https://observemetrics.com";
+  process.env.OBSERVE_BASE_URL || "https://observe.tansohq.com";
 
 export function trackSelfLLM(params: {
   featureKey: string;

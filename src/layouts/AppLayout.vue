@@ -113,9 +113,9 @@ const navItems = computed(() => [
   },
   {
     path: "/plans",
-    label: "Plans",
+    label: "Plans & Usage",
     icon: CreditCard,
-    description: "Manage your subscription",
+    description: "View limits and usage",
     dividerBefore: true,
   },
   {
@@ -322,7 +322,7 @@ function isActive(path: string) {
           v-if="isLoggedIn && usageMeters.length > 0"
           class="border-t border-sidebar-border px-4 py-3 space-y-2 cursor-pointer hover:bg-sidebar-accent/30 transition-colors"
           @click="router.push('/plans')"
-          title="View plan & usage"
+          title="View plans & usage"
         >
           <div v-for="m in usageMeters" :key="m.label" class="space-y-1">
             <div class="flex items-center justify-between text-[10px]">

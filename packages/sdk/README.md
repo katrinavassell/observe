@@ -38,7 +38,7 @@ const response = await openai.chat.completions.create({
 
 | Method | Description |
 |---|---|
-| `Observe.configure({ apiKey, baseUrl? })` | Set API key. Call once at startup. `baseUrl` defaults to `https://app.tanso.io` |
+| `Observe.configure({ apiKey, baseUrl? })` | Set API key. Call once at startup. `baseUrl` defaults to `https://observe.tansohq.com` |
 | `Observe.identify({ customerId, name?, email? })` | Set customer context globally. Call once on login |
 | `Observe.feature(featureKey)` | Set default feature attribution |
 | `Observe.wrap(client, overrides?)` | Wrap an OpenAI or Anthropic client. Returns the same instance |
@@ -104,7 +104,7 @@ from openai import OpenAI
 
 client = OpenAI(
     api_key="sk-...",
-    base_url="https://app.tanso.io/v1",
+    base_url="https://observe.tansohq.com/v1",
     default_headers={
         "Observe-Key": "obs_your_api_key",
         "Observe-Customer": user.stripe_id,
@@ -148,7 +148,7 @@ Failed sends are retried up to 3 times with exponential backoff (1s, 2s, 4s). Af
 ```ts
 const observe = new TansoObserve({
   apiKey: 'your-api-key',           // required -- SDK API key from Data Sources page
-  baseUrl: 'https://app.tanso.io',  // default; override for self-hosted
+  baseUrl: 'https://observe.tansohq.com',  // default; override for self-hosted
   flushIntervalMs: 5000,            // default: 5 seconds
   maxBatchSize: 100,                // default: 100 events per batch
   onError: (err) => {               // called after retries exhausted
@@ -160,7 +160,7 @@ const observe = new TansoObserve({
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `apiKey` | `string` | *required* | Your SDK API key from the Data Sources page |
-| `baseUrl` | `string` | `https://app.tanso.io` | API endpoint |
+| `baseUrl` | `string` | `https://observe.tansohq.com` | API endpoint |
 | `flushIntervalMs` | `number` | `5000` | Auto-flush interval in ms |
 | `maxBatchSize` | `number` | `100` | Max events per batch |
 | `onError` | `(err: Error) => void` | - | Error callback; errors are silent by default |

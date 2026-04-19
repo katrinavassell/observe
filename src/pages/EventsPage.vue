@@ -588,13 +588,14 @@ function usageTooltip(event: ObserveEvent): string {
           />
         </div>
       </div>
-      <router-link
+      <a
         v-if="eventUsagePct >= 50"
-        to="/plans"
+        href="https://tansohq.com"
+        target="_blank"
         class="text-xs font-medium text-primary hover:underline shrink-0"
       >
-        Upgrade
-      </router-link>
+        Need more? Try Tanso
+      </a>
     </div>
 
     <!-- Filters Inline Row -->
@@ -1217,11 +1218,11 @@ function usageTooltip(event: ObserveEvent): string {
                       <p class="text-xs">
                         Full guidance:
                         <a
-                          href="https://observemetrics.com/llms.txt"
+                          href="https://observe.tansohq.com/llms.txt"
                           target="_blank"
                           rel="noopener"
                           class="underline"
-                          >observemetrics.com/llms.txt</a
+                          >observe.tansohq.com/llms.txt</a
                         >
                       </p>
                     </div>

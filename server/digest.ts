@@ -205,8 +205,7 @@ export async function runWeeklyDigest(pool: Pool): Promise<void> {
      JOIN accounts a ON a.id = ua.account_id
      JOIN observe_events oe ON oe.user_id = u.visitor_id
      WHERE oe.timestamp > NOW() - INTERVAL '30 days'
-       AND oe.source != 'sample'
-       AND a.stripe_plan IN ('growth', 'pro')`,
+       AND oe.source != 'sample'`,
   );
 
   console.log(`Weekly digest: processing ${accounts.rows.length} accounts`);

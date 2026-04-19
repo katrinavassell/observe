@@ -531,7 +531,7 @@ Only include action blocks when the user explicitly asks you to do something. Fo
                 metric,
                 operator,
                 action.threshold || 100,
-                req.accountEmail || "noreply@observemetrics.com",
+                req.accountEmail || "noreply@observe.tansohq.com",
               ],
             );
             return res.json({

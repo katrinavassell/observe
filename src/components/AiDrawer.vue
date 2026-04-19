@@ -73,11 +73,6 @@ const ROUTE_PROMPTS: Record<string, string[]> = {
     "Show me the last 10 events from the SDK",
     "When did each of my data sources last sync?",
   ],
-  "/plans": [
-    "How close am I to my plan limits?",
-    "Should I upgrade to Growth?",
-    "What's included in Pro?",
-  ],
 };
 
 const DEFAULT_PROMPTS = [

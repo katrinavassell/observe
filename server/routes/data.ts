@@ -614,7 +614,9 @@ export function createDataRoutes(
       );
       if (!access.allowed)
         return res.status(403).json({
-          error: access.reason || "Upload limit reached. Upgrade your plan.",
+          error:
+            access.reason ||
+            "Upload limit reached. Need more? Check out Tanso at tansohq.com",
         });
       const client = await pool.connect();
       try {
@@ -731,7 +733,9 @@ export function createDataRoutes(
       );
       if (!access.allowed)
         return res.status(403).json({
-          error: access.reason || "Upload limit reached. Upgrade your plan.",
+          error:
+            access.reason ||
+            "Upload limit reached. Need more? Check out Tanso at tansohq.com",
         });
       const client = await pool.connect();
       try {
@@ -849,7 +853,9 @@ export function createDataRoutes(
       );
       if (!access.allowed)
         return res.status(403).json({
-          error: access.reason || "Upload limit reached. Upgrade your plan.",
+          error:
+            access.reason ||
+            "Upload limit reached. Need more? Check out Tanso at tansohq.com",
         });
       const client = await pool.connect();
       try {

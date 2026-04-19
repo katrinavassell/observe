@@ -20,7 +20,7 @@ import { Observe } from "@tansohq/observe";
 Observe.configure({
   apiKey: process.env.OBSERVE_API_KEY!,
   // Optional: override if self-hosting
-  // baseUrl: process.env.OBSERVE_URL ?? "https://observemetrics.com",
+  // baseUrl: process.env.OBSERVE_URL ?? "https://observe.tansohq.com",
 });
 ```
 
@@ -101,7 +101,7 @@ Observe.configure({
 
 ```
 OBSERVE_API_KEY=obs_...            # from Data Sources > API Keys
-# OBSERVE_URL=https://observemetrics.com  # optional, defaults to hosted
+# OBSERVE_URL=https://observe.tansohq.com  # optional, defaults to hosted
 ```
 
 Never expose `OBSERVE_API_KEY` to the browser. Keep it server-only (don't prefix with `NEXT_PUBLIC_`).

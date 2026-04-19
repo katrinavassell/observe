@@ -379,7 +379,7 @@ async function sendCustomerAlertEmail(
           <p><strong>Trigger:</strong> ${triggerLabel}</p>
           <p><strong>Current value:</strong> ${currentValue.toFixed(1)}</p>
           <p><strong>Threshold:</strong> ${rule.operator} ${rule.threshold}</p>
-          <p style="margin-top:16px"><a href="https://observemetrics.com/customers/${encodeURIComponent(customerId)}">View customer →</a></p>`,
+          <p style="margin-top:16px"><a href="https://observe.tansohq.com/customers/${encodeURIComponent(customerId)}">View customer →</a></p>`,
       }),
     });
     return res.ok;
@@ -428,7 +428,7 @@ async function sendCustomerAlertWebhook(
               {
                 type: "button",
                 text: { type: "plain_text", text: "View Customer" },
-                url: `https://observemetrics.com/customers/${encodeURIComponent(customerId)}`,
+                url: `https://observe.tansohq.com/customers/${encodeURIComponent(customerId)}`,
               },
             ],
           },

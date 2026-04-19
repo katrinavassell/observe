@@ -527,11 +527,14 @@ const insightCategories = [
               {{ insightsUsage.remaining }} remaining
             </template>
             <template v-else>
-              All {{ insightsUsage.limit }} insights used.
-              <router-link to="/plans" class="text-primary hover:underline"
-                >Upgrade to Growth</router-link
-              >
-              for unlimited.
+              All {{ insightsUsage.limit }} insights used this month. Need more?
+              Check out
+              <a
+                href="https://tansohq.com"
+                target="_blank"
+                class="text-primary hover:underline"
+                >Tanso</a
+              >.
             </template>
           </div>
         </div>

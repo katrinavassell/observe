@@ -12,7 +12,7 @@ export class TansoObserve {
 
   constructor(options: ClientOptions) {
     this.apiKey = options.apiKey;
-    this.baseUrl = options.baseUrl ?? "https://app.tanso.io";
+    this.baseUrl = options.baseUrl ?? "https://observe.tansohq.com";
     this.onError = options.onError;
 
     this.queue = new BatchQueue({
