@@ -795,35 +795,11 @@ const excludedCount = computed(() => {
           </button>
         </template>
 
-        <!-- Active cohort criteria -->
-        <p
-          v-if="activeCohort"
-          class="basis-full text-xs text-muted-foreground -mt-1"
-        >
-          {{ cohortMeta[activeCohort].label }}:
-          {{ cohortMeta[activeCohort].criteria }}
-        </p>
-        <p
-          v-else-if="
-            activeCustomCohortId &&
-            customCohorts.find((c) => c.id === activeCustomCohortId)
-          "
-          class="basis-full text-xs text-muted-foreground -mt-1"
-        >
-          {{ customCohorts.find((c) => c.id === activeCustomCohortId)!.name }}:
-          {{
-            customCohorts.find((c) => c.id === activeCustomCohortId)!
-              .cohort_type === "dynamic"
-              ? customCohorts
-                  .find((c) => c.id === activeCustomCohortId)!
-                  .rules?.map((r) => `${r.field} ${r.operator} ${r.value}`)
-                  .join(", ")
-              : `${customCohorts.find((c) => c.id === activeCustomCohortId)!.member_count} members (static)`
-          }}
-        </p>
-
         <!-- Column settings -->
-        <div class="relative ml-auto">
+        <div class="relative ml-auto flex items-center gap-3">
+          <span v-if="activeCohort" class="text-xs text-muted-foreground">
+            {{ cohortMeta[activeCohort].criteria }}
+          </span>
           <Button
             variant="outline"
             size="sm"
