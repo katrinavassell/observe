@@ -287,7 +287,7 @@ async function ensureDbInitialized() {
   }
   return dbInitPromise;
 }
-const SCHEMA_VERSION = 18;
+const SCHEMA_VERSION = 19;
 async function _doDbInit() {
   try {
     await pool.query("SELECT 1");
@@ -499,6 +499,29 @@ async function _doDbInit() {
       console.error("Stage 1 backfill outer loop failed:", err);
     }
     // ── end Stage 1 migration ───────────────────────────────────────────
+
+    // ── Stage 5: catch-up backfill for newly added tables ───────────────
+    // Stage 1 only backfills users without user_accounts rows. Users who
+    // already had rows from prior migrations still have NULL account_id on
+    // tables added to the list later (recommendations, custom_cohorts).
+    try {
+      for (const t of dataTablesNeedingAccountId) {
+        await pool
+          .query(
+            `UPDATE ${t} SET account_id = ua.account_id
+               FROM users u
+               JOIN user_accounts ua ON ua.user_id = u.id AND ua.role = 'owner'
+              WHERE ${t}.account_id IS NULL
+                AND ${t}.user_id = u.visitor_id`,
+          )
+          .catch((err) =>
+            console.error(`Stage 5 catch-up backfill ${t}:`, err),
+          );
+      }
+    } catch (err) {
+      console.error("Stage 5 catch-up backfill failed:", err);
+    }
+    // ── end Stage 5 migration ───────────────────────────────────────────
 
     // ── Stage 4: copy Stripe fields users → accounts ────────────────────
     // Additive + idempotent. Columns stay on `users` for rollback safety.
