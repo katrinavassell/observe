@@ -779,9 +779,9 @@ function relativeTime(dateStr: string) {
       </CardContent>
     </Card>
 
-    <!-- Empty state -->
+    <!-- Empty state (logged-in only — guests see the CTA above) -->
     <div
-      v-else-if="!isLoading"
+      v-else-if="!isLoading && isLoggedIn"
       class="flex flex-col items-center justify-center py-16 text-center max-w-md mx-auto"
     >
       <Bell class="h-10 w-10 text-muted-foreground/40 mb-3" />
