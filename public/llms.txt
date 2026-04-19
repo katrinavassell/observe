@@ -1,8 +1,9 @@
 # Observe by Tanso — Integration Reference
 
-Observe is an AI cost observability platform. It tracks every LLM call with cost,
-model, tokens, customer, and feature attribution. Use it to answer: "who uses how
-much AI, and is it profitable?"
+Observe is an AI cost and usage observability platform. It tracks every feature
+event — LLM calls, API usage, compute jobs — with cost, model, tokens, customer,
+and feature attribution. Use it to answer: "who uses what, how much does it cost,
+and is it profitable?"
 
 - Docs: https://observe.tansohq.com
 - SDK: `@tansohq/observe` on npm (NOT `@tanso/observe` — that package does not exist,
@@ -230,7 +231,7 @@ curl -X POST https://observe.tansohq.com/api/events/ingest \
   "events": [
     {
       // REQUIRED
-      "eventName":           string,  // short label, e.g. "chat", "embed", "eval"
+      "eventName":           string,  // short label, e.g. "chat", "embed", "eval", "api_call"
       "customerReferenceId": string,  // your end-user's ID (Stripe customer ID recommended)
       "featureKey":          string,  // product feature powered by this call
 
@@ -387,15 +388,19 @@ carries both cost and revenue for real-time per-event margin.
 3. Add `OBSERVE_API_KEY=obs_...` to `.env` (and `.env.example` with a placeholder).
    The key always starts with `obs_`. Get it from
    https://observe.tansohq.com/data-sources.
-4. Find every place the app calls OpenAI / Anthropic / another LLM provider.
+4. Find every place the app calls OpenAI / Anthropic / another LLM provider,
+   or any billable feature (API calls, compute jobs, file processing, etc.).
    After each call returns, `fetch('https://observe.tansohq.com/api/events/ingest', …)`
    with a single event in the body: `eventName`, `customerReferenceId`,
-   `featureKey`, `model`, `modelProvider`, `inputTokens`, `outputTokens`,
-   `durationMs`, `idempotencyKey`. Fire-and-forget; catch and log on failure.
+   `featureKey`. For LLM calls, also include `model`, `modelProvider`,
+   `inputTokens`, `outputTokens`. For non-LLM features, include `costAmount`
+   and/or `usageUnits`. Always include `durationMs` and `idempotencyKey`.
+   Fire-and-forget; catch and log on failure.
 5. Use the end-user's ID (Stripe customer ID if available, else stable user ID)
    as `customerReferenceId`. Never "default" or a hardcoded value.
-6. Use one stable `featureKey` per user-facing AI feature — e.g. `ai_chat`,
-   `summarize_email`, `code_autocomplete`. Not per model.
+6. Use one stable `featureKey` per user-facing feature — e.g. `ai_chat`,
+   `summarize_email`, `code_autocomplete`, `pdf_export`, `api_request`.
+   Not per model. Track all billable features, not just AI ones.
 7. If (and only if) the user asks for auto-instrumentation: `npm install
    @tansohq/observe` — with the `hq`. The package `@tanso/observe` does NOT
    exist on npm. If install fails, STOP and tell the user; do not substitute.

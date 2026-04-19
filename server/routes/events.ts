@@ -220,7 +220,7 @@ export function createEventsRoutes(
             ? "ASC"
             : "DESC";
 
-        let where = "WHERE oe.account_id = $1";
+        let where = "WHERE oe.account_id = $1 AND oe.event_name != 'revenue'";
         const params: unknown[] = [req.accountId!];
         let paramIdx = 2;
 
