@@ -28,6 +28,7 @@ const { data, isLoading } = useQuery({
   queryKey: ["cohorts"],
   queryFn: () => getCohorts(true),
   enabled: isLoggedIn,
+  placeholderData: { customers: [], totals: null },
 });
 
 const customers = computed<CohortCustomer[]>(

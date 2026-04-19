@@ -74,6 +74,7 @@ const {
   queryKey: ["events-by-feature"],
   queryFn: getEventsByFeature,
   enabled: computed(() => isLoggedIn.value),
+  placeholderData: [],
 });
 const featureData = computed(() =>
   isLoggedIn.value ? realFeatureData.value : GUEST_EVENTS_BY_FEATURE,
@@ -87,6 +88,7 @@ const {
   queryKey: ["events-by-model"],
   queryFn: getEventsByModel,
   enabled: computed(() => isLoggedIn.value),
+  placeholderData: [],
 });
 const modelData = computed(() =>
   isLoggedIn.value ? realModelData.value : GUEST_EVENTS_BY_MODEL,
@@ -100,6 +102,7 @@ const {
   queryKey: ["events-by-customer"],
   queryFn: getEventsByCustomer,
   enabled: computed(() => isLoggedIn.value),
+  placeholderData: [],
 });
 const customerData = computed(() =>
   isLoggedIn.value ? realCustomerData.value : GUEST_EVENTS_BY_CUSTOMER,

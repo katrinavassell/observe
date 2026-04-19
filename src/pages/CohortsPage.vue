@@ -337,6 +337,7 @@ const {
   queryKey: ["cohorts"],
   queryFn: () => getCohorts(),
   enabled: computed(() => isLoggedIn.value),
+  placeholderData: { customers: [], summary: [], totals: null },
 });
 
 const isLoading = computed(() => isLoggedIn.value && realIsLoading.value);

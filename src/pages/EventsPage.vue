@@ -270,6 +270,7 @@ const {
   queryKey: ["events", query],
   queryFn: () => getEvents(query.value),
   enabled: computed(() => isLoggedIn.value),
+  placeholderData: { events: [], total: 0, limit: PAGE_SIZE, offset: 0 },
 });
 const eventsData = computed(() =>
   isLoggedIn.value
