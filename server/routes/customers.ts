@@ -867,8 +867,14 @@ export function createCustomersRoutes(
           for (const sub of subscriptions) {
             const mrr = sub.mrr_override || planPriceMap.get(sub.plan_id) || 0;
             await client.query(
-              `INSERT INTO observe_events (user_id, account_id, customer_id, feature_key, event_name, timestamp, revenue_amount, source, granularity) VALUES ($1, $2, $3, 'subscription', 'revenue', NOW(), $4, 'csv', 'monthly_aggregate')`,
-              [req.visitorId, acctId, sub.customer_id, mrr],
+              `INSERT INTO observe_events (user_id, account_id, customer_id, feature_key, event_name, timestamp, revenue_amount, source, granularity) VALUES ($1, $2, $3, $4, 'revenue', NOW(), $5, 'csv', 'monthly_aggregate')`,
+              [
+                req.visitorId,
+                acctId,
+                sub.customer_id,
+                sub.plan_id || "subscription",
+                mrr,
+              ],
             );
           }
         }

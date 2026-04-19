@@ -756,11 +756,22 @@ export function createBillingApiRoutes(
           );
         }
 
+        const priceToProduct = new Map<string, string>();
+        for (const price of prices) {
+          const pid =
+            typeof price.product === "string"
+              ? price.product
+              : price.product?.id;
+          const prod = stripeProducts.data.find((p) => p.id === pid);
+          if (prod?.name) priceToProduct.set(price.id, prod.name);
+        }
+
         let syncedSubs = 0;
         const subRows: {
           id: string;
           customerId: string;
           priceId: string;
+          productName: string;
           isActive: boolean;
           mrr: number;
         }[] = [];
@@ -776,6 +787,7 @@ export function createBillingApiRoutes(
             id: sub.id,
             customerId: sub.customer as string,
             priceId,
+            productName: priceToProduct.get(priceId) || "subscription",
             isActive: sub.status === "active",
             mrr,
           });
@@ -803,12 +815,13 @@ export function createBillingApiRoutes(
               s.mrr,
             );
             eventPlaceholders.push(
-              `($${eventIdx++}, $${eventIdx++}, $${eventIdx++}, 'subscription', 'revenue', NOW(), $${eventIdx++}, 'stripe', 'monthly_aggregate')`,
+              `($${eventIdx++}, $${eventIdx++}, $${eventIdx++}, $${eventIdx++}, 'revenue', NOW(), $${eventIdx++}, 'stripe', 'monthly_aggregate')`,
             );
             eventValues.push(
               req.visitorId,
               req.accountId ?? null,
               s.customerId,
+              s.productName,
               s.mrr,
             );
           }

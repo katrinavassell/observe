@@ -11,7 +11,7 @@ All data in Observe lives in the `observe_events` table. Each import source writ
 |-------|-------|
 | `source` | `stripe` |
 | `granularity` | `monthly_aggregate` |
-| `feature_key` | `subscription` |
+| `feature_key` | Stripe product name (e.g., "Pro Plan") |
 | `event_name` | `revenue` |
 | `revenue_amount` | Subscription MRR |
 
@@ -22,7 +22,7 @@ Stripe gives you **revenue data**. To see margins, pair it with cost data from C
 |-------|-------|
 | `source` | `csv` |
 | `granularity` | `monthly_aggregate` |
-| `feature_key` | `subscription` |
+| `feature_key` | Plan ID from CSV |
 | `event_name` | `revenue` |
 | `revenue_amount` | From mapped column |
 

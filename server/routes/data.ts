@@ -961,8 +961,14 @@ export function createDataRoutes(
             const mrr = sub.mrr_override || planPriceMap.get(sub.plan_id) || 0;
             await client.query(
               `INSERT INTO observe_events (user_id, account_id, customer_id, feature_key, event_name, timestamp, revenue_amount, source, granularity)
-             VALUES ($1, $2, $3, 'subscription', 'revenue', NOW(), $4, 'csv', 'monthly_aggregate')`,
-              [req.visitorId, req.accountId ?? null, sub.customer_id, mrr],
+             VALUES ($1, $2, $3, $4, 'revenue', NOW(), $5, 'csv', 'monthly_aggregate')`,
+              [
+                req.visitorId,
+                req.accountId ?? null,
+                sub.customer_id,
+                sub.plan_id || "subscription",
+                mrr,
+              ],
             );
           }
         }
@@ -1237,11 +1243,22 @@ export function createDataRoutes(
         }
 
         // Insert subscriptions — batched
+        const priceToProduct = new Map<string, string>();
+        for (const price of prices) {
+          const pid =
+            typeof price.product === "string"
+              ? price.product
+              : price.product?.id;
+          const prod = stripeProducts.data.find((p) => p.id === pid);
+          if (prod?.name) priceToProduct.set(price.id, prod.name);
+        }
+
         let syncedSubs = 0;
         const subRows: {
           id: string;
           customerId: string;
           priceId: string;
+          productName: string;
           isActive: boolean;
           mrr: number;
         }[] = [];
@@ -1257,6 +1274,7 @@ export function createDataRoutes(
             id: sub.id,
             customerId: sub.customer as string,
             priceId,
+            productName: priceToProduct.get(priceId) || "subscription",
             isActive: sub.status === "active",
             mrr,
           });
@@ -1284,12 +1302,13 @@ export function createDataRoutes(
               s.mrr,
             );
             eventPlaceholders.push(
-              `($${eventIdx++}, $${eventIdx++}, $${eventIdx++}, 'subscription', 'revenue', NOW(), $${eventIdx++}, 'stripe', 'monthly_aggregate')`,
+              `($${eventIdx++}, $${eventIdx++}, $${eventIdx++}, $${eventIdx++}, 'revenue', NOW(), $${eventIdx++}, 'stripe', 'monthly_aggregate')`,
             );
             eventValues.push(
               req.visitorId,
               req.accountId ?? null,
               s.customerId,
+              s.productName,
               s.mrr,
             );
           }
