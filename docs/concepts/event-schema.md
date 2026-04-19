@@ -76,11 +76,11 @@ Most CSV imports are `monthly_aggregate`. Future SDK events will be `event` gran
 }
 ```
 
-**An AI Insights call (internal tracking):**
+**An internal system event:**
 ```json
 {
   "customer_id": "_system",
-  "feature_key": "ai_insights",
+  "feature_key": "system_health",
   "event_name": "inference",
   "timestamp": "2026-03-19T14:30:00Z",
   "cost_amount": 0.003,

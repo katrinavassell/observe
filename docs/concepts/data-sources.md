@@ -58,7 +58,7 @@ Stripe gives you **revenue data**. To see margins, pair it with cost data from C
 |-------|---------|---------------|
 | `monthly_aggregate` | One row per customer per feature per month | CSV uploads, Stripe sync, sample data |
 | `daily_aggregate` | One row per customer per feature per day | (Future) detailed CSV imports |
-| `event` | A single occurrence | (Future) SDK ingestion, AI Insights tracking |
+| `event` | A single occurrence | SDK ingestion, proxy mode |
 
 Aggregation queries in the dashboard work across all granularity levels — they just SUM the amounts. Finer granularity means more detail on timeseries charts.
 

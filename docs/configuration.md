@@ -30,7 +30,7 @@ Proxy mode and AI-powered suggestions are disabled if these are not set.
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `OPENAI_API_KEY` | No | -- | OpenAI API key for proxy mode and AI Insights generation |
+| `OPENAI_API_KEY` | No | -- | OpenAI API key for proxy mode |
 | `ANTHROPIC_API_KEY` | No | -- | Anthropic API key for proxy mode |
 
 ## Email Alerts
