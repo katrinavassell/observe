@@ -114,12 +114,6 @@ const navItems = computed(() => [
     description: "View limits and usage",
     dividerBefore: true,
   },
-  {
-    path: "/team",
-    label: "Team Settings",
-    icon: Users,
-    description: "Manage team & invites",
-  },
 ]);
 
 const ADMIN_EMAILS = [
