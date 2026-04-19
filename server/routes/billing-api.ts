@@ -244,7 +244,7 @@ export function createBillingApiRoutes(
     },
   );
 
-  // POST /credits/feedback — grant credits for submitting feedback
+  // POST /credits/feedback — store feedback and email it
   router.post(
     "/credits/feedback",
     ensureVisitor,
@@ -261,25 +261,9 @@ export function createBillingApiRoutes(
             .json({ error: "Feedback must be at least 10 characters" });
         }
 
-        // Always store feedback
         await pool.query(
           `INSERT INTO feedback (user_id, message) VALUES ($1, $2)`,
           [req.visitorId, message.trim()],
-        );
-
-        // Grant credits only on first-ever feedback
-        const priorFeedback = await pool.query(
-          `SELECT COUNT(*) FROM feedback WHERE user_id = $1`,
-          [req.visitorId],
-        );
-        const isFirstFeedback = parseInt(priorFeedback.rows[0].count) <= 1;
-        let result = { bonus_credits: 0, granted: 0 };
-        if (isFirstFeedback) {
-          result = await grantBonusCredits(pool, req.visitorId!, "feedback");
-        }
-        await pool.query(
-          `UPDATE users SET feedback_submitted = true WHERE visitor_id = $1`,
-          [req.visitorId],
         );
 
         // Email feedback to Kat
@@ -308,11 +292,7 @@ export function createBillingApiRoutes(
           );
         }
 
-        res.json({
-          success: true,
-          granted: result.granted,
-          bonus_credits: result.bonus_credits,
-        });
+        res.json({ success: true, granted: 0, bonus_credits: 0 });
       } catch (error) {
         console.error("POST /credits/feedback error:", error);
         res.status(500).json({ error: "Failed to submit feedback" });

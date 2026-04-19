@@ -54,10 +54,6 @@ const feedbackOpen = ref(false);
 const mobileLandingEmail = ref("");
 const queryClient = useQueryClient();
 
-function handleFeedbackCredited() {
-  queryClient.invalidateQueries({ queryKey: ["usage-limits"] });
-}
-
 onMounted(() => {
   fetchTeamInfo();
   // NOTE: do NOT auto-load sample data here. Previously this fired during
@@ -511,10 +507,6 @@ function isActive(path: string) {
       </div>
     </main>
 
-    <FeedbackModal
-      :open="feedbackOpen"
-      @close="feedbackOpen = false"
-      @credited="handleFeedbackCredited"
-    />
+    <FeedbackModal :open="feedbackOpen" @close="feedbackOpen = false" />
   </div>
 </template>

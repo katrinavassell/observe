@@ -1,14 +1,13 @@
 <script setup lang="ts">
 import { ref } from "vue";
 import { toast } from "vue-sonner";
-import { X, Sparkles, MessageSquare } from "lucide-vue-next";
+import { X, MessageSquare } from "lucide-vue-next";
 import { Button } from "@/components/ui";
 import { submitFeedback } from "@/lib/api";
 
 defineProps<{ open: boolean }>();
 const emit = defineEmits<{
   (e: "close"): void;
-  (e: "credited", amount: number): void;
 }>();
 
 const message = ref("");
@@ -21,16 +20,9 @@ async function handleSubmit() {
   }
   isSubmitting.value = true;
   try {
-    const result = await submitFeedback(message.value);
-    window.posthog?.capture("feedback_submitted", {
-      credits_granted: result.granted,
-    });
-    if (result.granted > 0) {
-      toast.success(`Thanks! You earned ${result.granted} bonus events`);
-    } else {
-      toast.success("Thanks for your feedback!");
-    }
-    emit("credited", result.granted);
+    await submitFeedback(message.value);
+    window.posthog?.capture("feedback_submitted");
+    toast.success("Thanks for your feedback!");
     emit("close");
     message.value = "";
   } catch (error) {
@@ -64,15 +56,6 @@ async function handleSubmit() {
           >
             <X class="h-4 w-4" />
           </button>
-        </div>
-
-        <div
-          class="flex items-center gap-2 text-xs bg-primary/5 border border-primary/20 rounded-md px-3 py-2"
-        >
-          <Sparkles class="h-3 w-3 text-primary shrink-0" />
-          <span
-            >Earn <strong>1,000 bonus events</strong> for your feedback</span
-          >
         </div>
 
         <div class="space-y-1">
