@@ -9,7 +9,6 @@ import {
   getEventsByAgent,
   getMrrMovements,
   getUsageLimits,
-  listFeaturePricing,
   getSourceBreakdown,
 } from "@/lib/api";
 import type {} from "@/lib/api";
@@ -35,20 +34,6 @@ const { data: usageLimits } = useQuery({
   queryKey: ["usage-limits"],
   queryFn: getUsageLimits,
 });
-
-function marginBarClass(margin_pct: number | null): string {
-  if (margin_pct == null) return "bg-foreground";
-  if (margin_pct < 0) return "bg-destructive";
-  if (margin_pct < 40) return "bg-amber-500";
-  return "bg-emerald-500";
-}
-
-function marginTextClass(margin_pct: number | null): string {
-  if (margin_pct == null) return "text-muted-foreground";
-  if (margin_pct < 0) return "text-destructive";
-  if (margin_pct < 40) return "text-amber-600";
-  return "text-success";
-}
 
 // Source breakdown for data attribution
 const { data: sourceBreakdown } = useQuery({
@@ -147,48 +132,9 @@ const hasData = computed(
       customerData.value?.length),
 );
 
-// Check if user has configured feature pricing (for margin label)
-const { data: featurePricingRules } = useQuery({
-  queryKey: ["feature-pricing"],
-  queryFn: listFeaturePricing,
-  staleTime: 0,
-});
-const hasFeaturePricing = computed(
-  () => (featurePricingRules.value?.length ?? 0) > 0,
-);
-const marginLabel = computed(() =>
-  hasFeaturePricing.value ? "Net Margin" : "Est. Margin",
-);
-const marginHint = computed(() =>
-  hasFeaturePricing.value
-    ? "Revenue from configured feature pricing"
-    : "Revenue estimated from Stripe MRR allocation. Configure feature pricing for precise margins.",
-);
-
 const totalCost = computed(() => {
   if (!featureData.value) return 0;
   return featureData.value.reduce((s, f) => s + f.total_cost, 0);
-});
-const totalRevenue = computed(() => {
-  if (!featureData.value) return 0;
-  return featureData.value.reduce((s, f) => s + f.total_revenue, 0);
-});
-const netMarginPct = computed(() => {
-  if (totalRevenue.value === 0) return null;
-  return ((totalRevenue.value - totalCost.value) / totalRevenue.value) * 100;
-});
-
-const _negativeMarginsInfo = computed(() => {
-  if (!featureData.value) return null;
-  const negative = featureData.value.filter(
-    (f) => f.margin_pct !== null && f.margin_pct < 0,
-  );
-  if (negative.length === 0) return null;
-  const totalLoss = negative.reduce(
-    (s, f) => s + (f.total_cost - f.total_revenue),
-    0,
-  );
-  return { count: negative.length, totalLoss };
 });
 
 const sortedFeatures = computed(() => {
@@ -329,8 +275,7 @@ function retry() {
       <Plug class="h-10 w-10 text-muted-foreground/40 mb-3" />
       <p class="text-sm font-medium mb-1">No analytics data yet</p>
       <p class="text-xs text-muted-foreground mb-4">
-        Connect your OpenAI or Anthropic SDK to see cost, revenue, and margin
-        breakdowns by feature, model, and customer.
+        Connect your SDK to see cost breakdowns by feature, model, and customer.
       </p>
       <Button size="sm" variant="outline" @click="router.push('/data-sources')">
         <Plug class="h-3.5 w-3.5 mr-1.5" />
