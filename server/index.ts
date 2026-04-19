@@ -287,10 +287,29 @@ async function ensureDbInitialized() {
   }
   return dbInitPromise;
 }
+const SCHEMA_VERSION = 17;
 async function _doDbInit() {
   try {
     await pool.query("SELECT 1");
-    console.warn("Database connection verified");
+
+    // Fast path: if schema is current, skip all migrations (1 query vs 100+)
+    try {
+      const vResult = await pool.query(
+        "SELECT version FROM schema_version LIMIT 1",
+      );
+      if (
+        vResult.rows.length > 0 &&
+        vResult.rows[0].version >= SCHEMA_VERSION
+      ) {
+        console.warn(`Schema v${SCHEMA_VERSION} current, skipping migrations`);
+        initModelPricing(pool).catch(() => {});
+        return;
+      }
+    } catch {
+      // Table doesn't exist yet — run full migration
+    }
+
+    console.warn("Running schema migrations...");
 
     // Hard-reject sample-tagged rows at the DB level. Cheaper than a
     // runtime filter in every read query. On first install with legacy
@@ -363,29 +382,15 @@ async function _doDbInit() {
         updated_at TIMESTAMPTZ DEFAULT NOW()
       )
     `);
-    await pool.query(
-      `ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_customer_id TEXT`,
-    );
-    await pool.query(
-      `ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_plan TEXT DEFAULT 'free'`,
-    );
-    await pool.query(
-      `ALTER TABLE users ADD COLUMN IF NOT EXISTS bonus_credits INTEGER DEFAULT 0`,
-    );
-    await pool.query(
-      `ALTER TABLE users ADD COLUMN IF NOT EXISTS feedback_submitted BOOLEAN DEFAULT false`,
-    );
-    await pool.query(
-      `ALTER TABLE users ADD COLUMN IF NOT EXISTS invite_credits_granted INTEGER DEFAULT 0`,
-    );
-    await pool.query(
-      `ALTER TABLE users ADD COLUMN IF NOT EXISTS is_internal BOOLEAN DEFAULT false`,
-    );
-    // Activation-funnel milestone: when a user's first real SDK event lands.
-    // Used to compute activation rate via SQL without relying on PostHog.
-    await pool.query(
-      `ALTER TABLE users ADD COLUMN IF NOT EXISTS first_sdk_event_at TIMESTAMPTZ`,
-    );
+    await pool.query(`DO $$ BEGIN
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_customer_id TEXT;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_plan TEXT DEFAULT 'free';
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS bonus_credits INTEGER DEFAULT 0;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS feedback_submitted BOOLEAN DEFAULT false;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS invite_credits_granted INTEGER DEFAULT 0;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS is_internal BOOLEAN DEFAULT false;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS first_sdk_event_at TIMESTAMPTZ;
+    END $$`);
 
     // 3. New billing/data owner accounts table.
     await pool.query(`
@@ -657,28 +662,16 @@ async function _doDbInit() {
     // Split token persistence — input and output tokens have different
     // provider rates, so we store them separately. Nullable so historical
     // rows (blended into usage_units) stay as-is.
-    await pool.query(
-      `ALTER TABLE observe_events ADD COLUMN IF NOT EXISTS input_tokens INT`,
-    );
-    await pool.query(
-      `ALTER TABLE observe_events ADD COLUMN IF NOT EXISTS output_tokens INT`,
-    );
-    // Stripe-aware revenue — pricing model detected at sync time drives
-    // per-event revenue enrichment at ingest. Nullable for pre-migration rows.
-    await pool.query(
-      `ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS pricing_model TEXT`,
-    );
-    await pool.query(
-      `ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS pricing_tiers JSONB`,
-    );
-    await pool.query(
-      `ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS unit_price NUMERIC(12, 6)`,
-    );
-    // Track where the token split came from: 'direct' from SDK, 'estimated'
-    // backfilled from provider daily aggregates, NULL for pre-backfill rows.
-    await pool.query(
-      `ALTER TABLE observe_events ADD COLUMN IF NOT EXISTS tokens_source TEXT`,
-    );
+    await pool.query(`DO $$ BEGIN
+      ALTER TABLE observe_events ADD COLUMN IF NOT EXISTS input_tokens INT;
+      ALTER TABLE observe_events ADD COLUMN IF NOT EXISTS output_tokens INT;
+      ALTER TABLE observe_events ADD COLUMN IF NOT EXISTS tokens_source TEXT;
+    END $$`);
+    await pool.query(`DO $$ BEGIN
+      ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS pricing_model TEXT;
+      ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS pricing_tiers JSONB;
+      ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS unit_price NUMERIC(12, 6);
+    END $$`);
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS feature_pricing (
@@ -712,14 +705,10 @@ async function _doDbInit() {
       `CREATE INDEX IF NOT EXISTS idx_feature_definitions_user_id ON feature_definitions(user_id)`,
     );
 
-    // Add revenue_source column to observe_events if missing
-    await pool.query(`
-      ALTER TABLE observe_events ADD COLUMN IF NOT EXISTS revenue_source TEXT DEFAULT 'none'
-    `);
-
-    await pool.query(`
-      ALTER TABLE observe_events ADD COLUMN IF NOT EXISTS agent_id TEXT
-    `);
+    await pool.query(`DO $$ BEGIN
+      ALTER TABLE observe_events ADD COLUMN IF NOT EXISTS revenue_source TEXT DEFAULT 'none';
+      ALTER TABLE observe_events ADD COLUMN IF NOT EXISTS agent_id TEXT;
+    END $$`);
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS ai_insights (
@@ -1267,20 +1256,17 @@ async function _doDbInit() {
       console.error("Initial pricing refresh failed:", err),
     );
 
-    // One-time cleanup: purge stale sample data for users already on 'user' mode
-    try {
-      const contaminated = await pool.query(
-        `SELECT uds.user_id FROM user_data_status uds
-         WHERE uds.data_mode = 'user'
-         AND EXISTS (SELECT 1 FROM observe_events oe WHERE oe.user_id = uds.user_id AND oe.source = 'sample' LIMIT 1)`,
-      );
-      for (const row of contaminated.rows) {
-        await clearSampleData(pool, row.user_id);
-        console.warn(`Cleaned stale sample data for user ${row.user_id}`);
-      }
-    } catch (err) {
-      console.error("Sample data cleanup error (non-fatal):", err);
-    }
+    // Record schema version so future cold starts skip migrations
+    await pool.query(
+      `CREATE TABLE IF NOT EXISTS schema_version (version INT NOT NULL)`,
+    );
+    await pool.query(`DELETE FROM schema_version`);
+    await pool.query(`INSERT INTO schema_version (version) VALUES ($1)`, [
+      SCHEMA_VERSION,
+    ]);
+    console.warn(
+      `Schema migrations complete, set version to ${SCHEMA_VERSION}`,
+    );
   } catch (error) {
     console.error("Failed to connect to database:", error);
     throw error;
