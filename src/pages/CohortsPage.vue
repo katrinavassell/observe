@@ -6,6 +6,9 @@ import {
   discoverCohorts,
   getCustomers,
   createCustomCohort,
+  listCustomCohorts,
+  deleteCustomCohort,
+  getCustomCohort,
 } from "@/lib/api";
 import type {
   CohortCustomer,
@@ -13,6 +16,7 @@ import type {
   CohortSummary,
   DiscoveredCluster,
   CohortRule,
+  CustomCohort,
 } from "@/lib/api";
 import {
   AlertCircle,
@@ -26,6 +30,7 @@ import {
   ArrowRight,
   Plug,
   Plus,
+  Trash2,
   X,
 } from "lucide-vue-next";
 import {
@@ -161,12 +166,59 @@ async function handleCreate() {
         : { customer_ids: [...selectedCustomerIds.value] }),
     });
     queryClient.invalidateQueries({ queryKey: ["cohorts"] });
+    queryClient.invalidateQueries({ queryKey: ["custom-cohorts"] });
     createDialogOpen.value = false;
     toast.success(`Cohort "${newCohortName.value.trim()}" created`);
   } catch (err: any) {
     toast.error(err.message || "Failed to create cohort");
   } finally {
     creating.value = false;
+  }
+}
+
+// ── Custom cohorts list ─────────────────────────────────────────────────────
+
+const { data: customCohortsData } = useQuery({
+  queryKey: ["custom-cohorts"],
+  queryFn: listCustomCohorts,
+  enabled: isLoggedIn,
+});
+const customCohorts = computed(() => customCohortsData.value?.cohorts ?? []);
+const activeCustomCohortId = ref<number | null>(null);
+
+const { data: activeCustomCohortDetail } = useQuery({
+  queryKey: computed(() => ["custom-cohort", activeCustomCohortId.value]),
+  queryFn: () => getCustomCohort(activeCustomCohortId.value!),
+  enabled: computed(() => activeCustomCohortId.value !== null),
+});
+
+const customCohortMemberIds = computed(() => {
+  if (!activeCustomCohortDetail.value?.members) return null;
+  return new Set(
+    activeCustomCohortDetail.value.members.map((m) => m.customer_id),
+  );
+});
+
+function toggleCustomCohortFilter(id: number) {
+  if (activeCustomCohortId.value === id) {
+    activeCustomCohortId.value = null;
+  } else {
+    activeCustomCohortId.value = id;
+    activeCohort.value = null;
+  }
+}
+
+async function handleDeleteCohort(cohort: CustomCohort) {
+  if (!confirm(`Delete cohort "${cohort.name}"?`)) return;
+  try {
+    await deleteCustomCohort(cohort.id);
+    if (activeCustomCohortId.value === cohort.id) {
+      activeCustomCohortId.value = null;
+    }
+    queryClient.invalidateQueries({ queryKey: ["custom-cohorts"] });
+    toast.success(`Cohort "${cohort.name}" deleted`);
+  } catch (err: any) {
+    toast.error(err.message || "Failed to delete cohort");
   }
 }
 
@@ -362,6 +414,7 @@ const activeCohort = ref<CohortLabel | null>(null);
 function toggleCohortFilter(label: CohortLabel) {
   const newValue = activeCohort.value === label ? null : label;
   activeCohort.value = newValue;
+  activeCustomCohortId.value = null;
   window.posthog?.capture("cohort_filter_changed", { filter: newValue });
 }
 
@@ -418,13 +471,40 @@ function _selectCluster(cluster: DiscoveredCluster) {
 }
 
 // Cohort meta
-const cohortMeta: Record<CohortLabel, { label: string; color: string }> = {
-  unprofitable: { label: "Unprofitable", color: "bg-red-100 text-red-700" },
-  at_risk: { label: "At Risk", color: "bg-yellow-100 text-yellow-700" },
-  rising_cost: { label: "Rising Cost", color: "bg-orange-100 text-orange-700" },
-  inactive: { label: "Inactive", color: "bg-gray-100 text-gray-600" },
-  champion: { label: "Champion", color: "bg-green-100 text-green-700" },
-  healthy: { label: "Healthy", color: "bg-blue-100 text-blue-700" },
+const cohortMeta: Record<
+  CohortLabel,
+  { label: string; color: string; criteria: string }
+> = {
+  unprofitable: {
+    label: "Unprofitable",
+    color: "bg-red-100 text-red-700",
+    criteria: "Margin < 0%",
+  },
+  at_risk: {
+    label: "At Risk",
+    color: "bg-yellow-100 text-yellow-700",
+    criteria: "Margin 0–15%",
+  },
+  rising_cost: {
+    label: "Rising Cost",
+    color: "bg-orange-100 text-orange-700",
+    criteria: "Cost trending up over last 4 weeks",
+  },
+  inactive: {
+    label: "Inactive",
+    color: "bg-gray-100 text-gray-600",
+    criteria: "0 active days in last 30d",
+  },
+  champion: {
+    label: "Champion",
+    color: "bg-green-100 text-green-700",
+    criteria: "Margin ≥ 50% and ≥ 10 active days",
+  },
+  healthy: {
+    label: "Healthy",
+    color: "bg-blue-100 text-blue-700",
+    criteria: "Margin ≥ 15%, none of the above",
+  },
 };
 
 const mrrMeta: Record<string, { label: string; color: string }> = {
@@ -477,6 +557,9 @@ const filteredCustomers = computed(() => {
   let list = customers.value;
   if (activeCohort.value) {
     list = list.filter((c) => c.cohort === activeCohort.value);
+  }
+  if (customCohortMemberIds.value) {
+    list = list.filter((c) => customCohortMemberIds.value!.has(c.customer_id));
   }
   if (discoveredCustomerIds.value) {
     list = list.filter((c) => discoveredCustomerIds.value!.has(c.customer_id));
@@ -668,6 +751,7 @@ const excludedCount = computed(() => {
               ? cohortMeta[label].color + ' ring-2 ring-offset-1 ring-current'
               : 'bg-muted text-muted-foreground hover:bg-muted/80',
           ]"
+          :title="cohortMeta[label].criteria"
           @click="toggleCohortFilter(label)"
         >
           {{ cohortMeta[label].label }}
@@ -675,6 +759,41 @@ const excludedCount = computed(() => {
             >({{ summary[label].count }})</span
           >
         </button>
+
+        <!-- Custom cohort pills -->
+        <template v-if="customCohorts.length > 0">
+          <span class="w-px h-5 bg-border" />
+          <button
+            v-for="cc in customCohorts"
+            :key="'cc-' + cc.id"
+            class="group px-3 py-1.5 rounded-full text-xs font-medium transition-colors inline-flex items-center gap-1.5"
+            :class="[
+              activeCustomCohortId === cc.id
+                ? 'text-white ring-2 ring-offset-1'
+                : 'bg-muted text-muted-foreground hover:bg-muted/80',
+            ]"
+            :style="
+              activeCustomCohortId === cc.id
+                ? { backgroundColor: cc.color, ringColor: cc.color }
+                : {}
+            "
+            @click="toggleCustomCohortFilter(cc.id)"
+          >
+            <span
+              v-if="activeCustomCohortId !== cc.id"
+              class="w-2 h-2 rounded-full inline-block"
+              :style="{ backgroundColor: cc.color }"
+            />
+            {{ cc.name }}
+            <span class="ml-0.5 opacity-70">({{ cc.member_count }})</span>
+            <button
+              class="opacity-0 group-hover:opacity-100 hover:text-destructive transition-opacity -mr-1"
+              @click.stop="handleDeleteCohort(cc)"
+            >
+              <Trash2 class="h-3 w-3" />
+            </button>
+          </button>
+        </template>
 
         <!-- Column settings -->
         <div class="relative ml-auto">
