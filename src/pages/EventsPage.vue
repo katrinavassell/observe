@@ -545,7 +545,8 @@ function usageTooltip(event: ObserveEvent): string {
       >
         <Activity class="h-4 w-4" />
         <span v-if="eventsData" class="font-medium text-foreground"
-          >{{ eventsData.total.toLocaleString() }} total events</span
+          >{{ eventsData.total.toLocaleString() }} total
+          {{ eventsData.total === 1 ? "event" : "events" }}</span
         >
       </div>
     </div>

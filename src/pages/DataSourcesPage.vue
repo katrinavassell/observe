@@ -963,7 +963,7 @@ watch(
                 Step 2 ·
                 {{
                   hasEvents
-                    ? `${eventCount!.toLocaleString()} events received`
+                    ? `${eventCount!.toLocaleString()} ${eventCount === 1 ? "event" : "events"} received`
                     : "Listening for events…"
                 }}
               </h2>
