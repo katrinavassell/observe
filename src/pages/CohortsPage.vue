@@ -766,6 +766,11 @@ const excludedCount = computed(() => {
           <span v-if="summary[label]" class="ml-1 opacity-70"
             >({{ summary[label].count }})</span
           >
+          <span
+            v-if="activeCohort === label"
+            class="ml-1 opacity-60 font-normal"
+            >· {{ cohortMeta[label].criteria }}</span
+          >
         </button>
 
         <!-- Custom cohort pills -->
@@ -804,26 +809,7 @@ const excludedCount = computed(() => {
         </template>
 
         <!-- Column settings -->
-        <div class="relative ml-auto flex items-center gap-3">
-          <span v-if="activeCohort" class="text-xs text-muted-foreground">
-            {{ cohortMeta[activeCohort].criteria }}
-          </span>
-          <span
-            v-else-if="activeCustomCohortId && activeCustomCohortDetail"
-            class="text-xs text-muted-foreground"
-          >
-            <template
-              v-if="
-                activeCustomCohortDetail.cohort_type === 'dynamic' &&
-                activeCustomCohortDetail.rules
-              "
-            >
-              {{ activeCustomCohortDetail.rules.map(formatRule).join(", ") }}
-            </template>
-            <template v-else>
-              {{ activeCustomCohortDetail.member_count }} members (static)
-            </template>
-          </span>
+        <div class="relative ml-auto">
           <Button
             variant="outline"
             size="sm"
