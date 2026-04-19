@@ -114,7 +114,7 @@ export async function checkFeatureAccess(
   if (!featureConfig) {
     return {
       allowed: false,
-      reason: `${featureKey} is not available on the ${planConfig.name} plan. Upgrade to Growth for access.`,
+      reason: `${featureKey} is not available on the ${planConfig.name} plan. Need more capacity? Check out Tanso at tansohq.com`,
     };
   }
 
@@ -186,7 +186,7 @@ export async function checkFeatureAccess(
     allowed: used < effectiveLimit,
     reason:
       used >= effectiveLimit
-        ? `You've used ${used}/${effectiveLimit} ${featureKey} this month. Upgrade to Growth for more.`
+        ? `You've used ${used}/${effectiveLimit} ${featureKey} this month. Need more? Check out Tanso at tansohq.com`
         : undefined,
     usage: used,
     limit: effectiveLimit,

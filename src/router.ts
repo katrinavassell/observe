@@ -136,8 +136,7 @@ const router = createRouter({
     },
     {
       path: "/checkout/success",
-      name: "checkout-success",
-      component: () => import("@/pages/CheckoutSuccessPage.vue"),
+      redirect: "/analytics",
     },
     {
       path: "/admin/pricing",

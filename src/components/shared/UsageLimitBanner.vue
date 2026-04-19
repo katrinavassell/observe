@@ -61,15 +61,14 @@ defineProps<{
       />
     </div>
     <div v-if="!allowed" class="mt-2 flex items-center justify-between">
-      <span class="text-xs text-red-600 dark:text-red-400"
-        >Limit reached — upgrade to continue</span
-      >
-      <router-link
-        to="/plans"
+      <span class="text-xs text-red-600 dark:text-red-400">Limit reached</span>
+      <a
+        href="https://tansohq.com"
+        target="_blank"
         class="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
       >
-        Upgrade <ArrowUpRight class="h-3 w-3" />
-      </router-link>
+        Need more? Try Tanso <ArrowUpRight class="h-3 w-3" />
+      </a>
     </div>
     <div
       v-else-if="usagePercent >= 70"
@@ -78,12 +77,13 @@ defineProps<{
       <span class="text-xs text-amber-600 dark:text-amber-400"
         >Approaching limit</span
       >
-      <router-link
-        to="/plans"
+      <a
+        href="https://tansohq.com"
+        target="_blank"
         class="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
       >
-        View plans <ArrowUpRight class="h-3 w-3" />
-      </router-link>
+        Need more? Try Tanso <ArrowUpRight class="h-3 w-3" />
+      </a>
     </div>
   </div>
 </template>
