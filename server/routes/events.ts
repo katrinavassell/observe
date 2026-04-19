@@ -12,6 +12,11 @@ import {
 import { checkAlerts, checkCustomerAlerts } from "./alerts.js";
 import { checkFeatureAccess } from "../billing.js";
 import { inferModelProvider } from "../lib/models.js";
+import {
+  type SubMeta,
+  tierUnitPrice,
+  enrichRevenueFromSub,
+} from "../lib/enrich-revenue.js";
 
 type ComputeInferenceProfilesFn = (userId: string) => Promise<number>;
 
@@ -978,12 +983,6 @@ export function createEventsRoutes(
         const customerIds = [
           ...new Set(validEvents.map((e) => e.customerReferenceId)),
         ];
-        interface SubMeta {
-          mrr: number;
-          pricingModel: "flat" | "tiered" | "metered" | "hybrid" | null;
-          pricingTiers: unknown | null;
-          unitPrice: number | null;
-        }
         const subByCustomer = new Map<string, SubMeta>();
         if (customerIds.length > 0 && accountId != null) {
           try {
@@ -1044,43 +1043,6 @@ export function createEventsRoutes(
           }
         }
 
-        // Resolve the per-unit price for a given month-to-date usage using a
-        // Stripe "tiers" payload. Returns dollars per unit. Falls back to the
-        // top tier when usage exceeds the largest `up_to`.
-        function tierUnitPrice(
-          tiers: unknown,
-          mtdUsage: number,
-        ): number | null {
-          if (!Array.isArray(tiers) || tiers.length === 0) return null;
-          for (const t of tiers) {
-            const row = t as {
-              up_to: number | null | "inf";
-              unit_amount?: number | null;
-              unit_amount_decimal?: string | null;
-            };
-            const cap =
-              row.up_to === null || row.up_to === "inf"
-                ? Infinity
-                : Number(row.up_to);
-            if (mtdUsage < cap) {
-              const amount =
-                row.unit_amount_decimal != null
-                  ? parseFloat(row.unit_amount_decimal)
-                  : (row.unit_amount ?? 0);
-              return amount / 100;
-            }
-          }
-          const last = tiers[tiers.length - 1] as {
-            unit_amount?: number | null;
-            unit_amount_decimal?: string | null;
-          };
-          const amount =
-            last.unit_amount_decimal != null
-              ? parseFloat(last.unit_amount_decimal)
-              : (last.unit_amount ?? 0);
-          return amount / 100;
-        }
-
         // Build batch insert
         const values: unknown[] = [];
         const placeholders: string[] = [];
@@ -1117,50 +1079,10 @@ export function createEventsRoutes(
             const evtUsage =
               evt.usageUnits ??
               (evt.inputTokens || 0) + (evt.outputTokens || 0);
-
-            // Per-event revenue should ONLY be the portion that's genuinely
-            // attributable to this event. Flat-subscription MRR belongs to the
-            // customer, not individual events — allocating MRR/30 per event
-            // produced misleading rows like "$9.97 revenue / $0.004 cost /
-            // 100% margin." For flat/allocated cases we zero the per-event
-            // revenue and tag revenue_source='subscription'; the subscription
-            // MRR is still counted at customer level via the monthly_aggregate
-            // stripe row that sync emits per subscription per period.
-            if (meta.pricingModel === "metered" && meta.unitPrice != null) {
-              revenue = meta.unitPrice * evtUsage;
-              revenueSource = "per_unit";
-            } else if (
-              meta.pricingModel === "tiered" &&
-              meta.pricingTiers != null
-            ) {
-              const mtd = mtdUsageByCustomer.get(evt.customerReferenceId) ?? 0;
-              const tierPrice = tierUnitPrice(meta.pricingTiers, mtd);
-              if (tierPrice != null) {
-                revenue = tierPrice * evtUsage;
-                revenueSource = "tiered";
-              } else {
-                revenue = 0;
-                revenueSource = "subscription";
-              }
-            } else if (meta.pricingModel === "hybrid") {
-              // Metered overage is real per-event revenue; flat base portion
-              // belongs to the customer, not this event.
-              const meteredPortion =
-                meta.unitPrice != null ? meta.unitPrice * evtUsage : 0;
-              if (meteredPortion > 0) {
-                revenue = meteredPortion;
-                revenueSource = "hybrid";
-              } else {
-                revenue = 0;
-                revenueSource = "subscription";
-              }
-            } else {
-              // flat (or unknown pricing_model on a legacy sub) — MRR belongs
-              // to the customer, not this event. Customer-level aggregates
-              // still sum the monthly_aggregate stripe row for accurate totals.
-              revenue = 0;
-              revenueSource = "subscription";
-            }
+            const mtd = mtdUsageByCustomer.get(evt.customerReferenceId) ?? 0;
+            const enriched = enrichRevenueFromSub(meta, evtUsage, mtd);
+            revenue = enriched.revenue;
+            revenueSource = enriched.revenueSource;
           }
 
           // Only mark tokens_source='direct' when the SDK actually provided

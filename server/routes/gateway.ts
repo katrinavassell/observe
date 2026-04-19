@@ -11,6 +11,7 @@ import type { StreamSink } from "../providers/types.js";
 import { calculateCostFromTokens } from "../model-pricing.js";
 import { decryptApiKey, encryptApiKey } from "../stripe-client.js";
 import { checkAlerts } from "./alerts.js";
+import { enrichRevenue } from "../lib/enrich-revenue.js";
 
 async function resolveAccountIdForUser(
   pool: Pool,
@@ -635,34 +636,13 @@ export function createGatewayRoutes(
     const totalTokens = inputTokens + outputTokens;
     const accountId = await resolveAccountIdForUser(pool, userId);
 
-    // Revenue enrichment
-    let revenue = 0;
-    let revenueSource = "none";
-    try {
-      const fpResult = await pool.query(
-        "SELECT revenue_per_unit FROM feature_pricing WHERE account_id = $1 AND feature_key = $2",
-        [accountId, featureKey],
-      );
-      if (fpResult.rows.length > 0) {
-        revenue = parseFloat(fpResult.rows[0].revenue_per_unit);
-        revenueSource = "feature_pricing";
-      } else if (
-        customerId &&
-        customerId !== "unknown" &&
-        customerId !== "default"
-      ) {
-        const mrrResult = await pool.query(
-          "SELECT SUM(mrr_override) as mrr FROM subscriptions WHERE account_id = $1 AND is_active = true AND customer_id = $2",
-          [accountId, customerId],
-        );
-        if (mrrResult.rows[0]?.mrr) {
-          revenue = parseFloat(mrrResult.rows[0].mrr) / 30;
-          revenueSource = "mrr_allocation";
-        }
-      }
-    } catch (err) {
-      console.error("Gateway revenue enrichment failed:", err);
-    }
+    const { revenue, revenueSource } = await enrichRevenue(
+      pool,
+      accountId,
+      customerId,
+      featureKey,
+      totalTokens,
+    );
 
     await pool.query(
       `INSERT INTO observe_events (
