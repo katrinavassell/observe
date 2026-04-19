@@ -143,8 +143,8 @@ async function sendUsageLimitEmail(
 
   const body =
     threshold === 80
-      ? `<p>You've used ${used.toLocaleString()} of your ${limit.toLocaleString()} monthly events on Observe.</p><p>To keep tracking without interruption, upgrade to Growth for unlimited events.</p><p><a href="https://observemetrics.com/plans">Upgrade now</a></p>`
-      : `<p>You've reached your ${limit.toLocaleString()} monthly event limit on Observe.</p><p>New events will be rejected until next month. Upgrade to Growth for unlimited events.</p><p><a href="https://observemetrics.com/plans">Upgrade now</a></p>`;
+      ? `<p>You've used ${used.toLocaleString()} of your ${limit.toLocaleString()} monthly events on Observe.</p><p>To keep tracking without interruption, upgrade to Growth for unlimited events.</p><p><a href="https://observe.tansohq.com/plans">Upgrade now</a></p>`
+      : `<p>You've reached your ${limit.toLocaleString()} monthly event limit on Observe.</p><p>New events will be rejected until next month. Upgrade to Growth for unlimited events.</p><p><a href="https://observe.tansohq.com/plans">Upgrade now</a></p>`;
 
   usageAlertsSent.add(key);
 

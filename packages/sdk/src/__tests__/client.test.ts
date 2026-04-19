@@ -29,7 +29,7 @@ describe("TansoObserve", () => {
     await vi.advanceTimersByTimeAsync(0);
 
     expect(fetch).toHaveBeenCalledWith(
-      "https://app.tanso.io/api/events/ingest",
+      "https://observe.tansohq.com/api/events/ingest",
       expect.objectContaining({
         method: "POST",
         headers: expect.objectContaining({

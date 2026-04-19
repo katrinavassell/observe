@@ -38,7 +38,7 @@ If you're running an AI product and you're losing money on a subset of customers
 | **Team collaboration** | Invite team members with admin/viewer roles |
 | **Guest preview** | Logged-out visitors see a pre-populated dashboard rendered entirely client-side — sample data never touches the database |
 | **Source badges** | See where each data point came from (Gateway, SDK, CSV, Stripe) |
-| **llms.txt install** | Point your AI agent at `observemetrics.com/llms.txt` + your API key and it'll wire up Observe in your repo |
+| **llms.txt install** | Point your AI agent at `observe.tansohq.com/llms.txt` + your API key and it'll wire up Observe in your repo |
 
 ---
 
@@ -97,7 +97,7 @@ from openai import OpenAI
 
 client = OpenAI(
     api_key="sk-...",                                  # your real provider key
-    base_url="https://observemetrics.com/v1",          # or your self-hosted URL
+    base_url="https://observe.tansohq.com/v1",          # or your self-hosted URL
     default_headers={"Observe-Key": "obs_..."},        # your Observe key from Data Sources
 )
 
@@ -112,7 +112,7 @@ You can also route to a self-hosted instance: swap `base_url` to `http://localho
 ```python
 client = OpenAI(
     api_key="sk-...",
-    base_url="https://observemetrics.com/v1",
+    base_url="https://observe.tansohq.com/v1",
     default_headers={
         "Observe-Key":      "obs_...",
         "Observe-Customer": user.stripe_customer_id,  # cus_...
@@ -131,7 +131,7 @@ import anthropic
 
 client = anthropic.Anthropic(
     api_key="sk-ant-...",
-    base_url="https://observemetrics.com",
+    base_url="https://observe.tansohq.com",
     default_headers={"Observe-Key": "obs_..."},
 )
 ```
@@ -186,10 +186,10 @@ await openai.chat.completions.create(
 
 ### Install with your AI agent
 
-Observe exposes an [`llms.txt`](https://observemetrics.com/llms.txt) optimized for LLM consumption. Paste this into Cursor / Claude Code / Copilot and it'll wire up Observe in your repo automatically:
+Observe exposes an [`llms.txt`](https://observe.tansohq.com/llms.txt) optimized for LLM consumption. Paste this into Cursor / Claude Code / Copilot and it'll wire up Observe in your repo automatically:
 
 ```
-Install Observe by Tanso. Docs: https://observemetrics.com/llms.txt
+Install Observe by Tanso. Docs: https://observe.tansohq.com/llms.txt
 My API key: obs_...
 Wrap all OpenAI/Anthropic calls to report cost, customer, and feature.
 ```
@@ -201,7 +201,7 @@ Wrap all OpenAI/Anthropic calls to report cost, customer, and feature.
 For providers without a gateway, or when you need to attach revenue data, send events directly.
 
 ```bash
-curl -X POST https://observemetrics.com/events/ingest \
+curl -X POST https://observe.tansohq.com/events/ingest \
   -H "Authorization: Bearer obs_..." \
   -H "Content-Type: application/json" \
   -d '{

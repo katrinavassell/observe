@@ -87,7 +87,7 @@ async function analyzeWithClaude(data: {
     apiKey: process.env.ANTHROPIC_API_KEY,
   });
 
-  const prompt = `You are auditing PostHog data from observemetrics.com (a developer-focused LLM billing/observability product) for the last 24 hours. You know:
+  const prompt = `You are auditing PostHog data from observe.tansohq.com (a developer-focused LLM billing/observability product) for the last 24 hours. You know:
 
 - It's a new product; volumes are low. Zero users one day is normal, not alarming.
 - The product has pages: /data-sources (API key + install prompt), /events, /customers, /alerts, /features, /plans, /team, /onboarding, /signup, /login, /join/:token.

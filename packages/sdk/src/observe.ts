@@ -33,7 +33,7 @@ let _featureKey: string | null = null;
 let _agentId: string | null = null;
 let _traceContext: TraceContext | null = null;
 
-const DEFAULT_BASE_URL = "https://app.tanso.io";
+const DEFAULT_BASE_URL = "https://observe.tansohq.com";
 
 function assertConfigured(): { apiKey: string; baseUrl: string } {
   if (!_config)

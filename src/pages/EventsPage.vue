@@ -1217,11 +1217,11 @@ function usageTooltip(event: ObserveEvent): string {
                       <p class="text-xs">
                         Full guidance:
                         <a
-                          href="https://observemetrics.com/llms.txt"
+                          href="https://observe.tansohq.com/llms.txt"
                           target="_blank"
                           rel="noopener"
                           class="underline"
-                          >observemetrics.com/llms.txt</a
+                          >observe.tansohq.com/llms.txt</a
                         >
                       </p>
                     </div>

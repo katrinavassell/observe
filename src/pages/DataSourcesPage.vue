@@ -178,7 +178,7 @@ const loomEmbedUrl = ref("");
 function buildAiInstallPrompt(apiKey: string) {
   return `Install Observe by Tanso in this repo so every LLM call is tracked with cost, model, customer, and feature.
 
-READ THIS FIRST — full reference: https://observemetrics.com/llms.txt
+READ THIS FIRST — full reference: https://observe.tansohq.com/llms.txt
 It documents three integration paths and the full POST body schema. Use it as the source of truth; do not improvise.
 
 My Observe API key: ${apiKey}
@@ -201,7 +201,7 @@ Find every place the app calls OpenAI / Anthropic / another LLM provider. After 
 const started = Date.now()
 const res = await openai.chat.completions.create({ model: 'gpt-4o-mini', messages })
 
-fetch('https://observemetrics.com/api/events/ingest', {
+fetch('https://observe.tansohq.com/api/events/ingest', {
   method: 'POST',
   headers: {
     'Authorization': \`Bearer \${process.env.OBSERVE_API_KEY!}\`,
@@ -234,7 +234,7 @@ Rules for Path 1:
 
 ## Step 3 — only if the user asks for auto-instrumentation (Path 3)
 
-**Do not do this by default.** Only install the SDK if the user explicitly says "I want auto-instrumentation" or "I don't want to add a fetch call to every call site" AND they accept that wrapping routes every LLM call through \`observemetrics.com\`.
+**Do not do this by default.** Only install the SDK if the user explicitly says "I want auto-instrumentation" or "I don't want to add a fetch call to every call site" AND they accept that wrapping routes every LLM call through \`observe.tansohq.com\`.
 
 If they do:
 1. \`npm install @tansohq/observe\` — with the \`hq\`. The package \`@tanso/observe\` (no hq) does NOT exist on npm. If your install command fails to resolve, STOP and tell the user; do not substitute a similar-looking package.
@@ -255,7 +255,7 @@ If they do:
 
 ## Verify
 
-After wiring up, run the app once, make one LLM call, and confirm the event appears at https://observemetrics.com/events.`;
+After wiring up, run the app once, make one LLM call, and confirm the event appears at https://observe.tansohq.com/events.`;
 }
 
 async function copyAiInstallPrompt() {

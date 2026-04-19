@@ -11,7 +11,7 @@ from openai import OpenAI
 
 client = OpenAI(
     api_key="sk-...",
-    base_url="https://app.tanso.io/v1",     # your Observe instance
+    base_url="https://observe.tansohq.com/v1",     # your Observe instance
     default_headers={"Observe-Key": "obs_..."}, # SDK key from Data Sources
 )
 
@@ -29,7 +29,7 @@ import OpenAI from 'openai'
 
 const client = new OpenAI({
   apiKey: 'sk-...',
-  baseURL: 'https://app.tanso.io/v1',
+  baseURL: 'https://observe.tansohq.com/v1',
   defaultHeaders: { 'Observe-Key': 'obs_...' },
 })
 ```
@@ -41,7 +41,7 @@ import anthropic
 
 client = anthropic.Anthropic(
     api_key="sk-ant-...",
-    base_url="https://app.tanso.io",
+    base_url="https://observe.tansohq.com",
     default_headers={"Observe-Key": "obs_..."},
 )
 ```
@@ -57,7 +57,7 @@ When you're ready to track costs per customer and feature, add two more headers:
 ```python
 client = OpenAI(
     api_key="sk-...",
-    base_url="https://app.tanso.io/v1",
+    base_url="https://observe.tansohq.com/v1",
     default_headers={
         "Observe-Key":      "obs_...",
         "Observe-Customer": "cus_acme",      # your customer ID
