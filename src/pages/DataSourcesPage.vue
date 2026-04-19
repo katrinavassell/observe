@@ -577,22 +577,133 @@ watch(
       </p>
     </div>
 
-    <!-- Guest CTA — page is viewable but the actionable steps need an account -->
-    <Card v-if="!isLoggedIn" class="border-primary/40 bg-primary/5">
-      <CardContent class="p-6 text-center space-y-3">
-        <h2 class="font-semibold text-lg">Sign in to connect data sources</h2>
-        <p class="text-sm text-muted-foreground max-w-md mx-auto">
-          Generate an SDK key, copy the install prompt, and verify events — all
-          in 30 seconds. Free to start.
-        </p>
-        <div class="flex justify-center gap-2 pt-1">
-          <Button @click="router.push('/signup')">Sign up free</Button>
-          <Button variant="outline" @click="router.push('/login')">
-            Log in
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
+    <!-- Guest: sign-in banner + preview of integration steps -->
+    <template v-if="!isLoggedIn">
+      <Card class="border-primary/40 bg-primary/5">
+        <CardContent
+          class="p-5 flex items-center justify-between gap-4 flex-wrap"
+        >
+          <div>
+            <h2 class="font-semibold text-base">Sign up to start tracking</h2>
+            <p class="text-sm text-muted-foreground">
+              Get an API key, paste one prompt, see events in 30 seconds. Free.
+            </p>
+          </div>
+          <div class="flex gap-2">
+            <Button @click="router.push('/signup')">Sign up free</Button>
+            <Button variant="outline" @click="router.push('/login')">
+              Log in
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      <!-- Preview: How it works -->
+      <div class="space-y-4">
+        <h2
+          class="text-sm font-semibold text-muted-foreground uppercase tracking-wider"
+        >
+          How it works
+        </h2>
+
+        <!-- Step 1 preview -->
+        <Card class="border-muted">
+          <CardContent class="p-5 space-y-3">
+            <div class="flex items-center gap-2">
+              <div
+                class="flex items-center justify-center w-6 h-6 rounded-full bg-primary text-primary-foreground text-xs font-bold"
+              >
+                1
+              </div>
+              <h3 class="font-semibold">Copy one prompt</h3>
+            </div>
+            <p class="text-sm text-muted-foreground">
+              Sign up, click "Copy install prompt", and paste it into Cursor,
+              Claude Code, or Copilot. The prompt includes your API key and
+              tells the agent exactly how to wire Observe into your repo. No
+              config, no SDK, no code to write.
+            </p>
+            <div class="rounded-lg border bg-muted/30 p-4 space-y-3">
+              <div class="flex items-center gap-3 text-sm">
+                <div
+                  class="flex items-center justify-center w-5 h-5 rounded-full bg-primary/10 text-primary text-[10px] font-bold shrink-0"
+                >
+                  1
+                </div>
+                <span>Sign up and get your API key (auto-generated)</span>
+              </div>
+              <div class="flex items-center gap-3 text-sm">
+                <div
+                  class="flex items-center justify-center w-5 h-5 rounded-full bg-primary/10 text-primary text-[10px] font-bold shrink-0"
+                >
+                  2
+                </div>
+                <span
+                  >Click
+                  <span class="font-medium">"Copy install prompt"</span></span
+                >
+              </div>
+              <div class="flex items-center gap-3 text-sm">
+                <div
+                  class="flex items-center justify-center w-5 h-5 rounded-full bg-primary/10 text-primary text-[10px] font-bold shrink-0"
+                >
+                  3
+                </div>
+                <span
+                  >Paste into your AI coding agent. It handles the rest.</span
+                >
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <!-- Step 2 preview -->
+        <Card class="border-muted">
+          <CardContent class="p-5">
+            <div class="flex items-center gap-3">
+              <div
+                class="flex items-center justify-center w-6 h-6 rounded-full bg-primary text-primary-foreground text-xs font-bold"
+              >
+                2
+              </div>
+              <div>
+                <h3 class="font-semibold">Events flow in automatically</h3>
+                <p class="text-sm text-muted-foreground">
+                  Run your app, make one LLM call, and Observe picks it up.
+                  Cost, model, customer, and feature are all tracked per event.
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <!-- Step 3 preview -->
+        <Card class="border-muted">
+          <CardContent class="p-5">
+            <div class="flex items-center gap-3">
+              <div
+                class="flex items-center justify-center w-6 h-6 rounded-full bg-muted text-muted-foreground text-xs font-bold"
+              >
+                3
+              </div>
+              <div>
+                <h3 class="font-semibold">
+                  Connect revenue
+                  <span class="text-xs font-normal text-muted-foreground"
+                    >(optional)</span
+                  >
+                </h3>
+                <p class="text-sm text-muted-foreground">
+                  Link Stripe to see margins per feature and customer. Also
+                  supports OpenAI and Anthropic dashboard syncs for historical
+                  cost data.
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </template>
 
     <!-- ================================================================== -->
     <!-- STEP 1: Install — hero prompt + API key                            -->
@@ -727,9 +838,9 @@ watch(
               </div>
               <div class="flex items-center gap-1.5 shrink-0">
                 <Button
-                  variant="ghost"
+                  variant="outline"
                   size="sm"
-                  class="h-9 w-9 p-0 text-muted-foreground"
+                  class="h-8 text-xs"
                   :disabled="!key.full_key"
                   :title="
                     !key.full_key
@@ -742,28 +853,30 @@ watch(
                 >
                   <Check
                     v-if="copiedPrefixId === key.id"
-                    class="h-[18px] w-[18px] text-success"
+                    class="h-3.5 w-3.5 mr-1"
                   />
-                  <Copy v-else class="h-[18px] w-[18px]" />
+                  <Copy v-else class="h-3.5 w-3.5 mr-1" />
+                  {{ copiedPrefixId === key.id ? "Copied" : "Copy" }}
                 </Button>
                 <Button
                   variant="outline"
                   size="sm"
-                  class="h-9 text-sm"
+                  class="h-8 text-xs"
                   title="Rotate — invalidates the old key and shows the new one"
                   @click="handleResetKey(key.id)"
                 >
-                  <RefreshCw class="h-4 w-4 mr-1.5" />
+                  <RefreshCw class="h-3.5 w-3.5 mr-1" />
                   Rotate
                 </Button>
                 <Button
-                  variant="ghost"
+                  variant="outline"
                   size="sm"
-                  class="h-9 w-9 p-0 text-muted-foreground hover:text-destructive"
+                  class="h-8 text-xs text-muted-foreground hover:text-destructive"
                   title="Delete key"
                   @click="handleRevokeKey(key.id)"
                 >
-                  <Trash2 class="h-[18px] w-[18px]" />
+                  <Trash2 class="h-3.5 w-3.5 mr-1" />
+                  Delete
                 </Button>
               </div>
             </div>
@@ -868,6 +981,7 @@ watch(
               v-if="hasEvents"
               variant="outline"
               size="sm"
+              class="h-8 text-xs"
               @click="router.push('/events')"
             >
               View events
@@ -875,8 +989,9 @@ watch(
             </Button>
             <Button
               v-if="hasEvents"
-              variant="ghost"
+              variant="outline"
               size="sm"
+              class="h-8 text-xs"
               @click="router.push('/features')"
             >
               Label features
@@ -890,13 +1005,6 @@ watch(
     <!-- STEP 3: Connect revenue (Stripe)                                   -->
     <!-- ================================================================== -->
     <div v-if="isLoggedIn" class="space-y-2">
-      <h2
-        class="text-sm font-semibold text-muted-foreground uppercase tracking-wider"
-      >
-        Step 3 · Connect revenue
-        <span class="font-normal normal-case">(optional)</span>
-      </h2>
-
       <Card id="stripe-section" class="border-[#635bff]/20">
         <CardContent class="p-6">
           <template v-if="!stripeStatus.connected">
@@ -909,7 +1017,7 @@ watch(
                 </div>
                 <div>
                   <div class="flex items-center gap-2">
-                    <h3 class="font-semibold">Connect Stripe</h3>
+                    <h3 class="font-semibold">Step 3 · Connect Stripe</h3>
                     <span
                       class="text-[10px] font-medium bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full"
                       >Revenue data</span

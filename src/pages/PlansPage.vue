@@ -251,5 +251,77 @@ const repoUrl = "https://github.com/katrinalaszlo/observe";
         </CardContent>
       </Card>
     </div>
+
+    <!-- Usage section -->
+    <div v-if="isLoggedIn" class="max-w-4xl space-y-4">
+      <h2
+        class="text-sm font-semibold text-muted-foreground uppercase tracking-wider"
+      >
+        Usage this month
+      </h2>
+      <Card>
+        <CardContent class="p-6 space-y-4">
+          <template v-if="usageItems.length > 0">
+            <div
+              v-for="item in usageItems"
+              :key="item.label"
+              class="space-y-1.5"
+            >
+              <div class="flex items-center justify-between text-sm">
+                <span class="font-medium">{{ item.label }}</span>
+                <span class="tabular-nums text-muted-foreground">
+                  {{ item.used.toLocaleString() }}
+                  <template v-if="item.limit">
+                    / {{ item.limit.toLocaleString() }}
+                  </template>
+                  <template v-else> (unlimited) </template>
+                </span>
+              </div>
+              <div
+                v-if="item.limit"
+                class="h-2 bg-muted rounded-full overflow-hidden"
+              >
+                <div
+                  class="h-full rounded-full transition-all"
+                  :class="
+                    item.pct >= 90
+                      ? 'bg-destructive'
+                      : item.pct >= 80
+                        ? 'bg-warning'
+                        : 'bg-primary'
+                  "
+                  :style="{ width: item.pct + '%' }"
+                />
+              </div>
+              <div v-else class="h-2 bg-primary/20 rounded-full" />
+            </div>
+          </template>
+          <p v-else class="text-sm text-muted-foreground text-center py-2">
+            Usage data loading...
+          </p>
+          <p class="text-xs text-muted-foreground pt-1">
+            Limits reset on the 1st of each month. Self-host for unlimited
+            usage.
+          </p>
+        </CardContent>
+      </Card>
+    </div>
+
+    <!-- Not logged in -->
+    <div v-if="!isLoggedIn" class="max-w-4xl">
+      <Card class="border-primary/40 bg-primary/5">
+        <CardContent class="p-5 text-center space-y-3">
+          <p class="font-semibold text-sm">Sign in to track your usage</p>
+          <div class="flex justify-center gap-2">
+            <Button size="sm" @click="router.push('/signup')"
+              >Sign up free</Button
+            >
+            <Button size="sm" variant="outline" @click="router.push('/login')"
+              >Log in</Button
+            >
+          </div>
+        </CardContent>
+      </Card>
+    </div>
   </div>
 </template>
