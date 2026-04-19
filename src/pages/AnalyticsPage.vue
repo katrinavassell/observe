@@ -8,15 +8,12 @@ import {
   getEventsByCustomer,
   getEventsByAgent,
   getMrrMovements,
-  listInsights,
-  generateInsights,
   getUsageLimits,
   listFeaturePricing,
   getSourceBreakdown,
 } from "@/lib/api";
 import type {} from "@/lib/api";
-import { AlertCircle, Plug, Sparkles } from "lucide-vue-next";
-import Sheet from "@/components/ui/sheet.vue";
+import { AlertCircle, Plug } from "lucide-vue-next";
 import { Card, Skeleton, Button } from "@/components/ui";
 import SourceBadge from "@/components/shared/SourceBadge.vue";
 import { formatCurrency as fmt, formatPct as fmtPct } from "@/lib/format";
@@ -34,45 +31,10 @@ const { isLoggedIn } = useAuth();
 type Tab = "feature" | "model" | "customer" | "agent" | "mrr";
 const activeTab = ref<Tab>("feature");
 
-// Insights drawer state
-const insightsOpen = ref(false);
-const isGenerating = ref(false);
-const generateError = ref<string | null>(null);
-
-const { data: insightsData, refetch: refetchInsights } = useQuery({
-  queryKey: ["insights"],
-  queryFn: listInsights,
-  enabled: computed(() => insightsOpen.value),
-});
-
 const { data: usageLimits } = useQuery({
   queryKey: ["usage-limits"],
   queryFn: getUsageLimits,
 });
-
-const insightsAllowed = computed(
-  () => usageLimits.value?.ai_insights?.allowed !== false,
-);
-const insightsUsage = computed(
-  () => usageLimits.value?.ai_insights?.usage ?? null,
-);
-
-async function handleGenerate() {
-  isGenerating.value = true;
-  generateError.value = null;
-  try {
-    await generateInsights();
-    window.posthog?.capture("ai_insights_generated");
-    window.localStorage.setItem("observe:insights_generated", "true");
-    await refetchInsights();
-    // Refresh usage limits
-    queryClient.invalidateQueries({ queryKey: ["usage-limits"] });
-  } catch (e: any) {
-    generateError.value = e?.message || "Failed to generate insights";
-  } finally {
-    isGenerating.value = false;
-  }
-}
 
 function marginBarClass(margin_pct: number | null): string {
   if (margin_pct == null) return "bg-foreground";
@@ -86,53 +48,6 @@ function marginTextClass(margin_pct: number | null): string {
   if (margin_pct < 0) return "text-destructive";
   if (margin_pct < 40) return "text-amber-600";
   return "text-success";
-}
-
-function severityColor(severity: string) {
-  switch (severity) {
-    case "critical":
-      return "border-destructive/30 bg-destructive/5 text-destructive";
-    case "warning":
-      return "border-warning/30 bg-warning/5 text-warning";
-    case "positive":
-      return "border-success/30 bg-success/5 text-success";
-    default:
-      return "border-border bg-card text-foreground";
-  }
-}
-
-function severityBadge(severity: string) {
-  switch (severity) {
-    case "critical":
-      return "bg-destructive/10 text-destructive";
-    case "warning":
-      return "bg-warning/10 text-warning";
-    case "positive":
-      return "bg-success/10 text-success";
-    default:
-      return "bg-muted text-muted-foreground";
-  }
-}
-
-function insightTypeLabel(type: string) {
-  switch (type) {
-    case "pricing_recommendation":
-      return "Pricing";
-    case "usage_pricing_signal":
-      return "Usage pattern";
-    case "model_routing":
-      return "Model routing";
-    case "margin_alert":
-      return "Margin";
-    case "customer_risk":
-      return "Customer";
-    case "cost_optimization":
-      return "Cost";
-    case "pricing_opportunity":
-      return "Pricing";
-    default:
-      return type.replace(/_/g, " ");
-  }
 }
 
 // Source breakdown for data attribution
@@ -356,28 +271,6 @@ function retry() {
   queryClient.invalidateQueries({ queryKey: ["events-by-model"] });
   queryClient.invalidateQueries({ queryKey: ["events-by-customer"] });
 }
-
-const insightCategories = [
-  {
-    title: "Margin analysis",
-    description: "Which features cost more than they earn, and by how much.",
-  },
-  {
-    title: "Model cost comparison",
-    description:
-      "Which AI models you spend the most on and cheaper alternatives.",
-  },
-  {
-    title: "Customer profitability",
-    description:
-      "Which customers cost the most to serve relative to their revenue.",
-  },
-  {
-    title: "Historic spend estimation",
-    description:
-      "Cross-references your SDK data with CSV uploads and provider imports to estimate where past spend went.",
-  },
-];
 </script>
 
 <template>
@@ -398,152 +291,6 @@ const insightCategories = [
         </div>
       </div>
     </div>
-
-    <!-- AI Insights Drawer -->
-    <Sheet
-      :open="insightsOpen"
-      side="right"
-      @update:open="insightsOpen = $event"
-    >
-      <div class="w-full sm:w-[420px] p-6 space-y-5">
-        <div>
-          <div class="flex items-center gap-2 mb-1">
-            <Sparkles class="h-5 w-5 text-primary" />
-            <h2 class="text-lg font-semibold">AI Insights</h2>
-          </div>
-          <p class="text-sm text-muted-foreground">
-            AI analyzes your cost and revenue data to find margin issues,
-            pricing opportunities, and model optimizations. Insights improve as
-            you send more events.
-          </p>
-        </div>
-
-        <!-- Generated insights (show first when they exist) -->
-        <div v-if="insightsData && insightsData.length > 0" class="space-y-3">
-          <div
-            v-for="insight in insightsData"
-            :key="insight.id"
-            class="rounded-lg border p-3 space-y-1.5"
-            :class="severityColor(insight.severity)"
-          >
-            <div class="flex items-center gap-2">
-              <span
-                class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium"
-                :class="severityBadge(insight.severity)"
-              >
-                {{ insight.severity }}
-              </span>
-              <span
-                class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium bg-primary/10 text-primary"
-              >
-                {{ insightTypeLabel(insight.insight_type) }}
-              </span>
-              <span
-                v-if="insight.feature_key"
-                class="font-mono text-[10px] bg-muted px-1.5 py-0.5 rounded"
-                >{{ insight.feature_key }}</span
-              >
-            </div>
-            <div class="text-sm font-medium">{{ insight.title }}</div>
-            <div class="text-xs text-muted-foreground">
-              {{ insight.description }}
-            </div>
-          </div>
-        </div>
-
-        <!-- No insights yet: show categories -->
-        <div v-else-if="!isGenerating" class="space-y-2">
-          <div
-            class="text-xs font-semibold text-muted-foreground uppercase tracking-wider"
-          >
-            What you'll get
-          </div>
-          <div
-            v-for="(cat, i) in insightCategories"
-            :key="i"
-            class="flex gap-3 rounded-lg border p-3"
-          >
-            <div class="min-w-0">
-              <div class="text-sm font-medium">{{ cat.title }}</div>
-              <div class="text-xs text-muted-foreground">
-                {{ cat.description }}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Loading state -->
-        <div v-if="isGenerating" class="flex items-center gap-3 py-4">
-          <div
-            class="h-8 w-8 rounded-full border-2 border-primary border-t-transparent animate-spin"
-          />
-          <div>
-            <div class="text-sm font-medium">Analyzing your data...</div>
-            <div class="text-xs text-muted-foreground">
-              This usually takes 5-10 seconds
-            </div>
-          </div>
-        </div>
-
-        <!-- Generate button -->
-        <div class="space-y-3 border-t pt-4">
-          <div v-if="totalEvents >= 10">
-            <Button
-              class="w-full"
-              :disabled="isGenerating || !insightsAllowed"
-              @click="handleGenerate"
-            >
-              <Sparkles class="h-4 w-4 mr-2" />
-              {{ isGenerating ? "Analyzing..." : "Generate Insights" }}
-            </Button>
-            <p
-              v-if="!isGenerating && insightsAllowed"
-              class="text-xs text-muted-foreground text-center mt-1.5"
-            >
-              Uses 1 message
-            </p>
-          </div>
-          <div v-else class="rounded-lg border bg-muted/30 p-3 text-center">
-            <p class="text-sm font-medium mb-1">Upload more data to unlock</p>
-            <p class="text-xs text-muted-foreground">
-              AI Insights needs event data from your SDK or proxy integration to
-              analyze.
-            </p>
-          </div>
-
-          <!-- Usage info -->
-          <div
-            v-if="insightsUsage && totalEvents >= 10"
-            class="text-xs text-muted-foreground text-center"
-          >
-            <template v-if="insightsUsage.used === 0">
-              {{ insightsUsage.limit }} free insight{{
-                insightsUsage.limit === 1 ? "" : "s"
-              }}
-              included
-            </template>
-            <template v-else-if="insightsUsage.remaining > 0">
-              {{ insightsUsage.used }} used,
-              {{ insightsUsage.remaining }} remaining
-            </template>
-            <template v-else>
-              All {{ insightsUsage.limit }} insights used this month. Need more?
-              Check out
-              <a
-                href="https://tansohq.com"
-                target="_blank"
-                class="text-primary hover:underline"
-                >Tanso</a
-              >.
-            </template>
-          </div>
-        </div>
-
-        <div v-if="generateError" class="text-sm text-destructive">
-          {{ generateError }}
-        </div>
-      </div>
-    </Sheet>
 
     <!-- Error state -->
     <div
