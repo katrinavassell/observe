@@ -113,6 +113,7 @@ const SOURCE_PRIORITY_CTE = `
     WHERE oe.account_id = $1
       AND oe.timestamp >= NOW() - INTERVAL '90 days'
       AND (oe.source != 'sample' OR COALESCE(uds.data_mode, 'none') = 'sample')
+      AND oe.event_name != 'revenue'
   ),
   deduped AS (SELECT * FROM ranked WHERE _src_rank = 1)
 `;

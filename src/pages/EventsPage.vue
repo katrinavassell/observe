@@ -537,8 +537,7 @@ function usageTooltip(event: ObserveEvent): string {
       <div>
         <h1 class="text-2xl font-semibold tracking-tight">Events</h1>
         <p class="text-sm text-muted-foreground mt-1">
-          Per-event cost with customer-level margin. Includes Stripe
-          subscription rows that feed revenue — filter by Source to narrow.
+          Per-event cost and usage from SDK, gateway, and CSV imports.
         </p>
       </div>
       <div
