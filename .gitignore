@@ -1,8 +1,6 @@
 # Environment variables
 .env
-.env.local
-.env.production
-.env.*.local
+.env.*
 !.env.example
 
 # Logs
@@ -38,3 +36,13 @@ files/
 .vercel
 .mcp.json
 screenshots/
+
+# Temp files
+findings.md
+progress.md
+task_plan.md
+scripts/diag.mjs
+scripts/fix-schema.mjs
+scripts/take-screenshots.ts
+scripts/wipe-user-data.ts
+uv.lock
