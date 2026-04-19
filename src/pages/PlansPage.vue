@@ -37,18 +37,6 @@ const usageItems = computed(() => {
     });
   }
 
-  const insights = usageLimits.value.ai_insights?.usage;
-  if (insights) {
-    items.push({
-      label: "AI Insights",
-      used: insights.used,
-      limit: insights.limit || null,
-      pct: insights.limit
-        ? Math.min(100, Math.round((insights.used / insights.limit) * 100))
-        : 0,
-    });
-  }
-
   return items;
 });
 
