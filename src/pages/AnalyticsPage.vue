@@ -283,7 +283,9 @@ function retry() {
       <div>
         <h1 class="text-2xl font-semibold tracking-tight">Analytics</h1>
         <div class="flex items-center gap-2 mt-1">
-          <p class="text-muted-foreground">Where your AI spend is going</p>
+          <p class="text-muted-foreground">
+            Cost breakdown by feature, model, and customer
+          </p>
           <div v-if="activeSources.length" class="flex items-center gap-1">
             <SourceBadge
               v-for="s in activeSources"
@@ -350,30 +352,18 @@ function retry() {
         </Card>
         <Card class="p-6">
           <div class="text-sm font-medium text-muted-foreground">
-            Total Revenue
+            Features Tracked
           </div>
           <div class="text-3xl font-semibold tabular-nums mt-1">
-            {{ fmt(totalRevenue) }}
+            {{ featureData?.length ?? 0 }}
           </div>
         </Card>
         <Card class="p-6">
-          <div
-            class="text-sm font-medium text-muted-foreground"
-            :title="marginHint"
-          >
-            {{ marginLabel }}
+          <div class="text-sm font-medium text-muted-foreground">
+            Models Used
           </div>
-          <div
-            class="text-3xl font-bold tabular-nums mt-1"
-            :class="marginTextClass(netMarginPct)"
-          >
-            {{ netMarginPct != null ? fmtPct(netMarginPct) : "—" }}
-          </div>
-          <div
-            v-if="!hasFeaturePricing && totalRevenue > 0"
-            class="text-[10px] text-muted-foreground mt-1"
-          >
-            from MRR allocation
+          <div class="text-3xl font-semibold tabular-nums mt-1">
+            {{ modelData?.length ?? 0 }}
           </div>
         </Card>
       </div>
@@ -416,24 +406,13 @@ function retry() {
           }}</span>
           <div class="flex-1 h-3 bg-muted rounded-full overflow-hidden">
             <div
-              class="h-full rounded-full"
-              :class="marginBarClass(f.margin_pct)"
+              class="h-full rounded-full bg-foreground"
               :style="{ width: `${(f.total_cost / maxFeatureCost) * 100}%` }"
             />
           </div>
           <span class="w-20 text-right text-sm tabular-nums">{{
             fmt(f.total_cost)
           }}</span>
-          <span
-            class="w-20 text-right text-sm tabular-nums text-muted-foreground"
-            >{{ fmt(f.total_revenue) }}</span
-          >
-          <span
-            class="w-16 text-right text-sm tabular-nums font-medium"
-            :class="marginTextClass(f.margin_pct)"
-          >
-            {{ f.margin_pct != null ? fmtPct(f.margin_pct) : "—" }}
-          </span>
         </div>
       </div>
 
@@ -466,16 +445,6 @@ function retry() {
           <span class="w-20 text-right text-sm tabular-nums">{{
             fmt(m.total_cost)
           }}</span>
-          <span
-            class="w-20 text-right text-sm tabular-nums text-muted-foreground"
-            >{{ fmt(m.total_revenue) }}</span
-          >
-          <span
-            class="w-16 text-right text-sm tabular-nums font-medium"
-            :class="marginTextClass(m.margin_pct)"
-          >
-            {{ m.margin_pct != null ? fmtPct(m.margin_pct) : "—" }}
-          </span>
         </div>
       </div>
 
@@ -513,24 +482,13 @@ function retry() {
           </div>
           <div class="flex-1 h-3 bg-muted rounded-full overflow-hidden">
             <div
-              class="h-full rounded-full"
-              :class="marginBarClass(c.margin_pct)"
+              class="h-full rounded-full bg-foreground"
               :style="{ width: `${(c.total_cost / maxCustomerCost) * 100}%` }"
             />
           </div>
           <span class="w-20 text-right text-sm tabular-nums">{{
             fmt(c.total_cost)
           }}</span>
-          <span
-            class="w-20 text-right text-sm tabular-nums text-muted-foreground"
-            >{{ fmt(c.total_revenue) }}</span
-          >
-          <span
-            class="w-16 text-right text-sm tabular-nums font-medium"
-            :class="marginTextClass(c.margin_pct)"
-          >
-            {{ c.margin_pct != null ? fmtPct(c.margin_pct) : "—" }}
-          </span>
         </div>
       </div>
 
@@ -543,8 +501,6 @@ function retry() {
           <span class="w-36">Agent</span>
           <span class="flex-1"></span>
           <span class="w-20 text-right">Cost</span>
-          <span class="w-20 text-right">Revenue</span>
-          <span class="w-16 text-right">Margin</span>
         </div>
         <div
           v-if="!sortedAgents.length"
@@ -565,8 +521,7 @@ function retry() {
           }}</span>
           <div class="flex-1 h-3 bg-muted rounded-full overflow-hidden">
             <div
-              class="h-full rounded-full"
-              :class="marginBarClass(a.margin_pct)"
+              class="h-full rounded-full bg-foreground"
               :style="{
                 width: `${sortedAgents.length ? (a.total_cost / sortedAgents[0].total_cost) * 100 : 0}%`,
               }"
@@ -575,16 +530,6 @@ function retry() {
           <span class="w-20 text-right text-sm tabular-nums">{{
             fmt(a.total_cost)
           }}</span>
-          <span
-            class="w-20 text-right text-sm tabular-nums text-muted-foreground"
-            >{{ fmt(a.total_revenue) }}</span
-          >
-          <span
-            class="w-16 text-right text-sm tabular-nums font-medium"
-            :class="marginTextClass(a.margin_pct)"
-          >
-            {{ a.margin_pct != null ? fmtPct(a.margin_pct) : "—" }}
-          </span>
         </div>
       </div>
 
