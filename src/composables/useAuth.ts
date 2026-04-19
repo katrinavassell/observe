@@ -179,7 +179,7 @@ export function useAuth() {
       email,
       password,
       options: {
-        emailRedirectTo: `${window.location.origin}${target}`,
+        emailRedirectTo: `https://observe.tansohq.com${target}`,
         data: name ? { full_name: name } : undefined,
       },
     });
@@ -233,9 +233,8 @@ export function useAuth() {
   }
 
   async function forgotPassword(email: string) {
-    const appUrl = window.location.origin;
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${appUrl}/reset-password`,
+      redirectTo: `https://observe.tansohq.com/reset-password`,
     });
     if (error) throw new Error(error.message);
   }
@@ -250,7 +249,7 @@ export function useAuth() {
   async function signInWithGoogle() {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: `${window.location.origin}/` },
+      options: { redirectTo: `https://observe.tansohq.com/` },
     });
     if (error) throw new Error(error.message);
   }
@@ -258,7 +257,7 @@ export function useAuth() {
   async function signInWithGithub() {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "github",
-      options: { redirectTo: `${window.location.origin}/` },
+      options: { redirectTo: `https://observe.tansohq.com/` },
     });
     if (error) throw new Error(error.message);
   }
@@ -266,7 +265,7 @@ export function useAuth() {
   async function signInWithMagicLink(email: string) {
     const { error } = await supabase.auth.signInWithOtp({
       email,
-      options: { emailRedirectTo: `${window.location.origin}/` },
+      options: { emailRedirectTo: `https://observe.tansohq.com/` },
     });
     if (error) throw new Error(error.message);
   }
@@ -276,7 +275,7 @@ export function useAuth() {
     const { error } = await supabase.auth.resend({
       type: "signup",
       email,
-      options: { emailRedirectTo: `${window.location.origin}/` },
+      options: { emailRedirectTo: `https://observe.tansohq.com/` },
     });
     if (error) throw new Error(error.message);
   }
