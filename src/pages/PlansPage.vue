@@ -49,7 +49,6 @@ const observeFeatures = [
   "Per-feature margin analysis",
   "Unlimited team members",
   "Unlimited cost alerts",
-  "CSV upload",
 ];
 
 const tansoFeatures = [
@@ -95,46 +94,6 @@ const repoUrl = "https://github.com/katrinalaszlo/observe";
             <div class="pb-2">
               <span class="text-3xl font-bold tracking-tight">Free</span>
               <span class="text-muted-foreground text-sm ml-1">forever</span>
-            </div>
-
-            <!-- Usage meter -->
-            <div
-              v-if="isLoggedIn && usageItems.length > 0"
-              class="rounded-lg border bg-muted/30 p-3 space-y-2"
-            >
-              <div
-                v-for="item in usageItems"
-                :key="item.label"
-                class="space-y-1"
-              >
-                <div
-                  class="flex items-center justify-between text-xs text-muted-foreground"
-                >
-                  <span>{{ item.label }}</span>
-                  <span class="tabular-nums">
-                    {{ item.used.toLocaleString() }}
-                    <template v-if="item.limit">
-                      / {{ item.limit.toLocaleString() }}
-                    </template>
-                  </span>
-                </div>
-                <div
-                  v-if="item.limit"
-                  class="h-1.5 bg-muted rounded-full overflow-hidden"
-                >
-                  <div
-                    class="h-full rounded-full transition-all"
-                    :class="
-                      item.pct >= 90
-                        ? 'bg-destructive'
-                        : item.pct >= 80
-                          ? 'bg-warning'
-                          : 'bg-primary'
-                    "
-                    :style="{ width: item.pct + '%' }"
-                  />
-                </div>
-              </div>
             </div>
 
             <div class="border-t pt-4">
