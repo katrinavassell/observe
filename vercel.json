@@ -27,6 +27,27 @@
       "schedule": "0 12 * * *"
     }
   ],
+  "redirects": [
+    {
+      "source": "/:path(.*)",
+      "has": [
+        {
+          "type": "host",
+          "value": "metrics-onboarding-pqmd-katrinajlaszlo-5962s-projects.vercel.app"
+        }
+      ],
+      "destination": "https://observe.tansohq.com/:path",
+      "permanent": true
+    },
+    {
+      "source": "/:path(.*)",
+      "has": [
+        { "type": "host", "value": "metrics-onboarding-pqmd.vercel.app" }
+      ],
+      "destination": "https://observe.tansohq.com/:path",
+      "permanent": true
+    }
+  ],
   "rewrites": [
     { "source": "/api/cron/(.*)", "destination": "/api/cron/$1" },
     { "source": "/api/(.*)", "destination": "/api" },
