@@ -1,8 +1,6 @@
 import { createApp } from "vue";
 import { VueQueryPlugin, QueryClient } from "@tanstack/vue-query";
-// Initialize Supabase BEFORE router — must read OAuth tokens from URL hash
-// before Vue router strips them
-import "./lib/supabase";
+import { setupClerk } from "./lib/clerk";
 import router from "./router";
 import App from "./App.vue";
 import { logger } from "./lib/logger";
@@ -37,6 +35,7 @@ app.config.warnHandler = (msg, instance, trace) => {
   });
 };
 
+setupClerk(app);
 app.use(router);
 app.use(VueQueryPlugin, { queryClient });
 

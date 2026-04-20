@@ -1,13 +1,10 @@
 import { Router, Request, Response, NextFunction } from "express";
 import type { Pool } from "pg";
-import { createClient } from "@supabase/supabase-js";
+import { createClerkClient } from "@clerk/backend";
 import { encryptApiKey } from "../stripe-client.js";
 
-const supabaseServiceKey =
-  process.env.SUPABASE_SERVICE_ROLE_KEY ||
-  process.env.SUPABASE_SECRET_KEY ||
-  "";
-const supabase = createClient(process.env.SUPABASE_URL!, supabaseServiceKey);
+const clerkSecretKey = process.env.CLERK_SECRET_KEY || "";
+const clerk = createClerkClient({ secretKey: clerkSecretKey });
 
 export interface AuthRequest extends Request {
   visitorId?: string;
@@ -15,13 +12,8 @@ export interface AuthRequest extends Request {
   accountEmail?: string;
 }
 
-// Track which users have had sample data cleared this server lifetime
-// Prevents running cleanup queries on every request
 const sampleClearedUsers = new Set<string>();
 
-// Cache (visitorId + X-Account-Id header) -> resolved accountId.
-// Saves a DB round-trip per request. 5-minute TTL means role/membership
-// changes take at most 5 minutes to reflect.
 const ACCOUNT_ID_TTL_MS = 5 * 60 * 1000;
 const accountIdCache = new Map<
   string,
@@ -35,7 +27,6 @@ export function createEnsureVisitor(pool: Pool) {
     next: NextFunction,
   ) {
     try {
-      // Test auth bypass — only active when TEST_AUTH_BYPASS=1
       if (
         process.env.TEST_AUTH_BYPASS === "1" &&
         req.headers["x-test-user-id"]
@@ -48,219 +39,191 @@ export function createEnsureVisitor(pool: Pool) {
       const authHeader = req.headers.authorization;
 
       if (authHeader?.startsWith("Bearer ")) {
-        // Authenticated user — verify Supabase JWT
         const token = authHeader.slice(7);
-        const {
-          data: { user },
-          error,
-        } = await supabase.auth.getUser(token);
 
-        if (error) {
-          console.error("Supabase getUser failed:", error.message);
+        let clerkUserId: string;
+        let clerkEmail: string | undefined;
+        let clerkName: string | undefined;
+
+        try {
+          const payload = await clerk.verifyToken(token);
+          clerkUserId = payload.sub;
+
+          const user = await clerk.users.getUser(clerkUserId);
+          clerkEmail = user.emailAddresses.find(
+            (e) => e.id === user.primaryEmailAddressId,
+          )?.emailAddress;
+          clerkName =
+            [user.firstName, user.lastName].filter(Boolean).join(" ") ||
+            undefined;
+        } catch (err) {
+          console.error("Clerk token verification failed:", err);
+          return next();
         }
-        if (!error && user) {
-          req.visitorId = user.id;
-          req.accountEmail = user.email;
 
-          // Look up local user row (used for self-heal only; req.accountId
-          // is resolved below via user_accounts)
-          const accountResult = await pool.query(
-            "SELECT id FROM users WHERE visitor_id = $1",
-            [user.id],
-          );
-          if (!accountResult.rows[0] && user.email) {
-            // Self-heal: authenticated user with no users row. This
-            // normally runs from /auth/signup-complete but may not have if
-            // the frontend retry loop exhausted. Create the row + SDK key
-            // inline so the user is never stuck without an account.
-            try {
-              const insertedUser = await pool.query(
-                `INSERT INTO users (email, password_hash, name, visitor_id)
-                 VALUES ($1, 'supabase-managed', $2, $3)
-                 ON CONFLICT (email) DO UPDATE SET visitor_id = $3
-                 RETURNING id`,
+        req.visitorId = clerkUserId;
+        req.accountEmail = clerkEmail;
+
+        const accountResult = await pool.query(
+          "SELECT id FROM users WHERE visitor_id = $1",
+          [clerkUserId],
+        );
+        if (!accountResult.rows[0] && clerkEmail) {
+          try {
+            const insertedUser = await pool.query(
+              `INSERT INTO users (email, password_hash, name, visitor_id)
+               VALUES ($1, 'clerk-managed', $2, $3)
+               ON CONFLICT (email) DO UPDATE SET visitor_id = $3
+               RETURNING id`,
+              [clerkEmail, clerkName || null, clerkUserId],
+            );
+            const userInternalId = insertedUser.rows[0].id as number;
+
+            const existingMembership = await pool.query(
+              `SELECT account_id FROM user_accounts
+                WHERE user_id = $1 AND role = 'owner' AND status = 'active'
+                LIMIT 1`,
+              [userInternalId],
+            );
+            let resolvedAccountId: number | undefined =
+              existingMembership.rows[0]?.account_id;
+            if (resolvedAccountId === undefined) {
+              const accountName = clerkName
+                ? `${clerkName}'s Account`
+                : "Personal Account";
+              const insertedAccount = await pool.query(
+                `INSERT INTO accounts (name, email, password_hash, visitor_id)
+                 VALUES ($1, $2, 'clerk-managed', $3) RETURNING id`,
+                [accountName, clerkEmail, clerkUserId],
+              );
+              resolvedAccountId = insertedAccount.rows[0].id as number;
+              await pool.query(
+                `INSERT INTO user_accounts (user_id, account_id, role, status, joined_at)
+                 VALUES ($1, $2, 'owner', 'active', NOW())
+                 ON CONFLICT (user_id, account_id) DO NOTHING`,
+                [userInternalId, resolvedAccountId],
+              );
+            }
+
+            const existingKey = await pool.query(
+              "SELECT id FROM sdk_api_keys WHERE user_id = $1 AND revoked_at IS NULL LIMIT 1",
+              [clerkUserId],
+            );
+            if (existingKey.rows.length === 0) {
+              const cryptoMod = await import("crypto");
+              const rawKey = `obs_${cryptoMod.randomBytes(24).toString("hex")}`;
+              const keyHash = cryptoMod
+                .createHash("sha256")
+                .update(rawKey)
+                .digest("hex");
+              const keyPrefix = rawKey.slice(0, 11);
+              await pool.query(
+                `INSERT INTO sdk_api_keys (user_id, account_id, key_hash, key_prefix, encrypted_key, name)
+                 VALUES ($1, $2, $3, $4, $5, 'default')
+                 ON CONFLICT (account_id, name) WHERE revoked_at IS NULL DO NOTHING`,
                 [
-                  user.email,
-                  user.user_metadata?.full_name ||
-                    user.user_metadata?.name ||
-                    null,
-                  user.id,
+                  clerkUserId,
+                  resolvedAccountId,
+                  keyHash,
+                  keyPrefix,
+                  encryptApiKey(rawKey),
                 ],
               );
-              const userInternalId = insertedUser.rows[0].id as number;
+            }
+          } catch (healErr) {
+            console.error("ensureVisitor self-heal failed:", healErr);
+          }
+        }
 
-              // Ensure an accounts + user_accounts row exists so
-              // req.accountId resolves and subsequent INSERTs carry a
-              // non-null account_id. Without this, a fresh signup arriving
-              // after Stage 1 backfill has no account row until next boot.
-              const existingMembership = await pool.query(
-                `SELECT account_id FROM user_accounts
-                  WHERE user_id = $1 AND role = 'owner' AND status = 'active'
-                  LIMIT 1`,
-                [userInternalId],
-              );
-              let resolvedAccountId: number | undefined =
-                existingMembership.rows[0]?.account_id;
-              if (resolvedAccountId === undefined) {
-                const accountName = user.user_metadata?.full_name
-                  ? `${user.user_metadata.full_name}'s Account`
-                  : user.user_metadata?.name
-                    ? `${user.user_metadata.name}'s Account`
-                    : "Personal Account";
-                const insertedAccount = await pool.query(
-                  `INSERT INTO accounts (name, email, password_hash, visitor_id)
-                   VALUES ($1, $2, 'supabase-managed', $3) RETURNING id`,
-                  [accountName, user.email, user.id],
-                );
-                resolvedAccountId = insertedAccount.rows[0].id as number;
-                await pool.query(
-                  `INSERT INTO user_accounts (user_id, account_id, role, status, joined_at)
-                   VALUES ($1, $2, 'owner', 'active', NOW())
-                   ON CONFLICT (user_id, account_id) DO NOTHING`,
-                  [userInternalId, resolvedAccountId],
-                );
-              }
+        if (!sampleClearedUsers.has(clerkUserId)) {
+          try {
+            await pool.query(
+              "DELETE FROM observe_events WHERE user_id = $1 AND source = 'sample'",
+              [clerkUserId],
+            );
+            await pool.query(
+              "DELETE FROM customers WHERE user_id = $1 AND customer_id IN ('cus_001','cus_002','cus_003','cus_004','cus_005','acme_saas','tidewater_ai','neondata','circleops','blazeml','quantumhr')",
+              [clerkUserId],
+            );
+            await pool.query(
+              "DELETE FROM subscriptions WHERE user_id = $1 AND subscription_id IN ('sub_001','sub_002','sub_003','sub_004','sub_005','sub_acme','sub_acme_addon','sub_tidewater','sub_neon','sub_neon_addon','sub_circle','sub_blaze','sub_quantum')",
+              [clerkUserId],
+            );
+            await pool.query(
+              "DELETE FROM plans WHERE user_id = $1 AND plan_id IN ('starter', 'pro', 'enterprise')",
+              [clerkUserId],
+            );
+            await pool.query(
+              "UPDATE user_data_status SET data_mode = CASE WHEN data_mode = 'sample' THEN 'none' ELSE data_mode END WHERE user_id = $1",
+              [clerkUserId],
+            );
+            sampleClearedUsers.add(clerkUserId);
+          } catch (cleanupErr) {
+            console.error(
+              "Sample data cleanup failed — will retry on next request:",
+              cleanupErr,
+            );
+          }
+        }
 
-              // Ensure an SDK key exists
-              const existingKey = await pool.query(
-                "SELECT id FROM sdk_api_keys WHERE user_id = $1 AND revoked_at IS NULL LIMIT 1",
-                [user.id],
-              );
-              if (existingKey.rows.length === 0) {
-                const cryptoMod = await import("crypto");
-                const rawKey = `obs_${cryptoMod.randomBytes(24).toString("hex")}`;
-                const keyHash = cryptoMod
-                  .createHash("sha256")
-                  .update(rawKey)
-                  .digest("hex");
-                const keyPrefix = rawKey.slice(0, 11);
-                await pool.query(
-                  `INSERT INTO sdk_api_keys (user_id, account_id, key_hash, key_prefix, encrypted_key, name)
-                   VALUES ($1, $2, $3, $4, $5, 'default')
-                   ON CONFLICT (account_id, name) WHERE revoked_at IS NULL DO NOTHING`,
-                  [
-                    user.id,
-                    resolvedAccountId,
-                    keyHash,
-                    keyPrefix,
-                    encryptApiKey(rawKey),
-                  ],
-                );
-              }
-            } catch (healErr) {
-              console.error(
-                "ensureVisitor self-heal failed — user will see errors until this clears:",
-                healErr,
-              );
+        const headerAccountIdRaw = req.headers["x-account-id"];
+        const headerAccountId = Array.isArray(headerAccountIdRaw)
+          ? headerAccountIdRaw[0]
+          : headerAccountIdRaw;
+        const cacheKey = `${clerkUserId}:${headerAccountId ?? ""}`;
+        const cached = accountIdCache.get(cacheKey);
+        const now = Date.now();
+        if (cached && cached.expiresAt > now) {
+          req.accountId = cached.accountId;
+        } else {
+          let resolvedAccountId: number | undefined;
+          if (headerAccountId) {
+            const verifyResult = await pool.query(
+              `SELECT ua.account_id
+               FROM user_accounts ua
+               JOIN users u ON u.id = ua.user_id
+               WHERE u.visitor_id = $1 AND ua.account_id = $2 AND ua.status = 'active'
+               LIMIT 1`,
+              [clerkUserId, headerAccountId],
+            );
+            if (verifyResult.rows[0]) {
+              resolvedAccountId = verifyResult.rows[0].account_id;
             }
           }
-
-          // Logged-in users must never see sample data. Mark the in-memory
-          // set AFTER the cleanup succeeds so a failed cleanup retries on
-          // the next request instead of silently persisting stale rows.
-          if (!sampleClearedUsers.has(user.id)) {
-            try {
-              await pool.query(
-                "DELETE FROM observe_events WHERE user_id = $1 AND source = 'sample'",
-                [user.id],
-              );
-              await pool.query(
-                "DELETE FROM customers WHERE user_id = $1 AND customer_id IN ('cus_001','cus_002','cus_003','cus_004','cus_005','acme_saas','tidewater_ai','neondata','circleops','blazeml','quantumhr')",
-                [user.id],
-              );
-              await pool.query(
-                "DELETE FROM subscriptions WHERE user_id = $1 AND subscription_id IN ('sub_001','sub_002','sub_003','sub_004','sub_005','sub_acme','sub_acme_addon','sub_tidewater','sub_neon','sub_neon_addon','sub_circle','sub_blaze','sub_quantum')",
-                [user.id],
-              );
-              await pool.query(
-                "DELETE FROM plans WHERE user_id = $1 AND plan_id IN ('starter', 'pro', 'enterprise')",
-                [user.id],
-              );
-              await pool.query(
-                "UPDATE user_data_status SET data_mode = CASE WHEN data_mode = 'sample' THEN 'none' ELSE data_mode END WHERE user_id = $1",
-                [user.id],
-              );
-              sampleClearedUsers.add(user.id);
-            } catch (cleanupErr) {
-              // Intentionally don't add to sampleClearedUsers so we retry.
-              console.error(
-                "Sample data cleanup failed — will retry on next request:",
-                cleanupErr,
-              );
+          if (resolvedAccountId === undefined) {
+            const defaultResult = await pool.query(
+              `SELECT ua.account_id
+               FROM user_accounts ua
+               JOIN users u ON u.id = ua.user_id
+               WHERE u.visitor_id = $1 AND ua.status = 'active'
+               ORDER BY CASE ua.role WHEN 'owner' THEN 0 WHEN 'admin' THEN 1 ELSE 2 END, ua.joined_at ASC NULLS LAST
+               LIMIT 1`,
+              [clerkUserId],
+            );
+            if (defaultResult.rows[0]) {
+              resolvedAccountId = defaultResult.rows[0].account_id;
             }
           }
-
-          // Resolve req.accountId from user_accounts. If X-Account-Id is
-          // provided, verify membership before using it; otherwise pick
-          // the user's default account (owner > admin > member, earliest
-          // joined). Cached for 5 minutes keyed on (visitorId, header).
-          const headerAccountIdRaw = req.headers["x-account-id"];
-          const headerAccountId = Array.isArray(headerAccountIdRaw)
-            ? headerAccountIdRaw[0]
-            : headerAccountIdRaw;
-          const cacheKey = `${user.id}:${headerAccountId ?? ""}`;
-          const cached = accountIdCache.get(cacheKey);
-          const now = Date.now();
-          if (cached && cached.expiresAt > now) {
-            req.accountId = cached.accountId;
+          if (resolvedAccountId !== undefined) {
+            req.accountId = resolvedAccountId;
+            accountIdCache.set(cacheKey, {
+              accountId: resolvedAccountId,
+              expiresAt: now + ACCOUNT_ID_TTL_MS,
+            });
           } else {
-            let resolvedAccountId: number | undefined;
-            if (headerAccountId) {
-              const verifyResult = await pool.query(
-                `SELECT ua.account_id
-                 FROM user_accounts ua
-                 JOIN users u ON u.id = ua.user_id
-                 WHERE u.visitor_id = $1 AND ua.account_id = $2 AND ua.status = 'active'
-                 LIMIT 1`,
-                [user.id, headerAccountId],
-              );
-              if (verifyResult.rows[0]) {
-                resolvedAccountId = verifyResult.rows[0].account_id;
-              }
-            }
-            if (resolvedAccountId === undefined) {
-              const defaultResult = await pool.query(
-                `SELECT ua.account_id
-                 FROM user_accounts ua
-                 JOIN users u ON u.id = ua.user_id
-                 WHERE u.visitor_id = $1 AND ua.status = 'active'
-                 ORDER BY CASE ua.role WHEN 'owner' THEN 0 WHEN 'admin' THEN 1 ELSE 2 END, ua.joined_at ASC NULLS LAST
-                 LIMIT 1`,
-                [user.id],
-              );
-              if (defaultResult.rows[0]) {
-                resolvedAccountId = defaultResult.rows[0].account_id;
-              }
-            }
-            if (resolvedAccountId !== undefined) {
-              req.accountId = resolvedAccountId;
-              accountIdCache.set(cacheKey, {
-                accountId: resolvedAccountId,
-                expiresAt: now + ACCOUNT_ID_TTL_MS,
-              });
-            } else {
-              console.warn(
-                "ensureVisitor: no active user_accounts row for visitor",
-                user.id,
-              );
-            }
+            console.warn(
+              "ensureVisitor: no active user_accounts row for visitor",
+              clerkUserId,
+            );
           }
         }
       }
 
-      // Anonymous visitor — generate a fresh UUID per request. We do NOT
-      // honor any client-sent x-visitor-id header: an attacker could
-      // otherwise set x-visitor-id: <victim-uuid> on an unauthenticated
-      // request and read/write the victim's data. Guests don't need
-      // persistent visitor IDs on the server anymore because their
-      // preview is rendered entirely client-side from src/lib/guest-preview.ts.
       if (!req.visitorId) {
         const crypto = await import("crypto");
         req.visitorId = crypto.randomUUID();
       }
 
-      // Ensure user_data_status row exists (only for authenticated users;
-      // ephemeral guest UUIDs don't need persistent rows).
       if (req.accountEmail) {
         await pool.query(
           "INSERT INTO user_data_status (user_id, account_id, data_mode) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING",
@@ -282,29 +245,18 @@ export function createAuthRoutes(
 ) {
   const router = Router();
 
-  // POST /auth/signup — called after Supabase client-side signup to create local account row
   router.post(
     "/auth/signup-complete",
     ensureVisitor,
     async (req: AuthRequest, res: Response) => {
       try {
-        // Require an authenticated Bearer token. Without this check, an
-        // anonymous attacker with just an x-visitor-id header (or body)
-        // could overwrite any victim's account email — an account takeover
-        // precondition. `req.accountEmail` is only populated when
-        // ensureVisitor successfully verifies the Supabase JWT.
         if (!req.accountEmail) {
           return res.status(401).json({ error: "Authentication required" });
         }
         const userId = req.visitorId!;
+        const email = req.accountEmail;
         const { name } = req.body;
 
-        // Email is taken ONLY from the verified JWT — never from the body
-        // or admin lookup. This prevents a confused-deputy rewrite where
-        // a valid JWT for user A is used to overwrite account B's email.
-        const email = req.accountEmail;
-
-        // Create or update local account row (handles both email and visitor_id conflicts)
         const existing = await pool.query(
           "SELECT id FROM users WHERE email = $1 OR visitor_id = $2 LIMIT 1",
           [email, userId],
@@ -313,14 +265,14 @@ export function createAuthRoutes(
         const isNewAccount = existing.rows.length === 0;
         if (!isNewAccount) {
           result = await pool.query(
-            `UPDATE users SET email = $1, visitor_id = $2, name = COALESCE($3, name), password_hash = 'supabase-managed', updated_at = NOW()
+            `UPDATE users SET email = $1, visitor_id = $2, name = COALESCE($3, name), password_hash = 'clerk-managed', updated_at = NOW()
              WHERE id = $4 RETURNING id, email, name`,
             [email, userId, name?.trim() || null, existing.rows[0].id],
           );
         } else {
           result = await pool.query(
             `INSERT INTO users (email, password_hash, name, visitor_id)
-             VALUES ($1, 'supabase-managed', $2, $3)
+             VALUES ($1, 'clerk-managed', $2, $3)
              RETURNING id, email, name`,
             [email, name?.trim() || null, userId],
           );
@@ -328,11 +280,6 @@ export function createAuthRoutes(
         const account = result.rows[0];
         const userInternalId = account.id as number;
 
-        // Ensure accounts + user_accounts rows exist synchronously. Stage 1
-        // backfill only runs on boot, so signups arriving after deploy
-        // would otherwise have no account row until next restart — causing
-        // NULL account_id on every subsequent INSERT. Idempotent: skip if
-        // the user already has an active owner membership.
         const existingMembership = await pool.query(
           `SELECT account_id FROM user_accounts
             WHERE user_id = $1 AND role = 'owner' AND status = 'active'
@@ -348,7 +295,7 @@ export function createAuthRoutes(
             : "Personal Account";
           const insertedAccount = await pool.query(
             `INSERT INTO accounts (name, email, password_hash, visitor_id)
-             VALUES ($1, $2, 'supabase-managed', $3) RETURNING id`,
+             VALUES ($1, $2, 'clerk-managed', $3) RETURNING id`,
             [accountName, email, userId],
           );
           resolvedAccountId = insertedAccount.rows[0].id as number;
@@ -360,11 +307,6 @@ export function createAuthRoutes(
           );
         }
 
-        // Dogfood: treat every new Observe signup as a customer on each
-        // admin's dashboard. Fire-and-forget — failure here must not block
-        // signup. Only runs on first-time account creation (not re-login
-        // UPDATEs) and uses idempotency keys so repeated calls don't
-        // duplicate the event.
         if (isNewAccount) {
           const adminEmailsForDogfood = [
             "tansoadmin@tansohq.com",
@@ -390,8 +332,6 @@ export function createAuthRoutes(
                 const adminUid = row.visitor_id as string;
                 const adminAccountId =
                   (row.account_id as number | null) ?? null;
-                // Ensure the customer row exists on the admin's side so the
-                // /customers LEFT JOIN finds a name.
                 await pool
                   .query(
                     `INSERT INTO customers (user_id, account_id, customer_id, name, email)
@@ -408,7 +348,6 @@ export function createAuthRoutes(
                   .catch((err) =>
                     console.error("Dogfood customer insert failed:", err),
                   );
-                // Emit a signup event — idempotency_key keeps this one-shot.
                 await pool
                   .query(
                     `INSERT INTO observe_events
@@ -428,7 +367,6 @@ export function createAuthRoutes(
             .catch((err) => console.error("Dogfood admin lookup failed:", err));
         }
 
-        // Clear any leftover sample/demo data
         await pool.query(
           "DELETE FROM observe_events WHERE user_id = $1 AND source = $2",
           [userId, "sample"],
@@ -459,13 +397,6 @@ export function createAuthRoutes(
           [userId],
         );
 
-        // Every account gets an SDK key on signup. If the insert conflicts
-        // (user already has a "default"), confirm an active key exists and
-        // return null for rawKey — the existing key_prefix is already shown
-        // on Data Sources. If the insert fails for any other reason, or no
-        // active key exists after the attempt, FAIL THE REQUEST so the
-        // user doesn't land in a state where onboarding tells them to
-        // copy a key that doesn't exist.
         let sdkKey: string | null = null;
         const crypto = await import("crypto");
         const rawKey = `obs_${crypto.randomBytes(24).toString("hex")}`;
@@ -491,8 +422,6 @@ export function createAuthRoutes(
         if (insertResult.rows.length > 0) {
           sdkKey = rawKey;
         } else {
-          // Verify an active key actually exists. If not, the insert
-          // silently failed for a non-conflict reason — fail loudly.
           const existing = await pool.query(
             "SELECT id FROM sdk_api_keys WHERE user_id = $1 AND revoked_at IS NULL LIMIT 1",
             [userId],
@@ -504,12 +433,6 @@ export function createAuthRoutes(
           }
         }
 
-        // Notify Kat of new signup + send welcome email.
-        // Both are AWAITED synchronously because Vercel serverless
-        // functions are killed immediately after the HTTP response
-        // returns. setTimeout callbacks are dropped, and fire-and-forget
-        // .catch() chains often race the lambda death and never actually
-        // send. Awaiting adds ~400ms to signup but guarantees delivery.
         const resendKey = process.env.RESEND_API_KEY;
         if (isNewAccount && resendKey) {
           const resendPost = (body: Record<string, unknown>) =>
@@ -557,7 +480,6 @@ export function createAuthRoutes(
     },
   );
 
-  // GET /auth/me — returns local account info for the authenticated user
   router.get(
     "/auth/me",
     ensureVisitor,

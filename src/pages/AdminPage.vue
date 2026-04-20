@@ -38,15 +38,15 @@ interface AdminUsageResponse {
 }
 
 async function fetchAdminUsage(): Promise<AdminUsageResponse> {
-  const { supabase } = await import("@/lib/supabase");
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
+  const { getAuthToken, isAuthenticated } = await import("@/lib/clerk");
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
   };
-  if (session?.access_token) {
-    headers["Authorization"] = `Bearer ${session.access_token}`;
+  if (isAuthenticated()) {
+    const token = await getAuthToken();
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
   }
   const response = await fetch("/api/admin/usage", { headers });
   if (!response.ok) {
