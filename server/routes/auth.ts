@@ -1,6 +1,6 @@
 import { Router, Request, Response, NextFunction } from "express";
 import type { Pool } from "pg";
-import { createClerkClient } from "@clerk/backend";
+import { verifyToken, createClerkClient } from "@clerk/backend";
 import { encryptApiKey } from "../stripe-client.js";
 
 const clerkSecretKey = process.env.CLERK_SECRET_KEY || "";
@@ -46,7 +46,9 @@ export function createEnsureVisitor(pool: Pool) {
         let clerkName: string | undefined;
 
         try {
-          const payload = await clerk.verifyToken(token);
+          const payload = await verifyToken(token, {
+            secretKey: clerkSecretKey,
+          });
           clerkUserId = payload.sub;
 
           const user = await clerk.users.getUser(clerkUserId);
