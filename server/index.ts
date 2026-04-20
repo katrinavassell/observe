@@ -283,7 +283,7 @@ async function ensureDbInitialized() {
   }
   return dbInitPromise;
 }
-const SCHEMA_VERSION = 21;
+const SCHEMA_VERSION = 22;
 async function _doDbInit() {
   try {
     await pool.query("SELECT 1");
@@ -1301,7 +1301,7 @@ async function _doDbInit() {
     }
     // ── end Stage 6 migration ───────────────────────────────────────────
 
-    // ── Stage 7: add clerk_org_id to accounts ──────────────────────────
+    // ── Stage 7: add clerk_org_id to accounts, relax legacy NOT NULLs ──
     await pool
       .query(
         `ALTER TABLE accounts ADD COLUMN IF NOT EXISTS clerk_org_id TEXT UNIQUE`,
@@ -1312,6 +1312,12 @@ async function _doDbInit() {
         `CREATE INDEX IF NOT EXISTS idx_accounts_clerk_org ON accounts(clerk_org_id) WHERE clerk_org_id IS NOT NULL`,
       )
       .catch((err) => console.error("Stage 7 clerk_org_id index:", err));
+    await pool
+      .query(`ALTER TABLE accounts ALTER COLUMN email DROP NOT NULL`)
+      .catch(() => {});
+    await pool
+      .query(`ALTER TABLE accounts ALTER COLUMN password_hash DROP NOT NULL`)
+      .catch(() => {});
     // ── end Stage 7 ────────────────────────────────────────────────────
 
     // Record schema version so future cold starts skip migrations

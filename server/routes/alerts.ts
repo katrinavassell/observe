@@ -90,7 +90,9 @@ const TANSO_UPSELLS: Record<string, string> = {
   customer_concentration: "Want to set concentration risk limits?",
 };
 
-function formatValue(metric: string, value: number): string {
+function formatValue(metric: string, rawValue: number | string): string {
+  const value = typeof rawValue === "string" ? parseFloat(rawValue) : rawValue;
+  if (!Number.isFinite(value)) return String(rawValue);
   switch (metric) {
     case "margin_percent":
     case "customer_margin":
