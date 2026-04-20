@@ -283,7 +283,7 @@ async function ensureDbInitialized() {
   }
   return dbInitPromise;
 }
-const SCHEMA_VERSION = 20;
+const SCHEMA_VERSION = 21;
 async function _doDbInit() {
   try {
     await pool.query("SELECT 1");
@@ -1300,6 +1300,19 @@ async function _doDbInit() {
       console.error("Stage 6 mrr_allocation fix failed:", err);
     }
     // ── end Stage 6 migration ───────────────────────────────────────────
+
+    // ── Stage 7: add clerk_org_id to accounts ──────────────────────────
+    await pool
+      .query(
+        `ALTER TABLE accounts ADD COLUMN IF NOT EXISTS clerk_org_id TEXT UNIQUE`,
+      )
+      .catch((err) => console.error("Stage 7 add clerk_org_id:", err));
+    await pool
+      .query(
+        `CREATE INDEX IF NOT EXISTS idx_accounts_clerk_org ON accounts(clerk_org_id) WHERE clerk_org_id IS NOT NULL`,
+      )
+      .catch((err) => console.error("Stage 7 clerk_org_id index:", err));
+    // ── end Stage 7 ────────────────────────────────────────────────────
 
     // Record schema version so future cold starts skip migrations
     await pool.query(
