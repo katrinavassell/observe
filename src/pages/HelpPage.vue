@@ -112,19 +112,27 @@ const sections = [
   },
   {
     id: "team",
-    title: "Team & Accounts",
+    title: "Team & Organizations",
     items: [
       {
+        q: "What is an organization?",
+        a: "An organization is a shared workspace. All data — events, customers, costs, SDK keys — belongs to an organization. Every user gets an organization when they sign up.",
+      },
+      {
         q: "How do I invite a team member?",
-        a: "Go to Team Settings, copy the invite link, and share it. They sign up (or log in) and click the link. They get added to your account as an admin and can see all your data.",
+        a: "Click Team in the sidebar to open organization settings, then go to Members. You can invite people by email. They'll get an invite to join your organization.",
       },
       {
-        q: "Can someone be on multiple accounts?",
-        a: "Yes. Each person has their own account. When invited to another account, they get both — switchable via the account switcher in the top-left of the sidebar.",
+        q: "What's the difference between Admin and Member?",
+        a: "Admins can invite/remove members, rename the organization, and manage settings. Members can access all the same data but can't manage people or settings. Both see the same events, costs, and customers.",
       },
       {
-        q: "What roles exist?",
-        a: "Owner (full access, one per account), Admin (full access, added via invite), Viewer (read-only, not yet enforced).",
+        q: "Can someone be in multiple organizations?",
+        a: "Yes. Use the dropdown in the top-left of the sidebar to switch between organizations. Each organization has its own data, SDK keys, and team members.",
+      },
+      {
+        q: "How do I create a new organization?",
+        a: "Click the dropdown in the top-left of the sidebar and select Create Organization. Useful if you manage multiple products or clients that need separate data.",
       },
     ],
   },
@@ -156,7 +164,7 @@ const sections = [
       Common questions about Observe. Can't find what you need?
       <button
         class="text-primary underline underline-offset-2"
-        @click="$emit('openFeedback')"
+        @click="window.dispatchEvent(new Event('observe:open-feedback'))"
       >
         Send us feedback
       </button>

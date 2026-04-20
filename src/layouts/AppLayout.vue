@@ -50,12 +50,9 @@ const mobileLandingEmail = ref("");
 const queryClient = useQueryClient();
 
 onMounted(() => {
-  // NOTE: do NOT auto-load sample data here. Previously this fired during
-  // a brief window where isLoggedIn was false on first paint (before
-  // useAuth finished initializing). Result: sample rows got seeded under
-  // the real user's visitor_id and then leaked into their dashboard.
-  // Sample data is no longer auto-loaded for anyone — guests see empty
-  // state.
+  window.addEventListener("observe:open-feedback", () => {
+    feedbackOpen.value = true;
+  });
 });
 
 const navItems = computed(() => [
