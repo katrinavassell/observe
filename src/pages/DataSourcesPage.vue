@@ -1286,6 +1286,58 @@ Observe.identify({ <span class="text-sky-300">customerId</span>: user.stripeId }
               </div>
             </details>
 
+            <!-- Infrastructure / non-AI costs -->
+            <details class="group">
+              <summary
+                class="text-xs font-medium text-muted-foreground cursor-pointer hover:text-foreground transition-colors"
+              >
+                Infrastructure costs (Pinecone, Supabase, AWS, etc.)
+              </summary>
+              <div class="mt-3 space-y-3">
+                <p class="text-[11px] text-muted-foreground">
+                  Track any cost alongside your AI costs. Set
+                  <code class="font-mono bg-muted px-1 rounded">costType</code>
+                  to categorize it (e.g. "database", "vector_db", "compute",
+                  "storage"). No model or tokens needed.
+                </p>
+                <div
+                  class="rounded-md bg-zinc-950 border border-zinc-800 p-4 font-mono text-xs leading-relaxed overflow-x-auto"
+                >
+                  <pre
+                    class="whitespace-pre text-zinc-100"
+                  ><span class="text-zinc-500">// Track infrastructure costs alongside AI costs</span>
+fetch(<span class="text-amber-300">'{{ ingestUrl }}'</span>, {
+  <span class="text-sky-300">method</span>: <span class="text-amber-300">'POST'</span>,
+  <span class="text-sky-300">headers</span>: {
+    <span class="text-amber-300">'Authorization'</span>: <span class="text-amber-300">`Bearer {{ apiKeyForSnippet }}`</span>,
+    <span class="text-amber-300">'Content-Type'</span>: <span class="text-amber-300">'application/json'</span>,
+  },
+  <span class="text-sky-300">body</span>: JSON.stringify({
+    <span class="text-sky-300">events</span>: [{
+      <span class="text-sky-300">eventName</span>: <span class="text-amber-300">'pinecone_query'</span>,
+      <span class="text-sky-300">customerReferenceId</span>: user.id,
+      <span class="text-sky-300">featureKey</span>: <span class="text-amber-300">'rag_search'</span>,
+      <span class="text-sky-300">costAmount</span>: 0.0012,                  <span class="text-zinc-500">// explicit cost in USD</span>
+      <span class="text-sky-300">costType</span>: <span class="text-amber-300">'vector_db'</span>,               <span class="text-zinc-500">// categorize the cost</span>
+    }],
+  }),
+}).catch(console.error)</pre>
+                </div>
+                <p class="text-[11px] text-muted-foreground">
+                  Common cost types:
+                  <code class="font-mono bg-muted px-1 rounded">llm</code>
+                  (default),
+                  <code class="font-mono bg-muted px-1 rounded">vector_db</code
+                  >,
+                  <code class="font-mono bg-muted px-1 rounded">database</code>,
+                  <code class="font-mono bg-muted px-1 rounded">compute</code>,
+                  <code class="font-mono bg-muted px-1 rounded">storage</code>,
+                  <code class="font-mono bg-muted px-1 rounded">search</code>,
+                  or any string you choose.
+                </p>
+              </div>
+            </details>
+
             <!-- Supported endpoints -->
             <div class="text-xs space-y-1 border-t pt-3">
               <div class="flex gap-2">

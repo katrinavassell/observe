@@ -42,6 +42,14 @@ const sections = [
         q: "What if my model isn't in the pricing table?",
         a: "Send costAmount explicitly in your event payload. Observe will use that instead of looking up the model price.",
       },
+      {
+        q: "Can I track non-AI costs like Pinecone, Supabase, or AWS?",
+        a: "Yes. Send an event with costAmount (in USD) and costType set to any label like 'vector_db', 'database', 'compute', or 'storage'. No model or token fields needed. See the Infrastructure costs section under Manual Integration on the Data Sources page.",
+      },
+      {
+        q: "What is costType?",
+        a: "A label that categorizes costs. Defaults to 'llm' for AI calls. Use any string for non-AI costs: 'vector_db', 'database', 'compute', 'storage', 'search', etc. Shows up in cost breakdowns so you can see total spend by category.",
+      },
     ],
   },
   {
