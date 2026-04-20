@@ -42,6 +42,7 @@ export function createEnsureVisitor(pool: Pool) {
         const token = authHeader.slice(7);
 
         let clerkUserId: string;
+        let clerkOrgId: string | undefined;
         let clerkEmail: string | undefined;
         let clerkName: string | undefined;
 
@@ -50,6 +51,10 @@ export function createEnsureVisitor(pool: Pool) {
             secretKey: clerkSecretKey,
           });
           clerkUserId = payload.sub;
+          const orgClaim = (payload as Record<string, unknown>).o as
+            | { id?: string }
+            | undefined;
+          clerkOrgId = orgClaim?.id;
 
           const user = await clerk.users.getUser(clerkUserId);
           clerkEmail = user.emailAddresses.find(
@@ -168,30 +173,54 @@ export function createEnsureVisitor(pool: Pool) {
           }
         }
 
-        const headerAccountIdRaw = req.headers["x-account-id"];
-        const headerAccountId = Array.isArray(headerAccountIdRaw)
-          ? headerAccountIdRaw[0]
-          : headerAccountIdRaw;
-        const cacheKey = `${clerkUserId}:${headerAccountId ?? ""}`;
+        const cacheKey = `${clerkUserId}:${clerkOrgId ?? "personal"}`;
         const cached = accountIdCache.get(cacheKey);
         const now = Date.now();
         if (cached && cached.expiresAt > now) {
           req.accountId = cached.accountId;
         } else {
           let resolvedAccountId: number | undefined;
-          if (headerAccountId) {
-            const verifyResult = await pool.query(
-              `SELECT ua.account_id
-               FROM user_accounts ua
-               JOIN users u ON u.id = ua.user_id
-               WHERE u.visitor_id = $1 AND ua.account_id = $2 AND ua.status = 'active'
-               LIMIT 1`,
-              [clerkUserId, headerAccountId],
+
+          if (clerkOrgId) {
+            const orgResult = await pool.query(
+              `SELECT id FROM accounts WHERE clerk_org_id = $1`,
+              [clerkOrgId],
             );
-            if (verifyResult.rows[0]) {
-              resolvedAccountId = verifyResult.rows[0].account_id;
+            if (orgResult.rows[0]) {
+              resolvedAccountId = orgResult.rows[0].id;
+            } else {
+              try {
+                const clerkOrg = await clerk.organizations.getOrganization({
+                  organizationId: clerkOrgId,
+                });
+                const insertedAccount = await pool.query(
+                  `INSERT INTO accounts (name, clerk_org_id)
+                   VALUES ($1, $2) RETURNING id`,
+                  [clerkOrg.name, clerkOrgId],
+                );
+                resolvedAccountId = insertedAccount.rows[0].id as number;
+                const userRow = await pool.query(
+                  `SELECT id FROM users WHERE visitor_id = $1`,
+                  [clerkUserId],
+                );
+                if (userRow.rows[0]) {
+                  await pool.query(
+                    `INSERT INTO user_accounts (user_id, account_id, role, status, joined_at)
+                     VALUES ($1, $2, 'owner', 'active', NOW())
+                     ON CONFLICT (user_id, account_id) DO NOTHING`,
+                    [userRow.rows[0].id, resolvedAccountId],
+                  );
+                }
+              } catch (orgErr) {
+                console.error(
+                  "ensureVisitor: failed to create account for org",
+                  clerkOrgId,
+                  orgErr,
+                );
+              }
             }
           }
+
           if (resolvedAccountId === undefined) {
             const defaultResult = await pool.query(
               `SELECT ua.account_id
@@ -206,6 +235,7 @@ export function createEnsureVisitor(pool: Pool) {
               resolvedAccountId = defaultResult.rows[0].account_id;
             }
           }
+
           if (resolvedAccountId !== undefined) {
             req.accountId = resolvedAccountId;
             accountIdCache.set(cacheKey, {
@@ -213,10 +243,7 @@ export function createEnsureVisitor(pool: Pool) {
               expiresAt: now + ACCOUNT_ID_TTL_MS,
             });
           } else {
-            console.warn(
-              "ensureVisitor: no active user_accounts row for visitor",
-              clerkUserId,
-            );
+            console.warn("ensureVisitor: no account resolved for", clerkUserId);
           }
         }
       }
@@ -292,13 +319,25 @@ export function createAuthRoutes(
           existingMembership.rows[0]?.account_id;
         if (resolvedAccountId === undefined) {
           const trimmedName = name?.trim();
-          const accountName = trimmedName
-            ? `${trimmedName}'s Account`
-            : "Personal Account";
+          const orgName = trimmedName
+            ? `${trimmedName}'s Workspace`
+            : "My Workspace";
+
+          let clerkOrgId: string | undefined;
+          try {
+            const clerkOrg = await clerk.organizations.createOrganization({
+              name: orgName,
+              createdBy: userId,
+            });
+            clerkOrgId = clerkOrg.id;
+          } catch (orgErr) {
+            console.error("Failed to create Clerk org on signup:", orgErr);
+          }
+
           const insertedAccount = await pool.query(
-            `INSERT INTO accounts (name, email, password_hash, visitor_id)
-             VALUES ($1, $2, 'clerk-managed', $3) RETURNING id`,
-            [accountName, email, userId],
+            `INSERT INTO accounts (name, email, password_hash, visitor_id, clerk_org_id)
+             VALUES ($1, $2, 'clerk-managed', $3, $4) RETURNING id`,
+            [orgName, email, userId, clerkOrgId ?? null],
           );
           resolvedAccountId = insertedAccount.rows[0].id as number;
           await pool.query(

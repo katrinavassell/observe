@@ -22,26 +22,21 @@ import {
   Shield,
   UserCircle,
 } from "lucide-vue-next";
+import { OrganizationSwitcher } from "@clerk/vue";
 import ErrorBoundary from "@/components/shared/ErrorBoundary.vue";
 import FeedbackModal from "@/components/shared/FeedbackModal.vue";
 
-import { useTeam } from "@/composables/useTeam";
 import { useAuth } from "@/composables/useAuth";
 import { useDataMode } from "@/composables/useDataMode";
-import { useAccounts } from "@/composables/useAccounts";
-import AccountSwitcher from "@/components/accounts/AccountSwitcher.vue";
 
 const route = useRoute();
 const router = useRouter();
-const { isViewer, fetchTeamInfo } = useTeam();
 const { account, isLoggedIn, logout } = useAuth();
 const { reset: resetDataMode } = useDataMode();
 
 const isMobileLanding = computed(
   () => route.path === "/" || route.path === "/analytics",
 );
-const { accounts: myAccounts } = useAccounts();
-const showAccountSwitcher = computed(() => (myAccounts.value?.length ?? 0) > 1);
 
 // Reset data status when auth state changes (signup clears sample data)
 watch(isLoggedIn, (loggedIn) => {
@@ -55,7 +50,6 @@ const mobileLandingEmail = ref("");
 const queryClient = useQueryClient();
 
 onMounted(() => {
-  fetchTeamInfo();
   // NOTE: do NOT auto-load sample data here. Previously this fired during
   // a brief window where isLoggedIn was false on first paint (before
   // useAuth finished initializing). Result: sample rows got seeded under
@@ -231,9 +225,18 @@ function isActive(path: string) {
       ]"
     >
       <div class="flex h-full flex-col">
-        <!-- Logo / Account Switcher -->
-        <div class="flex h-16 items-center border-b border-sidebar-border px-3">
-          <AccountSwitcher v-if="showAccountSwitcher" class="w-full" />
+        <!-- Header: Org Switcher (logged in) or Logo (guest) -->
+        <div class="flex h-14 items-center border-b border-sidebar-border px-3">
+          <OrganizationSwitcher
+            v-if="isLoggedIn"
+            :appearance="{
+              elements: {
+                rootBox: 'w-full',
+                organizationSwitcherTrigger:
+                  'w-full px-2 py-1.5 hover:bg-muted rounded-lg text-sm',
+              },
+            }"
+          />
           <div v-else class="flex items-center gap-3 px-2">
             <div
               class="flex h-8 w-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground font-semibold text-sm"
@@ -309,14 +312,6 @@ function isActive(path: string) {
 
         <!-- Bottom section: Account & Team Settings -->
         <div class="border-t border-sidebar-border px-3 py-4 space-y-1">
-          <!-- Role badge for viewers -->
-          <div
-            v-if="isViewer"
-            class="flex items-center gap-2 px-3 py-1.5 text-xs text-warning bg-warning/10 rounded-lg mb-2"
-          >
-            <Eye class="h-3 w-3 shrink-0" />
-            <span>Viewer access</span>
-          </div>
           <!-- Account section -->
           <div
             v-if="isLoggedIn && account"
