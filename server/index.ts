@@ -101,11 +101,7 @@ app.use(async (_req: Request, _res: Response, next: NextFunction) => {
 });
 
 // Validate required env vars at startup
-const requiredEnvVars = [
-  "DATABASE_URL",
-  "SUPABASE_URL",
-  "SUPABASE_SERVICE_ROLE_KEY",
-] as const;
+const requiredEnvVars = ["DATABASE_URL", "CLERK_SECRET_KEY"] as const;
 for (const envVar of requiredEnvVars) {
   if (!process.env[envVar]) {
     throw new Error(`${envVar} environment variable is required`);
@@ -114,7 +110,7 @@ for (const envVar of requiredEnvVars) {
 
 app.set("trust proxy", 1);
 
-// Auth middleware — verifies Supabase JWT, sets req.visitorId
+// Auth middleware — verifies Clerk JWT, sets req.visitorId
 const ensureVisitor = createEnsureVisitor(pool);
 app.use(createAuthRoutes(pool, ensureVisitor));
 

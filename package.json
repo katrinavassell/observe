@@ -20,7 +20,8 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.90.0",
-    "@supabase/supabase-js": "^2.103.0",
+    "@clerk/backend": "^3.2.13",
+    "@clerk/vue": "^2.0.15",
     "@tailwindcss/vite": "^4.2.2",
     "@tansohq/sdk": "^0.1.1",
     "@tanstack/vue-query": "^5.95.2",

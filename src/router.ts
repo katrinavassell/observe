@@ -101,15 +101,11 @@ const router = createRouter({
     },
     {
       path: "/forgot-password",
-      name: "forgot-password",
-      component: () => import("@/pages/ForgotPasswordPage.vue"),
-      meta: { noLayout: true },
+      redirect: "/login",
     },
     {
       path: "/reset-password",
-      name: "reset-password",
-      component: () => import("@/pages/ResetPasswordPage.vue"),
-      meta: { noLayout: true },
+      redirect: "/login",
     },
     {
       path: "/login",
@@ -153,29 +149,6 @@ const router = createRouter({
       meta: { noLayout: true },
     },
   ],
-});
-
-// Initialize Supabase auth session once on app load.
-//
-// We DO NOT await inside beforeEach: App.vue already calls initialize()
-// fire-and-forget at mount, and useAuth's init promise is idempotent. Awaiting
-// here blocked every nav on the same cached promise, so if an internal fetch
-// in initialize() hung (no timeouts on supabase.getSession / api.getMe), the
-// sidebar would silently stop responding to clicks until the user refreshed.
-// App.vue's isLoading ref handles the first-paint spinner for the case where
-// the user lands on a protected page before init completes.
-import { initialize } from "@/composables/useAuth";
-let kickedOff = false;
-router.beforeEach(() => {
-  if (!kickedOff) {
-    kickedOff = true;
-    void initialize().catch(() => {
-      // Let the page render — downstream queries surface errors appropriately.
-      // Reset so the next nav can retry.
-      kickedOff = false;
-    });
-  }
-  return true;
 });
 
 export default router;

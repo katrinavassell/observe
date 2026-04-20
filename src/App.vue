@@ -4,13 +4,21 @@ import { RouterView, useRoute, useRouter } from "vue-router";
 import { Toaster } from "vue-sonner";
 import { WifiOff } from "lucide-vue-next";
 import AppLayout from "@/layouts/AppLayout.vue";
+import { useAuth as useClerkAuth } from "@clerk/vue";
 import { useOnline } from "@/composables/useOnline";
-import { initialize, useAuth } from "@/composables/useAuth";
+import { useAuth } from "@/composables/useAuth";
+import { registerTokenGetter } from "@/lib/clerk";
 import { recordReferral } from "@/lib/api";
 
 const { isOnline } = useOnline();
-const { isLoading, isInitialized } = useAuth();
-initialize();
+const { isLoaded, isSignedIn, getToken } = useClerkAuth();
+const { isInitialized } = useAuth();
+const isLoading = computed(() => !isLoaded.value);
+
+registerTokenGetter(
+  () => getToken.value(),
+  () => !!isSignedIn.value,
+);
 const route = useRoute();
 const router = useRouter();
 const noLayout = computed(() => !!route.meta?.noLayout);

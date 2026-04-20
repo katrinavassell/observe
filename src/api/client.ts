@@ -32,18 +32,18 @@ async function request<T>(
 ): Promise<T> {
   const url = `${API_BASE}${endpoint}`;
 
-  const { supabase } = await import("@/lib/supabase");
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
+  const { getAuthToken, isAuthenticated } = await import("@/lib/clerk");
 
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     ...(options.headers as Record<string, string>),
   };
 
-  if (session?.access_token) {
-    headers["Authorization"] = `Bearer ${session.access_token}`;
+  if (isAuthenticated()) {
+    const token = await getAuthToken();
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
   } else {
     let anonId = localStorage.getItem("observe_visitor_id");
     if (!anonId) {

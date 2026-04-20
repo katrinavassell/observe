@@ -1,10 +1,7 @@
-import { supabase } from "@/lib/supabase";
-
 const API_BASE = "/api";
 
 const CURRENT_ACCOUNT_ID_KEY = "observe:current_account_id";
 
-// Anonymous visitor ID — persisted in localStorage so sample data survives page reloads
 function getAnonVisitorId(): string {
   let id = localStorage.getItem("observe_visitor_id");
   if (!id) {
@@ -32,17 +29,18 @@ async function request<T>(
   endpoint: string,
   options: RequestInit = {},
 ): Promise<T> {
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
+  const { getAuthToken, isAuthenticated } = await import("@/lib/clerk");
 
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     ...(options.headers as Record<string, string>),
   };
 
-  if (session?.access_token) {
-    headers["Authorization"] = `Bearer ${session.access_token}`;
+  if (isAuthenticated()) {
+    const token = await getAuthToken();
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
     const accountId = getCurrentAccountId();
     if (accountId !== null && !("X-Account-Id" in headers)) {
       headers["X-Account-Id"] = String(accountId);
