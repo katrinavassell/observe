@@ -22,7 +22,7 @@ import {
   Shield,
   UserCircle,
 } from "lucide-vue-next";
-import { OrganizationSwitcher } from "@clerk/vue";
+import { OrganizationSwitcher, OrganizationProfile } from "@clerk/vue";
 import ErrorBoundary from "@/components/shared/ErrorBoundary.vue";
 import FeedbackModal from "@/components/shared/FeedbackModal.vue";
 
@@ -109,6 +109,8 @@ const navItems = computed(() => [
     dividerBefore: true,
   },
 ]);
+
+const orgProfileOpen = ref(false);
 
 const ADMIN_EMAILS = [
   "dogfood@tansohq.com",
@@ -225,30 +227,32 @@ function isActive(path: string) {
       ]"
     >
       <div class="flex h-full flex-col">
-        <!-- Header: Org Switcher (logged in) or Logo (guest) -->
-        <div class="flex h-14 items-center border-b border-sidebar-border px-3">
-          <OrganizationSwitcher
-            v-if="isLoggedIn"
-            :appearance="{
-              elements: {
-                rootBox: 'w-full',
-                organizationSwitcherTrigger:
-                  'w-full px-2 py-1.5 hover:bg-muted rounded-lg text-sm',
-              },
-            }"
-          />
-          <div v-else class="flex items-center gap-3 px-2">
+        <!-- Header: Logo + Org Switcher -->
+        <div class="flex h-16 items-center border-b border-sidebar-border px-3">
+          <div class="flex items-center gap-3 px-2 flex-1 min-w-0">
             <div
-              class="flex h-8 w-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground font-semibold text-sm"
+              class="flex h-8 w-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground font-semibold text-sm shrink-0"
             >
               O
             </div>
-            <div class="flex flex-col">
+            <div class="flex flex-col min-w-0">
               <span class="text-base font-semibold leading-tight">Observe</span>
               <span class="text-[10px] text-sidebar-foreground/40 leading-tight"
                 >By Tanso</span
               >
             </div>
+          </div>
+          <div v-if="isLoggedIn" class="shrink-0 org-switcher-minimal">
+            <OrganizationSwitcher
+              :appearance="{
+                elements: {
+                  organizationSwitcherTrigger:
+                    'p-1.5 hover:bg-muted rounded-md',
+                  organizationSwitcherTriggerIcon:
+                    'h-4 w-4 text-muted-foreground',
+                },
+              }"
+            />
           </div>
         </div>
 
@@ -307,8 +311,31 @@ function isActive(path: string) {
                 <span>{{ item.label }}</span>
               </router-link>
             </template>
+            <button
+              v-if="isLoggedIn"
+              class="group relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-sidebar-foreground/60 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground transition-all duration-150 w-full text-left"
+              @click="orgProfileOpen = true"
+            >
+              <Users
+                class="h-4 w-4 shrink-0 text-sidebar-foreground/40 group-hover:text-sidebar-foreground/70 transition-colors duration-150"
+              />
+              <span>Team</span>
+            </button>
           </div>
         </nav>
+
+        <!-- Org Profile Modal -->
+        <Teleport to="body">
+          <div
+            v-if="orgProfileOpen"
+            class="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+            @click.self="orgProfileOpen = false"
+          >
+            <div class="relative">
+              <OrganizationProfile />
+            </div>
+          </div>
+        </Teleport>
 
         <!-- Bottom section: Account & Team Settings -->
         <div class="border-t border-sidebar-border px-3 py-4 space-y-1">
@@ -473,3 +500,21 @@ function isActive(path: string) {
     <FeedbackModal :open="feedbackOpen" @close="feedbackOpen = false" />
   </div>
 </template>
+
+<style>
+.org-switcher-minimal .cl-organizationPreview {
+  display: none !important;
+}
+.org-switcher-minimal .cl-organizationSwitcherTrigger__organizationPreview {
+  display: none !important;
+}
+.org-switcher-minimal .cl-userPreview {
+  display: none !important;
+}
+.org-switcher-minimal .cl-organizationPreviewAvatarBox {
+  display: none !important;
+}
+.org-switcher-minimal .cl-organizationPreviewTextContainer {
+  display: none !important;
+}
+</style>
