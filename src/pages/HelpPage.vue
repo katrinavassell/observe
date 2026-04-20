@@ -7,6 +7,10 @@ function toggle(id: string) {
   openSection.value = openSection.value === id ? null : id;
 }
 
+function openFeedback() {
+  window.dispatchEvent(new Event("observe:open-feedback"));
+}
+
 const sections = [
   {
     id: "getting-started",
@@ -172,7 +176,7 @@ const sections = [
       Common questions about Observe. Can't find what you need?
       <button
         class="text-primary underline underline-offset-2"
-        @click="window.dispatchEvent(new Event('observe:open-feedback'))"
+        @click="openFeedback"
       >
         Send us feedback
       </button>
