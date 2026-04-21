@@ -969,12 +969,23 @@ export async function setCustomerInternal(
   });
 }
 
+export async function setCustomerExcluded(
+  customerId: string,
+  isExcluded: boolean,
+): Promise<{ customer_id: string; is_excluded: boolean }> {
+  return request(`/customers/${customerId}/exclude`, {
+    method: "PATCH",
+    body: JSON.stringify({ is_excluded: isExcluded }),
+  });
+}
+
 export interface CohortCustomer {
   customer_id: string;
   customer_name: string;
   customer_email: string | null;
   segment: string | null;
   is_internal: boolean;
+  is_excluded: boolean;
   total_revenue: number;
   total_cost: number;
   margin_pct: number | null;

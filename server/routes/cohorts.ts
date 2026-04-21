@@ -165,7 +165,7 @@ export function createCohortsRoutes(pool: Pool, ensureVisitor: any) {
             `WITH all_customers AS (
                SELECT c.customer_id, c.name, c.email, c.segment, c.is_internal
                FROM customers c
-               WHERE c.account_id = $1 ${internalFilter}
+               WHERE c.account_id = $1 AND c.is_excluded IS NOT TRUE ${internalFilter}
                UNION
                SELECT DISTINCT oe.customer_id,
                       NULL::text AS name,
