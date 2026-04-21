@@ -176,7 +176,7 @@ const aiInstallPromptCopied = ref(false);
 const loomEmbedUrl = ref("");
 
 function buildAiInstallPrompt(apiKey: string) {
-  return `Install Observe by Tanso in this repo so every LLM call is tracked with cost, model, customer, and feature.
+  return `Install Observe by Tanso in this repo so every feature is tracked — LLM calls with cost, model, and tokens, plus non-LLM features (API calls, compute jobs, etc.) for usage and revenue attribution.
 
 READ THIS FIRST — full reference: https://observe.tansohq.com/llms.txt
 It documents three integration paths and the full POST body schema. Use it as the source of truth; do not improvise.
