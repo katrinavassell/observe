@@ -947,32 +947,6 @@ export function createDataRoutes(
           }
         }
 
-        // Dual-write subscriptions to observe_events (use plan price as MRR fallback)
-        if (Array.isArray(subscriptions)) {
-          const planPriceMap = new Map(
-            (plans || []).map(
-              (p: { plan_id: string; price_amount: number }) => [
-                p.plan_id,
-                parseFloat(p.price_amount as unknown as string) || 0,
-              ],
-            ),
-          );
-          for (const sub of subscriptions) {
-            const mrr = sub.mrr_override || planPriceMap.get(sub.plan_id) || 0;
-            await client.query(
-              `INSERT INTO observe_events (user_id, account_id, customer_id, feature_key, event_name, timestamp, revenue_amount, source, granularity)
-             VALUES ($1, $2, $3, $4, 'revenue', NOW(), $5, 'csv', 'monthly_aggregate')`,
-              [
-                req.visitorId,
-                req.accountId ?? null,
-                sub.customer_id,
-                sub.plan_id || "subscription",
-                mrr,
-              ],
-            );
-          }
-        }
-
         await clearSampleData(client, pool, req.visitorId!, req.accountId);
         await client.query(
           "UPDATE user_data_status SET data_mode = $2, updated_at = NOW() WHERE account_id = $1",
@@ -1284,10 +1258,7 @@ export function createDataRoutes(
           const batch = subRows.slice(i, i + batchSize);
           const subValues: unknown[] = [];
           const subPlaceholders: string[] = [];
-          const eventValues: unknown[] = [];
-          const eventPlaceholders: string[] = [];
           let subIdx = 1;
-          let eventIdx = 1;
           for (const s of batch) {
             subPlaceholders.push(
               `($${subIdx++}, $${subIdx++}, $${subIdx++}, $${subIdx++}, $${subIdx++}, $${subIdx++}, $${subIdx++})`,
@@ -1301,24 +1272,10 @@ export function createDataRoutes(
               s.isActive,
               s.mrr,
             );
-            eventPlaceholders.push(
-              `($${eventIdx++}, $${eventIdx++}, $${eventIdx++}, $${eventIdx++}, 'revenue', NOW(), $${eventIdx++}, 'stripe', 'monthly_aggregate')`,
-            );
-            eventValues.push(
-              req.visitorId,
-              req.accountId ?? null,
-              s.customerId,
-              s.productName,
-              s.mrr,
-            );
           }
           await client.query(
             `INSERT INTO subscriptions (user_id, account_id, subscription_id, customer_id, plan_id, is_active, mrr_override) VALUES ${subPlaceholders.join(", ")} ON CONFLICT DO NOTHING`,
             subValues,
-          );
-          await client.query(
-            `INSERT INTO observe_events (user_id, account_id, customer_id, feature_key, event_name, timestamp, revenue_amount, source, granularity) VALUES ${eventPlaceholders.join(", ")}`,
-            eventValues,
           );
         }
 

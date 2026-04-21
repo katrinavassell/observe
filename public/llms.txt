@@ -382,12 +382,17 @@ Revenue is attributed to each event at ingest time (`server/lib/enrich-revenue.t
    - `flat`: revenue = 0 per event (flat subscriptions don't generate per-event revenue)
 3. **Explicit per-event** — `revenueAmount` sent in the SDK event payload overrides
    all of the above.
-4. **Stripe sync** — when Stripe is connected, Observe also creates monthly aggregate
-   revenue events (source=`stripe`) carrying subscription MRR. These use the Stripe
-   product name as `feature_key`.
+4. **Stripe sync** — Stripe sync imports subscription data into the `subscriptions`
+   table. This data is joined at query time for customer-level MRR views. No revenue
+   events are written to `observe_events` from Stripe — this prevents double-counting
+   and fake features.
 
 The `revenue_source` field on each event indicates how the number was derived:
 `feature_pricing`, `per_unit`, `tiered`, `hybrid`, `subscription`, `explicit`, or `none`.
+
+Feature-level and model-level analytics only show usage-attributed revenue (metered,
+tiered, explicit, feature_pricing). Flat subscription MRR cannot be honestly attributed
+to a specific feature and is only shown at the customer level.
 
 #### MRR calculation
 

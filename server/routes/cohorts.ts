@@ -89,6 +89,7 @@ async function getCustomerDataForRules(
      FROM observe_events oe
      LEFT JOIN customers c ON oe.account_id = c.account_id AND oe.customer_id = c.customer_id
      WHERE oe.account_id = $1 AND oe.customer_id IS NOT NULL
+       AND (oe.source IS NULL OR oe.source != 'stripe')
      GROUP BY oe.customer_id, c.name`,
     [accountId],
   );
@@ -201,6 +202,7 @@ export function createCohortsRoutes(pool: Pool, ensureVisitor: any) {
                     COALESCE(SUM(CASE WHEN timestamp >= NOW() - INTERVAL '60 days' AND timestamp < NOW() - INTERVAL '30 days' THEN cost_amount ELSE 0 END), 0) AS prior_cost
              FROM observe_events
              WHERE account_id = $1 AND customer_id IS NOT NULL AND timestamp >= NOW() - INTERVAL '60 days'
+               AND (source IS NULL OR source != 'stripe')
              GROUP BY customer_id`,
             [accountId],
           ),
@@ -210,6 +212,7 @@ export function createCohortsRoutes(pool: Pool, ensureVisitor: any) {
                     COUNT(DISTINCT DATE(timestamp)) AS active_days
              FROM observe_events
              WHERE account_id = $1 AND customer_id IS NOT NULL AND timestamp >= NOW() - INTERVAL '30 days'
+               AND (source IS NULL OR source != 'stripe')
              GROUP BY customer_id`,
             [accountId],
           ),
@@ -218,6 +221,7 @@ export function createCohortsRoutes(pool: Pool, ensureVisitor: any) {
             `SELECT DISTINCT ON (customer_id) customer_id, model, SUM(cost_amount) AS model_cost
              FROM observe_events
              WHERE account_id = $1 AND customer_id IS NOT NULL AND model IS NOT NULL
+               AND (source IS NULL OR source != 'stripe')
              GROUP BY customer_id, model
              ORDER BY customer_id, model_cost DESC`,
             [accountId],

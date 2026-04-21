@@ -364,15 +364,20 @@ from `observe_events` and LEFT JOINs `customers` for metadata (name, email, segm
 Stripe-imported customers with zero SDK events are not shown. Rationale: margins are
 meaningless without cost data — showing $0/$0 produces misleading 0% margins.
 
-**Revenue is enriched at ingest time.** When an SDK event arrives, `server/lib/enrich-revenue.ts`
-stamps `revenue_amount` on the event row before it hits the database. Priority:
+**Per-event revenue is enriched at ingest time.** When an SDK event arrives,
+`server/lib/enrich-revenue.ts` stamps `revenue_amount` on the event row before it hits
+the database. This only applies to usage-attributed revenue (metered, tiered, explicit,
+feature_pricing). Flat subscription MRR is NOT written as events — it lives in the
+`subscriptions` table and is joined at query time for customer-level views. Priority:
 1. `feature_pricing` table (explicit per-feature revenue rules)
 2. Subscription data (metered unit price, tiered pricing, or hybrid)
 3. Explicit `revenueAmount` in the SDK payload overrides everything
 
-**Margins never double-count.** Since PR #94, all analytics queries compute margin from
-`SUM(revenue_amount)` and `SUM(cost_amount)` on `observe_events`. They do NOT add
-subscription MRR on top — that would double-count since revenue is already on the events.
+**Margins never double-count.** Stripe sync no longer writes revenue events into
+`observe_events`. This eliminates the previous double-counting risk where flat subscription
+MRR could appear both as a Stripe event and via enrichment. All analytics queries compute
+margin from `SUM(revenue_amount)` and `SUM(cost_amount)` on `observe_events`. They do NOT
+add subscription MRR on top.
 
 ### MRR calculation
 

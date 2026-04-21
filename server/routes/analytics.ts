@@ -26,6 +26,7 @@ export function createAnalyticsRoutes(pool: Pool, ensureVisitor: any) {
          FROM observe_events oe
          LEFT JOIN customers c ON oe.account_id = c.account_id AND oe.customer_id = c.customer_id
          WHERE oe.account_id = $1 AND oe.customer_id IS NOT NULL
+           AND (oe.source IS NULL OR oe.source != 'stripe')
          GROUP BY oe.customer_id, c.name
          ORDER BY COALESCE(SUM(oe.revenue_amount), 0) - COALESCE(SUM(oe.cost_amount), 0) ASC`,
           [req.accountId],
@@ -35,6 +36,7 @@ export function createAnalyticsRoutes(pool: Pool, ensureVisitor: any) {
           `SELECT DISTINCT ON (customer_id) customer_id, feature_key, SUM(cost_amount) as feat_cost
          FROM observe_events
          WHERE account_id = $1 AND customer_id IS NOT NULL AND feature_key IS NOT NULL
+           AND (source IS NULL OR source != 'stripe')
          GROUP BY customer_id, feature_key
          ORDER BY customer_id, feat_cost DESC`,
           [req.accountId],
@@ -105,6 +107,7 @@ export function createAnalyticsRoutes(pool: Pool, ensureVisitor: any) {
          FROM observe_events oe
          LEFT JOIN customers c ON oe.account_id = c.account_id AND oe.customer_id = c.customer_id
          WHERE oe.account_id = $1 AND oe.customer_id IS NOT NULL
+           AND (oe.source IS NULL OR oe.source != 'stripe')
          GROUP BY oe.customer_id, c.name
          HAVING COALESCE(SUM(oe.cost_amount), 0) > COALESCE(SUM(oe.revenue_amount), 0)`,
           [req.accountId],
@@ -131,6 +134,7 @@ export function createAnalyticsRoutes(pool: Pool, ensureVisitor: any) {
                 COALESCE(SUM(revenue_amount), 0) as total_revenue
          FROM observe_events
          WHERE account_id = $1 AND feature_key IS NOT NULL
+           AND (source IS NULL OR source != 'stripe')
          GROUP BY feature_key
          HAVING COALESCE(SUM(cost_amount), 0) > COALESCE(SUM(revenue_amount), 0)`,
           [req.accountId],
@@ -156,6 +160,7 @@ export function createAnalyticsRoutes(pool: Pool, ensureVisitor: any) {
                 COALESCE(SUM(CASE WHEN timestamp >= NOW() - INTERVAL '60 days' AND timestamp < NOW() - INTERVAL '30 days' THEN cost_amount ELSE 0 END), 0) as prior_cost
          FROM observe_events
          WHERE account_id = $1 AND model IS NOT NULL AND timestamp >= NOW() - INTERVAL '60 days'
+           AND (source IS NULL OR source != 'stripe')
          GROUP BY model
          HAVING COALESCE(SUM(CASE WHEN timestamp >= NOW() - INTERVAL '60 days' AND timestamp < NOW() - INTERVAL '30 days' THEN cost_amount ELSE 0 END), 0) > 0`,
           [req.accountId],
@@ -183,6 +188,7 @@ export function createAnalyticsRoutes(pool: Pool, ensureVisitor: any) {
          FROM observe_events oe
          LEFT JOIN customers c ON oe.account_id = c.account_id AND oe.customer_id = c.customer_id
          WHERE oe.account_id = $1 AND oe.customer_id IS NOT NULL
+           AND (oe.source IS NULL OR oe.source != 'stripe')
          GROUP BY oe.customer_id, c.name`,
           [req.accountId],
         );
@@ -248,6 +254,7 @@ export function createAnalyticsRoutes(pool: Pool, ensureVisitor: any) {
            AND model IS NOT NULL
            AND cost_amount > 0
            AND timestamp > NOW() - MAKE_INTERVAL(days => $2)
+           AND (source IS NULL OR source != 'stripe')
          GROUP BY feature_key, model, model_provider
          ORDER BY total_cost DESC`,
           [req.accountId, days],
@@ -387,6 +394,7 @@ export function createAnalyticsRoutes(pool: Pool, ensureVisitor: any) {
          LEFT JOIN customers c ON oe.account_id = c.account_id AND oe.customer_id = c.customer_id
          WHERE oe.account_id = $1
            AND oe.timestamp > NOW() - MAKE_INTERVAL(days => $2)
+           AND (oe.source IS NULL OR oe.source != 'stripe')
          GROUP BY oe.customer_id, c.name
          HAVING SUM(oe.cost_amount) > SUM(oe.revenue_amount)
          ORDER BY (SUM(oe.cost_amount) - SUM(oe.revenue_amount)) DESC`,
@@ -434,6 +442,7 @@ export function createAnalyticsRoutes(pool: Pool, ensureVisitor: any) {
            COUNT(*) as event_count
          FROM observe_events
          WHERE account_id = $1 AND feature_key IS NOT NULL
+           AND (source IS NULL OR source != 'stripe')
          GROUP BY feature_key`,
           [req.accountId],
         );
@@ -502,6 +511,7 @@ export function createAnalyticsRoutes(pool: Pool, ensureVisitor: any) {
              COALESCE(SUM(revenue_amount), 0) as total_revenue,
              COALESCE(SUM(usage_units), 0) as total_usage
            FROM observe_events WHERE account_id = $1 AND feature_key IS NOT NULL
+             AND (source IS NULL OR source != 'stripe')
            GROUP BY feature_key ORDER BY total_cost DESC`,
             [req.accountId],
           ),
@@ -512,6 +522,7 @@ export function createAnalyticsRoutes(pool: Pool, ensureVisitor: any) {
            FROM observe_events oe
            LEFT JOIN customers c ON oe.account_id = c.account_id AND oe.customer_id = c.customer_id
            WHERE oe.account_id = $1
+             AND (oe.source IS NULL OR oe.source != 'stripe')
            GROUP BY oe.customer_id, c.name, c.segment ORDER BY total_revenue DESC LIMIT 10`,
             [req.accountId],
           ),
@@ -863,6 +874,7 @@ Return ONLY the JSON object, no markdown or explanation.`;
              COUNT(*) as event_count
            FROM observe_events
            WHERE account_id = $1 AND feature_key IS NOT NULL
+             AND (source IS NULL OR source != 'stripe')
            GROUP BY feature_key`,
             [req.accountId],
           );
@@ -874,6 +886,7 @@ Return ONLY the JSON object, no markdown or explanation.`;
            FROM observe_events oe
            LEFT JOIN customers c ON oe.account_id = c.account_id AND oe.customer_id = c.customer_id
            WHERE oe.account_id = $1
+             AND (oe.source IS NULL OR oe.source != 'stripe')
            GROUP BY oe.customer_id, c.name, c.segment`,
             [req.accountId],
           );
@@ -1248,6 +1261,7 @@ Return ONLY the JSON object, no markdown or explanation.`;
                   COALESCE(SUM(revenue_amount), 0) as current_revenue
            FROM observe_events
            WHERE account_id = $1 AND feature_key IS NOT NULL
+             AND (source IS NULL OR source != 'stripe')
            GROUP BY feature_key
            ORDER BY total_cost DESC`,
             [req.accountId],
@@ -1372,6 +1386,7 @@ Only return the JSON array, no other text.`;
             COALESCE(SUM(cost_amount), 0) as total_cost
           FROM observe_events
           WHERE account_id = $1
+            AND (source IS NULL OR source != 'stripe')
           GROUP BY revenue_source
           ORDER BY total_revenue DESC`,
           [req.accountId],
@@ -1438,6 +1453,7 @@ Only return the JSON array, no other text.`;
             COUNT(DISTINCT model) as models_used
           FROM observe_events
           WHERE account_id = $1 AND timestamp >= NOW() - MAKE_INTERVAL(months => $2)
+            AND (source IS NULL OR source != 'stripe')
           GROUP BY month
           ORDER BY month ASC`,
           [req.accountId, months],

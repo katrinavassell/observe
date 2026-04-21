@@ -1007,7 +1007,7 @@ export function createCustomersRoutes(
             [req.accountId!, id],
           ),
           pool.query(
-            `SELECT feature_key, COUNT(*) as event_count, COALESCE(SUM(cost_amount), 0) as total_cost, COALESCE(SUM(revenue_amount), 0) as total_revenue, COALESCE(SUM(usage_units), 0) as total_usage, SUM(input_tokens) as total_input_tokens, SUM(output_tokens) as total_output_tokens FROM observe_events WHERE account_id = $1 AND customer_id = $2 AND feature_key IS NOT NULL GROUP BY feature_key ORDER BY total_cost DESC`,
+            `SELECT feature_key, COUNT(*) as event_count, COALESCE(SUM(cost_amount), 0) as total_cost, COALESCE(SUM(revenue_amount), 0) as total_revenue, COALESCE(SUM(usage_units), 0) as total_usage, SUM(input_tokens) as total_input_tokens, SUM(output_tokens) as total_output_tokens FROM observe_events WHERE account_id = $1 AND customer_id = $2 AND feature_key IS NOT NULL AND (source IS NULL OR source != 'stripe') GROUP BY feature_key ORDER BY total_cost DESC`,
             [req.accountId!, id],
           ),
         ]);
@@ -1101,6 +1101,7 @@ export function createCustomersRoutes(
                  COALESCE(SUM(revenue_amount), 0) as total_revenue,
                  COALESCE(SUM(usage_units), 0) as total_usage
            FROM observe_events WHERE account_id = $1 AND customer_id = $2
+             AND (source IS NULL OR source != 'stripe')
            GROUP BY month ORDER BY month ASC`,
           [req.accountId!, id],
         );
