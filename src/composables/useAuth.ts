@@ -23,6 +23,7 @@ export function useAuth() {
       if (signedIn && !account.value) {
         if (setupInFlight) return;
         setupInFlight = true;
+        isInitialized.value = false;
         try {
           for (let attempt = 0; attempt < 3; attempt++) {
             try {
