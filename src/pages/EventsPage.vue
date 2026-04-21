@@ -875,42 +875,70 @@ function usageTooltip(event: ObserveEvent): string {
 
                   <!-- Feature -->
                   <td v-else-if="col.id === 'feature'" class="px-4 py-3">
-                    <span
+                    <button
                       v-if="event.feature_key"
-                      class="font-mono text-xs bg-muted px-1.5 py-0.5 rounded"
+                      class="hover:underline"
+                      @click.stop="
+                        selectedFeature = event.feature_key;
+                        resetPage();
+                      "
                     >
-                      {{ event.feature_key }}
-                    </span>
+                      <span
+                        class="font-mono text-xs bg-muted px-1.5 py-0.5 rounded"
+                      >
+                        {{ event.feature_key }}
+                      </span>
+                    </button>
                     <span v-else class="text-muted-foreground text-sm">—</span>
                   </td>
 
                   <!-- Customer -->
                   <td v-else-if="col.id === 'customer'" class="px-4 py-3">
-                    <span
+                    <button
                       v-if="
                         event.customer_name &&
                         event.customer_name !== event.customer_id
                       "
-                      class="text-sm"
+                      class="text-sm hover:underline text-left"
+                      @click.stop="
+                        selectedCustomer = event.customer_id;
+                        resetPage();
+                      "
                     >
                       {{ event.customer_name }}
-                    </span>
-                    <code
+                    </button>
+                    <button
                       v-else-if="event.customer_id"
-                      class="font-mono text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded"
-                      >{{ event.customer_id }}</code
+                      class="hover:underline"
+                      @click.stop="
+                        selectedCustomer = event.customer_id;
+                        resetPage();
+                      "
                     >
+                      <code
+                        class="font-mono text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded"
+                        >{{ event.customer_id }}</code
+                      >
+                    </button>
                     <span v-else class="text-muted-foreground text-sm">—</span>
                   </td>
 
                   <!-- Model -->
                   <td v-else-if="col.id === 'model'" class="px-4 py-3">
-                    <span
+                    <button
                       v-if="event.model"
-                      class="font-mono text-xs bg-muted text-muted-foreground px-2 py-0.5 rounded-md border"
+                      class="hover:underline"
+                      @click.stop="
+                        selectedModel = event.model;
+                        resetPage();
+                      "
                     >
-                      {{ event.model }}
-                    </span>
+                      <span
+                        class="font-mono text-xs bg-muted text-muted-foreground px-2 py-0.5 rounded-md border"
+                      >
+                        {{ event.model }}
+                      </span>
+                    </button>
                     <span v-else class="text-muted-foreground text-sm">—</span>
                   </td>
 
