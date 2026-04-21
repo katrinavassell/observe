@@ -94,7 +94,7 @@ export async function syncStripeDataForUser(
   ] = await Promise.all([
     stripe.customers.list({ limit: 100 }).autoPagingToArray({ limit: 10000 }),
     stripe.subscriptions
-      .list({ limit: 100, status: "all", expand: ["data.items.data.price"] })
+      .list({ limit: 100, status: "all" })
       .autoPagingToArray({ limit: 10000 }),
     stripe.products
       .list({ limit: 100, active: true })
@@ -259,8 +259,12 @@ export async function syncStripeDataForUser(
     let tieredPayload: unknown | null = null;
 
     for (const item of items) {
-      const price = item.price;
-      if (!price) continue;
+      const priceId =
+        typeof item.price === "string" ? item.price : item.price?.id;
+      const price = priceId
+        ? (pricesList.find((p) => p.id === priceId) ?? item.price)
+        : item.price;
+      if (!price || typeof price === "string") continue;
       const isMetered = price.recurring?.usage_type === "metered";
       const isTiered = price.billing_scheme === "tiered";
       const yearly = price.recurring?.interval === "year";
