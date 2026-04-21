@@ -13,14 +13,8 @@ import { recordReferral } from "@/lib/api";
 const { isOnline } = useOnline();
 const { isLoaded, isSignedIn, getToken } = useClerkAuth();
 const { isInitialized } = useAuth();
-const hasSessionCookie =
-  document.cookie.includes("__session") ||
-  document.cookie.includes("__client_uat");
 const isLoading = computed(
-  () =>
-    !isLoaded.value ||
-    (isSignedIn.value && !isInitialized.value) ||
-    (hasSessionCookie && !isSignedIn.value),
+  () => !isLoaded.value || (isSignedIn.value && !isInitialized.value),
 );
 
 registerTokenGetter(
