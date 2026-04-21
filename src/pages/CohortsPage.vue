@@ -383,6 +383,8 @@ function removeExcludePattern(index: number) {
   );
 }
 
+const queryClient = useQueryClient();
+
 async function handleExcludeCustomer(customerId: string) {
   try {
     await setCustomerExcluded(customerId, true);
