@@ -143,7 +143,8 @@ const checkBillingFeatureAccess = (
   visitorId: string,
   featureKey: string,
   email?: string,
-) => checkFeatureAccess(pool, visitorId, featureKey, email);
+  accountId?: number,
+) => checkFeatureAccess(pool, visitorId, featureKey, email, accountId);
 const trackBillingUsage = (
   _visitorId: string,
   _featureKey: string,
