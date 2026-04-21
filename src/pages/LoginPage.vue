@@ -25,7 +25,7 @@ watch(
   { immediate: true },
 );
 
-const isRegisterMode = computed(() => route.path !== "/login");
+const isRegisterMode = computed(() => route.path.startsWith("/signup"));
 
 onMounted(() => {
   window.posthog?.capture(
