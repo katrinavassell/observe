@@ -1047,12 +1047,12 @@ async function _doDbInit() {
     );
     // Race-protect SDK key auto-generation on /auth/signup-complete.
     // PARTIAL unique index — only active (non-revoked) keys must have a
-    // unique (user_id, name). This lets /sdk-keys/:id/reset soft-delete
+    // unique (account_id, name). This lets /sdk-keys/:id/reset soft-delete
     // the old row and insert a new one with the same name.
     try {
       await pool.query(
-        `CREATE UNIQUE INDEX IF NOT EXISTS sdk_api_keys_user_name_active
-           ON sdk_api_keys (user_id, name)
+        `CREATE UNIQUE INDEX IF NOT EXISTS sdk_api_keys_account_name_active
+           ON sdk_api_keys (account_id, name)
            WHERE revoked_at IS NULL`,
       );
     } catch (err: unknown) {
