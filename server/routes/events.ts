@@ -784,6 +784,22 @@ export function createEventsRoutes(
           return res.status(400).json({ error: "Invalid key ID" });
         }
 
+        const activeCount = req.accountId
+          ? await pool.query(
+              "SELECT COUNT(*)::int AS cnt FROM sdk_api_keys WHERE account_id = $1 AND revoked_at IS NULL",
+              [req.accountId],
+            )
+          : await pool.query(
+              "SELECT COUNT(*)::int AS cnt FROM sdk_api_keys WHERE user_id = $1 AND revoked_at IS NULL",
+              [req.visitorId],
+            );
+
+        if (activeCount.rows[0].cnt <= 1) {
+          return res.status(400).json({
+            error: "Cannot delete your only API key — rotate it instead",
+          });
+        }
+
         const result = req.accountId
           ? await pool.query(
               "UPDATE sdk_api_keys SET revoked_at = NOW() WHERE id = $1 AND account_id = $2 AND revoked_at IS NULL",
@@ -909,6 +925,8 @@ export function createEventsRoutes(
           pool,
           userId,
           "event_ingest",
+          undefined,
+          (req as AuthRequest).accountId,
         );
         if (!ingestAccess.allowed) {
           return res.status(429).json({
