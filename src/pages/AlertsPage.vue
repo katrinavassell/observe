@@ -766,7 +766,7 @@ function relativeTime(dateStr: string) {
       </CardContent>
     </Card>
     <div
-      v-else-if="historyLoading"
+      v-else-if="historyLoading && !isLoading"
       class="flex items-center justify-center py-6"
     >
       <Loader2 class="h-4 w-4 animate-spin text-muted-foreground" />

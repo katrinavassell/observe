@@ -145,7 +145,7 @@ function copyKeyValue(key: SdkKey) {
 async function handleResetKey(id: number) {
   if (
     !window.confirm(
-      "Rotate this API key? The current key will stop working immediately — update your SDK with the new one.",
+      "Roll this API key? The current key will stop working immediately — update your SDK with the new one.",
     )
   )
     return;
@@ -153,9 +153,9 @@ async function handleResetKey(id: number) {
     const result = await resetSdkKey(id);
     await loadSdkKeys();
     generatedKey.value = result.key;
-    toast.success("API key rotated — copy the new one now");
+    toast.success("API key rolled — copy the new one now");
   } catch (error) {
-    toast.error("Failed to rotate key", {
+    toast.error("Failed to roll key", {
       description: error instanceof Error ? error.message : "Please try again.",
     });
   }
@@ -521,11 +521,7 @@ onMounted(async () => {
   if (!isLoggedIn.value) return;
   await Promise.all([loadSdkKeys(), loadStripeStatus(), loadProviderStatus()]);
 
-  const stashed = window.localStorage.getItem("observe:fresh_sdk_key");
-  if (stashed) {
-    generatedKey.value = stashed;
-    window.localStorage.removeItem("observe:fresh_sdk_key");
-  }
+  window.localStorage.removeItem("observe:fresh_sdk_key");
 
   startEventPolling();
 });
@@ -823,7 +819,7 @@ watch(
                   :disabled="!key.full_key"
                   :title="
                     !key.full_key
-                      ? 'Legacy key — rotate to view full key'
+                      ? 'Legacy key — roll to view full key'
                       : copiedPrefixId === key.id
                         ? 'Copied!'
                         : 'Copy key'
@@ -841,16 +837,17 @@ watch(
                   variant="outline"
                   size="sm"
                   class="h-8 text-xs"
-                  title="Rotate — invalidates the old key and shows the new one"
+                  title="Roll — invalidates the old key and shows the new one"
                   @click="handleResetKey(key.id)"
                 >
                   <RefreshCw class="h-3.5 w-3.5 mr-1" />
-                  Rotate
+                  Roll
                 </Button>
                 <Button
+                  v-if="sdkKeys.length > 1"
                   variant="outline"
                   size="sm"
-                  class="h-8 text-xs text-muted-foreground hover:text-destructive"
+                  class="h-8 text-xs hover:text-destructive"
                   title="Delete key"
                   @click="handleRevokeKey(key.id)"
                 >
@@ -860,7 +857,7 @@ watch(
               </div>
             </div>
             <p class="text-[11px] text-muted-foreground">
-              Keys stay visible here. Rotate any time the current one is
+              Keys stay visible here. Roll any time the current one is
               compromised — the old key stops working immediately.
             </p>
           </div>
