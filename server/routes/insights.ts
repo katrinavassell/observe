@@ -754,11 +754,13 @@ Return ONLY the JSON array, no markdown or explanation.`;
             visitorId,
             "ai_insights",
             req.accountEmail,
+            req.accountId,
           ),
           deps.checkBillingFeatureAccess(
             visitorId,
             "event_ingest",
             req.accountEmail,
+            req.accountId,
           ),
         ]);
         res.json({
