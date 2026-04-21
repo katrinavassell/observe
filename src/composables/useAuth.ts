@@ -6,6 +6,7 @@ import { logger } from "@/lib/logger";
 
 const account = ref<Account | null>(null);
 const isInitialized = ref(false);
+let setupInFlight = false;
 
 export function useAuth() {
   const { isSignedIn, isLoaded, getToken } = useClerkAuth();
@@ -20,6 +21,8 @@ export function useAuth() {
     isSignedIn,
     async (signedIn, wasSignedIn) => {
       if (signedIn && !account.value) {
+        if (setupInFlight) return;
+        setupInFlight = true;
         for (let attempt = 0; attempt < 3; attempt++) {
           try {
             const me = await api.getMe();
@@ -47,6 +50,7 @@ export function useAuth() {
             }
           }
         }
+        setupInFlight = false;
         isInitialized.value = true;
 
         if (account.value && window.posthog) {

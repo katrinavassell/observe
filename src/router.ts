@@ -108,13 +108,13 @@ const router = createRouter({
       redirect: "/login",
     },
     {
-      path: "/login",
+      path: "/login/:pathMatch(.*)*",
       name: "login",
       component: () => import("@/pages/LoginPage.vue"),
       meta: { noLayout: true },
     },
     {
-      path: "/signup",
+      path: "/signup/:pathMatch(.*)*",
       name: "signup",
       component: () => import("@/pages/LoginPage.vue"),
       meta: { noLayout: true },
