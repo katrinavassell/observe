@@ -252,7 +252,7 @@ export function createEventsRoutes(
         const eventsResult = await pool.query(
           `SELECT oe.*, c.name as customer_name
          FROM observe_events oe
-         LEFT JOIN customers c ON oe.account_id = c.account_id AND oe.customer_id = c.customer_id
+         LEFT JOIN customers c ON oe.account_id = c.account_id AND oe.customer_id = c.customer_id AND c.is_excluded IS NOT TRUE
          ${where}
          ORDER BY ${sortBy} ${sortDir}
          LIMIT $${paramIdx++} OFFSET $${paramIdx}`,
@@ -260,7 +260,9 @@ export function createEventsRoutes(
         );
 
         const countResult = await pool.query(
-          `SELECT COUNT(*) FROM observe_events oe ${where}`,
+          `SELECT COUNT(*) FROM observe_events oe
+         LEFT JOIN customers c ON oe.account_id = c.account_id AND oe.customer_id = c.customer_id
+         ${where} AND c.is_excluded IS NOT TRUE`,
           params,
         );
 
@@ -372,6 +374,7 @@ export function createEventsRoutes(
            MAX(d.timestamp) as last_seen
          FROM deduped d
          LEFT JOIN customers c ON d.account_id = c.account_id AND d.customer_id = c.customer_id
+         WHERE c.is_excluded IS NOT TRUE
          GROUP BY d.customer_id, c.name ORDER BY total_cost DESC`,
           [req.accountId!],
         );
