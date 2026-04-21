@@ -128,10 +128,10 @@ function handleClose() {
           <div class="text-sm text-muted-foreground">
             <p>
               Enter a Stripe restricted API key with read access to Customers,
-              Subscriptions, Products, and Prices.
+              Subscriptions, Products, Prices, and Plans.
             </p>
             <a
-              href="https://dashboard.stripe.com/apikeys/create?name=Observe+Read+Only&permissions%5B%5D=rak_customer_read&permissions%5B%5D=rak_subscription_read&permissions%5B%5D=rak_product_read&permissions%5B%5D=rak_price_read"
+              href="https://dashboard.stripe.com/apikeys/create?name=Observe+Read+Only&permissions%5B%5D=rak_customer_read&permissions%5B%5D=rak_subscription_read&permissions%5B%5D=rak_product_read&permissions%5B%5D=rak_price_read&permissions%5B%5D=rak_plan_read"
               target="_blank"
               rel="noopener noreferrer"
               class="inline-flex items-center gap-1 text-primary hover:underline mt-1"
