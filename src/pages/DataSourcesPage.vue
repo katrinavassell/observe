@@ -255,7 +255,9 @@ If they do:
 
 ## Verify
 
-After wiring up, run the app once and make one LLM call. The Data Sources page at https://observe.tansohq.com/data-sources will show "Event received" once the first event lands.
+After wiring up, run the app once and make one LLM call. Use \`"test_customer"\` as the \`customerReferenceId\` for this first event so it's easy to identify. The Data Sources page at https://observe.tansohq.com/data-sources will show "Event received" once it lands.
+
+Once you've confirmed events are flowing, you can exclude the test customer from all views using the Exclude toggle on the Customers page.
 
 ## What to expect
 
