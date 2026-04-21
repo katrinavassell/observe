@@ -8,6 +8,7 @@ type CheckBillingFeatureAccessFn = (
   visitorId: string,
   featureKey: string,
   email?: string,
+  accountId?: number,
 ) => Promise<{
   allowed: boolean;
   reason?: string;
