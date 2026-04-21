@@ -113,8 +113,8 @@ export function createEnsureVisitor(pool: Pool) {
             }
 
             const existingKey = await pool.query(
-              "SELECT id FROM sdk_api_keys WHERE user_id = $1 AND revoked_at IS NULL LIMIT 1",
-              [clerkUserId],
+              "SELECT id FROM sdk_api_keys WHERE account_id = $1 AND revoked_at IS NULL LIMIT 1",
+              [resolvedAccountId],
             );
             if (existingKey.rows.length === 0) {
               const cryptoMod = await import("crypto");
@@ -464,8 +464,8 @@ export function createAuthRoutes(
           sdkKey = rawKey;
         } else {
           const existing = await pool.query(
-            "SELECT id FROM sdk_api_keys WHERE user_id = $1 AND revoked_at IS NULL LIMIT 1",
-            [userId],
+            "SELECT id FROM sdk_api_keys WHERE account_id = $1 AND revoked_at IS NULL LIMIT 1",
+            [resolvedAccountId],
           );
           if (existing.rows.length === 0) {
             throw new Error(

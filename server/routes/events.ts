@@ -623,18 +623,17 @@ export function createEventsRoutes(
 
         // Auto-disambiguate the name if (user_id, name) already exists —
         // avoids leaking DB error messages back to the caller.
+        if (!req.accountId) {
+          return res.status(400).json({ error: "No account resolved" });
+        }
+
         let finalName = name;
         for (let attempt = 0; attempt < 10; attempt++) {
           const candidate = attempt === 0 ? name : `${name}-${attempt + 1}`;
-          const conflict = req.accountId
-            ? await pool.query(
-                "SELECT 1 FROM sdk_api_keys WHERE account_id = $1 AND name = $2 AND revoked_at IS NULL",
-                [req.accountId, candidate],
-              )
-            : await pool.query(
-                "SELECT 1 FROM sdk_api_keys WHERE user_id = $1 AND name = $2 AND revoked_at IS NULL",
-                [req.visitorId, candidate],
-              );
+          const conflict = await pool.query(
+            "SELECT 1 FROM sdk_api_keys WHERE account_id = $1 AND name = $2 AND revoked_at IS NULL",
+            [req.accountId, candidate],
+          );
           if (conflict.rows.length === 0) {
             finalName = candidate;
             break;
@@ -667,15 +666,13 @@ export function createEventsRoutes(
     ensureVisitor,
     async (req: AuthRequest, res: Response) => {
       try {
-        const result = req.accountId
-          ? await pool.query(
-              "SELECT id, key_prefix, encrypted_key, name, created_at, last_used_at FROM sdk_api_keys WHERE account_id = $1 AND revoked_at IS NULL ORDER BY created_at DESC",
-              [req.accountId],
-            )
-          : await pool.query(
-              "SELECT id, key_prefix, encrypted_key, name, created_at, last_used_at FROM sdk_api_keys WHERE user_id = $1 AND revoked_at IS NULL ORDER BY created_at DESC",
-              [req.visitorId],
-            );
+        if (!req.accountId) {
+          return res.status(400).json({ error: "No account resolved" });
+        }
+        const result = await pool.query(
+          "SELECT id, key_prefix, encrypted_key, name, created_at, last_used_at FROM sdk_api_keys WHERE account_id = $1 AND revoked_at IS NULL ORDER BY created_at DESC",
+          [req.accountId],
+        );
         const keys = result.rows.map((row) => {
           let fullKey: string | null = null;
           if (row.encrypted_key) {
@@ -718,15 +715,13 @@ export function createEventsRoutes(
         }
 
         // Get the old key's name
-        const old = req.accountId
-          ? await pool.query(
-              "SELECT name FROM sdk_api_keys WHERE id = $1 AND account_id = $2 AND revoked_at IS NULL",
-              [keyId, req.accountId],
-            )
-          : await pool.query(
-              "SELECT name FROM sdk_api_keys WHERE id = $1 AND user_id = $2 AND revoked_at IS NULL",
-              [keyId, req.visitorId],
-            );
+        if (!req.accountId) {
+          return res.status(400).json({ error: "No account resolved" });
+        }
+        const old = await pool.query(
+          "SELECT name FROM sdk_api_keys WHERE id = $1 AND account_id = $2 AND revoked_at IS NULL",
+          [keyId, req.accountId],
+        );
         if (old.rows.length === 0) {
           return res.status(404).json({ error: "Key not found" });
         }
@@ -784,15 +779,14 @@ export function createEventsRoutes(
           return res.status(400).json({ error: "Invalid key ID" });
         }
 
-        const activeCount = req.accountId
-          ? await pool.query(
-              "SELECT COUNT(*)::int AS cnt FROM sdk_api_keys WHERE account_id = $1 AND revoked_at IS NULL",
-              [req.accountId],
-            )
-          : await pool.query(
-              "SELECT COUNT(*)::int AS cnt FROM sdk_api_keys WHERE user_id = $1 AND revoked_at IS NULL",
-              [req.visitorId],
-            );
+        if (!req.accountId) {
+          return res.status(400).json({ error: "No account resolved" });
+        }
+
+        const activeCount = await pool.query(
+          "SELECT COUNT(*)::int AS cnt FROM sdk_api_keys WHERE account_id = $1 AND revoked_at IS NULL",
+          [req.accountId],
+        );
 
         if (activeCount.rows[0].cnt <= 1) {
           return res.status(400).json({
@@ -800,15 +794,10 @@ export function createEventsRoutes(
           });
         }
 
-        const result = req.accountId
-          ? await pool.query(
-              "UPDATE sdk_api_keys SET revoked_at = NOW() WHERE id = $1 AND account_id = $2 AND revoked_at IS NULL",
-              [keyId, req.accountId],
-            )
-          : await pool.query(
-              "UPDATE sdk_api_keys SET revoked_at = NOW() WHERE id = $1 AND user_id = $2 AND revoked_at IS NULL",
-              [keyId, req.visitorId],
-            );
+        const result = await pool.query(
+          "UPDATE sdk_api_keys SET revoked_at = NOW() WHERE id = $1 AND account_id = $2 AND revoked_at IS NULL",
+          [keyId, req.accountId],
+        );
 
         if (result.rowCount === 0) {
           return res.status(404).json({ error: "Key not found" });
