@@ -626,10 +626,15 @@ export function createEventsRoutes(
         let finalName = name;
         for (let attempt = 0; attempt < 10; attempt++) {
           const candidate = attempt === 0 ? name : `${name}-${attempt + 1}`;
-          const conflict = await pool.query(
-            "SELECT 1 FROM sdk_api_keys WHERE account_id = $1 AND name = $2",
-            [req.accountId!, candidate],
-          );
+          const conflict = req.accountId
+            ? await pool.query(
+                "SELECT 1 FROM sdk_api_keys WHERE account_id = $1 AND name = $2 AND revoked_at IS NULL",
+                [req.accountId, candidate],
+              )
+            : await pool.query(
+                "SELECT 1 FROM sdk_api_keys WHERE user_id = $1 AND name = $2 AND revoked_at IS NULL",
+                [req.visitorId, candidate],
+              );
           if (conflict.rows.length === 0) {
             finalName = candidate;
             break;
@@ -662,10 +667,15 @@ export function createEventsRoutes(
     ensureVisitor,
     async (req: AuthRequest, res: Response) => {
       try {
-        const result = await pool.query(
-          "SELECT id, key_prefix, encrypted_key, name, created_at, last_used_at FROM sdk_api_keys WHERE account_id = $1 AND revoked_at IS NULL ORDER BY created_at DESC",
-          [req.accountId!],
-        );
+        const result = req.accountId
+          ? await pool.query(
+              "SELECT id, key_prefix, encrypted_key, name, created_at, last_used_at FROM sdk_api_keys WHERE account_id = $1 AND revoked_at IS NULL ORDER BY created_at DESC",
+              [req.accountId],
+            )
+          : await pool.query(
+              "SELECT id, key_prefix, encrypted_key, name, created_at, last_used_at FROM sdk_api_keys WHERE user_id = $1 AND revoked_at IS NULL ORDER BY created_at DESC",
+              [req.visitorId],
+            );
         const keys = result.rows.map((row) => {
           let fullKey: string | null = null;
           if (row.encrypted_key) {
@@ -708,10 +718,15 @@ export function createEventsRoutes(
         }
 
         // Get the old key's name
-        const old = await pool.query(
-          "SELECT name FROM sdk_api_keys WHERE id = $1 AND account_id = $2 AND revoked_at IS NULL",
-          [keyId, req.accountId!],
-        );
+        const old = req.accountId
+          ? await pool.query(
+              "SELECT name FROM sdk_api_keys WHERE id = $1 AND account_id = $2 AND revoked_at IS NULL",
+              [keyId, req.accountId],
+            )
+          : await pool.query(
+              "SELECT name FROM sdk_api_keys WHERE id = $1 AND user_id = $2 AND revoked_at IS NULL",
+              [keyId, req.visitorId],
+            );
         if (old.rows.length === 0) {
           return res.status(404).json({ error: "Key not found" });
         }
@@ -719,8 +734,8 @@ export function createEventsRoutes(
 
         // Revoke old key
         await pool.query(
-          "UPDATE sdk_api_keys SET revoked_at = NOW() WHERE id = $1 AND account_id = $2",
-          [keyId, req.accountId!],
+          "UPDATE sdk_api_keys SET revoked_at = NOW() WHERE id = $1",
+          [keyId],
         );
 
         // Generate new key (same name, unique constraint is partial on
@@ -769,10 +784,15 @@ export function createEventsRoutes(
           return res.status(400).json({ error: "Invalid key ID" });
         }
 
-        const result = await pool.query(
-          "UPDATE sdk_api_keys SET revoked_at = NOW() WHERE id = $1 AND account_id = $2 AND revoked_at IS NULL",
-          [keyId, req.accountId!],
-        );
+        const result = req.accountId
+          ? await pool.query(
+              "UPDATE sdk_api_keys SET revoked_at = NOW() WHERE id = $1 AND account_id = $2 AND revoked_at IS NULL",
+              [keyId, req.accountId],
+            )
+          : await pool.query(
+              "UPDATE sdk_api_keys SET revoked_at = NOW() WHERE id = $1 AND user_id = $2 AND revoked_at IS NULL",
+              [keyId, req.visitorId],
+            );
 
         if (result.rowCount === 0) {
           return res.status(404).json({ error: "Key not found" });
