@@ -307,6 +307,7 @@ Only include action blocks when the user explicitly asks you to do something. Fo
           req.visitorId!,
           "ai_insights",
           req.accountEmail,
+          req.accountId,
         );
         if (!access.allowed) {
           return res.status(403).json({

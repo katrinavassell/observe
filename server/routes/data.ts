@@ -9,6 +9,7 @@ type CheckBillingFeatureAccessFn = (
   visitorId: string,
   featureKey: string,
   email?: string,
+  accountId?: number,
 ) => Promise<{
   allowed: boolean;
   reason?: string;
@@ -611,6 +612,7 @@ export function createDataRoutes(
         req.visitorId!,
         "csv_upload",
         req.accountEmail,
+        req.accountId,
       );
       if (!access.allowed)
         return res.status(403).json({
@@ -730,6 +732,7 @@ export function createDataRoutes(
         req.visitorId!,
         "csv_upload",
         req.accountEmail,
+        req.accountId,
       );
       if (!access.allowed)
         return res.status(403).json({
@@ -850,6 +853,7 @@ export function createDataRoutes(
         req.visitorId!,
         "csv_upload",
         req.accountEmail,
+        req.accountId,
       );
       if (!access.allowed)
         return res.status(403).json({
@@ -1419,6 +1423,7 @@ export function createDataRoutes(
         req.visitorId!,
         "csv_upload",
         req.accountEmail,
+        req.accountId,
       );
       if (!access.allowed)
         return res

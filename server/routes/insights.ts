@@ -23,6 +23,7 @@ type CheckBillingFeatureAccessFn = (
   visitorId: string,
   featureKey: string,
   email?: string,
+  accountId?: number,
 ) => Promise<{
   allowed: boolean;
   reason?: string;
@@ -78,6 +79,7 @@ export function createInsightsRoutes(
         visitorId,
         "ai_insights",
         req.accountEmail,
+        req.accountId,
       );
       if (!aiAccess.allowed) {
         return res.status(403).json({
