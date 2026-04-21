@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, watch } from "vue";
 import { useRouter, useRoute } from "vue-router";
-import { SignIn, SignUp } from "@clerk/vue";
+import { SignIn, SignUp, AuthenticateWithRedirectCallback } from "@clerk/vue";
 import {
   BarChart3,
   DollarSign,
@@ -26,6 +26,10 @@ watch(
 );
 
 const isRegisterMode = computed(() => route.path.startsWith("/signup"));
+const isSsoCallback = computed(
+  () =>
+    route.path.includes("/sso-callback") || route.path.includes("/sso-verify"),
+);
 
 onMounted(() => {
   window.posthog?.capture(
@@ -134,8 +138,13 @@ const highlights = [
 
     <!-- Right panel — Clerk auth -->
     <div class="flex-1 flex items-center justify-center p-4 sm:p-8">
+      <AuthenticateWithRedirectCallback
+        v-if="isSsoCallback"
+        :sign-in-fallback-redirect-url="'/'"
+        :sign-up-fallback-redirect-url="'/'"
+      />
       <SignUp
-        v-if="isRegisterMode"
+        v-else-if="isRegisterMode"
         :routing="'path'"
         :path="'/signup'"
         :sign-in-url="'/login'"
