@@ -50,7 +50,7 @@ const { data: cohortsData } = useQuery({
   enabled: isLoggedIn,
 });
 
-const { data: healthData } = useQuery({
+const { data: _healthData } = useQuery({
   queryKey: ["customer-health", customerId],
   queryFn: () => getHealthHistory(customerId.value),
   enabled: () => isLoggedIn.value && !!customerId.value,
@@ -70,7 +70,6 @@ const isLoading = computed(() => detailLoading.value || tsLoading.value);
 // Signals
 const signals = computed(() => {
   const cc = cohortCustomer.value;
-  const d = detail.value;
   if (!cc) return [];
 
   const items: {

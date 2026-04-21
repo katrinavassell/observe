@@ -26,7 +26,7 @@ import { useRouter } from "vue-router";
 import { useQueryClient } from "@tanstack/vue-query";
 import { useAuth } from "@/composables/useAuth";
 import { useTeam } from "@/composables/useTeam";
-import { useAccounts } from "@/composables/useAccounts";
+
 import type { OrgMember } from "@/lib/api";
 import {
   Button,
@@ -58,7 +58,6 @@ const { isLoggedIn, visitorId: currentVisitorId } = useAuth();
 function isOwner(member: { visitor_id?: string }) {
   return members.value?.[0]?.visitor_id === member.visitor_id;
 }
-const { accounts, currentAccountId } = useAccounts();
 
 const isRotating = ref(false);
 const copiedLink = ref(false);
@@ -80,6 +79,54 @@ const isResetting = ref(false);
 const resetComplete = ref(false);
 const newSdkKey = ref<string | null>(null);
 const copiedSdkKey = ref(false);
+
+interface ResetSummary {
+  events: number;
+  customers: number;
+  integrations: number;
+  alertRules: number;
+  sdkKeys: number;
+  stripePlan: string;
+}
+const resetSummary = ref<ResetSummary | null>(null);
+const resetSummaryLoading = ref(false);
+const resetSummaryError = ref<string | null>(null);
+
+async function fetchResetSummary() {
+  resetSummaryLoading.value = true;
+  resetSummaryError.value = null;
+  try {
+    const res = await fetch("/api/account/reset-summary", {
+      headers: { Authorization: `Bearer ${await useAuth().getToken.value()}` },
+    });
+    if (!res.ok) throw new Error("Failed to load reset summary");
+    resetSummary.value = await res.json();
+  } catch (err) {
+    resetSummaryError.value =
+      err instanceof Error ? err.message : "Failed to load summary";
+  } finally {
+    resetSummaryLoading.value = false;
+  }
+}
+
+async function executeReset(
+  confirmText: string,
+  cancelSubscription: boolean,
+): Promise<{ newSdkKey?: string }> {
+  const res = await fetch("/api/account/reset", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${await useAuth().getToken.value()}`,
+    },
+    body: JSON.stringify({ confirmText, cancelSubscription }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || "Reset failed");
+  }
+  return res.json();
+}
 
 const resetConfirmValid = computed(
   () => resetConfirmInput.value.trim() === "RESET MY DATA",

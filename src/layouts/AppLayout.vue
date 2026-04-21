@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
-import { useRoute, useRouter } from "vue-router";
-import { useQuery, useQueryClient } from "@tanstack/vue-query";
+import { useRoute } from "vue-router";
+import { useQuery } from "@tanstack/vue-query";
 import { getUsageLimits } from "@/lib/api";
 import {
   BarChart3,
@@ -20,7 +20,6 @@ import {
   MessageSquare,
   HelpCircle,
   Shield,
-  UserCircle,
 } from "lucide-vue-next";
 import { OrganizationSwitcher, OrganizationProfile } from "@clerk/vue";
 import ErrorBoundary from "@/components/shared/ErrorBoundary.vue";
@@ -30,7 +29,6 @@ import { useAuth } from "@/composables/useAuth";
 import { useDataMode } from "@/composables/useDataMode";
 
 const route = useRoute();
-const router = useRouter();
 const { account, isLoggedIn, logout } = useAuth();
 const { reset: resetDataMode } = useDataMode();
 
@@ -47,7 +45,6 @@ watch(isLoggedIn, (loggedIn) => {
 
 const feedbackOpen = ref(false);
 const mobileLandingEmail = ref("");
-const queryClient = useQueryClient();
 
 onMounted(() => {
   window.addEventListener("observe:open-feedback", () => {
@@ -143,7 +140,7 @@ const { data: usageLimits } = useQuery({
   refetchInterval: 60000,
 });
 
-const usageMeters = computed(() => {
+const _usageMeters = computed(() => {
   if (!usageLimits.value) return [];
   const meters: Array<{
     label: string;
@@ -162,12 +159,6 @@ const usageMeters = computed(() => {
   }
   return meters;
 });
-
-function meterColor(pct: number): string {
-  if (pct >= 100) return "bg-red-500";
-  if (pct >= 80) return "bg-amber-500";
-  return "bg-emerald-500";
-}
 
 const sidebarOpen = ref(false);
 

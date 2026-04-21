@@ -1,5 +1,5 @@
 import { computed, onMounted, onUnmounted, ref } from "vue";
-import { useQuery, useQueryClient } from "@tanstack/vue-query";
+import { useQuery } from "@tanstack/vue-query";
 import {
   getCurrentAccountId,
   listMyAccounts,
@@ -10,7 +10,6 @@ import { useAuth } from "@/composables/useAuth";
 
 export function useAccounts() {
   const { isLoggedIn } = useAuth();
-  const queryClient = useQueryClient();
 
   const query = useQuery({
     queryKey: ["my-accounts"],

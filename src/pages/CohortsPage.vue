@@ -86,14 +86,6 @@ const RULE_OPERATORS = [
   { value: "neq", label: "!=" },
 ];
 
-const fieldLabel = (f: string) =>
-  RULE_FIELDS.find((r) => r.value === f)?.label ?? f;
-const opLabel = (o: string) =>
-  RULE_OPERATORS.find((r) => r.value === o)?.label ?? o;
-function formatRule(r: CohortRule) {
-  return `${fieldLabel(r.field)} ${opLabel(r.operator)} ${r.value}`;
-}
-
 function addRule() {
   rules.value.push({ field: "margin_pct", operator: "lt", value: 0 });
 }
@@ -217,7 +209,7 @@ function toggleCustomCohortFilter(id: number) {
 }
 
 async function handleDeleteCohort(cohort: CustomCohort) {
-  if (!confirm(`Delete cohort "${cohort.name}"?`)) return;
+  if (!window.confirm(`Delete cohort "${cohort.name}"?`)) return;
   try {
     await deleteCustomCohort(cohort.id);
     if (activeCustomCohortId.value === cohort.id) {
