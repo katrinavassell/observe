@@ -15,7 +15,6 @@ import {
   Search,
   X,
 } from "lucide-vue-next";
-import MarginBadge from "@/components/shared/MarginBadge.vue";
 import { Skeleton, Button, Card, CardContent } from "@/components/ui";
 import { formatCurrency } from "@/lib/format";
 import { useAuth } from "@/composables/useAuth";
@@ -43,13 +42,6 @@ const DEFAULT_COLUMNS: TableColumn[] = [
   { id: "usage", label: "Usage", visible: true, align: "right" },
   { id: "total_cost", label: "Model Cost", visible: true, align: "right" },
   { id: "avg_cost", label: "Avg Cost/Event", visible: true, align: "right" },
-  {
-    id: "total_revenue",
-    label: "Model Revenue",
-    visible: true,
-    align: "right",
-  },
-  { id: "margin", label: "Margin", visible: true, align: "right" },
   { id: "last_seen", label: "Last Seen", visible: true, align: "right" },
 ];
 
@@ -251,7 +243,7 @@ const filteredPricing = computed(() => {
       <div>
         <h1 class="text-2xl font-semibold tracking-tight">Models</h1>
         <p class="text-sm text-muted-foreground mt-1">
-          Cost and margin breakdown by AI model
+          Cost and usage breakdown by AI model
         </p>
       </div>
 
@@ -477,12 +469,6 @@ const filteredPricing = computed(() => {
         </div>
       </div>
       <div class="rounded-lg border bg-card p-4">
-        <div class="text-xs text-muted-foreground mb-1">Model Revenue</div>
-        <div class="text-2xl font-semibold">
-          {{ formatCurrency(models.reduce((s, m) => s + m.total_revenue, 0)) }}
-        </div>
-      </div>
-      <div class="rounded-lg border bg-card p-4">
         <div class="text-xs text-muted-foreground mb-1">Total Events</div>
         <div class="text-2xl font-semibold">
           {{ models.reduce((s, m) => s + m.event_count, 0).toLocaleString() }}
@@ -659,22 +645,6 @@ const filteredPricing = computed(() => {
                   class="px-4 py-3 text-right tabular-nums text-xs"
                 >
                   {{ formatCurrency(m.avg_cost_per_event) }}
-                </td>
-
-                <!-- Total Revenue -->
-                <td
-                  v-else-if="col.id === 'total_revenue'"
-                  class="px-4 py-3 text-right tabular-nums text-xs"
-                >
-                  {{ formatCurrency(m.total_revenue) }}
-                </td>
-
-                <!-- Margin -->
-                <td
-                  v-else-if="col.id === 'margin'"
-                  class="px-4 py-3 text-right"
-                >
-                  <MarginBadge :margin="m.margin_pct" />
                 </td>
 
                 <!-- Last Seen -->
