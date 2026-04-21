@@ -13,7 +13,9 @@ import { recordReferral } from "@/lib/api";
 const { isOnline } = useOnline();
 const { isLoaded, isSignedIn, getToken } = useClerkAuth();
 const { isInitialized } = useAuth();
-const isLoading = computed(() => !isLoaded.value);
+const isLoading = computed(
+  () => !isLoaded.value || (isSignedIn.value && !isInitialized.value),
+);
 
 registerTokenGetter(
   () => getToken.value(),
