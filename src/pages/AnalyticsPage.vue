@@ -15,7 +15,7 @@ import type {} from "@/lib/api";
 import { AlertCircle, Plug } from "lucide-vue-next";
 import { Card, Skeleton, Button } from "@/components/ui";
 import SourceBadge from "@/components/shared/SourceBadge.vue";
-import { formatCurrency as fmt, formatPct as fmtPct } from "@/lib/format";
+import { formatCurrency as fmt } from "@/lib/format";
 import { useAuth } from "@/composables/useAuth";
 import {
   GUEST_EVENTS_BY_FEATURE,
@@ -30,7 +30,7 @@ const { isLoggedIn } = useAuth();
 type Tab = "feature" | "model" | "customer" | "agent" | "mrr";
 const activeTab = ref<Tab>("feature");
 
-const { data: usageLimits } = useQuery({
+const { data: _usageLimits } = useQuery({
   queryKey: ["usage-limits"],
   queryFn: getUsageLimits,
 });

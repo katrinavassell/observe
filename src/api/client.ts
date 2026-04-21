@@ -1104,7 +1104,6 @@ export interface OpenAIStatus {
 
 /**
  * Check if OpenAI is connected for the current user.
- * Uses Supabase Edge Function directly.
  */
 export async function getOpenAIStatus(): Promise<OpenAIStatus> {
   return request("/integrations/openai/status");
@@ -1120,7 +1119,6 @@ export interface AnthropicStatus {
 
 /**
  * Check if Anthropic is connected for the current user.
- * Uses Supabase Edge Function directly.
  */
 export async function getAnthropicStatus(): Promise<AnthropicStatus> {
   return request("/integrations/anthropic/status");

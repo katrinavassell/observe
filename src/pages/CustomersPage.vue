@@ -11,7 +11,7 @@ import {
   ChevronDown,
   ChevronUp,
 } from "lucide-vue-next";
-import { Card, CardContent, Skeleton, Button, Input } from "@/components/ui";
+import { Card, CardContent, Skeleton, Button } from "@/components/ui";
 import MarginBadge from "@/components/shared/MarginBadge.vue";
 import TrendIndicator from "@/components/shared/TrendIndicator.vue";
 import { formatCurrency as fmt } from "@/lib/format";

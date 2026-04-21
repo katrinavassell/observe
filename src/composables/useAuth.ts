@@ -6,6 +6,7 @@ import { logger } from "@/lib/logger";
 
 const account = ref<Account | null>(null);
 const isInitialized = ref(false);
+let setupInFlight = false;
 
 export function useAuth() {
   const { isSignedIn, isLoaded, getToken } = useClerkAuth();
@@ -20,32 +21,38 @@ export function useAuth() {
     isSignedIn,
     async (signedIn, wasSignedIn) => {
       if (signedIn && !account.value) {
-        for (let attempt = 0; attempt < 3; attempt++) {
-          try {
-            const me = await api.getMe();
-            if (me.account) {
-              account.value = me.account;
-              break;
-            } else {
-              const result = await api.signupComplete(
-                user.value?.fullName ?? undefined,
-                user.value?.primaryEmailAddress?.emailAddress,
-              );
-              account.value = result.account;
-              if (result.sdkKey) {
-                localStorage.setItem("observe:fresh_sdk_key", result.sdkKey);
+        if (setupInFlight) return;
+        setupInFlight = true;
+        try {
+          for (let attempt = 0; attempt < 3; attempt++) {
+            try {
+              const me = await api.getMe();
+              if (me.account) {
+                account.value = me.account;
+                break;
+              } else {
+                const result = await api.signupComplete(
+                  user.value?.fullName ?? undefined,
+                  user.value?.primaryEmailAddress?.emailAddress,
+                );
+                account.value = result.account;
+                if (result.sdkKey) {
+                  localStorage.setItem("observe:fresh_sdk_key", result.sdkKey);
+                }
+                break;
               }
-              break;
-            }
-          } catch (err) {
-            logger.error(
-              `Account setup failed (attempt ${attempt + 1}/3)`,
-              err,
-            );
-            if (attempt < 2) {
-              await new Promise((r) => setTimeout(r, 1000));
+            } catch (err) {
+              logger.error(
+                `Account setup failed (attempt ${attempt + 1}/3)`,
+                err,
+              );
+              if (attempt < 2) {
+                await new Promise((r) => setTimeout(r, 1000));
+              }
             }
           }
+        } finally {
+          setupInFlight = false;
         }
         isInitialized.value = true;
 
@@ -57,6 +64,7 @@ export function useAuth() {
           });
         }
       } else if (!signedIn && wasSignedIn) {
+        setupInFlight = false;
         account.value = null;
         isInitialized.value = false;
       } else if (!signedIn) {
@@ -72,6 +80,7 @@ export function useAuth() {
       window.posthog.reset();
     }
     await clerk.value?.signOut();
+    setupInFlight = false;
     account.value = null;
     isInitialized.value = false;
     window.location.href = "/login";

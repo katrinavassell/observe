@@ -16,9 +16,9 @@ const currentAccount = computed(
     null,
 );
 
-function handleOutside(e: MouseEvent) {
+function handleOutside(e: Event) {
   if (!open.value) return;
-  if (rootEl.value && !rootEl.value.contains(e.target as Node)) {
+  if (rootEl.value && !rootEl.value.contains(e.target as HTMLElement)) {
     open.value = false;
   }
 }

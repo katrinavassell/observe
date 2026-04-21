@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted } from "vue";
+import { computed, onMounted, watch } from "vue";
 import { useRouter, useRoute } from "vue-router";
 import { SignIn, SignUp } from "@clerk/vue";
 import {
@@ -15,11 +15,17 @@ const router = useRouter();
 const route = useRoute();
 const { isLoggedIn } = useAuth();
 
-if (isLoggedIn.value) {
-  router.replace("/");
-}
+watch(
+  isLoggedIn,
+  (loggedIn) => {
+    if (loggedIn) {
+      router.replace("/");
+    }
+  },
+  { immediate: true },
+);
 
-const isRegisterMode = computed(() => route.path !== "/login");
+const isRegisterMode = computed(() => route.path.startsWith("/signup"));
 
 onMounted(() => {
   window.posthog?.capture(
