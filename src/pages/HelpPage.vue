@@ -171,7 +171,7 @@ const sections = [
 
 <template>
   <div class="max-w-3xl mx-auto">
-    <h1 class="text-2xl font-bold mb-2">Help Center</h1>
+    <h1 class="text-2xl font-bold mb-2">FAQ</h1>
     <p class="text-muted-foreground mb-8">
       Common questions about Observe. Can't find what you need?
       <button

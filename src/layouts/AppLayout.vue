@@ -359,7 +359,7 @@ function isActive(path: string) {
               class="flex items-center gap-1.5 px-2 py-1 text-xs text-sidebar-foreground/40 hover:text-sidebar-foreground hover:bg-sidebar-accent/50 transition-all duration-150 rounded-md"
             >
               <HelpCircle class="h-3 w-3" />
-              Help
+              FAQ
             </router-link>
             <button
               v-if="isLoggedIn"
