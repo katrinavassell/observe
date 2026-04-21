@@ -255,7 +255,15 @@ If they do:
 
 ## Verify
 
-After wiring up, run the app once, make one LLM call, and confirm the event appears at https://observe.tansohq.com/events.`;
+After wiring up, run the app once and make one LLM call. The Data Sources page at https://observe.tansohq.com/data-sources will show "Event received" once the first event lands.
+
+## What to expect
+
+- **Data Sources page**: Shows connection status and confirms events are flowing.
+- **Analytics page**: Shows cost breakdown by feature, model, and customer. Populates as real events come in — you won't see data here until your app sends real traffic. This is normal.
+- **Events page**: Shows individual events with cost, model, tokens, and customer. Same as above — fills up with real usage.
+- **Customers page**: If you connect Stripe, all your customers appear here immediately with revenue data. As SDK events flow in, cost data gets layered on top for margin calculations.
+- **Stripe is optional**: You can connect it later from Data Sources → Connect Stripe. It syncs customers, subscriptions, and MRR for margin analysis. Not required for cost tracking.`;
 }
 
 async function copyAiInstallPrompt() {
