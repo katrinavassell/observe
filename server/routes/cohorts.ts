@@ -150,41 +150,16 @@ export function createCohortsRoutes(pool: Pool, ensureVisitor: any) {
           priorMrrResult,
           priorActiveDaysResult,
         ] = await Promise.all([
-          // 1. Per-customer P&L
-          //
-          // Pivoted FROM customers c LEFT JOIN observe_events so Stripe-imported
-          // customers with no events yet still appear (as $0 revenue / $0 cost
-          // / 0 events). Previously the query started from observe_events and
-          // customers without usage were invisible.
-          //
-          // We still union customer_ids that appear in observe_events but are
-          // missing from the customers table (legacy rows, CSV imports,
-          // customers deleted in Stripe after events landed). Those use the
-          // raw customer_id as the display name.
+          // 1. Per-customer P&L — only customers with SDK events appear.
+          // Customers imported via Stripe but with no events are not shown;
+          // they appear once the SDK sends at least one event with their
+          // customer_id, and Stripe enriches revenue from there.
           pool.query(
-            `WITH all_customers AS (
-               SELECT c.customer_id, c.name, c.email, c.segment, c.is_internal
-               FROM customers c
-               WHERE c.account_id = $1 ${internalFilter}
-               UNION
-               SELECT DISTINCT oe.customer_id,
-                      NULL::text AS name,
-                      NULL::text AS email,
-                      NULL::text AS segment,
-                      FALSE AS is_internal
-               FROM observe_events oe
-               WHERE oe.account_id = $1
-                 AND oe.customer_id IS NOT NULL
-                 AND NOT EXISTS (
-                   SELECT 1 FROM customers c2
-                   WHERE c2.account_id = oe.account_id AND c2.customer_id = oe.customer_id
-                 )
-             )
-             SELECT ac.customer_id,
-                    COALESCE(ac.name, ac.customer_id) AS customer_name,
-                    ac.email AS customer_email,
-                    ac.segment,
-                    ac.is_internal,
+            `SELECT oe.customer_id,
+                    COALESCE(c.name, oe.customer_id) AS customer_name,
+                    c.email AS customer_email,
+                    c.segment,
+                    COALESCE(c.is_internal, FALSE) AS is_internal,
                     COALESCE(SUM(oe.revenue_amount), 0) AS total_revenue,
                     COALESCE(SUM(oe.cost_amount), 0) AS total_cost,
                     COUNT(oe.id) AS event_count,
@@ -192,10 +167,13 @@ export function createCohortsRoutes(pool: Pool, ensureVisitor: any) {
                     COUNT(DISTINCT oe.model) AS model_count,
                     MIN(oe.timestamp) AS first_seen,
                     MAX(oe.timestamp) AS last_seen
-             FROM all_customers ac
-             LEFT JOIN observe_events oe
-               ON oe.account_id = $1 AND oe.customer_id = ac.customer_id
-             GROUP BY ac.customer_id, ac.name, ac.email, ac.segment, ac.is_internal`,
+             FROM observe_events oe
+             LEFT JOIN customers c
+               ON c.account_id = oe.account_id AND c.customer_id = oe.customer_id
+             WHERE oe.account_id = $1
+               AND oe.customer_id IS NOT NULL
+               ${showInternal ? "" : "AND (c.is_internal IS NOT TRUE OR c.is_internal IS NULL)"}
+             GROUP BY oe.customer_id, c.name, c.email, c.segment, c.is_internal`,
             [accountId],
           ),
           // 2. Total distinct features

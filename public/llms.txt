@@ -351,29 +351,69 @@ Customers, Subscriptions, Products, and Prices. No write permissions needed.
 If the user is on Clerk, Paddle, Lago, or any other billing tool, they can either
 connect Stripe separately, or use explicit `revenueAmount` / Feature Pricing.
 
-### How revenue and margin work
+### How revenue, MRR, and margin work
 
-Revenue flows into Observe through two channels:
+#### Customer lifecycle
 
-1. **Explicit per-event** — `revenueAmount` sent in the SDK event payload, or set
-   via Feature Pricing rules in the dashboard. This is exact.
-2. **Stripe sync** — when Stripe is connected, Observe creates revenue events from
-   subscription MRR. These use the Stripe product name as the `feature_key` (e.g.,
-   "Pro Plan") and carry the subscription MRR as `revenue_amount`. Source is `stripe`,
-   granularity is `monthly_aggregate`.
+Customers only appear in Observe once the SDK sends at least one event with their
+`customerReferenceId`. Stripe-imported customers with zero SDK events are NOT shown
+on the customers page — their margins would be meaningless without cost data. The
+intended flow is:
 
-Margin is computed at query time by summing `cost_amount` and `revenue_amount` across
-all events for a customer or feature. This means:
-- **Customer margin** = SUM(revenue_amount) - SUM(cost_amount) for that customer.
-- **Feature margin** = same, grouped by feature_key.
-- SDK events carry cost. Stripe events carry revenue. The join is by customer_id.
+1. **SDK event arrives** with a `customerReferenceId` → customer appears in Observe.
+2. **Stripe enriches revenue** → the event gets `revenue_amount` stamped at ingest.
+3. **Margins become real** — cost from the SDK event, revenue from Stripe data.
+
+This is a deliberate design choice. Observe is a cost observability tool — a customer
+without usage events has no cost data, so showing them with $0/$0 would produce
+misleading 0% margins and pollute analytics.
+
+#### Revenue sources (priority order)
+
+Revenue is attributed to each event at ingest time (`server/lib/enrich-revenue.ts`):
+
+1. **Feature Pricing rules** — checked first. If a `feature_pricing` row exists for
+   the event's `feature_key`, that `revenue_per_unit` is used. Most precise.
+2. **Subscription data** — if no feature pricing rule, Observe looks up the customer's
+   active subscription(s) and applies revenue based on the pricing model:
+   - `metered`: `unit_price * usage_units`
+   - `tiered`: tier-based unit price (from Stripe pricing tiers) * usage_units
+   - `hybrid`: metered component if available, else falls back to subscription
+   - `flat`: revenue = 0 per event (flat subscriptions don't generate per-event revenue)
+3. **Explicit per-event** — `revenueAmount` sent in the SDK event payload overrides
+   all of the above.
+4. **Stripe sync** — when Stripe is connected, Observe also creates monthly aggregate
+   revenue events (source=`stripe`) carrying subscription MRR. These use the Stripe
+   product name as `feature_key`.
 
 The `revenue_source` field on each event indicates how the number was derived:
-`explicit`, `feature_pricing`, `per_unit`, `tiered`, `allocated`, or `none`.
+`feature_pricing`, `per_unit`, `tiered`, `hybrid`, `subscription`, `explicit`, or `none`.
 
-A future update will distribute subscription revenue directly onto SDK events
-(revenue per event = customer MRR / event count in period) so that each event
-carries both cost and revenue for real-time per-event margin.
+#### MRR calculation
+
+MRR is computed from active subscriptions: `SUM(COALESCE(mrr_override, plan.price_amount))`
+across all active subscriptions, grouped by customer. `mrr_override` allows custom
+pricing that differs from the plan's list price. Plan prices are normalized to monthly
+(divided by `interval_months` for annual plans).
+
+MRR movements (new, expansion, contraction, churned) compare current active
+subscriptions against subscriptions that existed 60+ days ago.
+
+#### Margin calculation
+
+Margin is always: `(revenue - cost) / revenue * 100`
+
+All margin calculations use event-level data from `observe_events`:
+- **Customer margin** = `SUM(revenue_amount) - SUM(cost_amount)` for that customer
+- **Feature margin** = same, grouped by `feature_key`
+- **Overall margin** = same across all events
+
+Since PR #94, per-event revenue is enriched at ingest time. The analytics queries
+do NOT add subscription MRR on top — that would double-count. Revenue and cost both
+live on `observe_events` rows; margin is a pure aggregation.
+
+When revenue is 0 and cost > 0, margin is -100%. When both are 0, margin is null
+(not shown). This prevents misleading numbers for uninstrumented customers.
 
 ---
 

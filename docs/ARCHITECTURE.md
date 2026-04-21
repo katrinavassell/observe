@@ -352,3 +352,35 @@ TanStack Vue Query provides automatic request deduplication, background refetchi
 
 ### Proxy Caching
 The `proxy_cache` table stores responses keyed by request hash, saving tokens and cost on repeated identical requests.
+
+---
+
+## Revenue, MRR, and Margin Model
+
+### Design decisions
+
+**Customers appear only after SDK events.** The customers page (`/cohorts` route) queries
+from `observe_events` and LEFT JOINs `customers` for metadata (name, email, segment).
+Stripe-imported customers with zero SDK events are not shown. Rationale: margins are
+meaningless without cost data — showing $0/$0 produces misleading 0% margins.
+
+**Revenue is enriched at ingest time.** When an SDK event arrives, `server/lib/enrich-revenue.ts`
+stamps `revenue_amount` on the event row before it hits the database. Priority:
+1. `feature_pricing` table (explicit per-feature revenue rules)
+2. Subscription data (metered unit price, tiered pricing, or hybrid)
+3. Explicit `revenueAmount` in the SDK payload overrides everything
+
+**Margins never double-count.** Since PR #94, all analytics queries compute margin from
+`SUM(revenue_amount)` and `SUM(cost_amount)` on `observe_events`. They do NOT add
+subscription MRR on top — that would double-count since revenue is already on the events.
+
+### MRR calculation
+
+`SUM(COALESCE(mrr_override, plan.price_amount))` across active subscriptions per customer.
+`mrr_override` supports custom pricing. Annual plans are normalized to monthly via
+`interval_months`.
+
+### Margin formula
+
+Always: `(revenue - cost) / revenue * 100`. When revenue=0 and cost>0, margin=-100%.
+When both are 0, margin is null (not displayed).
