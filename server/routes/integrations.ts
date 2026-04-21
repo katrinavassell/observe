@@ -968,6 +968,9 @@ export function createIntegrationsRoutes(
     async (req: AuthRequest, res: Response) => {
       try {
         const visitorId = req.visitorId!;
+        if (!req.accountId) {
+          return res.status(400).json({ error: "No account resolved" });
+        }
         const { api_key } = req.body;
 
         if (!api_key || typeof api_key !== "string") {
