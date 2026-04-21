@@ -62,15 +62,19 @@ const sections = [
     items: [
       {
         q: "How does revenue attribution work?",
-        a: "Three sources, in priority order: (1) Explicit revenueAmount in the event payload. (2) Feature Pricing rules you set in Data Sources (e.g. $0.05 per blog_post call). (3) Stripe subscription MRR, allocated per customer.",
+        a: "Three sources, in priority order: (1) Explicit revenueAmount in the event payload. (2) Feature Pricing rules you set in Data Sources (e.g. $0.05 per blog_post call). (3) Stripe subscription data joined at query time for customer-level margin views.",
       },
       {
         q: "How is Stripe MRR allocated?",
-        a: "Flat subscriptions: MRR / 30, allocated per day. Metered/usage-based: exact per-unit revenue. Tiered/graduated: tier lookup based on month-to-date usage.",
+        a: "Flat subscriptions show MRR at the customer level only. Metered/usage-based: exact per-unit revenue stamped on each SDK event. Tiered: tier-based unit price from Stripe pricing tiers applied per event.",
       },
       {
         q: "How is margin calculated?",
         a: "Margin = (revenue - cost) / revenue * 100%. Shown per customer on the Customers page. If revenue is 0 but cost > 0, margin is -100% (unprofitable).",
+      },
+      {
+        q: "Why don't I see a customer until they have events?",
+        a: "Customers appear on the Customers page only after your app sends at least one SDK event with their customerReferenceId. Stripe-imported customers without usage data are hidden because margins would be meaningless without cost data. Connect Stripe, instrument your code, and customers appear automatically as events flow in.",
       },
       {
         q: "What is the health score?",

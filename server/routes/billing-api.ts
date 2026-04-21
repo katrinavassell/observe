@@ -797,10 +797,7 @@ export function createBillingApiRoutes(
           const batch = subRows.slice(i, i + batchSize);
           const subValues: unknown[] = [];
           const subPlaceholders: string[] = [];
-          const eventValues: unknown[] = [];
-          const eventPlaceholders: string[] = [];
           let subIdx = 1;
-          let eventIdx = 1;
           for (const s of batch) {
             subPlaceholders.push(
               `($${subIdx++}, $${subIdx++}, $${subIdx++}, $${subIdx++}, $${subIdx++}, $${subIdx++}, $${subIdx++})`,
@@ -814,24 +811,10 @@ export function createBillingApiRoutes(
               s.isActive,
               s.mrr,
             );
-            eventPlaceholders.push(
-              `($${eventIdx++}, $${eventIdx++}, $${eventIdx++}, $${eventIdx++}, 'revenue', NOW(), $${eventIdx++}, 'stripe', 'monthly_aggregate')`,
-            );
-            eventValues.push(
-              req.visitorId,
-              req.accountId ?? null,
-              s.customerId,
-              s.productName,
-              s.mrr,
-            );
           }
           await client.query(
             `INSERT INTO subscriptions (user_id, account_id, subscription_id, customer_id, plan_id, is_active, mrr_override) VALUES ${subPlaceholders.join(", ")} ON CONFLICT DO NOTHING`,
             subValues,
-          );
-          await client.query(
-            `INSERT INTO observe_events (user_id, account_id, customer_id, feature_key, event_name, timestamp, revenue_amount, source, granularity) VALUES ${eventPlaceholders.join(", ")}`,
-            eventValues,
           );
         }
 

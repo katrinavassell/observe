@@ -316,10 +316,7 @@ export async function syncStripeDataForUser(
     const batch = subRows.slice(i, i + batchSize);
     const subValues: unknown[] = [];
     const subPlaceholders: string[] = [];
-    const eventValues: unknown[] = [];
-    const eventPlaceholders: string[] = [];
     let subIdx = 1;
-    let eventIdx = 1;
     for (const s of batch) {
       subPlaceholders.push(
         `($${subIdx++}, $${subIdx++}, $${subIdx++}, $${subIdx++}, $${subIdx++}, $${subIdx++}, $${subIdx++}, $${subIdx++}, $${subIdx++}, $${subIdx++})`,
@@ -336,31 +333,11 @@ export async function syncStripeDataForUser(
         s.pricingTiers ? JSON.stringify(s.pricingTiers) : null,
         s.unitPrice,
       );
-      // Still emit a monthly_aggregate observe_event for non-metered revenue so
-      // Analytics can roll up subscription revenue alongside events.
-      if (s.mrr > 0) {
-        eventPlaceholders.push(
-          `($${eventIdx++}, $${eventIdx++}, $${eventIdx++}, $${eventIdx++}, 'revenue', NOW(), $${eventIdx++}, 'stripe', 'monthly_aggregate')`,
-        );
-        eventValues.push(
-          userId,
-          resolvedAccountId,
-          s.customerId,
-          s.productName,
-          s.mrr,
-        );
-      }
     }
     await pool.query(
       `INSERT INTO subscriptions (user_id, account_id, subscription_id, customer_id, plan_id, is_active, mrr_override, pricing_model, pricing_tiers, unit_price) VALUES ${subPlaceholders.join(", ")} ON CONFLICT DO NOTHING`,
       subValues,
     );
-    if (eventPlaceholders.length > 0) {
-      await pool.query(
-        `INSERT INTO observe_events (user_id, account_id, customer_id, feature_key, event_name, timestamp, revenue_amount, source, granularity) VALUES ${eventPlaceholders.join(", ")}`,
-        eventValues,
-      );
-    }
   }
 
   // Update last_synced_at
