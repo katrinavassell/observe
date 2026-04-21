@@ -84,7 +84,7 @@ export async function syncStripeDataForUser(
   );
   const stripe = apiKey
     ? createStripeClientFromKey(apiKey)
-    : await getStripeClientForUser(pool, userId);
+    : await getStripeClientForUser(pool, userId, resolvedAccountId);
 
   const [
     stripeCustomersList,
