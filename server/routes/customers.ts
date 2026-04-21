@@ -1165,40 +1165,5 @@ export function createCustomersRoutes(
     },
   );
 
-  // PATCH /customers/:customerId/exclude — toggle is_excluded flag
-  router.patch(
-    "/customers/:customerId/exclude",
-    ensureVisitor,
-    async (req: AuthRequest, res: Response) => {
-      try {
-        const { customerId } = req.params;
-        const { is_excluded } = req.body;
-        if (typeof is_excluded !== "boolean") {
-          return res
-            .status(400)
-            .json({ error: "is_excluded must be a boolean" });
-        }
-        const result = await pool.query(
-          `UPDATE customers SET is_excluded = $1, updated_at = NOW()
-           WHERE account_id = $2 AND customer_id = $3
-           RETURNING customer_id, is_excluded`,
-          [is_excluded, req.accountId!, customerId],
-        );
-        if (result.rows.length === 0) {
-          await pool.query(
-            `INSERT INTO customers (user_id, account_id, customer_id, name, is_excluded)
-             VALUES ($1, $2, $3, $3, $4)
-             ON CONFLICT (account_id, customer_id) DO UPDATE SET is_excluded = $4, updated_at = NOW()`,
-            [req.visitorId, req.accountId ?? null, customerId, is_excluded],
-          );
-        }
-        res.json({ customer_id: customerId, is_excluded });
-      } catch (err) {
-        console.error("PATCH /customers/:customerId/exclude error:", err);
-        res.status(500).json({ error: "Failed to update customer" });
-      }
-    },
-  );
-
   return router;
 }

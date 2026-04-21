@@ -9,7 +9,6 @@ import {
   listCustomCohorts,
   deleteCustomCohort,
   getCustomCohort,
-  setCustomerExcluded,
 } from "@/lib/api";
 import type {
   CohortCustomer,
@@ -33,7 +32,6 @@ import {
   Plus,
   Trash2,
   X,
-  EyeOff,
 } from "lucide-vue-next";
 import {
   DialogRoot,
@@ -381,15 +379,6 @@ function removeExcludePattern(index: number) {
     EXCLUDE_STORAGE_KEY,
     JSON.stringify(excludePatterns.value),
   );
-}
-
-async function handleExcludeCustomer(customerId: string) {
-  try {
-    await setCustomerExcluded(customerId, true);
-    queryClient.invalidateQueries({ queryKey: ["cohorts"] });
-  } catch (err) {
-    console.error("Failed to exclude customer:", err);
-  }
 }
 
 const {
@@ -1003,15 +992,6 @@ const excludedCount = computed(() => {
                       <span v-else class="text-muted-foreground">—</span>
                     </td>
                   </template>
-                  <td class="p-3">
-                    <button
-                      class="opacity-0 group-hover:opacity-100 text-xs text-muted-foreground hover:text-destructive transition-all"
-                      title="Exclude from all views"
-                      @click.stop="handleExcludeCustomer(c.customer_id)"
-                    >
-                      <EyeOff class="h-3.5 w-3.5" />
-                    </button>
-                  </td>
                 </tr>
                 <!-- Expanded model-swap row (hidden — compares unrelated
                      model families, not trustworthy yet) -->

@@ -602,9 +602,6 @@ async function _doDbInit() {
     await pool.query(
       `ALTER TABLE customers ADD COLUMN IF NOT EXISTS is_internal BOOLEAN DEFAULT false`,
     );
-    await pool.query(
-      `ALTER TABLE customers ADD COLUMN IF NOT EXISTS is_excluded BOOLEAN DEFAULT false`,
-    );
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS subscriptions (
