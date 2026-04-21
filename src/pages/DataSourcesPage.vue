@@ -259,26 +259,16 @@ After wiring up, run the app once, make one LLM call, and confirm the event appe
 }
 
 async function copyAiInstallPrompt() {
-  if (sdkKeys.value.length === 0 && !generatedKey.value) {
-    try {
-      const result = await createSdkKey("default");
-      generatedKey.value = result.key;
-      await loadSdkKeys();
-      window.posthog?.capture("sdk_key_created", { source: "install_prompt" });
-    } catch (error) {
-      toast.error("Couldn't generate an API key", {
-        description:
-          error instanceof Error ? error.message : "Please try again.",
-      });
-      return;
-    }
-  }
-
   const key =
     generatedKey.value ||
     sdkKeys.value[0]?.full_key ||
     sdkKeys.value[0]?.key_prefix + "..." ||
-    "YOUR_API_KEY";
+    null;
+
+  if (!key) {
+    toast.error("Generate an API key first");
+    return;
+  }
   window.navigator.clipboard.writeText(buildAiInstallPrompt(key));
   aiInstallPromptCopied.value = true;
   window.posthog?.capture("install_prompt_copied");
@@ -535,17 +525,6 @@ onMounted(async () => {
   if (stashed) {
     generatedKey.value = stashed;
     window.localStorage.removeItem("observe:fresh_sdk_key");
-  } else if (sdkKeys.value.length === 0) {
-    try {
-      const result = await createSdkKey("default");
-      generatedKey.value = result.key;
-      await loadSdkKeys();
-      window.posthog?.capture("sdk_key_created", {
-        source: "data_sources_mount",
-      });
-    } catch {
-      // Non-fatal — user can click "Generate Key" manually.
-    }
   }
 
   startEventPolling();
