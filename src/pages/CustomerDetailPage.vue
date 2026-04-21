@@ -458,7 +458,7 @@ const costPerEvent = computed(() => {
                   <th
                     class="px-3 py-2 font-medium text-muted-foreground text-right"
                   >
-                    Usage
+                    Margin
                   </th>
                 </tr>
               </thead>
@@ -469,9 +469,18 @@ const costPerEvent = computed(() => {
                   class="border-b last:border-0"
                 >
                   <td class="px-3 py-2">
-                    <code class="text-xs bg-muted px-1.5 py-0.5 rounded">{{
-                      f.feature_key
-                    }}</code>
+                    <button
+                      class="hover:underline"
+                      @click="
+                        router.push(
+                          `/events?customer=${encodeURIComponent(customerId)}&feature=${encodeURIComponent(f.feature_key)}`,
+                        )
+                      "
+                    >
+                      <code class="text-xs bg-muted px-1.5 py-0.5 rounded">{{
+                        f.feature_key
+                      }}</code>
+                    </button>
                   </td>
                   <td class="px-3 py-2 text-right font-mono">
                     {{ f.event_count.toLocaleString() }}
@@ -484,9 +493,128 @@ const costPerEvent = computed(() => {
                   </td>
                   <td
                     class="px-3 py-2 text-right font-mono"
-                    :title="featureUsageTooltip(f)"
+                    :class="{
+                      'text-destructive':
+                        f.total_revenue > 0 &&
+                        ((f.total_revenue - f.total_cost) / f.total_revenue) *
+                          100 <
+                          0,
+                      'text-success':
+                        f.total_revenue > 0 &&
+                        ((f.total_revenue - f.total_cost) / f.total_revenue) *
+                          100 >
+                          0,
+                      'text-muted-foreground': f.total_revenue === 0,
+                    }"
                   >
-                    {{ f.total_usage.toLocaleString() }}
+                    {{
+                      f.total_revenue > 0
+                        ? Math.round(
+                            ((f.total_revenue - f.total_cost) /
+                              f.total_revenue) *
+                              100,
+                          ) + "%"
+                        : "—"
+                    }}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+
+      <!-- Usage by model -->
+      <Card v-if="detail.by_model.length > 0">
+        <CardContent class="p-6">
+          <h2 class="font-semibold mb-4">Usage by Model</h2>
+          <div class="rounded-lg border overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead>
+                <tr class="border-b bg-muted/30 text-left">
+                  <th class="px-3 py-2 font-medium text-muted-foreground">
+                    Model
+                  </th>
+                  <th
+                    class="px-3 py-2 font-medium text-muted-foreground text-right"
+                  >
+                    Events
+                  </th>
+                  <th
+                    class="px-3 py-2 font-medium text-muted-foreground text-right"
+                  >
+                    Cost
+                  </th>
+                  <th
+                    class="px-3 py-2 font-medium text-muted-foreground text-right"
+                  >
+                    Revenue
+                  </th>
+                  <th
+                    class="px-3 py-2 font-medium text-muted-foreground text-right"
+                  >
+                    Margin
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr
+                  v-for="m in detail.by_model"
+                  :key="m.model"
+                  class="border-b last:border-0"
+                >
+                  <td class="px-3 py-2">
+                    <button
+                      class="text-left hover:underline"
+                      @click="
+                        router.push(
+                          `/events?customer=${encodeURIComponent(customerId)}&model=${encodeURIComponent(m.model)}`,
+                        )
+                      "
+                    >
+                      <div class="text-sm font-medium">{{ m.model }}</div>
+                      <div
+                        v-if="m.model_provider"
+                        class="text-xs text-muted-foreground"
+                      >
+                        {{ m.model_provider }}
+                      </div>
+                    </button>
+                  </td>
+                  <td class="px-3 py-2 text-right font-mono">
+                    {{ m.event_count.toLocaleString() }}
+                  </td>
+                  <td class="px-3 py-2 text-right font-mono">
+                    {{ fmt(m.total_cost) }}
+                  </td>
+                  <td class="px-3 py-2 text-right font-mono">
+                    {{ fmt(m.total_revenue) }}
+                  </td>
+                  <td
+                    class="px-3 py-2 text-right font-mono"
+                    :class="{
+                      'text-destructive':
+                        m.total_revenue > 0 &&
+                        ((m.total_revenue - m.total_cost) / m.total_revenue) *
+                          100 <
+                          0,
+                      'text-success':
+                        m.total_revenue > 0 &&
+                        ((m.total_revenue - m.total_cost) / m.total_revenue) *
+                          100 >
+                          0,
+                      'text-muted-foreground': m.total_revenue === 0,
+                    }"
+                  >
+                    {{
+                      m.total_revenue > 0
+                        ? Math.round(
+                            ((m.total_revenue - m.total_cost) /
+                              m.total_revenue) *
+                              100,
+                          ) + "%"
+                        : "—"
+                    }}
                   </td>
                 </tr>
               </tbody>

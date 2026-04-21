@@ -444,6 +444,14 @@ export interface CustomerDetail {
   total_revenue: number;
   margin_pct: number | null;
   recent_events: ObserveEvent[];
+  by_model: Array<{
+    model: string;
+    model_provider: string | null;
+    event_count: number;
+    total_cost: number;
+    total_revenue: number;
+    total_usage: number;
+  }>;
   by_feature: Array<{
     feature_key: string;
     event_count: number;

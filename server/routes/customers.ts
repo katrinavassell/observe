@@ -529,6 +529,7 @@ export function createCustomersRoutes(
         req.visitorId!,
         "csv_upload",
         req.accountEmail,
+        req.accountId,
       );
       if (!access.allowed)
         return res.status(403).json({
@@ -650,6 +651,7 @@ export function createCustomersRoutes(
         req.visitorId!,
         "csv_upload",
         req.accountEmail,
+        req.accountId,
       );
       if (!access.allowed)
         return res.status(403).json({
@@ -773,6 +775,7 @@ export function createCustomersRoutes(
         req.visitorId!,
         "csv_upload",
         req.accountEmail,
+        req.accountId,
       );
       if (!access.allowed)
         return res.status(403).json({
@@ -993,24 +996,29 @@ export function createCustomersRoutes(
       try {
         const { id } = req.params;
 
-        const [customerRes, subRes, eventsRes, featureRes] = await Promise.all([
-          pool.query(
-            "SELECT * FROM customers WHERE account_id = $1 AND customer_id = $2",
-            [req.accountId!, id],
-          ),
-          pool.query(
-            `SELECT s.*, p.name as plan_name, p.price_amount FROM subscriptions s LEFT JOIN plans p ON s.account_id = p.account_id AND s.plan_id = p.plan_id WHERE s.account_id = $1 AND s.customer_id = $2`,
-            [req.accountId!, id],
-          ),
-          pool.query(
-            `SELECT * FROM observe_events WHERE account_id = $1 AND customer_id = $2 ORDER BY timestamp DESC LIMIT 50`,
-            [req.accountId!, id],
-          ),
-          pool.query(
-            `SELECT feature_key, COUNT(*) as event_count, COALESCE(SUM(cost_amount), 0) as total_cost, COALESCE(SUM(revenue_amount), 0) as total_revenue, COALESCE(SUM(usage_units), 0) as total_usage, SUM(input_tokens) as total_input_tokens, SUM(output_tokens) as total_output_tokens FROM observe_events WHERE account_id = $1 AND customer_id = $2 AND feature_key IS NOT NULL AND (source IS NULL OR source != 'stripe') GROUP BY feature_key ORDER BY total_cost DESC`,
-            [req.accountId!, id],
-          ),
-        ]);
+        const [customerRes, subRes, eventsRes, featureRes, modelRes] =
+          await Promise.all([
+            pool.query(
+              "SELECT * FROM customers WHERE account_id = $1 AND customer_id = $2",
+              [req.accountId!, id],
+            ),
+            pool.query(
+              `SELECT s.*, p.name as plan_name, p.price_amount FROM subscriptions s LEFT JOIN plans p ON s.account_id = p.account_id AND s.plan_id = p.plan_id WHERE s.account_id = $1 AND s.customer_id = $2`,
+              [req.accountId!, id],
+            ),
+            pool.query(
+              `SELECT * FROM observe_events WHERE account_id = $1 AND customer_id = $2 ORDER BY timestamp DESC LIMIT 50`,
+              [req.accountId!, id],
+            ),
+            pool.query(
+              `SELECT feature_key, COUNT(*) as event_count, COALESCE(SUM(cost_amount), 0) as total_cost, COALESCE(SUM(revenue_amount), 0) as total_revenue, COALESCE(SUM(usage_units), 0) as total_usage, SUM(input_tokens) as total_input_tokens, SUM(output_tokens) as total_output_tokens FROM observe_events WHERE account_id = $1 AND customer_id = $2 AND feature_key IS NOT NULL AND (source IS NULL OR source != 'stripe') GROUP BY feature_key ORDER BY total_cost DESC`,
+              [req.accountId!, id],
+            ),
+            pool.query(
+              `SELECT model, model_provider, COUNT(*) as event_count, COALESCE(SUM(cost_amount), 0) as total_cost, COALESCE(SUM(revenue_amount), 0) as total_revenue, COALESCE(SUM(usage_units), 0) as total_usage FROM observe_events WHERE account_id = $1 AND customer_id = $2 AND model IS NOT NULL AND (source IS NULL OR source != 'stripe') GROUP BY model, model_provider ORDER BY total_cost DESC`,
+              [req.accountId!, id],
+            ),
+          ]);
 
         // Customer may exist only in observe_events (not in customers table)
         // — e.g. events ingested with a customerReferenceId before Stripe sync.
@@ -1054,6 +1062,23 @@ export function createCustomersRoutes(
           total_revenue: totalRevenue,
           margin_pct: marginPct,
           recent_events: eventsRes.rows.map(coerceEventRow),
+          by_model: modelRes.rows.map(
+            (r: {
+              model: string;
+              model_provider: string | null;
+              event_count: string;
+              total_cost: string;
+              total_revenue: string;
+              total_usage: string;
+            }) => ({
+              model: r.model,
+              model_provider: r.model_provider,
+              event_count: parseInt(r.event_count),
+              total_cost: parseFloat(r.total_cost) || 0,
+              total_revenue: parseFloat(r.total_revenue) || 0,
+              total_usage: parseFloat(r.total_usage) || 0,
+            }),
+          ),
           by_feature: featureRes.rows.map(
             (r: {
               feature_key: string;
