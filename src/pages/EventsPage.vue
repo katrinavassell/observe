@@ -85,7 +85,7 @@ const DEFAULT_COLUMNS: TableColumn[] = [
   { id: "properties", label: "Properties", visible: false, align: "left" },
 ];
 
-const STORAGE_KEY = "observe:events-columns:v3";
+const STORAGE_KEY = "observe:events-columns:v4";
 
 function loadColumns(): TableColumn[] {
   const saved = window.localStorage.getItem(STORAGE_KEY);
