@@ -1347,11 +1347,12 @@ export function createEventsRoutes(
             const cid = (evt as { customerReferenceId?: string })
               .customerReferenceId;
             if (!cid) continue;
-            if (!customerMetaMap.has(cid)) {
-              const stripeId = (
-                evt as { meta?: { stripe_customer_id?: string } }
-              ).meta?.stripe_customer_id;
-              customerMetaMap.set(cid, stripeId || null);
+            const stripeId = (evt as { meta?: { stripe_customer_id?: string } })
+              .meta?.stripe_customer_id;
+            if (stripeId && !customerMetaMap.get(cid)) {
+              customerMetaMap.set(cid, stripeId);
+            } else if (!customerMetaMap.has(cid)) {
+              customerMetaMap.set(cid, null);
             }
           }
           if (customerMetaMap.size > 0) {
@@ -1375,7 +1376,8 @@ export function createEventsRoutes(
               .query(
                 `INSERT INTO customers (user_id, account_id, customer_id, name, stripe_customer_id)
                  VALUES ${custPlaceholders.join(", ")}
-                 ON CONFLICT DO NOTHING`,
+                 ON CONFLICT (user_id, customer_id) DO UPDATE
+                   SET stripe_customer_id = COALESCE(customers.stripe_customer_id, EXCLUDED.stripe_customer_id)`,
                 custValues,
               )
               .catch((err) =>

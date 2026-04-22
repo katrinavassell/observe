@@ -190,8 +190,8 @@ export async function runRevenueBackfill(
     let stripe;
     try {
       stripe = await getStripeClientForUser(pool, userId, accountId);
-    } catch {
-      // No Stripe connection — skip name resolution
+    } catch (err) {
+      console.error("Backfill: Stripe client unavailable:", err);
     }
 
     if (stripe) {
