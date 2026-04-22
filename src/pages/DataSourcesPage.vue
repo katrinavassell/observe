@@ -89,6 +89,11 @@ const copiedPrefixId = ref<number | null>(null);
 async function loadSdkKeys() {
   try {
     sdkKeys.value = await listSdkKeys();
+    if (sdkKeys.value.length === 0) {
+      const result = await createSdkKey("Default");
+      generatedKey.value = result.key;
+      sdkKeys.value = await listSdkKeys();
+    }
   } catch {
     // silently fail - keys list is not critical
   }
