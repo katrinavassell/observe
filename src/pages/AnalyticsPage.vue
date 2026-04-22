@@ -451,6 +451,13 @@ function retry() {
           <span class="w-20 text-right text-sm tabular-nums">{{
             fmt(f.total_cost)
           }}</span>
+          <span
+            class="w-28 text-right text-xs text-muted-foreground tabular-nums"
+          >
+            ({{
+              f.event_count ? fmt(f.total_cost / f.event_count) : "$0"
+            }}/event)
+          </span>
         </div>
       </div>
 
