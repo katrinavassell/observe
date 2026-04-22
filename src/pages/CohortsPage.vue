@@ -122,7 +122,7 @@ const filteredCustomerList = computed(() => {
   const q = customerSearch.value.toLowerCase();
   return list.filter(
     (c) =>
-      c.name?.toLowerCase().includes(q) ||
+      c.customer_name?.toLowerCase().includes(q) ||
       c.customer_id.toLowerCase().includes(q),
   );
 });
@@ -902,19 +902,26 @@ const excludedCount = computed(() => {
                   <template v-for="col in visibleColumns" :key="col.id">
                     <!-- Customer -->
                     <td v-if="col.id === 'customer'" class="p-3">
-                      <div
-                        class="flex items-center gap-2"
-                        :title="c.customer_id"
-                      >
+                      <div class="flex flex-col" :title="c.customer_id">
+                        <div class="flex items-center gap-2">
+                          <span
+                            v-if="
+                              c.customer_name &&
+                              c.customer_name !== c.customer_id
+                            "
+                            class="font-medium"
+                            >{{ c.customer_name }}</span
+                          >
+                          <code
+                            v-else
+                            class="font-mono text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded"
+                            >{{ c.customer_id }}</code
+                          >
+                        </div>
                         <span
-                          v-if="c.name && c.name !== c.customer_id"
-                          class="font-medium"
-                          >{{ c.name }}</span
-                        >
-                        <code
-                          v-else
-                          class="font-mono text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded"
-                          >{{ c.customer_id }}</code
+                          v-if="c.customer_email"
+                          class="text-xs text-muted-foreground"
+                          >{{ c.customer_email }}</span
                         >
                         <span
                           v-if="c.cohort && cohortMeta[c.cohort]"
@@ -1211,7 +1218,7 @@ const excludedCount = computed(() => {
                     class="h-3.5 w-3.5 rounded border-input accent-primary"
                     @change="toggleCustomer(c.customer_id)"
                   />
-                  <span>{{ c.name || c.customer_id }}</span>
+                  <span>{{ c.customer_name || c.customer_id }}</span>
                 </label>
                 <div
                   v-if="filteredCustomerList.length === 0"
