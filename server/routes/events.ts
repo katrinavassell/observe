@@ -41,7 +41,11 @@ async function resolveStripeCustomerNames(
   let stripe;
   try {
     stripe = await getStripeClientForUser(pool, userId, accountId);
-  } catch {
+  } catch (err) {
+    console.error(
+      "resolveStripeCustomerNames: Stripe client unavailable:",
+      err,
+    );
     return;
   }
   for (const row of unresolved.rows) {
@@ -55,7 +59,12 @@ async function resolveStripeCustomerNames(
          WHERE account_id = $3 AND customer_id = $4 AND (name = customer_id OR name IS NULL)`,
         [name, email, accountId, row.customer_id],
       );
-    } catch {
+    } catch (err) {
+      console.error(
+        "resolveStripeCustomerNames: failed to resolve",
+        row.customer_id,
+        err,
+      );
       continue;
     }
   }
@@ -1379,7 +1388,9 @@ export function createEventsRoutes(
             userId!,
             accountId,
             alertCustomerIds.filter((id) => id.startsWith("cus_")),
-          ).catch(() => {});
+          ).catch((err) =>
+            console.error("resolveStripeCustomerNames error (ingest):", err),
+          );
           // Check usage limit and send warning emails
           if (ingestAccess.limit != null && ingestAccess.usage != null) {
             const newUsage = ingestAccess.usage + inserted;
