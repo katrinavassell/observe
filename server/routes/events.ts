@@ -33,7 +33,7 @@ async function resolveStripeCustomerNames(
   if (customerStripeMap.size === 0 || accountId == null) return;
   const dbIds = [...customerStripeMap.keys()];
   const unresolved = await pool.query(
-    `SELECT customer_id FROM customers
+    `SELECT customer_id, stripe_customer_id FROM customers
      WHERE account_id = $1 AND customer_id = ANY($2)
        AND (name = customer_id OR name IS NULL)`,
     [accountId, dbIds],
@@ -50,7 +50,8 @@ async function resolveStripeCustomerNames(
     return;
   }
   for (const row of unresolved.rows) {
-    const stripeId = customerStripeMap.get(row.customer_id);
+    const stripeId =
+      row.stripe_customer_id || customerStripeMap.get(row.customer_id);
     if (!stripeId) continue;
     try {
       const cust = await stripe.customers.retrieve(stripeId);
@@ -60,10 +61,11 @@ async function resolveStripeCustomerNames(
       await pool.query(
         `UPDATE customers
          SET name = $1, email = COALESCE(customers.email, $2),
+             stripe_customer_id = COALESCE(customers.stripe_customer_id, $3),
              updated_at = NOW()
-         WHERE account_id = $3 AND customer_id = $4
+         WHERE account_id = $4 AND customer_id = $5
            AND (name = customer_id OR name IS NULL)`,
-        [name, email, accountId, row.customer_id],
+        [name, email, stripeId, accountId, row.customer_id],
       );
     } catch (err) {
       console.error(
