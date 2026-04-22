@@ -88,6 +88,11 @@
   <a href="#us-alerts">Alerts</a>
   <a href="#us-onboarding">Onboarding</a>
   <a href="#pages" class="section-head">Pages & Routes</a>
+  <a href="#board" class="section-head">Board</a>
+  <a href="#board-backlog">Backlog</a>
+  <a href="#board-inprogress">In Progress</a>
+  <a href="#board-review">Review/Test</a>
+  <a href="#board-done">Done</a>
   <a href="#api" class="section-head">API Surface</a>
   <a href="#api-events">Events</a>
   <a href="#api-analytics">Analytics</a>
@@ -556,6 +561,136 @@ accounts ┘                   │
 </div>
 
 <!-- ────────────────── PAGES ────────────────── -->
+<!-- ────────────────── BOARD ────────────────── -->
+<h2 id="board">Board</h2>
+<p style="font-size:12px; color:#8b949e; margin-bottom:16px;">Kanban view of current work, backlog, and roadmap. Links to changelog entries and postmortems where applicable.</p>
+
+<div style="display:grid; grid-template-columns: repeat(4, 1fr); gap:12px; margin:16px 0; align-items:start;">
+
+  <!-- BACKLOG -->
+  <div id="board-backlog" style="background:#161b22; border:1px solid #21262d; border-radius:8px; padding:12px;">
+    <div style="font-size:13px; font-weight:600; color:#8b949e; margin-bottom:10px; padding-bottom:6px; border-bottom:1px solid #21262d;">BACKLOG</div>
+
+    <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #a371f7; border-radius:6px; padding:10px; margin-bottom:8px;">
+      <div style="font-size:12px; font-weight:600; color:#f0f6fc;">Multi-sub hybrid detection</div>
+      <div style="font-size:11px; color:#8b949e; margin-top:4px;">MAX(pricing_model) picks alphabetically. Flat + metered = "metered" not "hybrid". Needs CASE WHEN COUNT(DISTINCT) > 1.</div>
+      <div style="font-size:10px; color:#a371f7; margin-top:6px;">ROADMAP &middot; Revenue</div>
+    </div>
+
+    <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #a371f7; border-radius:6px; padding:10px; margin-bottom:8px;">
+      <div style="font-size:12px; font-weight:600; color:#f0f6fc;">Cohort-scoped alerts</div>
+      <div style="font-size:11px; color:#8b949e; margin-top:4px;">Let users scope alerts to a specific cohort's aggregate metrics instead of all customers.</div>
+      <div style="font-size:10px; color:#a371f7; margin-top:6px;">ROADMAP &middot; Alerts</div>
+    </div>
+
+    <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #a371f7; border-radius:6px; padding:10px; margin-bottom:8px;">
+      <div style="font-size:12px; font-weight:600; color:#f0f6fc;">Team management UI</div>
+      <div style="font-size:11px; color:#8b949e; margin-top:4px;">Clerk migration done. Team/org UI can be rebuilt on Clerk orgs and unhidden.</div>
+      <div style="font-size:10px; color:#a371f7; margin-top:6px;">ROADMAP &middot; Platform</div>
+    </div>
+
+    <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #a371f7; border-radius:6px; padding:10px; margin-bottom:8px;">
+      <div style="font-size:12px; font-weight:600; color:#f0f6fc;">Pricing simulation</div>
+      <div style="font-size:11px; color:#8b949e; margin-top:4px;">Simulation models, retention cohorts, Markov CLV, feature pricing. WIP table exists but hidden.</div>
+      <div style="font-size:10px; color:#a371f7; margin-top:6px;">ROADMAP &middot; Analytics</div>
+    </div>
+
+    <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #a371f7; border-radius:6px; padding:10px; margin-bottom:8px;">
+      <div style="font-size:12px; font-weight:600; color:#f0f6fc;">Revenue enrichment from MRR allocation</div>
+      <div style="font-size:11px; color:#8b949e; margin-top:4px;">Auto-stamp revenue on SDK events from Stripe MRR. Flat subs currently show $0 per event.</div>
+      <div style="font-size:10px; color:#a371f7; margin-top:6px;">ROADMAP &middot; Revenue</div>
+    </div>
+
+    <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #a371f7; border-radius:6px; padding:10px; margin-bottom:8px;">
+      <div style="font-size:12px; font-weight:600; color:#f0f6fc;">Separate customerReferenceId from stripe_customer_id in SDK</div>
+      <div style="font-size:11px; color:#8b949e; margin-top:4px;">SDK should enforce passing both separately. Currently optional meta field.</div>
+      <div style="font-size:10px; color:#a371f7; margin-top:6px;">ROADMAP &middot; SDK</div>
+    </div>
+  </div>
+
+  <!-- IN PROGRESS -->
+  <div id="board-inprogress" style="background:#161b22; border:1px solid #21262d; border-radius:8px; padding:12px;">
+    <div style="font-size:13px; font-weight:600; color:#d29922; margin-bottom:10px; padding-bottom:6px; border-bottom:1px solid #21262d;">IN PROGRESS</div>
+
+    <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #d29922; border-radius:6px; padding:10px; margin-bottom:8px;">
+      <div style="font-size:12px; font-weight:600; color:#f0f6fc;">Doug: Backend rewrite</div>
+      <div style="font-size:11px; color:#8b949e; margin-top:4px;">New backend based on Tanso architecture. Plug-and-play with existing frontend API contracts. Excludes entitlements.</div>
+      <div style="font-size:10px; color:#d29922; margin-top:6px;">ACTIVE &middot; Doug &middot; Started 2026-04-22</div>
+    </div>
+
+    <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #d29922; border-radius:6px; padding:10px; margin-bottom:8px;">
+      <div style="font-size:12px; font-weight:600; color:#f0f6fc;">Stripe revenue enrichment testing</div>
+      <div style="font-size:11px; color:#8b949e; margin-top:4px;">Bridge map, backfill, auto-enrich deployed. Needs production testing with real Stripe data to verify revenue shows on events.</div>
+      <div style="font-size:10px; color:#d29922; margin-top:6px;">ACTIVE &middot; Kat &middot; Deployed 2026-04-22</div>
+    </div>
+  </div>
+
+  <!-- REVIEW / TEST -->
+  <div id="board-review" style="background:#161b22; border:1px solid #21262d; border-radius:8px; padding:12px;">
+    <div style="font-size:13px; font-weight:600; color:#79c0ff; margin-bottom:10px; padding-bottom:6px; border-bottom:1px solid #21262d;">REVIEW / TEST</div>
+
+    <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #79c0ff; border-radius:6px; padding:10px; margin-bottom:8px;">
+      <div style="font-size:12px; font-weight:600; color:#f0f6fc;">Verify revenue on prod events</div>
+      <div style="font-size:11px; color:#8b949e; margin-top:4px;">After deploy: send SDK events with meta.stripe_customer_id, check revenue_amount > 0. Try sync button, verify backfill runs.</div>
+      <div style="font-size:10px; color:#79c0ff; margin-top:6px;">TEST &middot; Kat</div>
+    </div>
+
+    <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #79c0ff; border-radius:6px; padding:10px; margin-bottom:8px;">
+      <div style="font-size:12px; font-weight:600; color:#f0f6fc;">Verify customer names resolve</div>
+      <div style="font-size:11px; color:#8b949e; margin-top:4px;">After Stripe sync: check customers table for name != customer_id. Check events page shows real names.</div>
+      <div style="font-size:10px; color:#79c0ff; margin-top:6px;">TEST &middot; Kat</div>
+    </div>
+
+    <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #79c0ff; border-radius:6px; padding:10px; margin-bottom:8px;">
+      <div style="font-size:12px; font-weight:600; color:#f0f6fc;">Verify event detail expansion</div>
+      <div style="font-size:11px; color:#8b949e; margin-top:4px;">Expand events with/without requestBody. Check error display on network failure. Verify retry on re-expand.</div>
+      <div style="font-size:10px; color:#79c0ff; margin-top:6px;">TEST &middot; Kat</div>
+    </div>
+  </div>
+
+  <!-- DONE -->
+  <div id="board-done" style="background:#161b22; border:1px solid #21262d; border-radius:8px; padding:12px;">
+    <div style="font-size:13px; font-weight:600; color:#3fb950; margin-bottom:10px; padding-bottom:6px; border-bottom:1px solid #21262d;">DONE (2026-04-22)</div>
+
+    <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #3fb950; border-radius:6px; padding:10px; margin-bottom:8px;">
+      <div style="font-size:12px; font-weight:600; color:#f0f6fc;">Fix events page filters</div>
+      <div style="font-size:11px; color:#8b949e; margin-top:4px;">Vue HOF bug. <a href="#postmortems" style="color:#79c0ff;">PM-1</a></div>
+      <div style="font-size:10px; color:#3fb950; margin-top:6px;">BUG FIX &middot; aa5bed7</div>
+    </div>
+
+    <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #3fb950; border-radius:6px; padding:10px; margin-bottom:8px;">
+      <div style="font-size:12px; font-weight:600; color:#f0f6fc;">Fix event detail error handling</div>
+      <div style="font-size:11px; color:#8b949e; margin-top:4px;">Silent catch + empty error fallthrough. <a href="#postmortems" style="color:#79c0ff;">PM-3</a></div>
+      <div style="font-size:10px; color:#3fb950; margin-top:6px;">BUG FIX &middot; d2ce144</div>
+    </div>
+
+    <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #3fb950; border-radius:6px; padding:10px; margin-bottom:8px;">
+      <div style="font-size:12px; font-weight:600; color:#f0f6fc;">Add stripe_customer_id bridge</div>
+      <div style="font-size:11px; color:#8b949e; margin-top:4px;">Column + auto-create + resolve. <a href="#postmortems" style="color:#79c0ff;">PM-2, PM-4</a></div>
+      <div style="font-size:10px; color:#3fb950; margin-top:6px;">FEATURE &middot; f59f434</div>
+    </div>
+
+    <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #3fb950; border-radius:6px; padding:10px; margin-bottom:8px;">
+      <div style="font-size:12px; font-weight:600; color:#f0f6fc;">Revenue enrichment bridge</div>
+      <div style="font-size:11px; color:#8b949e; margin-top:4px;">appToStripe map, subscription lookup, MTD usage, backfill. <a href="#postmortems" style="color:#79c0ff;">PM-2</a></div>
+      <div style="font-size:10px; color:#3fb950; margin-top:6px;">FEATURE &middot; 20b7a70</div>
+    </div>
+
+    <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #3fb950; border-radius:6px; padding:10px; margin-bottom:8px;">
+      <div style="font-size:12px; font-weight:600; color:#f0f6fc;">Revenue backfill endpoint + auto-sync</div>
+      <div style="font-size:11px; color:#8b949e; margin-top:4px;">POST /backfill/revenue, auto-runs after Stripe sync.</div>
+      <div style="font-size:10px; color:#3fb950; margin-top:6px;">FEATURE &middot; c02b05d</div>
+    </div>
+
+    <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #3fb950; border-radius:6px; padding:10px; margin-bottom:8px;">
+      <div style="font-size:12px; font-weight:600; color:#f0f6fc;">Platform architecture doc</div>
+      <div style="font-size:11px; color:#8b949e; margin-top:4px;">ERD, definitions, user stories, acceptance criteria, postmortems.</div>
+      <div style="font-size:10px; color:#3fb950; margin-top:6px;">DOCS &middot; d5edca3</div>
+    </div>
+  </div>
+
+</div>
+
 <h2 id="pages">Pages & Routes</h2>
 <table>
   <tr><th>Path</th><th>Page</th><th>Purpose</th></tr>
