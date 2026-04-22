@@ -2,6 +2,65 @@
 
 Complete architecture reference: database ERD, user flows, Stripe integration, and API surface.
 
+Also see:
+- [observe-erd.html](observe-erd.html) — visual ERD (open in browser)
+- [observe-customer-model.html](observe-customer-model.html) — two-layer customer model (open in browser)
+
+---
+
+## Definitions
+
+These terms have precise meanings in the codebase. Mixing them up breaks revenue enrichment.
+
+| Term | Meaning | Table | Example |
+|------|---------|-------|---------|
+| **Observe user** | A person who signs up for Observe | `users` | Kat, Doug |
+| **Account** | An Observe billing/data-ownership unit (one user can have many) | `accounts` | "Acme AI" org |
+| **Customer** | An end-user of the Observe user's product — NOT an Observe user | `customers` | "FlatCo", "MeteredInc" |
+| **customer_id** | The app-level ID the SDK sends as `customerReferenceId` | `observe_events.customer_id`, `customers.customer_id` | `"flatco"`, `"user_123"` |
+| **stripe_customer_id** | The Stripe `cus_*` ID from the Observe user's own Stripe account | `customers.stripe_customer_id` | `"cus_abc123"` |
+| **account.stripe_customer_id** | The Observe user AS a Stripe customer of Tanso (billing) | `accounts.stripe_customer_id` | `"cus_tanso_billing"` |
+
+**Key rule:** `customer_id` != `stripe_customer_id`. They used to be the same, but now SDK events send an app-level `customerReferenceId` and pass the Stripe ID in `meta.stripe_customer_id`. The `customers.stripe_customer_id` column bridges them.
+
+## Two Stripe Connections (never confuse these)
+
+| | Tanso's Stripe (our billing) | User's Stripe (their revenue data) |
+|---|---|---|
+| **Purpose** | Bill Observe users for their plan | Pull the user's customers, subscriptions, revenue |
+| **API keys** | Env vars: `STRIPE_SECRET_KEY` | `integrations.encrypted_api_key` (per account) |
+| **Routes** | `/billing/checkout`, `/billing/webhook` | `/integrations/stripe/connect`, `/integrations/stripe/sync` |
+| **Writes to** | `accounts.stripe_plan` | `customers`, `subscriptions`, `plans` |
+| **Customer ID** | `accounts.stripe_customer_id` | `customers.stripe_customer_id` |
+
+## Revenue Enrichment Pipeline
+
+```
+SDK event arrives (POST /events/ingest)
+  customerReferenceId: "flatco"        ← app-level ID
+  meta.stripe_customer_id: "cus_abc"   ← Stripe ID
+
+Step 1: Build bridge map (app ID → Stripe ID)
+  "flatco" → "cus_abc"  (from meta, or from customers.stripe_customer_id, or if customer_id starts with cus_)
+
+Step 2: Look up subscription by Stripe ID
+  subscriptions WHERE customer_id = "cus_abc" → found: metered, unit_price = 0.01
+
+Step 3: Calculate revenue
+  metered: 0.01 × usage_units → revenue_amount
+  tiered: tierPrice(mtdUsage) × usage_units → revenue_amount
+  flat: $0 per event (MRR is fixed)
+
+Step 4: Store on event
+  observe_events.revenue_amount = calculated value
+  observe_events.revenue_source = "per_unit" | "tiered" | "subscription" | etc.
+
+Step 5: Resolve customer name (async)
+  customers WHERE customer_id = "flatco" → stripe_customer_id = "cus_abc"
+  → stripe.customers.retrieve("cus_abc") → name = "FlatCo Inc"
+  → UPDATE customers SET name = "FlatCo Inc"
+```
+
 ---
 
 ## Entity Relationship Diagram
