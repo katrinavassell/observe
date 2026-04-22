@@ -839,6 +839,28 @@ accounts ┘                   │
   </table>
 </div>
 
+<div class="us" id="pm6">
+  <div class="us-title">PM-6: Customer names not showing on Cohorts page</div>
+  <table>
+    <tr><th style="width:120px;">Field</th><th>Detail</th></tr>
+    <tr><td><strong>Root Cause</strong></td><td>API returns <code>customer_name</code> but template checks <code>c.name</code> (undefined). Also, Clerk org <code>org_3CgKJRdLwG8qTdZFdIGbviyJn7e</code> had no matching account in DB — created pre-Clerk migration without <code>clerk_org_id</code>.</td></tr>
+    <tr><td><strong>Impact</strong></td><td>All customers showed raw <code>cus_*</code> IDs instead of resolved names. Stripe sync failed because <code>accountId</code> resolved to null.</td></tr>
+    <tr><td><strong>Fix</strong></td><td>Fixed <code>c.name</code> → <code>c.customer_name</code> in 3 places. Linked Clerk org to existing account 82 in prod DB. Added email display under name.</td></tr>
+    <tr><td><strong>Prevention</strong></td><td>When field names differ between API and frontend types, catch it in code review. Run Clerk org → account migration for all pre-Clerk accounts.</td></tr>
+  </table>
+</div>
+
+<div class="us" id="pm7">
+  <div class="us-title">PM-7: Revenue rule — flat subs show $0 per event (by design)</div>
+  <table>
+    <tr><th style="width:120px;">Field</th><th>Detail</th></tr>
+    <tr><td><strong>Rule</strong></td><td>Revenue at the <strong>customer level</strong> (MRR from subscription) is the right signal. Revenue at the <strong>event/feature level</strong> is misleading for flat subs — proportional attribution gives every feature the same margin %.</td></tr>
+    <tr><td><strong>Where to show MRR</strong></td><td>Customer detail page, Cohorts page MRR column, Analytics by-customer tab. NOT per-event or per-feature.</td></tr>
+    <tr><td><strong>Per-event revenue</strong></td><td>Only meaningful for metered (<code>unitPrice × usage</code>) and tiered pricing. Flat subs = $0 per event, <code>revenue_source = "subscription"</code>.</td></tr>
+    <tr><td><strong>Fix applied</strong></td><td>Cohorts page MRR column now shows actual dollar amount from subscriptions instead of movement badge. Removed "Unprofitable" cohort label badge.</td></tr>
+  </table>
+</div>
+
 <script>
 function filterChangelog(type) {
   const rows = document.querySelectorAll('#changelog-table tr[data-type]');
