@@ -308,6 +308,7 @@ const DEFAULT_COLUMNS: TableColumn[] = [
   { id: "revenue", label: "Revenue", visible: true, align: "right" },
   { id: "cost", label: "Cost", visible: true, align: "right" },
   { id: "margin", label: "Margin", visible: true, align: "right" },
+  { id: "profit", label: "Profit", visible: true, align: "right" },
   { id: "active_days", label: "Active Days", visible: true, align: "right" },
   { id: "mrr", label: "MRR", visible: false, align: "left" },
 ];
@@ -1036,6 +1037,21 @@ const excludedCount = computed(() => {
                     <!-- Margin -->
                     <td v-else-if="col.id === 'margin'" class="p-3 text-right">
                       {{ fmtPct(c.margin_pct) }}
+                    </td>
+
+                    <!-- Profit -->
+                    <td v-else-if="col.id === 'profit'" class="p-3 text-right">
+                      <span
+                        :class="
+                          (c.total_revenue || c.mrr || 0) - c.total_cost >= 0
+                            ? 'text-green-600'
+                            : 'text-red-600'
+                        "
+                        class="font-medium"
+                        >{{
+                          fmt((c.total_revenue || c.mrr || 0) - c.total_cost)
+                        }}</span
+                      >
                     </td>
 
                     <!-- Active Days -->
