@@ -941,6 +941,7 @@ export function createEventsRoutes(
           inputTokens?: number;
           outputTokens?: number;
           properties?: Record<string, unknown>;
+          meta?: Record<string, string>;
           requestBody?: unknown;
           responseBody?: unknown;
           idempotencyKey?: string;
@@ -1009,8 +1010,13 @@ export function createEventsRoutes(
         // in this batch, carrying the pricing model so we pick the right
         // revenue derivation per event.
         const customerIds = [
-          ...new Set(validEvents.map((e) => e.customerReferenceId)),
-        ];
+          ...new Set([
+            ...validEvents.map((e) => e.customerReferenceId),
+            ...validEvents
+              .map((e) => e.meta?.stripe_customer_id)
+              .filter(Boolean),
+          ]),
+        ] as string[];
         const subByCustomer = new Map<string, SubMeta>();
         if (customerIds.length > 0 && accountId != null) {
           try {
@@ -1102,15 +1108,24 @@ export function createEventsRoutes(
           } else if (featurePricingMap.has(evt.featureKey)) {
             revenue = featurePricingMap.get(evt.featureKey)!;
             revenueSource = "feature_pricing";
-          } else if (subByCustomer.has(evt.customerReferenceId)) {
-            const meta = subByCustomer.get(evt.customerReferenceId)!;
-            const evtUsage =
-              evt.usageUnits ??
-              (evt.inputTokens || 0) + (evt.outputTokens || 0);
-            const mtd = mtdUsageByCustomer.get(evt.customerReferenceId) ?? 0;
-            const enriched = enrichRevenueFromSub(meta, evtUsage, mtd);
-            revenue = enriched.revenue;
-            revenueSource = enriched.revenueSource;
+          } else {
+            const subKey =
+              (evt.meta?.stripe_customer_id &&
+                subByCustomer.has(evt.meta.stripe_customer_id) &&
+                evt.meta.stripe_customer_id) ||
+              (subByCustomer.has(evt.customerReferenceId) &&
+                evt.customerReferenceId) ||
+              null;
+            if (subKey) {
+              const subMeta = subByCustomer.get(subKey)!;
+              const evtUsage =
+                evt.usageUnits ??
+                (evt.inputTokens || 0) + (evt.outputTokens || 0);
+              const mtd = mtdUsageByCustomer.get(subKey) ?? 0;
+              const enriched = enrichRevenueFromSub(subMeta, evtUsage, mtd);
+              revenue = enriched.revenue;
+              revenueSource = enriched.revenueSource;
+            }
           }
 
           // Only mark tokens_source='direct' when the SDK actually provided
@@ -1121,7 +1136,7 @@ export function createEventsRoutes(
               : null;
 
           placeholders.push(
-            `($${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, 'sdk', 'event', false, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++})`,
+            `($${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, 'sdk', 'event', false, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}::jsonb)`,
           );
           values.push(
             userId,
@@ -1156,6 +1171,7 @@ export function createEventsRoutes(
                 ? evt.responseBody
                 : JSON.stringify(evt.responseBody)
               : null,
+            evt.meta ? JSON.stringify(evt.meta) : null,
           );
         }
 
@@ -1166,7 +1182,7 @@ export function createEventsRoutes(
           model, model_provider, source, granularity, is_inferred, idempotency_key, revenue_source,
           trace_id, span_id, parent_span_id, duration_ms, cost_type,
           input_tokens, output_tokens, tokens_source,
-          request_body, response_body
+          request_body, response_body, meta
         ) VALUES ${placeholders.join(", ")}
         ON CONFLICT (account_id, idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING
       `;

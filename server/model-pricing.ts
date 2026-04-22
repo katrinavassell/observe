@@ -386,15 +386,22 @@ export async function getAllPricing(pool: Pg.Pool): Promise<ModelPrice[]> {
   return pricingCache;
 }
 
+function normalizeModelName(name: string): string {
+  const stripped = name.includes("/") ? name.split("/").pop()! : name;
+  return stripped.toLowerCase().replace(/[^a-z0-9.-]/g, "");
+}
+
 export async function getModelPricing(
   pool: Pg.Pool,
   model: string,
 ): Promise<ModelPrice | null> {
   const all = await getAllPricing(pool);
-  return (
-    all.find((p) => p.model === model || p.model === model.toLowerCase()) ||
-    null
+  const exact = all.find(
+    (p) => p.model === model || p.model === model.toLowerCase(),
   );
+  if (exact) return exact;
+  const normalized = normalizeModelName(model);
+  return all.find((p) => normalizeModelName(p.model) === normalized) || null;
 }
 
 export async function getUserModelPricing(
