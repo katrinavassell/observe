@@ -1212,7 +1212,8 @@ export function createIntegrationsRoutes(
           return;
         }
         console.error("Stripe sync error:", err);
-        res.status(500).json({ error: "Failed to sync Stripe data" });
+        const detail = err instanceof Error ? err.message : String(err);
+        res.status(500).json({ error: "Failed to sync Stripe data", detail });
       }
     },
   );
