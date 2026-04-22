@@ -291,7 +291,14 @@ export function createEventsRoutes(
         }
 
         const eventsResult = await pool.query(
-          `SELECT oe.*, c.name as customer_name
+          `SELECT
+           oe.id, oe.user_id, oe.account_id, oe.customer_id, oe.feature_key,
+           oe.event_name, oe.timestamp, oe.cost_amount, oe.cost_unit,
+           oe.revenue_amount, oe.usage_units, oe.model, oe.model_provider,
+           oe.source, oe.granularity, oe.is_inferred, oe.properties, oe.created_at,
+           oe.input_tokens, oe.output_tokens, oe.tokens_source, oe.revenue_source,
+           oe.trace_id, oe.span_id, oe.parent_span_id, oe.duration_ms, oe.cost_type,
+           c.name as customer_name
          FROM observe_events oe
          LEFT JOIN customers c ON oe.account_id = c.account_id AND oe.customer_id = c.customer_id
          ${where}

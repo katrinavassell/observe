@@ -194,6 +194,7 @@ function resetColumns() {
 const expandedIds = reactive(new Set<number>());
 const eventDetails = reactive<Record<number, EventDetail>>({});
 const loadingDetails = reactive(new Set<number>());
+const detailErrors = reactive<Record<number, string>>({});
 
 async function toggleEvent(id: number) {
   if (expandedIds.has(id)) {
@@ -202,12 +203,14 @@ async function toggleEvent(id: number) {
   }
   expandedIds.add(id);
   window.posthog?.capture("event_expanded", { event_id: id });
+  delete detailErrors[id];
   if (!eventDetails[id]) {
     loadingDetails.add(id);
     try {
       eventDetails[id] = await getEventDetail(id);
-    } catch {
-      /* silently fail */
+    } catch (err) {
+      console.error(`Failed to load event detail id=${id}:`, err);
+      detailErrors[id] = err instanceof Error ? err.message : "Unknown error";
     }
     loadingDetails.delete(id);
   }
@@ -1332,12 +1335,17 @@ responseBody: {
                       </span>
                     </div>
                   </div>
+                  <div
+                    v-else-if="detailErrors[event.id]"
+                    class="p-4 text-sm text-destructive space-y-1"
+                  >
+                    <p class="font-medium">Failed to load event detail</p>
+                    <p class="text-xs text-muted-foreground">
+                      {{ detailErrors[event.id] }}
+                    </p>
+                  </div>
                   <div v-else class="p-4 text-sm text-muted-foreground">
-                    {{
-                      isLoggedIn
-                        ? "Failed to load detail."
-                        : "Sign in to view event details."
-                    }}
+                    Sign in to view event details.
                   </div>
                 </td>
               </tr>
