@@ -33,6 +33,7 @@ const props = defineProps<{
     total_revenue: number;
     total_usage: number;
   }>;
+  mrr?: number;
 }>();
 
 const chartData = computed(() => {
@@ -50,10 +51,15 @@ const chartData = computed(() => {
     });
   });
 
+  const hasEventRevenue = props.data.some((d) => d.total_revenue > 0);
+  const revenueLabel = hasEventRevenue ? "Revenue" : "MRR";
+
   const datasets = [
     {
-      label: "Revenue",
-      data: props.data.map((d) => d.total_revenue),
+      label: revenueLabel,
+      data: props.data.map((d) =>
+        hasEventRevenue ? d.total_revenue : (props.mrr ?? 0),
+      ),
       borderColor: "rgb(99, 102, 241)",
       backgroundColor: "rgba(99, 102, 241, 0.1)",
       fill: true,

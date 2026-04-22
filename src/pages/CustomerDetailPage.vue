@@ -316,7 +316,10 @@ const isFlat = computed(() => cohortCustomer.value?.pricing_model === "flat");
       <Card v-if="timeseries?.timeseries.length">
         <CardContent class="p-6">
           <h2 class="font-semibold mb-4">Revenue vs Cost</h2>
-          <CustomerTrendChart :data="timeseries.timeseries" />
+          <CustomerTrendChart
+            :data="timeseries.timeseries"
+            :mrr="cohortCustomer?.mrr ?? 0"
+          />
         </CardContent>
       </Card>
 
