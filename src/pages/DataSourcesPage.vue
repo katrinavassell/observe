@@ -90,8 +90,7 @@ async function loadSdkKeys() {
   try {
     sdkKeys.value = await listSdkKeys();
     if (sdkKeys.value.length === 0) {
-      const result = await createSdkKey("Default");
-      generatedKey.value = result.key;
+      await createSdkKey("Default");
       sdkKeys.value = await listSdkKeys();
     }
   } catch {
