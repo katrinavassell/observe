@@ -220,7 +220,9 @@ curl -X POST https://observe.tansohq.com/api/events/ingest \
         "inputTokens": 150,
         "outputTokens": 80,
         "durationMs": 1240,
-        "idempotencyKey": "req_abc"
+        "idempotencyKey": "req_abc",
+        "requestBody": { "messages": [{ "role": "user", "content": "Hello" }] },
+        "responseBody": { "choices": [{ "message": { "role": "assistant", "content": "Hi there!" } }] }
       }
     ]
   }'
@@ -243,6 +245,10 @@ curl -X POST https://observe.tansohq.com/api/events/ingest \
       "inputTokens":         number,
       "outputTokens":        number,
 
+      // RECOMMENDED — shows prompt + completion in the event detail view
+      "requestBody":         object,  // the messages/prompt you sent to the provider
+      "responseBody":        object,  // the provider's response body (choices, content, etc.)
+
       // OPTIONAL
       "timestamp":           string,  // ISO 8601; defaults to server-received time
       "costAmount":          number,  // override auto-computed cost (in costUnit)
@@ -256,9 +262,7 @@ curl -X POST https://observe.tansohq.com/api/events/ingest \
       "spanId":              string,  // this span's ID
       "parentSpanId":        string,  // parent span (for nested agent calls)
       "properties":          object,  // arbitrary JSON metadata (searchable)
-      "meta":                object,  // { stripe_customer_id: "cus_..." } — links event to Stripe customer for revenue matching
-      "requestBody":         object,  // optional — prompt/messages you sent
-      "responseBody":        object   // optional — provider response body
+      "meta":                object   // { stripe_customer_id: "cus_..." } — links event to Stripe customer for revenue matching
     }
   ]
 }
