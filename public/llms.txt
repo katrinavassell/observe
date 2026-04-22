@@ -447,17 +447,23 @@ Stripe subscription: Flat, Metered, Tiered, or Hybrid. This is queried from
 
 Margin is always: `(revenue - cost) / revenue * 100`
 
-All margin calculations use event-level data from `observe_events`:
-- **Customer margin** = `SUM(revenue_amount) - SUM(cost_amount)` for that customer
-- **Feature margin** = same, grouped by `feature_key`
-- **Overall margin** = same across all events
+**Revenue source for margin depends on pricing model:**
+- **Metered/tiered/hybrid customers**: revenue comes from per-event `revenue_amount`
+  in `observe_events` (enriched at ingest time via `enrich-revenue.ts`)
+- **Flat subscription customers**: per-event `revenue_amount` is $0 by design (PM-7).
+  The cohorts endpoint falls back to **subscription MRR** from the `subscriptions` table
+  (`subRevenueMap`) when event-level revenue is 0. This ensures flat-sub customers show
+  their actual margin (e.g., $99 MRR - $0.001 cost = ~100% margin) instead of -100%.
 
-Since PR #94, per-event revenue is enriched at ingest time. The analytics queries
-do NOT add subscription MRR on top — that would double-count. Revenue and cost both
-live on `observe_events` rows; margin is a pure aggregation.
+Feature-level and model-level margins only use event-level revenue (metered, tiered,
+explicit, feature_pricing). Flat subscription MRR cannot be attributed to individual
+features — feature margins show as null for flat-sub customers.
 
-When revenue is 0 and cost > 0, margin is -100%. When both are 0, margin is null
-(not shown). This prevents misleading numbers for uninstrumented customers.
+When revenue is 0 (no subscription AND no event revenue) and cost > 0, margin is -100%.
+When both are 0, margin is null (not shown).
+
+Values >99% but <100% display as ">99%" on the Analytics dashboard to avoid implying
+zero cost.
 
 Margin badges show a tooltip with benchmark context: "AI SaaS target: 60-80% gross margin."
 
@@ -571,8 +577,9 @@ To get per-event revenue, either:
 
 - **Cost** = what YOU pay the LLM provider (auto-calculated from model + tokens)
 - **Revenue** = what YOUR CUSTOMER pays you (from Stripe subscription or explicit)
-- **Margin** = (revenue - cost) / revenue — only meaningful at the customer level
-  for flat subscriptions
+- **Margin** = (revenue - cost) / revenue — for flat subscriptions, the cohorts
+  endpoint uses subscription MRR as revenue (not per-event $0). Feature-level
+  margin is null for flat subs since MRR can't be attributed to individual features.
 - **Period** = margin is scoped to a billing period (This Month by default).
   Switch between This Month, Last Month, and All Time on the Customer Detail
   and Cohorts pages. MRR is compared against cost within that period.
