@@ -762,16 +762,7 @@ watch(
               <Key class="h-4 w-4 text-primary" />
               <h3 class="font-medium text-sm">Your API key</h3>
             </div>
-            <Button
-              v-if="sdkKeys.length > 0"
-              variant="ghost"
-              size="sm"
-              class="h-7 text-xs text-muted-foreground"
-              @click="showKeyGenerator = true"
-            >
-              <Plus class="h-3 w-3 mr-1" />
-              Add another key
-            </Button>
+            <!-- Add another key hidden for now — single key per org is simpler -->
           </div>
 
           <!-- Fresh key -->
