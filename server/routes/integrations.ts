@@ -108,9 +108,10 @@ export async function syncStripeDataForUser(
   await pool.query("DELETE FROM subscriptions WHERE account_id = $1", [
     resolvedAccountId,
   ]);
-  await pool.query("DELETE FROM customers WHERE account_id = $1", [
-    resolvedAccountId,
-  ]);
+  await pool.query(
+    "DELETE FROM customers WHERE account_id = $1 OR (user_id = $2 AND account_id IS NULL)",
+    [resolvedAccountId, userId],
+  );
   await pool.query("DELETE FROM plans WHERE account_id = $1", [
     resolvedAccountId,
   ]);
