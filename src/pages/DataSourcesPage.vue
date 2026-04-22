@@ -963,15 +963,6 @@ watch(
               View events
               <ArrowRight class="h-3 w-3 ml-1" />
             </Button>
-            <Button
-              v-if="hasEvents"
-              variant="outline"
-              size="sm"
-              class="h-8 text-xs"
-              @click="router.push('/features')"
-            >
-              Label features
-            </Button>
           </div>
         </div>
       </CardContent>
