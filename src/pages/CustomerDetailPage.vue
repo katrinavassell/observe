@@ -17,11 +17,11 @@ import {
   AlertTriangle,
   Clock,
   Zap,
-  Cpu,
   Activity,
   Info,
 } from "lucide-vue-next";
 import {
+  Badge,
   Card,
   CardContent,
   Skeleton,
@@ -177,17 +177,6 @@ const signals = computed(() => {
     });
   }
 
-  // Model swap
-  if (cc.model_swap_suggestion) {
-    const s = cc.model_swap_suggestion;
-    items.push({
-      type: "info",
-      icon: Cpu,
-      title: "Model optimization available",
-      description: `Switch from ${cc.top_model} to ${s.suggested_model} — save ~${s.potential_savings_pct}% per event.`,
-    });
-  }
-
   return items;
 });
 
@@ -255,6 +244,8 @@ const costPerEvent = computed(() => {
   if (events === 0) return null;
   return detail.value.total_cost / events;
 });
+
+const isFlat = computed(() => cohortCustomer.value?.pricing_model === "flat");
 </script>
 
 <template>
@@ -461,10 +452,8 @@ const costPerEvent = computed(() => {
         </CardContent>
       </Card>
 
-      <!-- Signals — hidden until calcs are trustworthy (no revenue guard,
-           hardcoded thresholds, no trend magnitude, model-swap compares
-           unrelated model families). Code kept for when we reintroduce. -->
-      <Card v-if="false && signals.length > 0">
+      <!-- Signals -->
+      <Card v-if="signals.length > 0">
         <CardContent class="p-6 space-y-3">
           <h2 class="font-semibold flex items-center gap-2">
             <Zap class="h-4 w-4 text-primary" />
@@ -551,7 +540,14 @@ const costPerEvent = computed(() => {
                     {{ fmt(f.total_cost) }}
                   </td>
                   <td class="px-3 py-2 text-right font-mono">
-                    {{ fmt(f.total_revenue) }}
+                    <Badge
+                      v-if="f.total_revenue === 0 && isFlat"
+                      variant="secondary"
+                      class="text-[10px] font-medium"
+                    >
+                      Bundled
+                    </Badge>
+                    <template v-else>{{ fmt(f.total_revenue) }}</template>
                   </td>
                   <td
                     class="px-3 py-2 text-right font-mono"
