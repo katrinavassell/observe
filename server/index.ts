@@ -730,6 +730,7 @@ async function _doDbInit() {
     await pool.query(`DO $$ BEGIN
       ALTER TABLE observe_events ADD COLUMN IF NOT EXISTS revenue_source TEXT DEFAULT 'none';
       ALTER TABLE observe_events ADD COLUMN IF NOT EXISTS agent_id TEXT;
+      ALTER TABLE observe_events ADD COLUMN IF NOT EXISTS meta JSONB DEFAULT '{}'::jsonb;
     END $$`);
 
     await pool.query(`
