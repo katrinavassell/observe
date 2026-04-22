@@ -722,6 +722,18 @@ export async function backfillTokens(
   });
 }
 
+export interface BackfillRevenueSummary {
+  events_updated: number;
+  events_skipped: number;
+  events_checked: number;
+  customers_resolved: number;
+  customers_checked: number;
+}
+
+export async function backfillRevenue(): Promise<BackfillRevenueSummary> {
+  return request("/backfill/revenue", { method: "POST" });
+}
+
 // ======================================================================// TEAM / ORGANIZATION
 // ======================================================================
 export interface OrgMember {
