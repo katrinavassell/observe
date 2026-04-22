@@ -363,6 +363,11 @@ function onSelectUpdate(setter: (v: string | undefined) => void) {
   };
 }
 
+const onFeatureChange = onSelectUpdate((v) => (selectedFeature.value = v));
+const onCustomerChange = onSelectUpdate((v) => (selectedCustomer.value = v));
+const onModelChange = onSelectUpdate((v) => (selectedModel.value = v));
+const onSourceChange = onSelectUpdate((v) => (selectedSource.value = v));
+
 const hasFilters = computed(
   () =>
     selectedFeature.value ||
@@ -605,28 +610,28 @@ function usageTooltip(event: ObserveEvent): string {
         :model-value="selectedFeature || ALL"
         placeholder="Feature"
         :items="featureItems"
-        @update:model-value="onSelectUpdate((v) => (selectedFeature = v))"
+        @update:model-value="onFeatureChange"
         class="w-[160px]"
       />
       <Select
         :model-value="selectedCustomer || ALL"
         placeholder="Customer"
         :items="customerItems"
-        @update:model-value="onSelectUpdate((v) => (selectedCustomer = v))"
+        @update:model-value="onCustomerChange"
         class="w-[180px]"
       />
       <Select
         :model-value="selectedModel || ALL"
         placeholder="Model"
         :items="modelItems"
-        @update:model-value="onSelectUpdate((v) => (selectedModel = v))"
+        @update:model-value="onModelChange"
         class="w-[160px]"
       />
       <Select
         :model-value="selectedSource || ALL"
         placeholder="Source"
         :items="sourceItems"
-        @update:model-value="onSelectUpdate((v) => (selectedSource = v))"
+        @update:model-value="onSourceChange"
         class="w-[160px]"
       />
       <div class="flex items-center gap-2">
