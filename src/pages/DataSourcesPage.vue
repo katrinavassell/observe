@@ -1515,32 +1515,39 @@ fetch(<span class="text-amber-300">'{{ ingestUrl }}'</span>, {
     </details>
 
     <!-- ================================================================== -->
-    <!-- DANGER ZONE: Reset Account Data                                    -->
-    <!-- ================================================================== -->
-    <Card v-if="isLoggedIn" class="border-destructive/40">
-      <CardContent class="p-6 space-y-3">
-        <div class="flex items-center gap-2">
-          <AlertTriangle class="h-5 w-5 text-destructive" />
-          <h2 class="font-semibold text-lg text-destructive">Danger Zone</h2>
-        </div>
-        <p class="text-sm text-muted-foreground">
-          Permanently deletes <strong>all</strong> events, customers,
-          subscriptions, integrations (Stripe/OpenAI/Anthropic), SDK keys,
-          features, alerts, and cohorts. Your account and team members are kept.
-          After reset: generate a new API key, re-connect Stripe, and send
-          events to start fresh.
-        </p>
-        <Button
-          variant="destructive"
-          :disabled="isResettingData"
-          @click="handleResetAccountData"
-        >
-          <Loader2 v-if="isResettingData" class="h-4 w-4 mr-2 animate-spin" />
-          <Trash2 v-else class="h-4 w-4 mr-2" />
-          {{ isResettingData ? "Resetting…" : "Reset Account Data" }}
-        </Button>
-      </CardContent>
-    </Card>
+    <details v-if="isLoggedIn" class="group">
+      <summary
+        class="text-xs font-medium text-muted-foreground cursor-pointer hover:text-foreground transition-colors"
+      >
+        Danger zone
+      </summary>
+      <div class="mt-3">
+        <Card class="border-destructive/40">
+          <CardContent class="p-4 space-y-3">
+            <p class="text-xs text-muted-foreground">
+              Permanently deletes <strong>all</strong> events, customers,
+              subscriptions, integrations, SDK keys, features, alerts, and
+              cohorts. Your account and team members are kept. After reset:
+              generate a new API key, re-connect Stripe, and send events to
+              start fresh.
+            </p>
+            <Button
+              variant="destructive"
+              size="sm"
+              :disabled="isResettingData"
+              @click="handleResetAccountData"
+            >
+              <Loader2
+                v-if="isResettingData"
+                class="h-3 w-3 mr-1.5 animate-spin"
+              />
+              <Trash2 v-else class="h-3 w-3 mr-1.5" />
+              {{ isResettingData ? "Resetting…" : "Reset Account Data" }}
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    </details>
   </div>
 
   <StripeApiKeyModal

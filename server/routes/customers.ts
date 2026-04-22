@@ -451,7 +451,8 @@ export function createCustomersRoutes(
       } catch (error) {
         await client.query("ROLLBACK");
         console.error("Clear data error:", error);
-        res.status(500).json({ error: "Failed to clear data" });
+        const detail = error instanceof Error ? error.message : String(error);
+        res.status(500).json({ error: "Failed to clear data", detail });
       } finally {
         client.release();
       }
