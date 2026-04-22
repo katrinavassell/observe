@@ -910,11 +910,6 @@ const excludedCount = computed(() => {
                           class="text-sm font-medium"
                           >{{ c.customer_name }}</span
                         >
-                        <span
-                          v-if="c.customer_email"
-                          class="text-xs text-muted-foreground"
-                          >{{ c.customer_email }}</span
-                        >
                         <code
                           class="font-mono text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded w-fit"
                           >{{ c.customer_id }}</code
