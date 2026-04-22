@@ -926,9 +926,11 @@ const excludedCount = computed(() => {
                         class="flex items-center gap-2"
                         :title="c.customer_id"
                       >
-                        <span v-if="c.customer_email" class="font-medium">{{
-                          c.customer_email
-                        }}</span>
+                        <span
+                          v-if="c.name && c.name !== c.customer_id"
+                          class="font-medium"
+                          >{{ c.name }}</span
+                        >
                         <code
                           v-else
                           class="font-mono text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded"
