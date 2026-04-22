@@ -780,6 +780,10 @@ accounts ┘                   │
   <tr data-type="docs"><td><span style="color:#8b949e;">DOCS</span></td><td>2026-04-22</td><td><strong>requestBody/responseBody promoted to RECOMMENDED</strong> — added to curl example in llms.txt</td></tr>
   <tr data-type="docs"><td><span style="color:#8b949e;">DOCS</span></td><td>2026-04-22</td><td><strong>Platform architecture doc</strong> — ERD, definitions, user stories, acceptance criteria, revenue pipeline</td></tr>
   <tr data-type="feature"><td><span style="color:#3fb950;">FEATURE</span></td><td>2026-04-22</td><td><strong>Billing-period-scoped margin</strong> — Period selector on Customer Detail and Cohorts pages. Stripe sync populates current_period_start/end. Queries scoped by timestamp. Default: This Month.</td></tr>
+  <tr data-type="bug" style="cursor:pointer;" onclick="location.href='#pm8'"><td><span style="color:#f85149;">BUG</span></td><td>2026-04-22</td><td><strong>Pre-Clerk accounts not linked to Clerk orgs</strong> — users created before Clerk migration get empty new accounts on login <span style="color:#79c0ff;font-size:11px;">→ PM-8</span></td></tr>
+  <tr data-type="bug"><td><span style="color:#f85149;">BUG</span></td><td>2026-04-22</td><td><strong>Period selector crashed cohorts page</strong> — currentMrrMap reference caused serverless function crash. Reverted, hidden until fixed.</td></tr>
+  <tr data-type="feature"><td><span style="color:#3fb950;">FEATURE</span></td><td>2026-04-22</td><td><strong>Revenue shows MRR for flat subs</strong> — Revenue column and customer detail use subscription MRR when event revenue is $0</td></tr>
+  <tr data-type="feature"><td><span style="color:#3fb950;">FEATURE</span></td><td>2026-04-22</td><td><strong>Auto-backfill clerk_org_id</strong> — ensureVisitor stamps clerk_org_id on accounts when Clerk user logs in</td></tr>
 </table>
 
 <!-- ────────────────── BUG POSTMORTEMS ────────────────── -->
@@ -860,6 +864,18 @@ accounts ┘                   │
     <tr><td><strong>Where to show MRR</strong></td><td>Customer detail page, Cohorts page MRR column, Analytics by-customer tab. NOT per-event or per-feature.</td></tr>
     <tr><td><strong>Per-event revenue</strong></td><td>Only meaningful for metered (<code>unitPrice × usage</code>) and tiered pricing. Flat subs = $0 per event, <code>revenue_source = "subscription"</code>.</td></tr>
     <tr><td><strong>Fix applied</strong></td><td>Cohorts page MRR column now shows actual dollar amount from subscriptions instead of movement badge. Removed "Unprofitable" cohort label badge.</td></tr>
+  </table>
+</div>
+
+<div class="us" id="pm8">
+  <div class="us-title">PM-8: Pre-Clerk accounts not linked — users get empty accounts on login</div>
+  <table>
+    <tr><th style="width:120px;">Field</th><th>Detail</th></tr>
+    <tr><td><strong>Root Cause</strong></td><td>Users created before Clerk migration have UUID <code>visitor_id</code> values. When they log in via Clerk, <code>ensureVisitor</code> creates a new user record (or updates via ON CONFLICT email). But the old account has no <code>clerk_org_id</code>, so the Clerk org can't find it. A new empty account gets created instead.</td></tr>
+    <tr><td><strong>Affected</strong></td><td>Only pre-Clerk users (4 users with UUID visitor_ids). New signups via Clerk work correctly. GrowthOS (post-Clerk) is fine.</td></tr>
+    <tr><td><strong>Impact</strong></td><td>User sees empty Data Sources page with no API key, no events, no Stripe connection — even though their old account has all this data.</td></tr>
+    <tr><td><strong>Fix</strong></td><td>Added auto-backfill in <code>ensureVisitor</code>: when a Clerk user's account has no <code>clerk_org_id</code>, stamp the Clerk org ID on it. The <code>ON CONFLICT (email) DO UPDATE SET visitor_id</code> clause already updates the visitor_id — the auth flow just needs to complete (user can't bounce at the org setup screen).</td></tr>
+    <tr><td><strong>Prevention</strong></td><td>Run a one-time migration to update all UUID visitor_ids to Clerk user IDs. Add monitoring for accounts with null <code>clerk_org_id</code>.</td></tr>
   </table>
 </div>
 
