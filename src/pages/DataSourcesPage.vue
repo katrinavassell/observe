@@ -17,6 +17,7 @@ import {
   CheckCircle2,
   Radio,
   ArrowRight,
+  AlertTriangle,
 } from "lucide-vue-next";
 import { Card, CardContent, Button } from "@/components/ui";
 import { CostsSection, UsageSection } from "@/components/data-sources";
@@ -26,6 +27,7 @@ import AnthropicApiKeyModal from "@/components/integrations/AnthropicApiKeyModal
 import { useDataMode } from "@/composables/useDataMode";
 import { useAuth } from "@/composables/useAuth";
 import {
+  clearData,
   clearCostData,
   clearUsageData,
   createSdkKey,
@@ -520,6 +522,32 @@ async function handleUsageFileCleared(): Promise<void> {
     toast.error("Failed to clear usage data", {
       description: error instanceof Error ? error.message : "Please try again.",
     });
+  }
+}
+
+// =============================================================================
+// RESET ACCOUNT DATA
+// =============================================================================
+
+const isResettingData = ref(false);
+
+async function handleResetAccountData() {
+  const confirmation = window.prompt(
+    'This will permanently delete ALL data for this account. Type "RESET" to confirm.',
+  );
+  if (confirmation !== "RESET") return;
+
+  isResettingData.value = true;
+  try {
+    await clearData();
+    await queryClient.invalidateQueries();
+    toast.success("All account data has been reset");
+  } catch (error) {
+    toast.error("Failed to reset account data", {
+      description: error instanceof Error ? error.message : "Please try again.",
+    });
+  } finally {
+    isResettingData.value = false;
   }
 }
 
@@ -1485,6 +1513,34 @@ fetch(<span class="text-amber-300">'{{ ingestUrl }}'</span>, {
         />
       </div>
     </details>
+
+    <!-- ================================================================== -->
+    <!-- DANGER ZONE: Reset Account Data                                    -->
+    <!-- ================================================================== -->
+    <Card v-if="isLoggedIn" class="border-destructive/40">
+      <CardContent class="p-6 space-y-3">
+        <div class="flex items-center gap-2">
+          <AlertTriangle class="h-5 w-5 text-destructive" />
+          <h2 class="font-semibold text-lg text-destructive">Danger Zone</h2>
+        </div>
+        <p class="text-sm text-muted-foreground">
+          Permanently deletes <strong>all</strong> events, customers,
+          subscriptions, integrations (Stripe/OpenAI/Anthropic), SDK keys,
+          features, alerts, and cohorts. Your account and team members are kept.
+          After reset: generate a new API key, re-connect Stripe, and send
+          events to start fresh.
+        </p>
+        <Button
+          variant="destructive"
+          :disabled="isResettingData"
+          @click="handleResetAccountData"
+        >
+          <Loader2 v-if="isResettingData" class="h-4 w-4 mr-2 animate-spin" />
+          <Trash2 v-else class="h-4 w-4 mr-2" />
+          {{ isResettingData ? "Resetting…" : "Reset Account Data" }}
+        </Button>
+      </CardContent>
+    </Card>
   </div>
 
   <StripeApiKeyModal

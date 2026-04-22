@@ -401,6 +401,26 @@ export function createCustomersRoutes(
       const client = await pool.connect();
       try {
         await client.query("BEGIN");
+        await client.query("DELETE FROM alert_rules WHERE account_id = $1", [
+          req.accountId!,
+        ]);
+        await client.query("DELETE FROM custom_cohorts WHERE account_id = $1", [
+          req.accountId!,
+        ]);
+        await client.query(
+          "DELETE FROM feature_pricing WHERE account_id = $1",
+          [req.accountId!],
+        );
+        await client.query(
+          "DELETE FROM feature_definitions WHERE account_id = $1",
+          [req.accountId!],
+        );
+        await client.query("DELETE FROM integrations WHERE account_id = $1", [
+          req.accountId!,
+        ]);
+        await client.query("DELETE FROM sdk_api_keys WHERE account_id = $1", [
+          req.accountId!,
+        ]);
         await client.query("DELETE FROM ai_insights WHERE account_id = $1", [
           req.accountId!,
         ]);
