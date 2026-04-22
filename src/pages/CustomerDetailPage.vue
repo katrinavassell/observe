@@ -310,27 +310,7 @@ const costPerEvent = computed(() => {
         <MarginBadge :margin="detail.margin_pct" />
       </div>
 
-      <!-- Period selector -->
-      <div class="flex items-center gap-2">
-        <span class="text-xs text-muted-foreground">Period:</span>
-        <button
-          v-for="p in [
-            { key: 'this_month', label: 'This Month' },
-            { key: 'last_month', label: 'Last Month' },
-            { key: 'all_time', label: 'All Time' },
-          ] as const"
-          :key="p.key"
-          class="px-2.5 py-1 rounded text-xs font-medium transition-colors"
-          :class="
-            selectedPeriod === p.key
-              ? 'bg-primary text-primary-foreground'
-              : 'bg-muted text-muted-foreground hover:text-foreground'
-          "
-          @click="selectedPeriod = p.key"
-        >
-          {{ p.label }}
-        </button>
-      </div>
+      <!-- Period selector (hidden until backend period queries are fixed) -->
 
       <!-- Trend chart -->
       <Card v-if="timeseries?.timeseries.length">

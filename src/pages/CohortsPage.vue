@@ -749,26 +749,7 @@ const excludedCount = computed(() => {
         </Card>
       </div>
 
-      <!-- Period selector -->
-      <div class="flex items-center gap-1 p-0.5 bg-muted rounded-md w-fit">
-        <button
-          v-for="p in [
-            { key: 'this_month', label: 'This Month' },
-            { key: 'last_month', label: 'Last Month' },
-            { key: 'all_time', label: 'All Time' },
-          ] as const"
-          :key="p.key"
-          class="px-3 py-1.5 rounded text-xs font-medium transition-colors"
-          :class="
-            selectedPeriod === p.key
-              ? 'bg-background shadow-sm text-foreground'
-              : 'text-muted-foreground hover:text-foreground'
-          "
-          @click="selectedPeriod = p.key"
-        >
-          {{ p.label }}
-        </button>
-      </div>
+      <!-- Period selector (hidden until backend period queries are fixed) -->
 
       <!-- Cohort filter chips + column settings -->
       <div class="flex flex-wrap items-center gap-2">
