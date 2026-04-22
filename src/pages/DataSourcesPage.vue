@@ -273,8 +273,7 @@ async function copyAiInstallPrompt() {
   const key =
     generatedKey.value ||
     sdkKeys.value[0]?.full_key ||
-    sdkKeys.value[0]?.key_prefix + "..." ||
-    null;
+    (sdkKeys.value[0]?.key_prefix ? sdkKeys.value[0].key_prefix + "..." : null);
 
   if (!key) {
     toast.error("Generate an API key first");
