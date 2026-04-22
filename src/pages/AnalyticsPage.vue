@@ -267,7 +267,7 @@ function retry() {
         </div>
         <div class="flex items-center gap-2 mt-1">
           <p class="text-muted-foreground">
-            Cost breakdown by feature, model, and customer
+            Revenue, cost, and margin by feature, model, and customer
           </p>
           <div v-if="activeSources.length" class="flex items-center gap-1">
             <SourceBadge
@@ -384,7 +384,21 @@ function retry() {
             </Tooltip>
           </div>
           <div v-if="hasRevenue" class="flex items-center gap-2 mt-1">
-            <MarginBadge :margin="grossMarginPct" class="text-base" />
+            <span
+              class="text-3xl font-semibold tabular-nums"
+              :class="
+                grossMarginPct >= 70
+                  ? 'text-green-600'
+                  : grossMarginPct >= 30
+                    ? 'text-amber-600'
+                    : 'text-red-600'
+              "
+              >{{
+                grossMarginPct > 99 && grossMarginPct < 100
+                  ? ">99"
+                  : Math.round(grossMarginPct)
+              }}%</span
+            >
           </div>
           <div v-else class="text-3xl font-semibold tabular-nums mt-1">
             {{ totalEvents.toLocaleString() }}

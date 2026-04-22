@@ -529,7 +529,7 @@ export function createCohortsRoutes(pool: Pool, ensureVisitor: any) {
             model_swap_suggestion: modelSwapSuggestion,
             mrr: currentMrr,
             mrr_movement: mrrMovement,
-            pricing_model: pricingModelMap[customerId] || null,
+            pricing_model: pricingModelMap[row.customer_id] || null,
             cohort,
           };
         });
@@ -624,7 +624,9 @@ export function createCohortsRoutes(pool: Pool, ensureVisitor: any) {
         });
       } catch (error) {
         console.error("GET /cohorts error:", error);
-        res.status(500).json({ error: "Failed to compute cohorts" });
+        res
+          .status(500)
+          .json({ error: "Failed to compute cohorts", detail: String(error) });
       }
     },
   );
