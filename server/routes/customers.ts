@@ -996,6 +996,13 @@ export function createCustomersRoutes(
     async (req: AuthRequest, res: Response) => {
       try {
         const { id } = req.params;
+        const periodStart = req.query.period_start as string | undefined;
+        const periodEnd = req.query.period_end as string | undefined;
+        const hasPeriod = !!(periodStart && periodEnd);
+        const periodFilter = hasPeriod
+          ? " AND timestamp >= $3 AND timestamp <= $4"
+          : "";
+        const periodParams = hasPeriod ? [periodStart, periodEnd] : [];
 
         const [customerRes, subRes, eventsRes, featureRes, modelRes] =
           await Promise.all([
@@ -1008,16 +1015,16 @@ export function createCustomersRoutes(
               [req.accountId!, id],
             ),
             pool.query(
-              `SELECT * FROM observe_events WHERE account_id = $1 AND customer_id = $2 ORDER BY timestamp DESC LIMIT 50`,
-              [req.accountId!, id],
+              `SELECT * FROM observe_events WHERE account_id = $1 AND customer_id = $2${periodFilter} ORDER BY timestamp DESC LIMIT 50`,
+              [req.accountId!, id, ...periodParams],
             ),
             pool.query(
-              `SELECT feature_key, COUNT(*) as event_count, COALESCE(SUM(cost_amount), 0) as total_cost, COALESCE(SUM(revenue_amount), 0) as total_revenue, COALESCE(SUM(usage_units), 0) as total_usage, SUM(input_tokens) as total_input_tokens, SUM(output_tokens) as total_output_tokens FROM observe_events WHERE account_id = $1 AND customer_id = $2 AND feature_key IS NOT NULL AND (source IS NULL OR source != 'stripe') GROUP BY feature_key ORDER BY total_cost DESC`,
-              [req.accountId!, id],
+              `SELECT feature_key, COUNT(*) as event_count, COALESCE(SUM(cost_amount), 0) as total_cost, COALESCE(SUM(revenue_amount), 0) as total_revenue, COALESCE(SUM(usage_units), 0) as total_usage, SUM(input_tokens) as total_input_tokens, SUM(output_tokens) as total_output_tokens FROM observe_events WHERE account_id = $1 AND customer_id = $2${periodFilter} AND feature_key IS NOT NULL AND (source IS NULL OR source != 'stripe') GROUP BY feature_key ORDER BY total_cost DESC`,
+              [req.accountId!, id, ...periodParams],
             ),
             pool.query(
-              `SELECT model, model_provider, COUNT(*) as event_count, COALESCE(SUM(cost_amount), 0) as total_cost, COALESCE(SUM(revenue_amount), 0) as total_revenue, COALESCE(SUM(usage_units), 0) as total_usage FROM observe_events WHERE account_id = $1 AND customer_id = $2 AND model IS NOT NULL AND (source IS NULL OR source != 'stripe') GROUP BY model, model_provider ORDER BY total_cost DESC`,
-              [req.accountId!, id],
+              `SELECT model, model_provider, COUNT(*) as event_count, COALESCE(SUM(cost_amount), 0) as total_cost, COALESCE(SUM(revenue_amount), 0) as total_revenue, COALESCE(SUM(usage_units), 0) as total_usage FROM observe_events WHERE account_id = $1 AND customer_id = $2${periodFilter} AND model IS NOT NULL AND (source IS NULL OR source != 'stripe') GROUP BY model, model_provider ORDER BY total_cost DESC`,
+              [req.accountId!, id, ...periodParams],
             ),
           ]);
 
@@ -1052,7 +1059,11 @@ export function createCustomersRoutes(
               sum + (parseFloat(s.mrr_override ?? "0") || 0),
             0,
           );
-        const totalRevenue = eventRevenue > 0 ? eventRevenue : subscriptionMrr;
+        const totalRevenue = hasPeriod
+          ? subscriptionMrr
+          : eventRevenue > 0
+            ? eventRevenue
+            : subscriptionMrr;
         const marginPct =
           totalRevenue > 0
             ? Math.round(((totalRevenue - totalCost) / totalRevenue) * 100)
@@ -1070,6 +1081,8 @@ export function createCustomersRoutes(
           total_cost: totalCost,
           total_revenue: totalRevenue,
           margin_pct: marginPct,
+          period_start: periodStart ?? null,
+          period_end: periodEnd ?? null,
           recent_events: eventsRes.rows.map(coerceEventRow),
           by_model: modelRes.rows.map(
             (r: {

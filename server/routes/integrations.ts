@@ -255,6 +255,8 @@ export async function syncStripeDataForUser(
     pricingModel: "flat" | "tiered" | "metered" | "hybrid";
     pricingTiers: unknown | null;
     unitPrice: number | null; // for metered items, dollars per unit
+    currentPeriodStart: string | null;
+    currentPeriodEnd: string | null;
   }
   const subRows: SubRow[] = [];
 
@@ -319,6 +321,12 @@ export async function syncStripeDataForUser(
       pricingModel,
       pricingTiers: tieredPayload,
       unitPrice: meteredUnitPrice,
+      currentPeriodStart: sub.current_period_start
+        ? new Date(sub.current_period_start * 1000).toISOString()
+        : null,
+      currentPeriodEnd: sub.current_period_end
+        ? new Date(sub.current_period_end * 1000).toISOString()
+        : null,
     });
     syncedSubs++;
   }
@@ -330,7 +338,7 @@ export async function syncStripeDataForUser(
     let subIdx = 1;
     for (const s of batch) {
       subPlaceholders.push(
-        `($${subIdx++}, $${subIdx++}, $${subIdx++}, $${subIdx++}, $${subIdx++}, $${subIdx++}, $${subIdx++}, $${subIdx++}, $${subIdx++}, $${subIdx++})`,
+        `($${subIdx++}, $${subIdx++}, $${subIdx++}, $${subIdx++}, $${subIdx++}, $${subIdx++}, $${subIdx++}, $${subIdx++}, $${subIdx++}, $${subIdx++}, $${subIdx++}, $${subIdx++})`,
       );
       subValues.push(
         userId,
@@ -343,10 +351,12 @@ export async function syncStripeDataForUser(
         s.pricingModel,
         s.pricingTiers ? JSON.stringify(s.pricingTiers) : null,
         s.unitPrice,
+        s.currentPeriodStart,
+        s.currentPeriodEnd,
       );
     }
     await pool.query(
-      `INSERT INTO subscriptions (user_id, account_id, subscription_id, customer_id, plan_id, is_active, mrr_override, pricing_model, pricing_tiers, unit_price) VALUES ${subPlaceholders.join(", ")} ON CONFLICT DO NOTHING`,
+      `INSERT INTO subscriptions (user_id, account_id, subscription_id, customer_id, plan_id, is_active, mrr_override, pricing_model, pricing_tiers, unit_price, current_period_start, current_period_end) VALUES ${subPlaceholders.join(", ")} ON CONFLICT DO NOTHING`,
       subValues,
     );
   }

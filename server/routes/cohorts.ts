@@ -132,6 +132,23 @@ export function createCohortsRoutes(pool: Pool, ensureVisitor: any) {
           ? ""
           : "AND (c.is_internal IS NOT TRUE)";
 
+        const periodStart =
+          typeof req.query.period_start === "string"
+            ? req.query.period_start
+            : undefined;
+        const periodEnd =
+          typeof req.query.period_end === "string"
+            ? req.query.period_end
+            : undefined;
+        const hasPeriod = periodStart && periodEnd;
+        const oeTimeFilter = hasPeriod
+          ? `AND oe.timestamp >= $2 AND oe.timestamp <= $3`
+          : "";
+        const plainTimeFilter = hasPeriod
+          ? `AND timestamp >= $2 AND timestamp <= $3`
+          : "";
+        const periodParams = hasPeriod ? [periodStart, periodEnd] : [];
+
         // Backfill: create customer rows for event customer_ids that have
         // no matching row in the customers table yet.
         await pool
@@ -185,9 +202,10 @@ export function createCohortsRoutes(pool: Pool, ensureVisitor: any) {
              WHERE oe.account_id = $1
                AND oe.customer_id IS NOT NULL
                ${showInternal ? "" : "AND (c.is_internal IS NOT TRUE OR c.is_internal IS NULL)"}
+               ${oeTimeFilter}
              GROUP BY oe.customer_id, c.name, c.email, c.segment, c.is_internal
              HAVING COUNT(oe.id) FILTER (WHERE oe.source IS NULL OR oe.source != 'stripe') > 0`,
-            [accountId],
+            [accountId, ...periodParams],
           ),
           // 2. Total distinct features
           pool.query(
@@ -214,8 +232,9 @@ export function createCohortsRoutes(pool: Pool, ensureVisitor: any) {
              FROM observe_events
              WHERE account_id = $1 AND customer_id IS NOT NULL AND timestamp >= NOW() - INTERVAL '60 days'
                AND (source IS NULL OR source != 'stripe')
+               ${plainTimeFilter}
              GROUP BY customer_id`,
-            [accountId],
+            [accountId, ...periodParams],
           ),
           // 5. Stickiness: distinct active days in last 30d
           pool.query(
@@ -224,8 +243,9 @@ export function createCohortsRoutes(pool: Pool, ensureVisitor: any) {
              FROM observe_events
              WHERE account_id = $1 AND customer_id IS NOT NULL AND timestamp >= NOW() - INTERVAL '30 days'
                AND (source IS NULL OR source != 'stripe')
+               ${plainTimeFilter}
              GROUP BY customer_id`,
-            [accountId],
+            [accountId, ...periodParams],
           ),
           // 6. Top model by cost per customer
           pool.query(
