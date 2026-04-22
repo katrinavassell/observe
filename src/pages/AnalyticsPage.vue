@@ -406,24 +406,16 @@ function retry() {
           :key="c.customer_id"
           class="flex items-center gap-3 rounded-md px-3 py-2.5 hover:bg-muted/50 transition-colors"
         >
-          <div class="w-36 min-w-0">
-            <div
+          <div class="w-36 min-w-0 flex flex-col gap-0.5">
+            <span
               v-if="c.customer_name && c.customer_name !== c.customer_id"
               class="text-sm font-medium truncate"
+              >{{ c.customer_name }}</span
             >
-              {{ c.customer_name }}
-            </div>
             <code
-              v-else
-              class="font-mono text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded truncate"
+              class="font-mono text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded truncate w-fit"
               >{{ c.customer_id }}</code
             >
-            <div
-              v-if="c.customer_name && c.customer_name !== c.customer_id"
-              class="text-xs text-muted-foreground truncate"
-            >
-              {{ c.customer_id }}
-            </div>
           </div>
           <div class="flex-1 h-3 bg-muted rounded-full overflow-hidden">
             <div

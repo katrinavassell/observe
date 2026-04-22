@@ -902,26 +902,22 @@ const excludedCount = computed(() => {
                   <template v-for="col in visibleColumns" :key="col.id">
                     <!-- Customer -->
                     <td v-if="col.id === 'customer'" class="p-3">
-                      <div class="flex flex-col" :title="c.customer_id">
-                        <div class="flex items-center gap-2">
-                          <span
-                            v-if="
-                              c.customer_name &&
-                              c.customer_name !== c.customer_id
-                            "
-                            class="font-medium"
-                            >{{ c.customer_name }}</span
-                          >
-                          <code
-                            v-else
-                            class="font-mono text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded"
-                            >{{ c.customer_id }}</code
-                          >
-                        </div>
+                      <div class="flex flex-col gap-0.5">
+                        <span
+                          v-if="
+                            c.customer_name && c.customer_name !== c.customer_id
+                          "
+                          class="text-sm font-medium"
+                          >{{ c.customer_name }}</span
+                        >
                         <span
                           v-if="c.customer_email"
                           class="text-xs text-muted-foreground"
                           >{{ c.customer_email }}</span
+                        >
+                        <code
+                          class="font-mono text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded w-fit"
+                          >{{ c.customer_id }}</code
                         >
                       </div>
                     </td>
