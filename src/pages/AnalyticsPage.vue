@@ -12,8 +12,16 @@ import {
   getSourceBreakdown,
 } from "@/lib/api";
 import type {} from "@/lib/api";
-import { AlertCircle, Plug } from "lucide-vue-next";
-import { Badge, Card, Skeleton, Button } from "@/components/ui";
+import { AlertCircle, Plug, Info } from "lucide-vue-next";
+import {
+  Badge,
+  Card,
+  Skeleton,
+  Button,
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+} from "@/components/ui";
 import SourceBadge from "@/components/shared/SourceBadge.vue";
 import MarginBadge from "@/components/shared/MarginBadge.vue";
 import { formatCurrency as fmt } from "@/lib/format";
@@ -318,8 +326,19 @@ function retry() {
       <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <!-- Card 1: Revenue or Customers -->
         <Card class="p-6">
-          <div class="text-sm font-medium text-muted-foreground">
+          <div
+            class="flex items-center gap-1 text-sm font-medium text-muted-foreground"
+          >
             {{ hasRevenue ? "Total Revenue" : "Customers Tracked" }}
+            <Tooltip v-if="hasRevenue">
+              <TooltipTrigger as-child>
+                <Info class="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+              </TooltipTrigger>
+              <TooltipContent class="max-w-xs"
+                >Sum of subscription MRR plus trailing 30-day usage revenue for
+                metered customers.</TooltipContent
+              >
+            </Tooltip>
           </div>
           <div class="text-3xl font-semibold tabular-nums mt-1">
             {{ hasRevenue ? fmt(totalRevenue) : (customerData?.length ?? 0) }}
@@ -328,8 +347,20 @@ function retry() {
 
         <!-- Card 2: Total Cost (always) -->
         <Card class="p-6">
-          <div class="text-sm font-medium text-muted-foreground">
+          <div
+            class="flex items-center gap-1 text-sm font-medium text-muted-foreground"
+          >
             Total Cost
+            <Tooltip>
+              <TooltipTrigger as-child>
+                <Info class="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+              </TooltipTrigger>
+              <TooltipContent class="max-w-xs"
+                >Sum of all tracked AI costs (LLM inference, embeddings, API
+                calls). Does not include infrastructure overhead unless
+                separately uploaded via CSV.</TooltipContent
+              >
+            </Tooltip>
           </div>
           <div class="text-3xl font-semibold tabular-nums mt-1">
             {{ fmt(totalCost) }}
@@ -338,8 +369,19 @@ function retry() {
 
         <!-- Card 3: Gross Margin or Events Tracked -->
         <Card class="p-6">
-          <div class="text-sm font-medium text-muted-foreground">
+          <div
+            class="flex items-center gap-1 text-sm font-medium text-muted-foreground"
+          >
             {{ hasRevenue ? "Gross Margin" : "Events Tracked" }}
+            <Tooltip v-if="hasRevenue">
+              <TooltipTrigger as-child>
+                <Info class="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+              </TooltipTrigger>
+              <TooltipContent class="max-w-xs"
+                >Revenue minus cost, divided by revenue. AI SaaS target:
+                60-80%.</TooltipContent
+              >
+            </Tooltip>
           </div>
           <div v-if="hasRevenue" class="flex items-center gap-2 mt-1">
             <MarginBadge :margin="grossMarginPct" class="text-base" />

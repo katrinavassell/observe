@@ -32,6 +32,7 @@ import {
   Plus,
   Trash2,
   X,
+  Info,
 } from "lucide-vue-next";
 import {
   DialogRoot,
@@ -41,7 +42,16 @@ import {
   DialogTitle,
   DialogClose,
 } from "radix-vue";
-import { Badge, Card, Skeleton, Button, Input } from "@/components/ui";
+import {
+  Badge,
+  Card,
+  Skeleton,
+  Button,
+  Input,
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+} from "@/components/ui";
 import { formatCurrency as fmt, formatPct as fmtPct } from "@/lib/format";
 import { toast } from "vue-sonner";
 import { useAuth } from "@/composables/useAuth";
@@ -731,25 +741,58 @@ const excludedCount = computed(() => {
       <!-- KPI cards -->
       <div class="grid grid-cols-2 sm:grid-cols-3 gap-4">
         <Card class="p-4">
-          <p class="text-xs text-muted-foreground uppercase tracking-wider">
+          <div
+            class="flex items-center gap-1 text-xs text-muted-foreground uppercase tracking-wider"
+          >
             Customers
-          </p>
+            <Tooltip>
+              <TooltipTrigger as-child>
+                <Info class="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+              </TooltipTrigger>
+              <TooltipContent class="max-w-xs"
+                >Active customers with at least one event or
+                subscription.</TooltipContent
+              >
+            </Tooltip>
+          </div>
           <p class="text-2xl font-semibold mt-1">
             {{ totals?.customers ?? 0 }}
           </p>
         </Card>
         <Card class="p-4">
-          <p class="text-xs text-muted-foreground uppercase tracking-wider">
+          <div
+            class="flex items-center gap-1 text-xs text-muted-foreground uppercase tracking-wider"
+          >
             Revenue
-          </p>
+            <Tooltip>
+              <TooltipTrigger as-child>
+                <Info class="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+              </TooltipTrigger>
+              <TooltipContent class="max-w-xs"
+                >Sum of all customer revenue for selected
+                period.</TooltipContent
+              >
+            </Tooltip>
+          </div>
           <p class="text-2xl font-semibold mt-1">
             {{ fmt(totals?.revenue ?? 0) }}
           </p>
         </Card>
         <Card class="p-4">
-          <p class="text-xs text-muted-foreground uppercase tracking-wider">
+          <div
+            class="flex items-center gap-1 text-xs text-muted-foreground uppercase tracking-wider"
+          >
             Cost
-          </p>
+            <Tooltip>
+              <TooltipTrigger as-child>
+                <Info class="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+              </TooltipTrigger>
+              <TooltipContent class="max-w-xs"
+                >Weighted average margin across all customers with
+                revenue.</TooltipContent
+              >
+            </Tooltip>
+          </div>
           <p class="text-2xl font-semibold mt-1">
             {{ fmt(totals?.cost ?? 0) }}
           </p>

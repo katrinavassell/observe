@@ -19,8 +19,17 @@ import {
   Zap,
   Cpu,
   Activity,
+  Info,
 } from "lucide-vue-next";
-import { Card, CardContent, Skeleton, Button } from "@/components/ui";
+import {
+  Card,
+  CardContent,
+  Skeleton,
+  Button,
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+} from "@/components/ui";
 import MarginBadge from "@/components/shared/MarginBadge.vue";
 import CustomerTrendChart from "@/components/charts/CustomerTrendChart.vue";
 import { formatCurrency as fmt } from "@/lib/format";
@@ -324,19 +333,52 @@ const costPerEvent = computed(() => {
       <div class="grid grid-cols-2 sm:grid-cols-5 gap-4">
         <Card>
           <CardContent class="p-4">
-            <p class="text-xs text-muted-foreground">Revenue</p>
+            <div class="flex items-center gap-1 text-xs text-muted-foreground">
+              Revenue
+              <Tooltip>
+                <TooltipTrigger as-child>
+                  <Info class="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                </TooltipTrigger>
+                <TooltipContent class="max-w-xs"
+                  >Subscription MRR plus metered usage revenue for this
+                  customer.</TooltipContent
+                >
+              </Tooltip>
+            </div>
             <p class="text-xl font-semibold">{{ fmt(detail.total_revenue) }}</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent class="p-4">
-            <p class="text-xs text-muted-foreground">Cost</p>
+            <div class="flex items-center gap-1 text-xs text-muted-foreground">
+              Cost
+              <Tooltip>
+                <TooltipTrigger as-child>
+                  <Info class="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                </TooltipTrigger>
+                <TooltipContent class="max-w-xs"
+                  >Total AI costs attributed to this customer across all
+                  features and models.</TooltipContent
+                >
+              </Tooltip>
+            </div>
             <p class="text-xl font-semibold">{{ fmt(detail.total_cost) }}</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent class="p-4">
-            <p class="text-xs text-muted-foreground">Margin</p>
+            <div class="flex items-center gap-1 text-xs text-muted-foreground">
+              Margin
+              <Tooltip>
+                <TooltipTrigger as-child>
+                  <Info class="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                </TooltipTrigger>
+                <TooltipContent class="max-w-xs"
+                  >Revenue minus cost, divided by revenue. Negative means cost
+                  exceeds revenue.</TooltipContent
+                >
+              </Tooltip>
+            </div>
             <p class="text-xl font-semibold">
               {{ detail.margin_pct !== null ? `${detail.margin_pct}%` : "—" }}
             </p>
@@ -344,7 +386,18 @@ const costPerEvent = computed(() => {
         </Card>
         <Card>
           <CardContent class="p-4">
-            <p class="text-xs text-muted-foreground">Avg Events/Day</p>
+            <div class="flex items-center gap-1 text-xs text-muted-foreground">
+              Avg Events/Day
+              <Tooltip>
+                <TooltipTrigger as-child>
+                  <Info class="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                </TooltipTrigger>
+                <TooltipContent class="max-w-xs"
+                  >Average daily event volume based on monthly
+                  totals.</TooltipContent
+                >
+              </Tooltip>
+            </div>
             <p class="text-xl font-semibold">
               {{
                 avgEventsPerDay !== null
@@ -356,7 +409,18 @@ const costPerEvent = computed(() => {
         </Card>
         <Card>
           <CardContent class="p-4">
-            <p class="text-xs text-muted-foreground">Cost per Event</p>
+            <div class="flex items-center gap-1 text-xs text-muted-foreground">
+              Cost per Event
+              <Tooltip>
+                <TooltipTrigger as-child>
+                  <Info class="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                </TooltipTrigger>
+                <TooltipContent class="max-w-xs"
+                  >Total cost divided by total events. Use to compare efficiency
+                  across customers.</TooltipContent
+                >
+              </Tooltip>
+            </div>
             <p class="text-xl font-semibold">
               {{ costPerEvent !== null ? fmt(costPerEvent) : "—" }}
             </p>
