@@ -482,3 +482,62 @@ When revenue is 0 and cost > 0, margin is -100%. When both are 0, margin is null
   explicitly asks for auto-instrumentation.
 - Do not add Stripe integration as part of Observe setup unless the user asks.
   Stripe is optional.
+
+---
+
+## FAQ — Revenue Attribution
+
+### How does revenue get attributed to events?
+
+Three methods, in priority order:
+
+1. **Explicit `revenueAmount`** — pass it on the SDK event. Overrides everything.
+   Best when: the developer knows the exact revenue for that API call.
+
+2. **Feature pricing rules** — set `revenue_per_unit` per feature in the Observe
+   dashboard (/features page). Every event with that `featureKey` gets stamped
+   automatically. Best when: pricing is per-feature (e.g., $0.01 per chat message).
+
+3. **Stripe subscription match** — connect Stripe, sync customers/subscriptions.
+   Observe detects the pricing model and calculates revenue per event:
+   - **Metered**: `unitPrice × usageUnits` → exact per-event revenue
+   - **Tiered**: `tierPrice(monthToDateUsage) × usageUnits` → tier-aware revenue
+   - **Flat**: $0 per event — MRR is tracked at the customer level, not per-event
+   - **Hybrid**: metered component calculated, flat component at customer level
+
+### Where does revenue show in the UI?
+
+| Level | What shows | Source |
+|-------|-----------|--------|
+| **Event** | `revenue_amount` | Metered/tiered/explicit/feature pricing only. Flat = $0. |
+| **Feature** | Sum of event revenue | Only meaningful for metered/tiered/feature pricing. |
+| **Customer** | MRR from subscription | Always shows — pulled from `subscriptions` table. |
+| **Cohorts** | MRR column + cost | MRR from subscription, cost from events. |
+
+### Why is revenue $0 on my events?
+
+Most likely: your customers have **flat-rate subscriptions**. Flat subscriptions
+contribute $0 per event because MRR is fixed regardless of usage. This is by
+design — revenue shows at the customer level (MRR column on Cohorts page).
+
+To get per-event revenue, either:
+- Switch to metered/tiered Stripe pricing
+- Set feature pricing rules in the dashboard
+- Pass explicit `revenueAmount` on each SDK event
+
+### How do I connect Stripe for revenue?
+
+1. Go to Data Sources → Stripe → Connect
+2. Paste a Stripe API key (restricted key with read access to customers,
+   subscriptions, and prices)
+3. Click Sync — pulls customers, subscriptions, plans
+4. Revenue enrichment runs automatically on new events AND backfills existing ones
+5. Pass `meta.stripe_customer_id` on SDK events if your `customerReferenceId`
+   differs from the Stripe `cus_*` ID
+
+### What's the difference between cost and revenue?
+
+- **Cost** = what YOU pay the LLM provider (auto-calculated from model + tokens)
+- **Revenue** = what YOUR CUSTOMER pays you (from Stripe subscription or explicit)
+- **Margin** = (revenue - cost) / revenue — only meaningful at the customer level
+  for flat subscriptions
