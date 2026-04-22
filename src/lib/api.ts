@@ -595,6 +595,7 @@ export interface IngestEvent {
   model?: string;
   modelProvider?: string;
   properties?: Record<string, unknown>;
+  meta?: Record<string, string>;
   idempotencyKey?: string;
 }
 
