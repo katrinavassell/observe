@@ -392,7 +392,7 @@ const maxDuration = computed(() => {
               <span
                 v-for="_ in spanDepths.get(span.span_id ?? '') ?? 0"
                 :key="_"
-                class="w-4 border-l border-muted-foreground/20 h-6 shrink-0"
+                class="w-5 border-l-2 border-muted-foreground/30 h-6 shrink-0"
               />
               <span class="truncate font-medium">{{ span.event_name }}</span>
             </div>
