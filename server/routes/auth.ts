@@ -242,6 +242,15 @@ export function createEnsureVisitor(pool: Pool) {
               accountId: resolvedAccountId,
               expiresAt: now + ACCOUNT_ID_TTL_MS,
             });
+            // Backfill: if account has no clerk_org_id but user has one, stamp it
+            if (clerkOrgId) {
+              pool
+                .query(
+                  `UPDATE accounts SET clerk_org_id = $1 WHERE id = $2 AND clerk_org_id IS NULL`,
+                  [clerkOrgId, resolvedAccountId],
+                )
+                .catch(() => {});
+            }
           } else {
             console.warn("ensureVisitor: no account resolved for", clerkUserId);
           }
