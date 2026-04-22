@@ -716,6 +716,120 @@ watch(
           </CardContent>
         </Card>
       </div>
+
+      <!-- Preview: What connected sources look like -->
+      <div class="space-y-4">
+        <h2
+          class="text-sm font-semibold text-muted-foreground uppercase tracking-wider"
+        >
+          What you'll see when connected
+        </h2>
+
+        <!-- SDK key preview -->
+        <Card class="border-muted opacity-80">
+          <CardContent class="p-5 space-y-3">
+            <div class="flex items-center gap-2">
+              <Key class="h-4 w-4 text-primary" />
+              <h3 class="font-semibold text-sm">SDK API Key</h3>
+              <span
+                class="ml-auto text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700"
+                >Connected</span
+              >
+            </div>
+            <div
+              class="rounded-md border bg-muted/30 p-3 font-mono text-xs text-muted-foreground"
+            >
+              obs_a1b2c3d4e5f6...
+            </div>
+            <div class="flex items-center gap-4 text-xs text-muted-foreground">
+              <span
+                >Ingest URL:
+                <code class="font-mono"
+                  >https://app.observe.tanso.io/api/events/ingest</code
+                ></span
+              >
+            </div>
+          </CardContent>
+        </Card>
+
+        <!-- Stripe preview -->
+        <Card class="border-muted opacity-80">
+          <CardContent class="p-5">
+            <div class="flex items-center gap-2">
+              <CreditCard class="h-4 w-4 text-primary" />
+              <h3 class="font-semibold text-sm">Stripe</h3>
+              <span
+                class="ml-auto text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700"
+                >Connected</span
+              >
+            </div>
+            <div class="mt-3 grid grid-cols-3 gap-3 text-center">
+              <div class="rounded-md border p-2">
+                <div class="text-lg font-semibold">142</div>
+                <div class="text-xs text-muted-foreground">Customers</div>
+              </div>
+              <div class="rounded-md border p-2">
+                <div class="text-lg font-semibold">89</div>
+                <div class="text-xs text-muted-foreground">Subscriptions</div>
+              </div>
+              <div class="rounded-md border p-2">
+                <div class="text-lg font-semibold">$24k</div>
+                <div class="text-xs text-muted-foreground">MRR</div>
+              </div>
+            </div>
+            <p class="text-xs text-muted-foreground mt-2">
+              Last synced 2 hours ago
+            </p>
+          </CardContent>
+        </Card>
+
+        <!-- Provider cost preview -->
+        <Card class="border-muted opacity-80">
+          <CardContent class="p-5">
+            <div class="flex items-center gap-2">
+              <Radio class="h-4 w-4 text-primary" />
+              <h3 class="font-semibold text-sm">OpenAI</h3>
+              <span
+                class="ml-auto text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700"
+                >Connected</span
+              >
+            </div>
+            <p class="text-xs text-muted-foreground mt-2">
+              Syncs historical cost data from your OpenAI dashboard for cost
+              reconciliation.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      <!-- Manual integration preview -->
+      <details class="group">
+        <summary
+          class="cursor-pointer text-sm font-medium text-muted-foreground hover:text-foreground flex items-center gap-1.5"
+        >
+          <ArrowRight
+            class="h-3.5 w-3.5 transition-transform group-open:rotate-90"
+          />
+          Manual integration (code snippets)
+        </summary>
+        <Card class="mt-3 border-muted opacity-80">
+          <CardContent class="p-4">
+            <pre
+              class="text-xs font-mono text-muted-foreground overflow-x-auto"
+            ><code>import Observe from '@anthropic/observe';
+
+const observe = new Observe({
+  apiKey: 'obs_...',  // from Data Sources page
+});
+
+// Wrap any LLM call
+const result = await observe.track({
+  featureKey: 'chat_response',
+  customerReferenceId: 'cus_123',
+}, () => openai.chat.completions.create({...}));</code></pre>
+          </CardContent>
+        </Card>
+      </details>
     </template>
 
     <!-- ================================================================== -->
@@ -1107,7 +1221,7 @@ watch(
     <!-- ================================================================== -->
     <!-- ADVANCED: manual snippet (collapsed)                               -->
     <!-- ================================================================== -->
-    <details class="group">
+    <details v-if="isLoggedIn" class="group">
       <summary
         class="text-sm font-medium text-muted-foreground cursor-pointer hover:text-foreground transition-colors"
       >

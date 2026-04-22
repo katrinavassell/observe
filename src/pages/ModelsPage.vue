@@ -575,6 +575,11 @@ const filteredPricing = computed(() => {
                 :class="col.align === 'right' && 'text-right'"
               >
                 {{ col.label }}
+                <template v-if="col.id === 'customers'">
+                  <span class="normal-case font-normal text-[10px] block"
+                    >per model</span
+                  >
+                </template>
               </th>
             </tr>
           </thead>
