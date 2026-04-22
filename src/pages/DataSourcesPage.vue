@@ -182,14 +182,11 @@ const loomEmbedUrl = ref("");
 function buildAiInstallPrompt(apiKey: string) {
   return `Install Observe by Tanso in this repo so every feature is tracked — LLM calls with cost, model, and tokens, plus non-LLM features (API calls, compute jobs, etc.) for usage and revenue attribution.
 
-READ THIS FIRST — full reference: https://observe.tansohq.com/llms.txt
-It documents three integration paths and the full POST body schema. Use it as the source of truth; do not improvise.
-
 My Observe API key: ${apiKey}
 
 ## Step 0 — detect the user's current setup before touching anything
 
-Grep the codebase for \`portkey-ai\`, \`litellm\`, \`helicone\`, \`openrouter\`, and any custom \`baseURL\` on \`new OpenAI()\` / \`new Anthropic()\`. If ANY of those exist, the user is on an AI gateway. Do NOT rip it out — use Path 2 (gateway headers) from llms.txt: add Observe headers to their existing gateway config. Ask the user before making structural gateway changes.
+Grep the codebase for \`portkey-ai\`, \`litellm\`, \`helicone\`, \`openrouter\`, and any custom \`baseURL\` on \`new OpenAI()\` / \`new Anthropic()\`. If ANY of those exist, the user is on an AI gateway. Do NOT rip it out — use Path 2 (gateway headers): add Observe headers (\`observe-key\`, \`observe-customer\`, \`observe-feature\`) to their existing gateway config. Ask the user before making structural gateway changes.
 
 If there is no gateway, use Path 1 (direct ingest) below. **Direct ingest is the default.** Do not install any package. Do not wrap the provider client. Do not change \`baseURL\`. Observe stays off the critical path of LLM calls.
 
@@ -234,8 +231,9 @@ Rules for Path 1:
 - Include \`model\` + \`modelProvider\` + \`inputTokens\` + \`outputTokens\` whenever available so Observe computes cost automatically.
 - \`idempotencyKey\` (use the provider's request ID when possible) makes retries safe.
 - Fire-and-forget is fine. Catch + log the error; do not block the user request on Observe.
-- For non-LLM costs, skip \`model\` and pass \`costAmount\` + \`costUnit\` explicitly.
-- Full body schema in llms.txt under "POST /api/events/ingest — full body schema".
+- For non-LLM costs (API calls, compute jobs, file processing), skip \`model\` and include \`costAmount\` (number, in \`costUnit\` which defaults to \`"usd"\`) and/or \`usageUnits\` (number — minutes, images, requests, etc.).
+- Other optional fields: \`timestamp\` (ISO 8601, defaults to now), \`revenueAmount\` (overrides auto-computed revenue), \`costType\` (defaults to \`"llm"\` if model is set, else \`"generic"\`), \`properties\` (arbitrary JSON metadata), \`requestBody\` / \`responseBody\` (for prompt/response logging — skip if sensitive).
+- Batch up to 1000 events per request.
 
 ## Step 3 — only if the user asks for auto-instrumentation (Path 3)
 
