@@ -214,7 +214,7 @@ fetch('https://observe.tansohq.com/api/events/ingest', {
   body: JSON.stringify({
     events: [{
       eventName: 'chat',
-      customerReferenceId: user.stripeCustomerId ?? user.id,
+      customerReferenceId: user.id,
       featureKey: 'ai_chat',
       model: 'gpt-4o-mini',
       modelProvider: 'openai',
@@ -222,6 +222,7 @@ fetch('https://observe.tansohq.com/api/events/ingest', {
       outputTokens: res.usage?.completion_tokens,
       durationMs: Date.now() - started,
       idempotencyKey: res.id,
+      meta: user.stripeCustomerId ? { stripe_customer_id: user.stripeCustomerId } : undefined,
     }],
   }),
 }).catch((err) => console.error('observe ingest failed:', err))
@@ -243,7 +244,7 @@ Rules for Path 1:
 If they do:
 1. \`npm install @tansohq/observe\` — with the \`hq\`. The package \`@tanso/observe\` (no hq) does NOT exist on npm. If your install command fails to resolve, STOP and tell the user; do not substitute a similar-looking package.
 2. At app startup: \`Observe.configure({ apiKey: process.env.OBSERVE_API_KEY! })\`
-3. Per authenticated request: \`Observe.identify({ customerId: user.stripeCustomerId })\`
+3. Per authenticated request: \`Observe.identify({ customerId: user.id })\`
 4. Wrap \`new OpenAI()\` and \`new Anthropic()\` with \`Observe.wrap(...)\`. Do not replace the client, just wrap. Do not alter the existing provider API key.
 5. Tag each AI feature with \`Observe.feature('<feature_key>')\` or a per-call \`Observe-Feature\` header.
 
@@ -1135,7 +1136,7 @@ fetch(<span class="text-amber-300">'{{ ingestUrl }}'</span>, {
   <span class="text-sky-300">body</span>: JSON.stringify({
     <span class="text-sky-300">events</span>: [{
       <span class="text-sky-300">eventName</span>: <span class="text-amber-300">'chat'</span>,
-      <span class="text-sky-300">customerReferenceId</span>: user.stripeId,       <span class="text-zinc-500">// any stable user ID</span>
+      <span class="text-sky-300">customerReferenceId</span>: user.id,              <span class="text-zinc-500">// your app's user ID</span>
       <span class="text-sky-300">featureKey</span>: <span class="text-amber-300">'ai_chat'</span>,                  <span class="text-zinc-500">// which product feature</span>
       <span class="text-sky-300">model</span>: <span class="text-amber-300">'gpt-4o-mini'</span>,
       <span class="text-sky-300">modelProvider</span>: <span class="text-amber-300">'openai'</span>,
@@ -1143,14 +1144,15 @@ fetch(<span class="text-amber-300">'{{ ingestUrl }}'</span>, {
       <span class="text-sky-300">outputTokens</span>: res.usage?.completion_tokens,
       <span class="text-sky-300">durationMs</span>: Date.now() - started,
       <span class="text-sky-300">idempotencyKey</span>: res.id,                   <span class="text-zinc-500">// safe retries</span>
+      <span class="text-sky-300">meta</span>: { <span class="text-sky-300">stripe_customer_id</span>: user.stripeId }, <span class="text-zinc-500">// optional: links to Stripe</span>
     }],
   }),
 }).catch((err) => console.error(<span class="text-amber-300">'observe ingest failed:'</span>, err))</pre>
             </div>
 
             <p class="text-[11px] text-muted-foreground">
-              Use your Stripe customer ID so Observe can automatically join
-              costs with revenue. No Stripe yet? Any stable customer ID works.
+              Use any stable user ID as customerReferenceId. To link to Stripe,
+              add meta.stripe_customer_id. No Stripe? Just the user ID works.
             </p>
 
             <!-- Other provider snippets -->
@@ -1243,7 +1245,7 @@ curl -X POST <span class="text-amber-300">'{{ proxyBaseUrl }}/google/generateCon
 <span class="text-emerald-400">import</span> OpenAI <span class="text-emerald-400">from</span> <span class="text-amber-300">'openai'</span>
 
 Observe.configure({ <span class="text-sky-300">apiKey</span>: <span class="text-amber-300">'{{ apiKeyForSnippet }}'</span> })
-Observe.identify({ <span class="text-sky-300">customerId</span>: user.stripeId })  <span class="text-zinc-500">// call once on login</span>
+Observe.identify({ <span class="text-sky-300">customerId</span>: user.id })  <span class="text-zinc-500">// your app's user ID</span>
 
 <span class="text-emerald-400">const</span> openai = Observe.wrap(<span class="text-emerald-400">new</span> OpenAI())
 <span class="text-zinc-500">// All calls auto-tracked — no headers to manage</span></pre>
