@@ -8,7 +8,6 @@ import {
   Copy,
   Check,
   Trash2,
-  Plus,
   CreditCard,
   RefreshCw,
   Loader2,
