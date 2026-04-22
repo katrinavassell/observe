@@ -804,6 +804,9 @@ async function _doDbInit() {
       `CREATE INDEX IF NOT EXISTS idx_customers_user_id ON customers(user_id)`,
     );
     await pool.query(
+      `CREATE UNIQUE INDEX IF NOT EXISTS idx_customers_account_customer ON customers(account_id, customer_id) WHERE account_id IS NOT NULL`,
+    );
+    await pool.query(
       `CREATE INDEX IF NOT EXISTS idx_subscriptions_user_id ON subscriptions(user_id)`,
     );
     await pool.query(
