@@ -948,11 +948,9 @@ export async function getMrrMovements(): Promise<{
 // ======================================================================
 export type CohortLabel =
   | "unprofitable"
-  | "at_risk"
   | "champion"
   | "inactive"
-  | "rising_cost"
-  | "healthy";
+  | "rising_cost";
 
 export type MrrMovementCategory =
   | "new"
@@ -1002,7 +1000,7 @@ export interface CohortCustomer {
   top_model_cost: number | null;
   model_swap_suggestion: ModelSwapSuggestion | null;
   mrr_movement: MrrMovementCategory | null;
-  cohort: CohortLabel;
+  cohort: CohortLabel | null;
 }
 
 export interface CohortSummary {

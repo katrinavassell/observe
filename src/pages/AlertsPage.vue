@@ -105,11 +105,6 @@ const COHORT_META: Record<
     description: "Cost exceeds revenue",
     color: "bg-red-100 text-red-700",
   },
-  at_risk: {
-    label: "At Risk",
-    description: "Usage declining or inactive",
-    color: "bg-yellow-100 text-yellow-700",
-  },
   rising_cost: {
     label: "Rising Cost",
     description: "Costs growing faster than revenue",
@@ -124,11 +119,6 @@ const COHORT_META: Record<
     label: "Champion",
     description: "High usage, healthy margin",
     color: "bg-green-100 text-green-700",
-  },
-  healthy: {
-    label: "Healthy",
-    description: "Profitable and active",
-    color: "bg-blue-100 text-blue-700",
   },
 };
 

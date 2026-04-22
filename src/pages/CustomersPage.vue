@@ -101,11 +101,6 @@ const cohortLabels: { label: string; value: CohortLabel; color: string }[] = [
     color: "bg-red-100 text-red-700 border-red-200",
   },
   {
-    label: "At Risk",
-    value: "at_risk",
-    color: "bg-yellow-100 text-yellow-700 border-yellow-200",
-  },
-  {
     label: "Rising Cost",
     value: "rising_cost",
     color: "bg-orange-100 text-orange-700 border-orange-200",
@@ -120,14 +115,10 @@ const cohortLabels: { label: string; value: CohortLabel; color: string }[] = [
     value: "champion",
     color: "bg-green-100 text-green-700 border-green-200",
   },
-  {
-    label: "Healthy",
-    value: "healthy",
-    color: "bg-blue-100 text-blue-700 border-blue-200",
-  },
 ];
 
-function cohortBadgeClass(cohort: CohortLabel): string {
+function cohortBadgeClass(cohort: CohortLabel | null): string {
+  if (!cohort) return "";
   return (
     cohortLabels.find((c) => c.value === cohort)?.color ??
     "bg-gray-100 text-gray-600"
@@ -377,6 +368,7 @@ function sortIcon(key: SortKey) {
                   </div>
                 </div>
                 <span
+                  v-if="c.cohort"
                   class="inline-flex items-center rounded-full border px-1.5 py-0.5 text-[10px] font-medium shrink-0"
                   :class="cohortBadgeClass(c.cohort)"
                 >

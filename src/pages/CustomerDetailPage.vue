@@ -181,14 +181,13 @@ function signalIconClass(type: string): string {
   }
 }
 
-function cohortBadgeClass(cohort: CohortLabel): string {
+function cohortBadgeClass(cohort: CohortLabel | null): string {
+  if (!cohort) return "";
   const map: Record<CohortLabel, string> = {
     unprofitable: "bg-red-100 text-red-700 border-red-200",
-    at_risk: "bg-yellow-100 text-yellow-700 border-yellow-200",
     rising_cost: "bg-orange-100 text-orange-700 border-orange-200",
     inactive: "bg-gray-100 text-gray-600 border-gray-200",
     champion: "bg-green-100 text-green-700 border-green-200",
-    healthy: "bg-blue-100 text-blue-700 border-blue-200",
   };
   return map[cohort] ?? "bg-gray-100 text-gray-600";
 }
@@ -260,7 +259,7 @@ const costPerEvent = computed(() => {
                 {{ detail.customer.name }}
               </h1>
               <span
-                v-if="cohortCustomer"
+                v-if="cohortCustomer?.cohort"
                 class="inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium"
                 :class="cohortBadgeClass(cohortCustomer.cohort)"
               >

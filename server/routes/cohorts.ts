@@ -4,13 +4,7 @@ import { type AuthRequest } from "./auth.js";
 import { getAllPricing } from "../model-pricing.js";
 import { inferModelProvider } from "../lib/models.js";
 
-type CohortLabel =
-  | "unprofitable"
-  | "at_risk"
-  | "champion"
-  | "inactive"
-  | "rising_cost"
-  | "healthy";
+type CohortLabel = "unprofitable" | "champion" | "inactive" | "rising_cost";
 
 type MrrMovementCategory =
   | "new"
@@ -104,9 +98,8 @@ async function getCustomerDataForRules(
       0,
       Math.min(100, Math.round(margin_pct * 0.6 + active_days * 2)),
     );
-    let cohort: string = "healthy";
+    let cohort: string | null = null;
     if (margin_pct < 0) cohort = "unprofitable";
-    else if (margin_pct < 15) cohort = "at_risk";
     else if (active_days === 0) cohort = "inactive";
     else if (margin_pct >= 50 && active_days >= 10) cohort = "champion";
 
@@ -450,11 +443,9 @@ export function createCohortsRoutes(pool: Pool, ensureVisitor: any) {
           else if (currentMrr > 0) mrrMovement = "stable";
 
           // Cohort label
-          let cohort: CohortLabel = "healthy";
+          let cohort: CohortLabel | null = null;
           if (healthScore < 25 && marginPct !== null && marginPct < 0) {
             cohort = "unprofitable";
-          } else if (healthScore < 40) {
-            cohort = "at_risk";
           } else if (
             costTrend === "up" &&
             marginPct !== null &&
@@ -505,11 +496,9 @@ export function createCohortsRoutes(pool: Pool, ensureVisitor: any) {
           { count: number; total_revenue: number; total_cost: number }
         > = {
           unprofitable: { count: 0, total_revenue: 0, total_cost: 0 },
-          at_risk: { count: 0, total_revenue: 0, total_cost: 0 },
           champion: { count: 0, total_revenue: 0, total_cost: 0 },
           inactive: { count: 0, total_revenue: 0, total_cost: 0 },
           rising_cost: { count: 0, total_revenue: 0, total_cost: 0 },
-          healthy: { count: 0, total_revenue: 0, total_cost: 0 },
         };
 
         let totalRevenue = 0;
@@ -517,9 +506,11 @@ export function createCohortsRoutes(pool: Pool, ensureVisitor: any) {
         let totalHealthScore = 0;
 
         for (const c of customers) {
-          summary[c.cohort].count++;
-          summary[c.cohort].total_revenue += c.total_revenue;
-          summary[c.cohort].total_cost += c.total_cost;
+          if (c.cohort && summary[c.cohort]) {
+            summary[c.cohort].count++;
+            summary[c.cohort].total_revenue += c.total_revenue;
+            summary[c.cohort].total_cost += c.total_cost;
+          }
           totalRevenue += c.total_revenue;
           totalCost += c.total_cost;
           totalHealthScore += c.health_score;

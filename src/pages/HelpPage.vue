@@ -78,7 +78,7 @@ const sections = [
       },
       {
         q: "What is the health score?",
-        a: "A 0-100 score combining margin (60% weight) and activity in the last 30 days (40% weight). Drives cohort assignment: Champion (high margin + active), At Risk, Unprofitable, Inactive, Rising Cost.",
+        a: "A 0-100 score combining margin (60% weight) and activity in the last 30 days (40% weight). Drives cohort assignment: Champion (high margin + active), Unprofitable, Inactive, Rising Cost.",
       },
     ],
   },

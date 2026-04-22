@@ -611,7 +611,7 @@ export const GUEST_COHORT_CUSTOMERS: CohortCustomer[] = [
     top_model: "gpt-4o-mini",
     top_model_cost: 48,
     mrr_movement: "contraction",
-    cohort: "at_risk",
+    cohort: null,
   }),
   guestCohortCustomer({
     customer_id: "cus_blazeml",
@@ -646,17 +646,17 @@ const emptySummary = (): CohortSummary => ({
 export const GUEST_COHORT_SUMMARY: Record<CohortLabel, CohortSummary> = (() => {
   const summary: Record<CohortLabel, CohortSummary> = {
     unprofitable: emptySummary(),
-    at_risk: emptySummary(),
     champion: emptySummary(),
     inactive: emptySummary(),
     rising_cost: emptySummary(),
-    healthy: emptySummary(),
   };
   for (const c of GUEST_COHORT_CUSTOMERS) {
-    const s = summary[c.cohort];
-    s.count += 1;
-    s.total_revenue += c.total_revenue;
-    s.total_cost += c.total_cost;
+    if (c.cohort && summary[c.cohort]) {
+      const s = summary[c.cohort];
+      s.count += 1;
+      s.total_revenue += c.total_revenue;
+      s.total_cost += c.total_cost;
+    }
   }
   return summary;
 })();

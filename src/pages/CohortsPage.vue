@@ -269,7 +269,7 @@ interface TableColumn {
 
 const DEFAULT_COLUMNS: TableColumn[] = [
   { id: "customer", label: "Customer", visible: true, align: "left" },
-  { id: "health", label: "Health", visible: true, align: "left" },
+  { id: "health", label: "Health", visible: false, align: "left" },
   { id: "revenue", label: "Revenue", visible: true, align: "right" },
   { id: "cost", label: "Cost", visible: true, align: "right" },
   { id: "margin", label: "Margin", visible: true, align: "right" },
@@ -480,11 +480,6 @@ const cohortMeta: Record<
     color: "bg-red-100 text-red-700",
     criteria: "Margin < 0%",
   },
-  at_risk: {
-    label: "At Risk",
-    color: "bg-yellow-100 text-yellow-700",
-    criteria: "Margin 0–15%",
-  },
   rising_cost: {
     label: "Rising Cost",
     color: "bg-orange-100 text-orange-700",
@@ -500,11 +495,6 @@ const cohortMeta: Record<
     color: "bg-green-100 text-green-700",
     criteria: "Margin ≥ 50% and ≥ 10 active days",
   },
-  healthy: {
-    label: "Healthy",
-    color: "bg-blue-100 text-blue-700",
-    criteria: "Margin ≥ 15%, none of the above",
-  },
 };
 
 const mrrMeta: Record<string, { label: string; color: string }> = {
@@ -517,11 +507,9 @@ const mrrMeta: Record<string, { label: string; color: string }> = {
 
 const cohortLabels: CohortLabel[] = [
   "unprofitable",
-  "at_risk",
   "rising_cost",
   "inactive",
   "champion",
-  "healthy",
 ];
 
 function healthColor(score: number): string {
@@ -705,7 +693,7 @@ const excludedCount = computed(() => {
     <!-- Main content -->
     <template v-else>
       <!-- KPI cards -->
-      <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      <div class="grid grid-cols-2 sm:grid-cols-3 gap-4">
         <Card class="p-4">
           <p class="text-xs text-muted-foreground uppercase tracking-wider">
             Customers
@@ -728,14 +716,6 @@ const excludedCount = computed(() => {
           </p>
           <p class="text-2xl font-semibold mt-1">
             {{ fmt(totals?.cost ?? 0) }}
-          </p>
-        </Card>
-        <Card class="p-4">
-          <p class="text-xs text-muted-foreground uppercase tracking-wider">
-            Avg Health Score
-          </p>
-          <p class="text-2xl font-semibold mt-1">
-            {{ totals?.avg_health_score?.toFixed(0) ?? "—" }}
           </p>
         </Card>
       </div>
@@ -937,6 +917,7 @@ const excludedCount = computed(() => {
                           >{{ c.customer_id }}</code
                         >
                         <span
+                          v-if="c.cohort && cohortMeta[c.cohort]"
                           class="inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium"
                           :class="cohortMeta[c.cohort].color"
                         >
