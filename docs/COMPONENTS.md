@@ -42,7 +42,7 @@ Vue components and composables in Observe.
 
 | Component | Purpose |
 |-----------|---------|
-| `MetricCard.vue` | Key metric display with trend |
+| `MetricCard.vue` | KPI card with optional info tooltip (Revenue, Cost, Margin on Analytics; Customers, Revenue, Margin on Cohorts) |
 | `AlertCard.vue` | Alert summary card |
 | `MrrMonthlyBreakdown.vue` | Month-by-month MRR breakdown |
 | `QuickActions.vue` | Shortcut buttons for common actions |

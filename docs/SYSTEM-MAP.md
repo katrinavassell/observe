@@ -638,7 +638,7 @@ Event has cus_* customer ID → async after ingest response:
 | Acceptance Criteria | Verified By |
 |---|---|
 | Customer name (not raw ID) shown | Check `/customers/:id` page |
-| Revenue, cost, margin % calculated | Check KPI cards |
+| Revenue, cost, margin % calculated | KPI cards: Total Revenue, Total Cost, Gross Margin (or cost-only fallback when no revenue connected) |
 | Active subscriptions listed with pricing model | Check subscriptions section |
 | Recent events shown | Check events section |
 | Model breakdown (which models this customer uses) | Check model section |

@@ -605,34 +605,34 @@ accounts ┘                   │
     <!-- Full specs: files/internal-research/data-display-strategy-2026-04.md -->
     <!-- Agent-ready card details: .claude/plans/ plan file, DDS-N sections -->
 
-    <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #a371f7; border-radius:6px; padding:10px; margin-bottom:8px;">
-      <div style="font-size:12px; font-weight:600; color:#f0f6fc;">[DDS-1] Replace Analytics KPI cards</div>
-      <div style="font-size:11px; color:#8b949e; margin-top:4px;">Replace vanity KPIs (Features Tracked, Models Used) with Revenue / Cost / Margin. Degrade to cost-only when no revenue connected. Move counts to tab labels. File: <code>src/pages/AnalyticsPage.vue:289-313</code>. Reuse: <code>fmt()</code>, <code>MarginBadge</code>, existing vue-query data. Done: Revenue/Cost/Margin cards render; cost-only fallback works.</div>
-      <div style="font-size:10px; color:#a371f7; margin-top:6px;">TIER 1 &middot; Analytics &middot; DDS &middot; Independent</div>
+    <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #3fb950; border-radius:6px; padding:10px; margin-bottom:8px; opacity:0.6;">
+      <div style="font-size:12px; font-weight:600; color:#f0f6fc;"><s>[DDS-1] Replace Analytics KPI cards</s> DONE</div>
+      <div style="font-size:11px; color:#8b949e; margin-top:4px;">Revenue/Cost/Margin cards with cost-only fallback. Counts moved to tab labels. Gross margin shows >99% instead of rounding to 100%. <a href="#postmortems" style="color:#79c0ff;">PM-8</a></div>
+      <div style="font-size:10px; color:#3fb950; margin-top:6px;">COMPLETE &middot; Analytics &middot; fe08d60, 44ecb2c</div>
     </div>
 
-    <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #a371f7; border-radius:6px; padding:10px; margin-bottom:8px;">
-      <div style="font-size:12px; font-weight:600; color:#f0f6fc;">[DDS-2] Add info tooltips to KPI cards</div>
-      <div style="font-size:11px; color:#8b949e; margin-top:4px;">Add <code>tooltip</code> prop to MetricCard with Lucide Info icon + shadcn Tooltip. Add definitions to all KPI cards on Analytics, Cohorts, CustomerDetail. Pattern: see <code>MarginOverviewCard.vue</code> Tooltip usage. Files: <code>MetricCard.vue</code>, 3 pages. Done: hover any KPI label → definition appears.</div>
-      <div style="font-size:10px; color:#a371f7; margin-top:6px;">TIER 1 &middot; UI &middot; DDS &middot; Independent</div>
+    <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #3fb950; border-radius:6px; padding:10px; margin-bottom:8px; opacity:0.6;">
+      <div style="font-size:12px; font-weight:600; color:#f0f6fc;"><s>[DDS-2] Add info tooltips to KPI cards</s> DONE</div>
+      <div style="font-size:11px; color:#8b949e; margin-top:4px;">MetricCard.vue tooltip prop + Info icon. Tooltips on Analytics, Cohorts, CustomerDetail.</div>
+      <div style="font-size:10px; color:#3fb950; margin-top:6px;">COMPLETE &middot; UI &middot; 208cf89</div>
     </div>
 
-    <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #a371f7; border-radius:6px; padding:10px; margin-bottom:8px;">
-      <div style="font-size:12px; font-weight:600; color:#f0f6fc;">[DDS-3] Surface pricing_model badge on Customers</div>
-      <div style="font-size:11px; color:#8b949e; margin-top:4px;">JOIN subscriptions to get <code>pricing_model</code> per customer. Render badge: Flat(gray)/Metered(blue)/Tiered(purple)/Hybrid(teal). Data exists in DB (<code>subscriptions.pricing_model</code>), just not queried. Files: <code>server/routes/customers.ts</code>, <code>CohortsPage.vue</code>. Pattern: <code>SourceBadge</code> for inline badges. Done: each customer row shows pricing model.</div>
-      <div style="font-size:10px; color:#a371f7; margin-top:6px;">TIER 1 &middot; Customers &middot; DDS &middot; Independent</div>
+    <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #3fb950; border-radius:6px; padding:10px; margin-bottom:8px; opacity:0.6;">
+      <div style="font-size:12px; font-weight:600; color:#f0f6fc;"><s>[DDS-3] Surface pricing_model badge on Customers</s> DONE</div>
+      <div style="font-size:11px; color:#8b949e; margin-top:4px;">JOIN subscriptions for pricing_model. Badges render on Cohorts page. Bug fix: <code>customerId</code> → <code>row.customer_id</code>. <a href="#postmortems" style="color:#79c0ff;">PM-8</a></div>
+      <div style="font-size:10px; color:#3fb950; margin-top:6px;">COMPLETE &middot; Customers &middot; fe08d60, 44ecb2c</div>
     </div>
 
-    <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #a371f7; border-radius:6px; padding:10px; margin-bottom:8px;">
-      <div style="font-size:12px; font-weight:600; color:#f0f6fc;">[DDS-4] Standardize currency formatting</div>
-      <div style="font-size:11px; color:#8b949e; margin-top:4px;">Fix uppercase 'K' → lowercase 'k' in <code>pricing-analyzer.ts</code>. Add <code>fmtExact()</code> to <code>format.ts</code> using <code>Intl.NumberFormat</code> for table cells with thousands separators. Don't change existing <code>fmt()</code> usage. Done: grep for uppercase K returns 0; <code>fmtExact(1234.56)</code> → "$1,234.56".</div>
-      <div style="font-size:10px; color:#a371f7; margin-top:6px;">TIER 1 &middot; Formatting &middot; DDS &middot; Independent</div>
+    <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #3fb950; border-radius:6px; padding:10px; margin-bottom:8px; opacity:0.6;">
+      <div style="font-size:12px; font-weight:600; color:#f0f6fc;"><s>[DDS-4] Standardize currency formatting</s> DONE</div>
+      <div style="font-size:11px; color:#8b949e; margin-top:4px;">K→k in pricing-analyzer.ts. fmtExact() added to format.ts with Intl.NumberFormat.</div>
+      <div style="font-size:10px; color:#3fb950; margin-top:6px;">COMPLETE &middot; Formatting &middot; fe08d60</div>
     </div>
 
-    <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #a371f7; border-radius:6px; padding:10px; margin-bottom:8px;">
-      <div style="font-size:12px; font-weight:600; color:#f0f6fc;">[DDS-5] Surface data confidence indicator</div>
-      <div style="font-size:11px; color:#8b949e; margin-top:4px;">Rename <code>_dataConfidence</code> → <code>dataConfidence</code> in <code>AnalyticsPage.vue:207</code>. Show Badge next to header when below "Good" (&lt;500 events): "Low confidence · N events". Hide when healthy. Pattern: SourceBadge inline in same header area. Done: &lt;50 events shows warning badge; 500+ shows nothing.</div>
-      <div style="font-size:10px; color:#a371f7; margin-top:6px;">TIER 1 &middot; Analytics &middot; DDS &middot; Independent</div>
+    <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #3fb950; border-radius:6px; padding:10px; margin-bottom:8px; opacity:0.6;">
+      <div style="font-size:12px; font-weight:600; color:#f0f6fc;"><s>[DDS-5] Surface data confidence indicator</s> DONE</div>
+      <div style="font-size:11px; color:#8b949e; margin-top:4px;">dataConfidence badge shows next to Analytics header when &lt;500 events. Warning variant for Low/Medium, destructive for Very low.</div>
+      <div style="font-size:10px; color:#3fb950; margin-top:6px;">COMPLETE &middot; Analytics &middot; fe08d60</div>
     </div>
 
     <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #d29922; border-radius:6px; padding:10px; margin-bottom:8px;">
@@ -647,10 +647,10 @@ accounts ┘                   │
       <div style="font-size:10px; color:#d29922; margin-top:6px;">TIER 2 &middot; Analytics &middot; DDS &middot; Independent</div>
     </div>
 
-    <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #d29922; border-radius:6px; padding:10px; margin-bottom:8px;">
-      <div style="font-size:12px; font-weight:600; color:#f0f6fc;">[DDS-8] Add margin benchmark tooltip</div>
-      <div style="font-size:11px; color:#8b949e; margin-top:4px;">Wrap <code>MarginBadge.vue</code> content in shadcn Tooltip: "AI SaaS target: 60-80% gross margin. Below 30% is typically unsustainable." Pattern: <code>MarginOverviewCard.vue</code> Tooltip. Don't change badge colors/thresholds. Done: hover any margin badge → benchmark appears.</div>
-      <div style="font-size:10px; color:#d29922; margin-top:6px;">TIER 2 &middot; UI &middot; DDS &middot; Independent</div>
+    <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #3fb950; border-radius:6px; padding:10px; margin-bottom:8px; opacity:0.6;">
+      <div style="font-size:12px; font-weight:600; color:#f0f6fc;"><s>[DDS-8] Add margin benchmark tooltip</s> DONE</div>
+      <div style="font-size:11px; color:#8b949e; margin-top:4px;">MarginBadge wrapped in shadcn Tooltip with AI SaaS benchmark text.</div>
+      <div style="font-size:10px; color:#3fb950; margin-top:6px;">COMPLETE &middot; UI &middot; c61cbc4</div>
     </div>
 
     <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #d29922; border-radius:6px; padding:10px; margin-bottom:8px;">

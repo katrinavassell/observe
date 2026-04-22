@@ -417,6 +417,32 @@ pricing that differs from the plan's list price. Plan prices are normalized to m
 MRR movements (new, expansion, contraction, churned) compare current active
 subscriptions against subscriptions that existed 60+ days ago.
 
+#### Analytics KPI cards
+
+The Analytics page (`/analytics`) shows three KPI cards at the top:
+
+**When revenue data is connected (Stripe or explicit):**
+- **Total Revenue** — sum of all customer revenue from events
+- **Total Cost** — sum of all tracked AI costs (LLM inference, embeddings, API calls)
+- **Gross Margin** — `(revenue - cost) / revenue * 100`, displayed as a large colored
+  percentage (green ≥70%, amber 30-69%, red <30%). Values >99% but <100% display as ">99%"
+
+**When no revenue data exists (cost-only mode):**
+- **Customers Tracked** — count of distinct customers with events
+- **Total Cost** — same as above
+- **Events Tracked** — total event count
+
+Each card has an info tooltip (hover the ⓘ icon) explaining what the metric includes.
+
+A **data confidence badge** appears next to the page header when event count is low:
+Very low (<10 events), Low (<50), Medium (<200). Hidden when Good (≥500).
+
+#### Pricing model badges
+
+Each customer on the Cohorts page shows a pricing model badge derived from their
+Stripe subscription: Flat, Metered, Tiered, or Hybrid. This is queried from
+`subscriptions.pricing_model` via a JOIN in the cohorts endpoint.
+
 #### Margin calculation
 
 Margin is always: `(revenue - cost) / revenue * 100`
@@ -432,6 +458,8 @@ live on `observe_events` rows; margin is a pure aggregation.
 
 When revenue is 0 and cost > 0, margin is -100%. When both are 0, margin is null
 (not shown). This prevents misleading numbers for uninstrumented customers.
+
+Margin badges show a tooltip with benchmark context: "AI SaaS target: 60-80% gross margin."
 
 ---
 

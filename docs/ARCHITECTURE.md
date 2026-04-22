@@ -135,7 +135,7 @@ Client SDK → POST /v1/chat/completions
 ```
 src/
 ├── pages/                  # Route components
-│   ├── AnalyticsPage.vue        # Home: revenue, costs, margin overview
+│   ├── AnalyticsPage.vue        # Home: Total Revenue / Total Cost / Gross Margin KPIs, breakdown by feature/model/customer
 │   ├── EventsPage.vue           # Filterable event stream
 │   ├── ModelsPage.vue           # AI model cost breakdown
 │   ├── AlertsPage.vue           # 17 alert types (cost, margin, abuse, pricing, concentration) -- free for all users
