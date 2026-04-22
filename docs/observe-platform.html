@@ -605,35 +605,9 @@ accounts ┘                   │
     <!-- Full specs: files/internal-research/data-display-strategy-2026-04.md -->
     <!-- Agent-ready card details: .claude/plans/ plan file, DDS-N sections -->
 
-    <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #3fb950; border-radius:6px; padding:10px; margin-bottom:8px; opacity:0.6;">
-      <div style="font-size:12px; font-weight:600; color:#f0f6fc;"><s>[DDS-1] Replace Analytics KPI cards</s> DONE</div>
-      <div style="font-size:11px; color:#8b949e; margin-top:4px;">Revenue/Cost/Margin cards with cost-only fallback. Counts moved to tab labels. Gross margin shows >99% instead of rounding to 100%. <a href="#postmortems" style="color:#79c0ff;">PM-8</a></div>
-      <div style="font-size:10px; color:#3fb950; margin-top:6px;">COMPLETE &middot; Analytics &middot; fe08d60, 44ecb2c</div>
-    </div>
+    <!-- DDS-1,2,3 moved to DONE column -->
 
-    <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #3fb950; border-radius:6px; padding:10px; margin-bottom:8px; opacity:0.6;">
-      <div style="font-size:12px; font-weight:600; color:#f0f6fc;"><s>[DDS-2] Add info tooltips to KPI cards</s> DONE</div>
-      <div style="font-size:11px; color:#8b949e; margin-top:4px;">MetricCard.vue tooltip prop + Info icon. Tooltips on Analytics, Cohorts, CustomerDetail.</div>
-      <div style="font-size:10px; color:#3fb950; margin-top:6px;">COMPLETE &middot; UI &middot; 208cf89</div>
-    </div>
-
-    <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #3fb950; border-radius:6px; padding:10px; margin-bottom:8px; opacity:0.6;">
-      <div style="font-size:12px; font-weight:600; color:#f0f6fc;"><s>[DDS-3] Surface pricing_model badge on Customers</s> DONE</div>
-      <div style="font-size:11px; color:#8b949e; margin-top:4px;">JOIN subscriptions for pricing_model. Badges render on Cohorts page. Bug fix: <code>customerId</code> → <code>row.customer_id</code>. <a href="#postmortems" style="color:#79c0ff;">PM-8</a></div>
-      <div style="font-size:10px; color:#3fb950; margin-top:6px;">COMPLETE &middot; Customers &middot; fe08d60, 44ecb2c</div>
-    </div>
-
-    <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #3fb950; border-radius:6px; padding:10px; margin-bottom:8px; opacity:0.6;">
-      <div style="font-size:12px; font-weight:600; color:#f0f6fc;"><s>[DDS-4] Standardize currency formatting</s> DONE</div>
-      <div style="font-size:11px; color:#8b949e; margin-top:4px;">K→k in pricing-analyzer.ts. fmtExact() added to format.ts with Intl.NumberFormat.</div>
-      <div style="font-size:10px; color:#3fb950; margin-top:6px;">COMPLETE &middot; Formatting &middot; fe08d60</div>
-    </div>
-
-    <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #3fb950; border-radius:6px; padding:10px; margin-bottom:8px; opacity:0.6;">
-      <div style="font-size:12px; font-weight:600; color:#f0f6fc;"><s>[DDS-5] Surface data confidence indicator</s> DONE</div>
-      <div style="font-size:11px; color:#8b949e; margin-top:4px;">dataConfidence badge shows next to Analytics header when &lt;500 events. Warning variant for Low/Medium, destructive for Very low.</div>
-      <div style="font-size:10px; color:#3fb950; margin-top:6px;">COMPLETE &middot; Analytics &middot; fe08d60</div>
-    </div>
+    <!-- DDS-4,5 moved to DONE column -->
 
     <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #d29922; border-radius:6px; padding:10px; margin-bottom:8px;">
       <div style="font-size:12px; font-weight:600; color:#f0f6fc;">[DDS-6] Add Gross Profit column to Customers</div>
@@ -647,11 +621,7 @@ accounts ┘                   │
       <div style="font-size:10px; color:#d29922; margin-top:6px;">TIER 2 &middot; Analytics &middot; DDS &middot; Independent</div>
     </div>
 
-    <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #3fb950; border-radius:6px; padding:10px; margin-bottom:8px; opacity:0.6;">
-      <div style="font-size:12px; font-weight:600; color:#f0f6fc;"><s>[DDS-8] Add margin benchmark tooltip</s> DONE</div>
-      <div style="font-size:11px; color:#8b949e; margin-top:4px;">MarginBadge wrapped in shadcn Tooltip with AI SaaS benchmark text.</div>
-      <div style="font-size:10px; color:#3fb950; margin-top:6px;">COMPLETE &middot; UI &middot; c61cbc4</div>
-    </div>
+    <!-- DDS-8 moved to DONE column -->
 
     <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #d29922; border-radius:6px; padding:10px; margin-bottom:8px;">
       <div style="font-size:12px; font-weight:600; color:#f0f6fc;">[DDS-9] Re-enable Customer Detail signals</div>
@@ -724,6 +694,42 @@ accounts ┘                   │
   <!-- DONE -->
   <div id="board-done" style="background:#161b22; border:1px solid #21262d; border-radius:8px; padding:12px;">
     <div style="font-size:13px; font-weight:600; color:#3fb950; margin-bottom:10px; padding-bottom:6px; border-bottom:1px solid #21262d;">DONE (2026-04-22)</div>
+
+    <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #3fb950; border-radius:6px; padding:10px; margin-bottom:8px;">
+      <div style="font-size:12px; font-weight:600; color:#f0f6fc;">[DDS-1] Replace Analytics KPI cards</div>
+      <div style="font-size:11px; color:#8b949e; margin-top:4px;">Revenue/Cost/Margin cards with cost-only fallback. Counts in tab labels. >99% margin edge case. <a href="#postmortems" style="color:#79c0ff;">PM-9</a></div>
+      <div style="font-size:10px; color:#3fb950; margin-top:6px;">DDS &middot; fe08d60, 44ecb2c</div>
+    </div>
+
+    <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #3fb950; border-radius:6px; padding:10px; margin-bottom:8px;">
+      <div style="font-size:12px; font-weight:600; color:#f0f6fc;">[DDS-2] Add info tooltips to KPI cards</div>
+      <div style="font-size:11px; color:#8b949e; margin-top:4px;">MetricCard.vue tooltip prop + Info icon. Tooltips on Analytics, Cohorts, CustomerDetail.</div>
+      <div style="font-size:10px; color:#3fb950; margin-top:6px;">DDS &middot; 208cf89</div>
+    </div>
+
+    <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #3fb950; border-radius:6px; padding:10px; margin-bottom:8px;">
+      <div style="font-size:12px; font-weight:600; color:#f0f6fc;">[DDS-3] Pricing model badge on Customers</div>
+      <div style="font-size:11px; color:#8b949e; margin-top:4px;">JOIN subscriptions for pricing_model. Badges on Cohorts page. Bug: <code>customerId</code> → <code>row.customer_id</code>. <a href="#postmortems" style="color:#79c0ff;">PM-9</a></div>
+      <div style="font-size:10px; color:#3fb950; margin-top:6px;">DDS &middot; fe08d60, 44ecb2c</div>
+    </div>
+
+    <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #3fb950; border-radius:6px; padding:10px; margin-bottom:8px;">
+      <div style="font-size:12px; font-weight:600; color:#f0f6fc;">[DDS-4] Standardize currency formatting</div>
+      <div style="font-size:11px; color:#8b949e; margin-top:4px;">K→k in pricing-analyzer.ts. fmtExact() added to format.ts.</div>
+      <div style="font-size:10px; color:#3fb950; margin-top:6px;">DDS &middot; fe08d60</div>
+    </div>
+
+    <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #3fb950; border-radius:6px; padding:10px; margin-bottom:8px;">
+      <div style="font-size:12px; font-weight:600; color:#f0f6fc;">[DDS-5] Data confidence indicator</div>
+      <div style="font-size:11px; color:#8b949e; margin-top:4px;">Badge next to Analytics header when &lt;500 events. Warning/destructive variants.</div>
+      <div style="font-size:10px; color:#3fb950; margin-top:6px;">DDS &middot; fe08d60</div>
+    </div>
+
+    <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #3fb950; border-radius:6px; padding:10px; margin-bottom:8px;">
+      <div style="font-size:12px; font-weight:600; color:#f0f6fc;">[DDS-8] Margin benchmark tooltip</div>
+      <div style="font-size:11px; color:#8b949e; margin-top:4px;">MarginBadge shadcn Tooltip: "AI SaaS target: 60-80% gross margin."</div>
+      <div style="font-size:10px; color:#3fb950; margin-top:6px;">DDS &middot; c61cbc4</div>
+    </div>
 
     <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #3fb950; border-radius:6px; padding:10px; margin-bottom:8px;">
       <div style="font-size:12px; font-weight:600; color:#f0f6fc;">Fix events page filters</div>
@@ -960,6 +966,18 @@ accounts ┘                   │
     <tr><td><strong>Impact</strong></td><td>User sees empty Data Sources page with no API key, no events, no Stripe connection — even though their old account has all this data.</td></tr>
     <tr><td><strong>Fix</strong></td><td>Added auto-backfill in <code>ensureVisitor</code>: when a Clerk user's account has no <code>clerk_org_id</code>, stamp the Clerk org ID on it. The <code>ON CONFLICT (email) DO UPDATE SET visitor_id</code> clause already updates the visitor_id — the auth flow just needs to complete (user can't bounce at the org setup screen).</td></tr>
     <tr><td><strong>Prevention</strong></td><td>Run a one-time migration to update all UUID visitor_ids to Clerk user IDs. Add monitoring for accounts with null <code>clerk_org_id</code>.</td></tr>
+  </table>
+</div>
+
+<div class="us" id="pm9">
+  <div class="us-title">PM-9: Agent hallucinated variable name in cohorts query (DDS-3)</div>
+  <table>
+    <tr><th style="width:120px;">Field</th><th>Detail</th></tr>
+    <tr><td><strong>Root Cause</strong></td><td>DDS-3 agent added <code>pricingModelMap[customerId]</code> to the cohorts response builder, but the loop variable is <code>row.customer_id</code>, not <code>customerId</code>. The agent hallucinated a variable name that doesn't exist in scope.</td></tr>
+    <tr><td><strong>Symptom</strong></td><td>GET /cohorts returns 500 "Failed to compute cohorts" with <code>ReferenceError: customerId is not defined</code>. Cohorts page fails to load for logged-in users.</td></tr>
+    <tr><td><strong>Impact</strong></td><td>Cohorts page completely broken for authenticated users. Guest mode unaffected (uses client-side sample data).</td></tr>
+    <tr><td><strong>Fix</strong></td><td><code>pricingModelMap[customerId]</code> → <code>pricingModelMap[row.customer_id]</code> at cohorts.ts:532. Also added <code>detail: String(error)</code> to the 500 response so future errors are diagnosable from the browser.</td></tr>
+    <tr><td><strong>Prevention</strong></td><td>Agent swarm cards should specify exact variable names in scope, not just file + line number. Post-merge testing with a test client catches ReferenceErrors that type-checking misses (TypeScript doesn't catch runtime <code>ReferenceError</code> in template expressions or dynamic map lookups).</td></tr>
   </table>
 </div>
 
