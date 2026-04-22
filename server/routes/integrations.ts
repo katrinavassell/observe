@@ -178,7 +178,7 @@ export async function syncStripeDataForUser(
     let idx = 1;
     for (const customer of batch) {
       placeholders.push(
-        `($${idx++}, $${idx++}, $${idx++}, $${idx++}, $${idx++})`,
+        `($${idx++}, $${idx++}, $${idx++}, $${idx++}, $${idx++}, $${idx++})`,
       );
       values.push(
         userId,
@@ -186,10 +186,11 @@ export async function syncStripeDataForUser(
         customer.id,
         customer.name || customer.email || customer.id,
         customer.email || null,
+        customer.id,
       );
     }
     await pool.query(
-      `INSERT INTO customers (user_id, account_id, customer_id, name, email) VALUES ${placeholders.join(", ")} ON CONFLICT (user_id, customer_id) DO UPDATE SET account_id = COALESCE(customers.account_id, EXCLUDED.account_id), name = EXCLUDED.name, email = COALESCE(EXCLUDED.email, customers.email)`,
+      `INSERT INTO customers (user_id, account_id, customer_id, name, email, stripe_customer_id) VALUES ${placeholders.join(", ")} ON CONFLICT (user_id, customer_id) DO UPDATE SET account_id = COALESCE(customers.account_id, EXCLUDED.account_id), name = EXCLUDED.name, email = COALESCE(EXCLUDED.email, customers.email), stripe_customer_id = COALESCE(EXCLUDED.stripe_customer_id, customers.stripe_customer_id)`,
       values,
     );
   }

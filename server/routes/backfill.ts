@@ -142,10 +142,47 @@ export async function runRevenueBackfill(
   let eventsSkipped = 0;
   let customersResolved = 0;
 
-  // ── 1. Backfill customer names from Stripe ──────────────────────────
+  // ── 1. Backfill stripe_customer_id from event meta where missing ────
+  await pool
+    .query(
+      `UPDATE customers c
+       SET stripe_customer_id = sub.stripe_id
+       FROM (
+         SELECT DISTINCT ON (oe.customer_id)
+                oe.customer_id, meta->>'stripe_customer_id' AS stripe_id
+         FROM observe_events oe
+         WHERE oe.account_id = $1
+           AND meta->>'stripe_customer_id' IS NOT NULL
+       ) sub
+       WHERE c.account_id = $1
+         AND c.customer_id = sub.customer_id
+         AND c.stripe_customer_id IS NULL`,
+      [accountId],
+    )
+    .catch((err) =>
+      console.error("Backfill stripe_customer_id from meta:", err),
+    );
+
+  // Also set stripe_customer_id = customer_id for cus_* records
+  await pool
+    .query(
+      `UPDATE customers
+       SET stripe_customer_id = customer_id
+       WHERE account_id = $1
+         AND customer_id LIKE 'cus_%'
+         AND stripe_customer_id IS NULL`,
+      [accountId],
+    )
+    .catch((err) =>
+      console.error("Backfill stripe_customer_id for cus_* IDs:", err),
+    );
+
+  // ── 2. Resolve customer names from Stripe ─────────────────────────
   const unresolvedCustomers = await pool.query(
-    `SELECT customer_id FROM customers
-     WHERE account_id = $1 AND (name = customer_id OR name IS NULL)`,
+    `SELECT customer_id, stripe_customer_id FROM customers
+     WHERE account_id = $1
+       AND stripe_customer_id IS NOT NULL
+       AND (name = customer_id OR name IS NULL)`,
     [accountId],
   );
 
@@ -160,52 +197,26 @@ export async function runRevenueBackfill(
     if (stripe) {
       for (const row of unresolvedCustomers.rows) {
         const cid = row.customer_id as string;
-        const lookupId = cid.startsWith("cus_") ? cid : null;
-        if (!lookupId) {
-          const metaResult = await pool.query(
-            `SELECT DISTINCT (meta->>'stripe_customer_id') AS stripe_id
-             FROM observe_events
-             WHERE account_id = $1 AND customer_id = $2
-               AND meta->>'stripe_customer_id' IS NOT NULL
-             LIMIT 1`,
-            [accountId, cid],
-          );
-          if (metaResult.rows.length === 0) continue;
-          const stripeId = metaResult.rows[0].stripe_id;
-          if (!stripeId) continue;
-          try {
-            const cust = await stripe.customers.retrieve(stripeId);
-            if (cust.deleted) continue;
-            const name = cust.name || cust.email || cid;
-            await pool.query(
-              `UPDATE customers SET name = $1, email = COALESCE(customers.email, $2), updated_at = NOW()
-               WHERE account_id = $3 AND customer_id = $4`,
-              [name, cust.email || null, accountId, cid],
-            );
-            customersResolved++;
-          } catch (err) {
-            console.error(
-              "Backfill: failed to resolve customer",
-              cid,
-              "via",
-              stripeId,
-              err,
-            );
-          }
-          continue;
-        }
+        const stripeId = row.stripe_customer_id as string;
         try {
-          const cust = await stripe.customers.retrieve(lookupId);
+          const cust = await stripe.customers.retrieve(stripeId);
           if (cust.deleted) continue;
           const name = cust.name || cust.email || cid;
           await pool.query(
-            `UPDATE customers SET name = $1, email = COALESCE(customers.email, $2), updated_at = NOW()
+            `UPDATE customers
+             SET name = $1, email = COALESCE(customers.email, $2), updated_at = NOW()
              WHERE account_id = $3 AND customer_id = $4`,
             [name, cust.email || null, accountId, cid],
           );
           customersResolved++;
         } catch (err) {
-          console.error("Backfill: failed to resolve customer", cid, err);
+          console.error(
+            "Backfill: failed to resolve customer",
+            cid,
+            "via",
+            stripeId,
+            err,
+          );
         }
       }
     }

@@ -625,6 +625,9 @@ async function _doDbInit() {
     await pool.query(
       `ALTER TABLE customers ADD COLUMN IF NOT EXISTS is_internal BOOLEAN DEFAULT false`,
     );
+    await pool.query(
+      `ALTER TABLE customers ADD COLUMN IF NOT EXISTS stripe_customer_id TEXT`,
+    );
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS subscriptions (
