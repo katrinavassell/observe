@@ -1336,7 +1336,7 @@ responseBody: {
                     </div>
                   </div>
                   <div
-                    v-else-if="detailErrors[event.id]"
+                    v-else-if="event.id in detailErrors"
                     class="p-4 text-sm text-destructive space-y-1"
                   >
                     <p class="font-medium">Failed to load event detail</p>

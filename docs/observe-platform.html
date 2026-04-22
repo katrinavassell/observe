@@ -3,7 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <title>Observe — Platform Architecture</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<script>document.addEventListener('DOMContentLoaded', () => mermaid.initialize({ theme: 'dark', startOnLoad: true }));</script>
 <style>
+  .mermaid { background: #161b22; border-radius: 8px; padding: 24px; overflow-x: auto; border: 1px solid #21262d; margin: 16px 0; }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0d1117; color: #c9d1d9; display: flex; }
 
@@ -162,6 +165,50 @@ SDK event arrives: customerReferenceId = "flatco", meta.stripe_customer_id = "cu
 
 <!-- ────────────────── ERD ────────────────── -->
 <h2 id="erd">Entity Relationship Diagram</h2>
+
+<div class="mermaid">
+erDiagram
+    users ||--o{ user_accounts : "has"
+    accounts ||--o{ user_accounts : "has"
+    accounts ||--o{ customers : "owns"
+    accounts ||--o{ observe_events : "owns"
+    accounts ||--o{ subscriptions : "owns"
+    accounts ||--o{ plans : "owns"
+    accounts ||--o{ integrations : "owns"
+    accounts ||--o{ sdk_api_keys : "owns"
+    accounts ||--o{ feature_definitions : "owns"
+    accounts ||--o{ feature_pricing : "owns"
+    accounts ||--o{ alert_rules : "owns"
+    accounts ||--o{ custom_cohorts : "owns"
+    accounts ||--o{ routing_configs : "owns"
+    customers }o--o{ observe_events : "customer_id"
+    customers }o--o{ subscriptions : "stripe_customer_id"
+    customers }o--o{ cohort_members : "customer_id"
+    subscriptions }o--|| plans : "plan_id"
+    alert_rules ||--o{ alert_history : "fires"
+    custom_cohorts ||--o{ cohort_members : "contains"
+    routing_configs ||--o{ routing_targets : "has"
+    feature_pricing }o--o{ feature_definitions : "feature_key"
+
+    users { serial id PK; text email UK; text visitor_id UK; text stripe_customer_id; text stripe_plan }
+    accounts { serial id PK; text name; text clerk_org_id UK; text stripe_customer_id; text stripe_plan }
+    user_accounts { serial id PK; int user_id FK; int account_id FK; text role }
+    customers { serial id PK; int account_id FK; text customer_id; text name; text email; text stripe_customer_id }
+    observe_events { serial id PK; int account_id FK; text customer_id; text feature_key; text model; numeric cost_amount; numeric revenue_amount; text revenue_source; jsonb meta }
+    subscriptions { serial id PK; int account_id FK; text customer_id; text plan_id; text pricing_model; numeric unit_price; jsonb pricing_tiers }
+    plans { serial id PK; int account_id FK; text plan_id; text name; numeric price_amount }
+    integrations { serial id PK; int account_id FK; text provider; text encrypted_api_key; text stripe_account_id }
+    sdk_api_keys { serial id PK; int account_id FK; text key_hash UK; text name }
+    feature_definitions { serial id PK; int account_id FK; text feature_key; text name; text kind }
+    feature_pricing { serial id PK; int account_id FK; text feature_key; numeric revenue_per_unit }
+    alert_rules { serial id PK; int account_id FK; text name; text metric; numeric threshold }
+    alert_history { serial id PK; int alert_rule_id FK; text customer_id; numeric current_value }
+    custom_cohorts { serial id PK; int account_id FK; text name; jsonb rules }
+    cohort_members { int cohort_id FK; text customer_id }
+    routing_configs { serial id PK; int account_id FK; text name; boolean is_active }
+    routing_targets { int config_id FK; text provider; text model }
+</div>
+<p style="font-size:11px; color:#484f58;">Mermaid diagram renders when opened with internet access. Detailed tables below.</p>
 
 <h3 id="erd-core">Core (Auth & Data Ownership)</h3>
 <div class="erd-grid">
