@@ -1519,7 +1519,7 @@ fetch(<span class="text-amber-300">'{{ ingestUrl }}'</span>, {
       <summary
         class="text-xs font-medium text-muted-foreground cursor-pointer hover:text-foreground transition-colors"
       >
-        Danger zone
+        Reset account data
       </summary>
       <div class="mt-3">
         <Card class="border-destructive/40">
