@@ -128,5 +128,46 @@
 </pre>
 </div>
 
+<div class="section">
+<h3>Definitions (avoid confusion)</h3>
+<table style="width:100%; border-collapse:collapse; margin-top:12px;">
+<tr><th style="text-align:left; padding:8px 12px; border-bottom:1px solid #21262d; color:#8b949e; font-size:13px;">Term</th><th style="text-align:left; padding:8px 12px; border-bottom:1px solid #21262d; color:#8b949e; font-size:13px;">Meaning</th><th style="text-align:left; padding:8px 12px; border-bottom:1px solid #21262d; color:#8b949e; font-size:13px;">Table</th></tr>
+<tr><td style="padding:8px 12px; border-bottom:1px solid #21262d; font-size:13px;"><strong>Observe user</strong></td><td style="padding:8px 12px; border-bottom:1px solid #21262d; font-size:13px;">Person who signs up for Observe</td><td style="padding:8px 12px; border-bottom:1px solid #21262d; font-size:13px;"><code>users</code></td></tr>
+<tr><td style="padding:8px 12px; border-bottom:1px solid #21262d; font-size:13px;"><strong>Account</strong></td><td style="padding:8px 12px; border-bottom:1px solid #21262d; font-size:13px;">Billing/data-ownership unit</td><td style="padding:8px 12px; border-bottom:1px solid #21262d; font-size:13px;"><code>accounts</code></td></tr>
+<tr><td style="padding:8px 12px; border-bottom:1px solid #21262d; font-size:13px;"><strong>Customer</strong></td><td style="padding:8px 12px; border-bottom:1px solid #21262d; font-size:13px;">End-user of the Observe user's product (NOT an Observe user)</td><td style="padding:8px 12px; border-bottom:1px solid #21262d; font-size:13px;"><code>customers</code></td></tr>
+<tr><td style="padding:8px 12px; border-bottom:1px solid #21262d; font-size:13px;"><code>customer_id</code></td><td style="padding:8px 12px; border-bottom:1px solid #21262d; font-size:13px;">App-level ID from SDK <code>customerReferenceId</code></td><td style="padding:8px 12px; border-bottom:1px solid #21262d; font-size:13px;"><code>observe_events</code>, <code>customers</code></td></tr>
+<tr><td style="padding:8px 12px; border-bottom:1px solid #21262d; font-size:13px;"><code>stripe_customer_id</code></td><td style="padding:8px 12px; border-bottom:1px solid #21262d; font-size:13px;">Stripe <code>cus_*</code> ID from user's own Stripe account</td><td style="padding:8px 12px; border-bottom:1px solid #21262d; font-size:13px;"><code>customers.stripe_customer_id</code></td></tr>
+<tr><td style="padding:8px 12px; border-bottom:1px solid #21262d; font-size:13px;"><code>accounts.stripe_customer_id</code></td><td style="padding:8px 12px; border-bottom:1px solid #21262d; font-size:13px;">Observe user as Tanso billing customer (different Stripe account!)</td><td style="padding:8px 12px; border-bottom:1px solid #21262d; font-size:13px;"><code>accounts</code></td></tr>
+</table>
+</div>
+
+<div class="section">
+<h3>Revenue Enrichment Pipeline (the bridge)</h3>
+<pre style="background:#161b22; border-radius:8px; padding:20px; border:1px solid #21262d; font-size:13px; line-height:1.7;">
+SDK event arrives: customerReferenceId = <span class="green">"flatco"</span>, meta.stripe_customer_id = <span class="red">"cus_abc"</span>
+
+<strong>Step 1: Build bridge map</strong> (app ID &rarr; Stripe ID)
+  <span class="green">"flatco"</span> &rarr; <span class="red">"cus_abc"</span>
+  Sources: meta.stripe_customer_id, customers.stripe_customer_id, or cus_* detection
+
+<strong>Step 2: Look up subscription by Stripe ID</strong>
+  subscriptions WHERE customer_id = <span class="red">"cus_abc"</span> &rarr; found: metered, unit_price = 0.01
+
+<strong>Step 3: Calculate revenue</strong>
+  metered:  unit_price &times; usage_units
+  tiered:   tierPrice(mtdUsage) &times; usage_units
+  flat:     $0 per event (MRR is fixed)
+
+<strong>Step 4: Store on event</strong>
+  observe_events.revenue_amount = calculated value
+  observe_events.revenue_source = "per_unit" | "tiered" | "subscription"
+
+<strong>Step 5: Resolve customer name (async)</strong>
+  customers.stripe_customer_id = <span class="red">"cus_abc"</span>
+  &rarr; stripe.customers.retrieve(<span class="red">"cus_abc"</span>)
+  &rarr; UPDATE customers SET name = "FlatCo Inc", email = "..."
+</pre>
+</div>
+
 </body>
 </html>
