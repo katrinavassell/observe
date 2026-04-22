@@ -1040,11 +1040,19 @@ export function createCustomersRoutes(
             sum + (parseFloat(r.total_cost) || 0),
           0,
         );
-        const totalRevenue = featureRes.rows.reduce(
+        const eventRevenue = featureRes.rows.reduce(
           (sum: number, r: { total_revenue: string }) =>
             sum + (parseFloat(r.total_revenue) || 0),
           0,
         );
+        const subscriptionMrr = subRes.rows
+          .filter((s: { is_active: boolean }) => s.is_active)
+          .reduce(
+            (sum: number, s: { mrr_override: string | null }) =>
+              sum + (parseFloat(s.mrr_override ?? "0") || 0),
+            0,
+          );
+        const totalRevenue = eventRevenue > 0 ? eventRevenue : subscriptionMrr;
         const marginPct =
           totalRevenue > 0
             ? Math.round(((totalRevenue - totalCost) / totalRevenue) * 100)
