@@ -104,14 +104,11 @@ export async function syncStripeDataForUser(
       .autoPagingToArray({ limit: 10000 }),
   ]);
 
-  // Clear existing Stripe-sourced data before re-syncing
+  // Clear existing Stripe-sourced data before re-syncing (except customers,
+  // which are upserted to preserve SDK-created rows)
   await pool.query("DELETE FROM subscriptions WHERE account_id = $1", [
     resolvedAccountId,
   ]);
-  await pool.query(
-    "DELETE FROM customers WHERE account_id = $1 OR (user_id = $2 AND account_id IS NULL)",
-    [resolvedAccountId, userId],
-  );
   await pool.query("DELETE FROM plans WHERE account_id = $1", [
     resolvedAccountId,
   ]);

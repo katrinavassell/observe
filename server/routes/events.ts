@@ -3,7 +3,11 @@ import type { Pool } from "pg";
 import crypto from "crypto";
 import rateLimit from "express-rate-limit";
 import { type AuthRequest } from "./auth.js";
-import { encryptApiKey, decryptApiKey } from "../stripe-client.js";
+import {
+  encryptApiKey,
+  decryptApiKey,
+  getStripeClientForUser,
+} from "../stripe-client.js";
 import {
   calculateCostFromTokens as calcCostFromDb,
   resolveModelPricing,
@@ -19,6 +23,43 @@ import {
 } from "../lib/enrich-revenue.js";
 
 type ComputeInferenceProfilesFn = (userId: string) => Promise<number>;
+
+async function resolveStripeCustomerNames(
+  pool: Pool,
+  userId: string,
+  accountId: number | null,
+  customerIds: string[],
+): Promise<void> {
+  if (customerIds.length === 0 || accountId == null) return;
+  const unresolved = await pool.query(
+    `SELECT customer_id FROM customers
+     WHERE account_id = $1 AND customer_id = ANY($2)
+       AND (name = customer_id OR name IS NULL)`,
+    [accountId, customerIds],
+  );
+  if (unresolved.rows.length === 0) return;
+  let stripe;
+  try {
+    stripe = await getStripeClientForUser(pool, userId, accountId);
+  } catch {
+    return;
+  }
+  for (const row of unresolved.rows) {
+    try {
+      const cust = await stripe.customers.retrieve(row.customer_id);
+      if (cust.deleted) continue;
+      const name = cust.name || cust.email || row.customer_id;
+      const email = cust.email || null;
+      await pool.query(
+        `UPDATE customers SET name = $1, email = COALESCE(customers.email, $2), updated_at = NOW()
+         WHERE account_id = $3 AND customer_id = $4 AND (name = customer_id OR name IS NULL)`,
+        [name, email, accountId, row.customer_id],
+      );
+    } catch {
+      continue;
+    }
+  }
+}
 
 /**
  * Annotate a list of already-coerced event rows with derived `input_cost` +
@@ -1325,6 +1366,13 @@ export function createEventsRoutes(
               console.error("checkCustomerAlerts error (ingest):", err),
             );
           }
+          // Resolve Stripe customer names for any cus_* IDs missing a real name
+          resolveStripeCustomerNames(
+            pool,
+            userId!,
+            accountId,
+            alertCustomerIds.filter((id) => id.startsWith("cus_")),
+          ).catch(() => {});
           // Check usage limit and send warning emails
           if (ingestAccess.limit != null && ingestAccess.usage != null) {
             const newUsage = ingestAccess.usage + inserted;
