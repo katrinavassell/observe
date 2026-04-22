@@ -377,11 +377,13 @@ export function createCohortsRoutes(pool: Pool, ensureVisitor: any) {
           // contribution (both the monthly_aggregate stripe rows and the
           // per-event allocated/tiered/metered portions). Summing subRevenue
           // on top double-counts.
-          const totalRevenue = parseFloat(row.total_revenue) || 0;
+          const eventRevenue = parseFloat(row.total_revenue) || 0;
           const totalCost = parseFloat(row.total_cost) || 0;
           const eventCount = parseInt(row.event_count) || 0;
           const featureCount = parseInt(row.feature_count) || 0;
           const modelCount = parseInt(row.model_count) || 0;
+          const currentMrr = currentMrrMap[row.customer_id] || 0;
+          const totalRevenue = eventRevenue > 0 ? eventRevenue : currentMrr;
 
           const marginPct =
             totalRevenue > 0

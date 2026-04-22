@@ -33,7 +33,7 @@ const { isLoggedIn } = useAuth();
 const customerId = computed(() => route.params.id as string);
 
 type BillingPeriod = "this_month" | "last_month" | "all_time";
-const selectedPeriod = ref<BillingPeriod>("this_month");
+const selectedPeriod = ref<BillingPeriod>("all_time");
 
 function formatLocalDate(d: Date): string {
   const y = d.getFullYear();

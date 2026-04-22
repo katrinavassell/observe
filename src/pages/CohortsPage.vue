@@ -58,7 +58,7 @@ const { isLoggedIn } = useAuth();
 // ── Period selector ─────────────────────────────────────────────────────────
 
 type PeriodKey = "this_month" | "last_month" | "all_time";
-const selectedPeriod = ref<PeriodKey>("this_month");
+const selectedPeriod = ref<PeriodKey>("all_time");
 
 const periodDates = computed(() => {
   const now = new Date();
@@ -299,7 +299,7 @@ const DEFAULT_COLUMNS: TableColumn[] = [
   { id: "cost", label: "Cost", visible: true, align: "right" },
   { id: "margin", label: "Margin", visible: true, align: "right" },
   { id: "active_days", label: "Active Days", visible: true, align: "right" },
-  { id: "mrr", label: "MRR", visible: true, align: "left" },
+  { id: "mrr", label: "MRR", visible: false, align: "left" },
 ];
 
 const STORAGE_KEY = "observe:cohorts-columns";
@@ -980,7 +980,9 @@ const excludedCount = computed(() => {
 
                     <!-- Revenue -->
                     <td v-else-if="col.id === 'revenue'" class="p-3 text-right">
-                      {{ fmt(c.total_revenue) }}
+                      {{
+                        fmt(c.total_revenue > 0 ? c.total_revenue : c.mrr || 0)
+                      }}
                     </td>
 
                     <!-- Cost -->
