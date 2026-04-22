@@ -682,6 +682,12 @@ accounts ┘                   │
       <div style="font-size:11px; color:#8b949e; margin-top:4px;">ERD, definitions, user stories, acceptance criteria, postmortems.</div>
       <div style="font-size:10px; color:#3fb950; margin-top:6px;">DOCS &middot; d5edca3</div>
     </div>
+
+    <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #3fb950; border-radius:6px; padding:10px; margin-bottom:8px;">
+      <div style="font-size:12px; font-weight:600; color:#f0f6fc;">Billing-period-scoped margin</div>
+      <div style="font-size:11px; color:#8b949e; margin-top:4px;">Period selector (This Month / Last Month / All Time) on Customer Detail and Cohorts pages. Stripe sync populates period dates. Queries scoped by timestamp.</div>
+      <div style="font-size:10px; color:#3fb950; margin-top:6px;">FEATURE &middot; 71a020a</div>
+    </div>
   </div>
 
 </div>
@@ -773,6 +779,7 @@ accounts ┘                   │
   <tr data-type="perf"><td><span style="color:#79c0ff;">PERF</span></td><td>2026-04-22</td><td><strong>List query optimized</strong> — excluded request_body/response_body JSONB from GET /events list payload</td></tr>
   <tr data-type="docs"><td><span style="color:#8b949e;">DOCS</span></td><td>2026-04-22</td><td><strong>requestBody/responseBody promoted to RECOMMENDED</strong> — added to curl example in llms.txt</td></tr>
   <tr data-type="docs"><td><span style="color:#8b949e;">DOCS</span></td><td>2026-04-22</td><td><strong>Platform architecture doc</strong> — ERD, definitions, user stories, acceptance criteria, revenue pipeline</td></tr>
+  <tr data-type="feature"><td><span style="color:#3fb950;">FEATURE</span></td><td>2026-04-22</td><td><strong>Billing-period-scoped margin</strong> — Period selector on Customer Detail and Cohorts pages. Stripe sync populates current_period_start/end. Queries scoped by timestamp. Default: This Month.</td></tr>
 </table>
 
 <!-- ────────────────── BUG POSTMORTEMS ────────────────── -->

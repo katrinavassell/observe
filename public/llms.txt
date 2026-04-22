@@ -541,6 +541,16 @@ To get per-event revenue, either:
 - **Revenue** = what YOUR CUSTOMER pays you (from Stripe subscription or explicit)
 - **Margin** = (revenue - cost) / revenue — only meaningful at the customer level
   for flat subscriptions
+- **Period** = margin is scoped to a billing period (This Month by default).
+  Switch between This Month, Last Month, and All Time on the Customer Detail
+  and Cohorts pages. MRR is compared against cost within that period.
+
+**Q: Why does margin change when I switch periods?**
+
+Margin is calculated as MRR vs cost within the selected billing period. "This
+Month" shows cost accumulated so far this month against your monthly MRR.
+"All Time" shows lifetime cost against MRR — which can look worse because cost
+accumulates over months but MRR is a single month's revenue.
 
 **Q: My customer has multiple subscriptions with different pricing models. Why does
 Observe pick the wrong one?**
