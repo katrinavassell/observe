@@ -125,6 +125,220 @@ async function fetchAnthropicUsage(apiKey: string): Promise<ProviderBucket[]> {
   return buckets;
 }
 
+export interface RevenueBackfillSummary {
+  events_updated: number;
+  events_skipped: number;
+  events_checked: number;
+  customers_resolved: number;
+  customers_checked: number;
+}
+
+export async function runRevenueBackfill(
+  pool: Pool,
+  userId: string,
+  accountId: number,
+): Promise<RevenueBackfillSummary> {
+  let eventsUpdated = 0;
+  let eventsSkipped = 0;
+  let customersResolved = 0;
+
+  // ── 1. Backfill customer names from Stripe ──────────────────────────
+  const unresolvedCustomers = await pool.query(
+    `SELECT customer_id FROM customers
+     WHERE account_id = $1 AND (name = customer_id OR name IS NULL)`,
+    [accountId],
+  );
+
+  if (unresolvedCustomers.rows.length > 0) {
+    let stripe;
+    try {
+      stripe = await getStripeClientForUser(pool, userId, accountId);
+    } catch {
+      // No Stripe connection — skip name resolution
+    }
+
+    if (stripe) {
+      for (const row of unresolvedCustomers.rows) {
+        const cid = row.customer_id as string;
+        const lookupId = cid.startsWith("cus_") ? cid : null;
+        if (!lookupId) {
+          const metaResult = await pool.query(
+            `SELECT DISTINCT (meta->>'stripe_customer_id') AS stripe_id
+             FROM observe_events
+             WHERE account_id = $1 AND customer_id = $2
+               AND meta->>'stripe_customer_id' IS NOT NULL
+             LIMIT 1`,
+            [accountId, cid],
+          );
+          if (metaResult.rows.length === 0) continue;
+          const stripeId = metaResult.rows[0].stripe_id;
+          if (!stripeId) continue;
+          try {
+            const cust = await stripe.customers.retrieve(stripeId);
+            if (cust.deleted) continue;
+            const name = cust.name || cust.email || cid;
+            await pool.query(
+              `UPDATE customers SET name = $1, email = COALESCE(customers.email, $2), updated_at = NOW()
+               WHERE account_id = $3 AND customer_id = $4`,
+              [name, cust.email || null, accountId, cid],
+            );
+            customersResolved++;
+          } catch (err) {
+            console.error(
+              "Backfill: failed to resolve customer",
+              cid,
+              "via",
+              stripeId,
+              err,
+            );
+          }
+          continue;
+        }
+        try {
+          const cust = await stripe.customers.retrieve(lookupId);
+          if (cust.deleted) continue;
+          const name = cust.name || cust.email || cid;
+          await pool.query(
+            `UPDATE customers SET name = $1, email = COALESCE(customers.email, $2), updated_at = NOW()
+             WHERE account_id = $3 AND customer_id = $4`,
+            [name, cust.email || null, accountId, cid],
+          );
+          customersResolved++;
+        } catch (err) {
+          console.error("Backfill: failed to resolve customer", cid, err);
+        }
+      }
+    }
+  }
+
+  // ── 2. Backfill revenue on events ───────────────────────────────────
+  const fpResult = await pool.query(
+    `SELECT feature_key, revenue_per_unit FROM feature_pricing WHERE account_id = $1`,
+    [accountId],
+  );
+  const featurePricingMap = new Map<string, number>();
+  for (const row of fpResult.rows) {
+    featurePricingMap.set(row.feature_key, parseFloat(row.revenue_per_unit));
+  }
+
+  const subResult = await pool.query(
+    `SELECT s.customer_id,
+            SUM(COALESCE(s.mrr_override, 0)) AS mrr,
+            MAX(s.pricing_model) AS pricing_model,
+            MAX(CASE WHEN s.pricing_model = 'tiered' OR s.pricing_model = 'hybrid'
+                     THEN s.pricing_tiers::text END) AS pricing_tiers,
+            MAX(s.unit_price) AS unit_price
+     FROM subscriptions s
+     WHERE s.account_id = $1 AND s.is_active = true
+     GROUP BY s.customer_id`,
+    [accountId],
+  );
+  const subByCustomer = new Map<string, SubMeta>();
+  for (const row of subResult.rows) {
+    subByCustomer.set(row.customer_id, {
+      mrr: parseFloat(row.mrr) || 0,
+      pricingModel: row.pricing_model,
+      pricingTiers: row.pricing_tiers ? JSON.parse(row.pricing_tiers) : null,
+      unitPrice: row.unit_price != null ? parseFloat(row.unit_price) : null,
+    });
+  }
+
+  const events = await pool.query(
+    `SELECT id, customer_id, feature_key, usage_units, input_tokens,
+            output_tokens, meta->>'stripe_customer_id' AS meta_stripe_id
+     FROM observe_events
+     WHERE account_id = $1
+       AND (revenue_source = 'none' OR revenue_source IS NULL)
+       AND source != 'stripe'
+     ORDER BY timestamp DESC
+     LIMIT 50000`,
+    [accountId],
+  );
+
+  const mtdCache = new Map<string, number>();
+  async function getMtdUsage(customerId: string): Promise<number> {
+    if (mtdCache.has(customerId)) return mtdCache.get(customerId)!;
+    const result = await pool.query(
+      `SELECT COALESCE(SUM(usage_units), 0) AS usage
+       FROM observe_events
+       WHERE account_id = $1 AND customer_id = $2
+         AND timestamp >= date_trunc('month', NOW())`,
+      [accountId, customerId],
+    );
+    const usage = parseFloat(result.rows[0]?.usage) || 0;
+    mtdCache.set(customerId, usage);
+    return usage;
+  }
+
+  const updates: { id: number; revenue: number; source: string }[] = [];
+  for (const evt of events.rows) {
+    let revenue = 0;
+    let revenueSource = "none";
+
+    if (featurePricingMap.has(evt.feature_key)) {
+      revenue = featurePricingMap.get(evt.feature_key)!;
+      revenueSource = "feature_pricing";
+    } else {
+      const subKey =
+        (evt.meta_stripe_id && subByCustomer.has(evt.meta_stripe_id)
+          ? evt.meta_stripe_id
+          : null) ||
+        (subByCustomer.has(evt.customer_id) ? evt.customer_id : null);
+
+      if (subKey) {
+        const subMeta = subByCustomer.get(subKey)!;
+        const evtUsage =
+          parseFloat(evt.usage_units) ||
+          (parseFloat(evt.input_tokens) || 0) +
+            (parseFloat(evt.output_tokens) || 0);
+        const mtd = await getMtdUsage(subKey);
+        const enriched = enrichRevenueFromSub(subMeta, evtUsage, mtd);
+        revenue = enriched.revenue;
+        revenueSource = enriched.revenueSource;
+      }
+    }
+
+    if (revenueSource === "none") {
+      eventsSkipped++;
+      continue;
+    }
+    updates.push({ id: evt.id, revenue, source: revenueSource });
+  }
+
+  for (let i = 0; i < updates.length; i += BATCH_SIZE) {
+    const chunk = updates.slice(i, i + BATCH_SIZE);
+    const valueTuples: string[] = [];
+    const params: (number | string)[] = [];
+    let p = 1;
+    for (const u of chunk) {
+      valueTuples.push(`($${p++}::int, $${p++}::numeric, $${p++}::text)`);
+      params.push(u.id, u.revenue, u.source);
+    }
+    const sql = `
+      UPDATE observe_events AS e
+         SET revenue_amount = v.rev,
+             revenue_source = v.src
+        FROM (VALUES ${valueTuples.join(", ")}) AS v(id, rev, src)
+       WHERE e.id = v.id
+    `;
+    const result = await pool.query(sql, params);
+    eventsUpdated += result.rowCount ?? 0;
+  }
+
+  const summary: RevenueBackfillSummary = {
+    events_updated: eventsUpdated,
+    events_skipped: eventsSkipped,
+    events_checked: events.rows.length,
+    customers_resolved: customersResolved,
+    customers_checked: unresolvedCustomers.rows.length,
+  };
+  console.warn(
+    `Revenue backfill complete for account ${accountId}:`,
+    JSON.stringify(summary),
+  );
+  return summary;
+}
+
 export function createBackfillRoutes(pool: Pool, ensureVisitor: any) {
   const router = Router();
 
@@ -318,9 +532,6 @@ export function createBackfillRoutes(pool: Pool, ensureVisitor: any) {
   );
 
   // ── POST /backfill/revenue ─────────────────────────────────────────────────
-  // Re-enrich revenue_amount + revenue_source on existing events using current
-  // subscription data and feature pricing. Also backfills customer names from
-  // Stripe for any customers where name = customer_id.
   router.post(
     "/backfill/revenue",
     ensureVisitor,
@@ -330,224 +541,8 @@ export function createBackfillRoutes(pool: Pool, ensureVisitor: any) {
       if (accountId == null) {
         return res.status(400).json({ error: "No account found" });
       }
-
-      let eventsUpdated = 0;
-      let eventsSkipped = 0;
-      let customersResolved = 0;
-
       try {
-        // ── 1. Backfill customer names from Stripe ────────────────────────
-        const unresolvedCustomers = await pool.query(
-          `SELECT customer_id FROM customers
-           WHERE account_id = $1 AND (name = customer_id OR name IS NULL)`,
-          [accountId],
-        );
-
-        if (unresolvedCustomers.rows.length > 0) {
-          let stripe;
-          try {
-            stripe = await getStripeClientForUser(pool, userId, accountId);
-          } catch {
-            // No Stripe connection — skip name resolution
-          }
-
-          if (stripe) {
-            for (const row of unresolvedCustomers.rows) {
-              const cid = row.customer_id as string;
-              // Try direct Stripe lookup for cus_* IDs
-              const lookupId = cid.startsWith("cus_") ? cid : null;
-              // Also check if observe_events has a meta.stripe_customer_id for this customer
-              if (!lookupId) {
-                const metaResult = await pool.query(
-                  `SELECT DISTINCT (meta->>'stripe_customer_id') AS stripe_id
-                   FROM observe_events
-                   WHERE account_id = $1 AND customer_id = $2
-                     AND meta->>'stripe_customer_id' IS NOT NULL
-                   LIMIT 1`,
-                  [accountId, cid],
-                );
-                if (metaResult.rows.length === 0) continue;
-                const stripeId = metaResult.rows[0].stripe_id;
-                if (!stripeId) continue;
-                try {
-                  const cust = await stripe.customers.retrieve(stripeId);
-                  if (cust.deleted) continue;
-                  const name = cust.name || cust.email || cid;
-                  await pool.query(
-                    `UPDATE customers SET name = $1, email = COALESCE(customers.email, $2), updated_at = NOW()
-                     WHERE account_id = $3 AND customer_id = $4`,
-                    [name, cust.email || null, accountId, cid],
-                  );
-                  customersResolved++;
-                } catch (err) {
-                  console.error(
-                    "Backfill: failed to resolve customer",
-                    cid,
-                    "via",
-                    stripeId,
-                    err,
-                  );
-                }
-                continue;
-              }
-              try {
-                const cust = await stripe.customers.retrieve(lookupId);
-                if (cust.deleted) continue;
-                const name = cust.name || cust.email || cid;
-                await pool.query(
-                  `UPDATE customers SET name = $1, email = COALESCE(customers.email, $2), updated_at = NOW()
-                   WHERE account_id = $3 AND customer_id = $4`,
-                  [name, cust.email || null, accountId, cid],
-                );
-                customersResolved++;
-              } catch (err) {
-                console.error("Backfill: failed to resolve customer", cid, err);
-              }
-            }
-          }
-        }
-
-        // ── 2. Backfill revenue on events ─────────────────────────────────
-        // Load feature pricing
-        const fpResult = await pool.query(
-          `SELECT feature_key, revenue_per_unit FROM feature_pricing WHERE account_id = $1`,
-          [accountId],
-        );
-        const featurePricingMap = new Map<string, number>();
-        for (const row of fpResult.rows) {
-          featurePricingMap.set(
-            row.feature_key,
-            parseFloat(row.revenue_per_unit),
-          );
-        }
-
-        // Load all active subscriptions keyed by customer_id
-        const subResult = await pool.query(
-          `SELECT s.customer_id,
-                  SUM(COALESCE(s.mrr_override, 0)) AS mrr,
-                  MAX(s.pricing_model) AS pricing_model,
-                  MAX(CASE WHEN s.pricing_model = 'tiered' OR s.pricing_model = 'hybrid'
-                           THEN s.pricing_tiers::text END) AS pricing_tiers,
-                  MAX(s.unit_price) AS unit_price
-           FROM subscriptions s
-           WHERE s.account_id = $1 AND s.is_active = true
-           GROUP BY s.customer_id`,
-          [accountId],
-        );
-        const subByCustomer = new Map<string, SubMeta>();
-        for (const row of subResult.rows) {
-          subByCustomer.set(row.customer_id, {
-            mrr: parseFloat(row.mrr) || 0,
-            pricingModel: row.pricing_model,
-            pricingTiers: row.pricing_tiers
-              ? JSON.parse(row.pricing_tiers)
-              : null,
-            unitPrice:
-              row.unit_price != null ? parseFloat(row.unit_price) : null,
-          });
-        }
-
-        // Fetch events that need revenue enrichment (none or subscription-only with active sub)
-        const events = await pool.query(
-          `SELECT id, customer_id, feature_key, usage_units, input_tokens,
-                  output_tokens, revenue_source, revenue_amount,
-                  meta->>'stripe_customer_id' AS meta_stripe_id
-           FROM observe_events
-           WHERE account_id = $1
-             AND (revenue_source = 'none' OR revenue_source IS NULL)
-             AND source != 'stripe'
-           ORDER BY timestamp DESC
-           LIMIT 50000`,
-          [accountId],
-        );
-
-        // MTD usage cache per customer (for tiered/hybrid)
-        const mtdCache = new Map<string, number>();
-        async function getMtdUsage(customerId: string): Promise<number> {
-          if (mtdCache.has(customerId)) return mtdCache.get(customerId)!;
-          const result = await pool.query(
-            `SELECT COALESCE(SUM(usage_units), 0) AS usage
-             FROM observe_events
-             WHERE account_id = $1 AND customer_id = $2
-               AND timestamp >= date_trunc('month', NOW())`,
-            [accountId, customerId],
-          );
-          const usage = parseFloat(result.rows[0]?.usage) || 0;
-          mtdCache.set(customerId, usage);
-          return usage;
-        }
-
-        // Process in batches of 50
-        const updates: { id: number; revenue: number; source: string }[] = [];
-        for (const evt of events.rows) {
-          let revenue = 0;
-          let revenueSource = "none";
-
-          // Priority 1: feature pricing
-          if (featurePricingMap.has(evt.feature_key)) {
-            revenue = featurePricingMap.get(evt.feature_key)!;
-            revenueSource = "feature_pricing";
-          } else {
-            // Priority 2: subscription match
-            const subKey =
-              (evt.meta_stripe_id && subByCustomer.has(evt.meta_stripe_id)
-                ? evt.meta_stripe_id
-                : null) ||
-              (subByCustomer.has(evt.customer_id) ? evt.customer_id : null);
-
-            if (subKey) {
-              const subMeta = subByCustomer.get(subKey)!;
-              const evtUsage =
-                parseFloat(evt.usage_units) ||
-                (parseFloat(evt.input_tokens) || 0) +
-                  (parseFloat(evt.output_tokens) || 0);
-              const mtd = await getMtdUsage(subKey);
-              const enriched = enrichRevenueFromSub(subMeta, evtUsage, mtd);
-              revenue = enriched.revenue;
-              revenueSource = enriched.revenueSource;
-            }
-          }
-
-          if (revenueSource === "none") {
-            eventsSkipped++;
-            continue;
-          }
-
-          updates.push({ id: evt.id, revenue, source: revenueSource });
-        }
-
-        // Batch UPDATE
-        for (let i = 0; i < updates.length; i += BATCH_SIZE) {
-          const chunk = updates.slice(i, i + BATCH_SIZE);
-          const valueTuples: string[] = [];
-          const params: (number | string)[] = [];
-          let p = 1;
-          for (const u of chunk) {
-            valueTuples.push(`($${p++}::int, $${p++}::numeric, $${p++}::text)`);
-            params.push(u.id, u.revenue, u.source);
-          }
-          const sql = `
-            UPDATE observe_events AS e
-               SET revenue_amount = v.rev,
-                   revenue_source = v.src
-              FROM (VALUES ${valueTuples.join(", ")}) AS v(id, rev, src)
-             WHERE e.id = v.id
-          `;
-          const result = await pool.query(sql, params);
-          eventsUpdated += result.rowCount ?? 0;
-        }
-
-        const summary = {
-          events_updated: eventsUpdated,
-          events_skipped: eventsSkipped,
-          events_checked: events.rows.length,
-          customers_resolved: customersResolved,
-          customers_checked: unresolvedCustomers.rows.length,
-        };
-        console.warn(
-          `Revenue backfill complete for account ${accountId}:`,
-          JSON.stringify(summary),
-        );
+        const summary = await runRevenueBackfill(pool, userId, accountId);
         res.json(summary);
       } catch (error) {
         console.error("Revenue backfill error:", error);

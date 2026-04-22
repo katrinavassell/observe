@@ -9,6 +9,7 @@ import {
   getStripeClientForUser,
 } from "../stripe-client.js";
 import { calculateCostFromTokens } from "../model-pricing.js";
+import { runRevenueBackfill } from "./backfill.js";
 
 async function resolveAccountIdForUser(
   pool: Pool,
@@ -343,6 +344,13 @@ export async function syncStripeDataForUser(
     `UPDATE integrations SET last_synced_at = NOW() WHERE account_id = $1 AND provider = 'stripe'`,
     [resolvedAccountId],
   );
+
+  // Re-enrich existing events with freshly synced subscription/customer data
+  if (resolvedAccountId != null) {
+    runRevenueBackfill(pool, userId, resolvedAccountId).catch((err) =>
+      console.error("Post-sync revenue backfill failed:", err),
+    );
+  }
 
   return {
     customers: validCustomers.length,
