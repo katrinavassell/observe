@@ -110,7 +110,7 @@ for (const envVar of requiredEnvVars) {
 
 app.set("trust proxy", 1);
 
-app.get("/version", (_req, res) => res.json({ v: "2026-04-22-b" }));
+app.get("/version", (_req, res) => res.json({ v: "2026-04-22-c" }));
 
 // Auth middleware — verifies Clerk JWT, sets req.visitorId
 const ensureVisitor = createEnsureVisitor(pool);

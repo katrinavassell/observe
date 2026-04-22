@@ -1517,7 +1517,7 @@ fetch(<span class="text-amber-300">'{{ ingestUrl }}'</span>, {
     <!-- ================================================================== -->
     <details v-if="isLoggedIn" class="group">
       <summary
-        class="text-xs font-medium text-muted-foreground cursor-pointer hover:text-foreground transition-colors"
+        class="text-sm font-medium text-muted-foreground cursor-pointer hover:text-foreground transition-colors"
       >
         Reset account data
       </summary>
