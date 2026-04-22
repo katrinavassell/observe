@@ -208,22 +208,6 @@ function formatDate(date: string): string {
   });
 }
 
-function featureUsageTooltip(f: {
-  total_usage: number;
-  total_input_tokens: number | null;
-  total_output_tokens: number | null;
-}): string {
-  if (f.total_input_tokens != null || f.total_output_tokens != null) {
-    const inp = (f.total_input_tokens ?? 0).toLocaleString();
-    const out = (f.total_output_tokens ?? 0).toLocaleString();
-    return `${inp} in / ${out} out`;
-  }
-  if (f.total_usage) {
-    return `${f.total_usage.toLocaleString()} units (token split unavailable)`;
-  }
-  return "No usage recorded";
-}
-
 const avgEventsPerDay = computed(() => {
   if (!timeseries.value?.timeseries.length) return null;
   const ts = timeseries.value.timeseries;
