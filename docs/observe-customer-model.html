@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Observe — Customer Model: Two Layers</title>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0d1117; color: #c9d1d9; margin: 0; padding: 32px; max-width: 1100px; margin: 0 auto; }
+  h1 { color: #f0f6fc; font-size: 24px; margin-bottom: 8px; }
+  h2 { color: #f0f6fc; font-size: 18px; margin-top: 36px; border-bottom: 1px solid #21262d; padding-bottom: 8px; }
+  .subtitle { color: #8b949e; font-size: 14px; margin-top: 0; margin-bottom: 32px; }
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 20px; }
+  .card { background: #161b22; border-radius: 10px; padding: 24px; border: 1px solid #21262d; }
+  .card.layer1 { border-left: 4px solid #da3633; }
+  .card.layer2 { border-left: 4px solid #3fb950; }
+  .card h3 { margin-top: 0; font-size: 16px; }
+  .card.layer1 h3 { color: #f85149; }
+  .card.layer2 h3 { color: #3fb950; }
+  .label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; padding: 2px 8px; border-radius: 4px; display: inline-block; margin-bottom: 12px; }
+  .label.red { background: #da363322; color: #f85149; }
+  .label.green { background: #3fb95022; color: #3fb950; }
+  table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+  th, td { text-align: left; padding: 6px 10px; font-size: 13px; border-bottom: 1px solid #21262d; }
+  th { color: #8b949e; font-weight: 600; }
+  code { background: #21262d; padding: 2px 6px; border-radius: 4px; font-size: 12px; color: #79c0ff; }
+  .flow { background: #161b22; border-radius: 10px; padding: 24px; border: 1px solid #21262d; margin-top: 20px; }
+  .flow pre { margin: 0; font-size: 13px; line-height: 1.7; color: #c9d1d9; }
+  .red { color: #f85149; }
+  .green { color: #3fb950; }
+  .dim { color: #484f58; }
+  .warn { background: #d2992222; border: 1px solid #d2992244; border-radius: 8px; padding: 16px; margin-top: 24px; }
+  .warn h4 { color: #d29922; margin: 0 0 8px 0; font-size: 14px; }
+  .warn p { margin: 0; font-size: 13px; line-height: 1.6; }
+  .table-name { font-family: monospace; font-size: 13px; color: #79c0ff; }
+</style>
+</head>
+<body>
+
+<h1>Customer Model: Two Layers</h1>
+<p class="subtitle">Observe has two distinct "customer" concepts that must not be conflated.</p>
+
+<div class="two-col">
+  <div class="card layer1">
+    <span class="label red">Layer 1 — Observe's Customers</span>
+    <h3>Companies that use Observe</h3>
+    <p style="font-size:13px; color:#8b949e; margin-top:0;">The people who sign up, log in, and pay Tanso for Observe.</p>
+    <table>
+      <tr><th>Table</th><th>Key Columns</th></tr>
+      <tr><td class="table-name">users</td><td><code>email</code>, <code>visitor_id</code>, <code>stripe_customer_id</code>, <code>stripe_plan</code></td></tr>
+      <tr><td class="table-name">accounts</td><td><code>name</code>, <code>clerk_org_id</code>, <code>stripe_customer_id</code>, <code>stripe_plan</code></td></tr>
+      <tr><td class="table-name">user_accounts</td><td><code>user_id</code>, <code>account_id</code>, <code>role</code></td></tr>
+    </table>
+    <p style="font-size:12px; color:#8b949e; margin-top:12px;">
+      <strong>Stripe context:</strong> Tanso's own Stripe account.<br>
+      <code>users.stripe_customer_id</code> = this user as a paying customer of Tanso.<br>
+      <code>accounts.stripe_plan</code> = free | growth (Observe pricing tier).<br>
+      Managed by <code>/billing/webhook</code> and <code>/billing/checkout</code>.
+    </p>
+  </div>
+
+  <div class="card layer2">
+    <span class="label green">Layer 2 — Their Customers' Customers</span>
+    <h3>End-users of the Observe customer's product</h3>
+    <p style="font-size:13px; color:#8b949e; margin-top:0;">The people whose usage/costs/revenue the Observe customer tracks.</p>
+    <table>
+      <tr><th>Table</th><th>Key Columns</th></tr>
+      <tr><td class="table-name">customers</td><td><code>customer_id</code>, <code>name</code>, <code>email</code>, <code>stripe_customer_id</code></td></tr>
+      <tr><td class="table-name">subscriptions</td><td><code>subscription_id</code>, <code>customer_id</code>, <code>plan_id</code>, <code>pricing_model</code></td></tr>
+      <tr><td class="table-name">plans</td><td><code>plan_id</code>, <code>name</code>, <code>price_amount</code></td></tr>
+      <tr><td class="table-name">observe_events</td><td><code>customer_id</code>, <code>revenue_amount</code>, <code>cost_amount</code></td></tr>
+    </table>
+    <p style="font-size:12px; color:#8b949e; margin-top:12px;">
+      <strong>Stripe context:</strong> The Observe customer's own Stripe account.<br>
+      <code>customers.stripe_customer_id</code> = the end-user's Stripe ID (cus_*).<br>
+      Connected via <code>integrations</code> table (their API key, not ours).<br>
+      Managed by <code>/integrations/stripe/connect</code> and <code>syncStripeDataForUser()</code>.
+    </p>
+  </div>
+</div>
+
+<h2>Two Separate Stripe Connections</h2>
+<div class="two-col">
+  <div class="card layer1">
+    <h3 style="color: #f85149; font-size: 14px;">Tanso's Stripe (our billing)</h3>
+    <table>
+      <tr><th>What</th><th>Where</th></tr>
+      <tr><td>API keys</td><td>Env vars: <code>STRIPE_SECRET_KEY</code>, <code>STRIPE_PUBLISHABLE_KEY</code></td></tr>
+      <tr><td>Webhook</td><td><code>POST /billing/webhook</code></td></tr>
+      <tr><td>Checkout</td><td><code>POST /billing/checkout</code></td></tr>
+      <tr><td>Portal</td><td><code>POST /billing/portal</code></td></tr>
+      <tr><td>Writes to</td><td><code>users.stripe_plan</code>, <code>accounts.stripe_plan</code></td></tr>
+    </table>
+  </div>
+  <div class="card layer2">
+    <h3 style="color: #3fb950; font-size: 14px;">User's Stripe (their revenue data)</h3>
+    <table>
+      <tr><th>What</th><th>Where</th></tr>
+      <tr><td>API key</td><td><code>integrations.encrypted_api_key</code> (per account)</td></tr>
+      <tr><td>Connect</td><td><code>POST /integrations/stripe/connect</code></td></tr>
+      <tr><td>Sync</td><td><code>POST /integrations/stripe/sync</code></td></tr>
+      <tr><td>Writes to</td><td><code>customers</code>, <code>subscriptions</code>, <code>plans</code></td></tr>
+      <tr><td>Enriches</td><td><code>observe_events.revenue_amount</code></td></tr>
+    </table>
+  </div>
+</div>
+
+<div class="warn">
+  <h4>Where They Can Get Conflated</h4>
+  <p>
+    <strong>1. Column naming:</strong> <code>users.stripe_customer_id</code> (Layer 1) vs <code>customers.stripe_customer_id</code> (Layer 2) — same column name, completely different Stripe accounts.<br><br>
+    <strong>2. Billing routes vs integration routes:</strong> <code>/billing/*</code> uses Tanso's Stripe keys. <code>/integrations/stripe/*</code> uses the user's encrypted key from <code>integrations</code> table. If code accidentally uses the wrong Stripe client, it hits the wrong account.<br><br>
+    <strong>3. "customer" in code:</strong> In routes, "customer" sometimes means the Observe user (billing context) and sometimes means their end-user (analytics context). The <code>customers</code> table only holds Layer 2 data, but <code>users</code>/<code>accounts</code> also have customer-like fields.
+  </p>
+</div>
+
+<h2>Data Flow</h2>
+<div class="flow">
+<pre>
+<span class="red">LAYER 1: Observe's own billing</span>
+<span class="dim">User signs up</span> -> Clerk auth -> <code>users</code> + <code>accounts</code> + <code>user_accounts</code>
+<span class="dim">User upgrades</span> -> <code>/billing/checkout</code> -> Tanso's Stripe -> webhook -> <code>accounts.stripe_plan = 'growth'</code>
+
+<span class="green">LAYER 2: User's customer analytics</span>
+<span class="dim">User connects Stripe</span> -> <code>/integrations/stripe/connect</code> -> their API key encrypted -> <code>integrations</code>
+<span class="dim">Sync runs</span>          -> <code>syncStripeDataForUser()</code> -> their Stripe API -> <code>customers</code> + <code>subscriptions</code> + <code>plans</code>
+<span class="dim">SDK event arrives</span>  -> <code>/events/ingest</code> -> auto-create <code>customers</code> row -> enrich revenue from <code>subscriptions</code>
+<span class="dim">Name resolution</span>   -> <code>customers.stripe_customer_id</code> -> their Stripe API -> update <code>customers.name</code>, <code>email</code>
+<span class="dim">Revenue backfill</span>  -> <code>runRevenueBackfill()</code> -> re-enrich <code>observe_events.revenue_amount</code>
+</pre>
+</div>
+
+</body>
+</html>
