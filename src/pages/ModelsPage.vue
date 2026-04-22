@@ -474,6 +474,19 @@ const filteredPricing = computed(() => {
           {{ models.reduce((s, m) => s + m.event_count, 0).toLocaleString() }}
         </div>
       </div>
+      <div class="rounded-lg border bg-card p-4">
+        <div class="text-xs text-muted-foreground mb-1">Avg Cost/Event</div>
+        <div class="text-2xl font-semibold">
+          {{
+            formatCurrency(
+              models.reduce((s, m) => s + m.event_count, 0) > 0
+                ? models.reduce((s, m) => s + m.total_cost, 0) /
+                    models.reduce((s, m) => s + m.event_count, 0)
+                : 0,
+            )
+          }}
+        </div>
+      </div>
     </div>
 
     <!-- Cost by Provider Chart -->
