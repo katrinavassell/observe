@@ -740,7 +740,7 @@ const excludedCount = computed(() => {
     <!-- Main content -->
     <template v-else>
       <!-- KPI cards -->
-      <div class="grid grid-cols-2 sm:grid-cols-3 gap-4">
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <Card class="p-4">
           <div
             class="flex items-center gap-1 text-xs text-muted-foreground uppercase tracking-wider"
@@ -789,8 +789,8 @@ const excludedCount = computed(() => {
                 <Info class="h-3.5 w-3.5 text-muted-foreground cursor-help" />
               </TooltipTrigger>
               <TooltipContent class="max-w-xs"
-                >Weighted average margin across all customers with
-                revenue.</TooltipContent
+                >Sum of all tracked AI costs across all
+                customers.</TooltipContent
               >
             </Tooltip>
           </div>
