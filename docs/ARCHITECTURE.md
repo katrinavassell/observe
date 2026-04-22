@@ -254,7 +254,7 @@ Single Express app on port 3001, proxied by Vite at `/api/*`. The `/api` prefix 
 
 | Middleware | Purpose |
 |-----------|---------|
-| `@supabase/supabase-js` | Auth (JWT-based; no server sessions) |
+| `@clerk/backend` | Auth (Clerk JWT verification) |
 | `ensureVisitor` | Creates visitor ID if not in session, ensures data isolation |
 | `helmet` | Security headers |
 | `cors` | Restrict origins to known frontends |
@@ -262,26 +262,26 @@ Single Express app on port 3001, proxied by Vite at `/api/*`. The `/api` prefix 
 
 ### Authentication Model
 
-Supabase-managed email/password auth:
+Clerk-managed authentication (migrated from Supabase in PR #165):
 
 ```
-1. Signup → Supabase creates user; local `accounts` row linked by visitor_id
+1. Signup → Clerk creates user; local `accounts` row linked by visitor_id
          │
          ▼
-2. Login → Supabase issues JWT; frontend sends it as a Bearer token
+2. Login → Clerk issues JWT; frontend sends it as a Bearer token
          │
          ▼
-3. `ensureVisitor` verifies JWT via supabase.auth.getUser and sets visitorId
+3. `ensureVisitor` verifies JWT via Clerk's `verifyToken` and sets visitorId + accountId
          │
          ▼
-4. All DB queries filter by user_id = visitorId
+4. All DB queries filter by account_id (org-scoped, not user-scoped)
 ```
 
 An auth guard redirects unauthenticated users to `/signup`.
 
 ### Data Isolation
 
-All queries are scoped by `user_id` (visitor ID). Team members share data through the `visitor_org_map` table which maps visitors to organizations.
+All queries are scoped by `account_id` (organization). Team members share data through Clerk organizations.
 
 ### Stripe Integration
 

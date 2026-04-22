@@ -257,7 +257,7 @@ Same for Anthropic.
 
 ## Alert Endpoints
 
-Alerts are free for all users. 17 metric types across 5 categories: cost, margin, abuse/runaway, pricing, and concentration risk. Each alert type includes a Tanso upsell CTA linking to tansohq.com.
+Alerts are free for all users. 14 metric types across 5 categories: cost, margin, abuse/runaway, model, and concentration risk. 8 aggregate metrics evaluate globally; 6 per-customer triggers evaluate per customer. Each alert type includes a Tanso upsell CTA linking to tansohq.com.
 
 ### GET /alerts
 

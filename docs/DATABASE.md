@@ -74,9 +74,20 @@ The unified event store. All data (CSV, Stripe, sample, SDK, proxy) flows throug
 | `inference_confidence` | NUMERIC(3,2) | NULL | Confidence score (0-1) |
 | `inferred_from_source` | TEXT | NULL | Source event used for inference |
 | `original_event_id` | INTEGER | NULL | Link to original event if inferred |
+| `input_tokens` | INT | NULL | Input token count |
+| `output_tokens` | INT | NULL | Output token count |
+| `tokens_source` | TEXT | NULL | Where token counts came from (`direct`, `backfill`) |
+| `revenue_source` | TEXT | DEFAULT 'none' | How revenue was attributed (`explicit`, `feature_pricing`, `per_unit`, `tiered`, `hybrid`, `subscription`, `none`) |
+| `agent_id` | TEXT | NULL | Which agent made the call |
+| `meta` | JSONB | DEFAULT '{}' | System metadata, e.g. `{ stripe_customer_id: "cus_xxx" }` |
 | `idempotency_key` | TEXT | NULL | Deduplicate retries |
 | `request_body` | JSONB | NULL | Proxy request body (for request explorer) |
 | `response_body` | JSONB | NULL | Proxy response body |
+| `trace_id` | TEXT | NULL | Distributed trace ID |
+| `span_id` | TEXT | NULL | Span ID within a trace |
+| `parent_span_id` | TEXT | NULL | Parent span for nested calls |
+| `duration_ms` | INTEGER | NULL | Wall-clock latency of the call |
+| `cost_type` | TEXT | DEFAULT 'llm' | Category: `llm`, `vector_db`, `compute`, `api`, `database`, `generic` |
 | `created_at` | TIMESTAMPTZ | DEFAULT NOW() | Record creation |
 
 **Indexes:**
