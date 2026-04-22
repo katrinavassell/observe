@@ -609,31 +609,7 @@ accounts ┘                   │
 
     <!-- DDS-4,5 moved to DONE column -->
 
-    <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #d29922; border-radius:6px; padding:10px; margin-bottom:8px;">
-      <div style="font-size:12px; font-weight:600; color:#f0f6fc;">[DDS-6] Add Gross Profit column to Customers</div>
-      <div style="font-size:11px; color:#8b949e; margin-top:4px;">Add "Profit" column: Revenue - Cost in absolute $. Sortable. Green when positive, red when negative. File: <code>CohortsPage.vue</code>. Pattern: existing Revenue column fallback logic at line 963. Done: Profit column renders, sorts, negative values red.</div>
-      <div style="font-size:10px; color:#d29922; margin-top:6px;">TIER 2 &middot; Customers &middot; DDS &middot; Independent</div>
-    </div>
-
-    <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #d29922; border-radius:6px; padding:10px; margin-bottom:8px;">
-      <div style="font-size:12px; font-weight:600; color:#f0f6fc;">[DDS-7] Add cost-per-event to feature breakdown</div>
-      <div style="font-size:11px; color:#8b949e; margin-top:4px;">Show <code>total_cost / event_count</code> per feature in Analytics "By Feature" tab. Distinguishes "inherently expensive" from "heavily used". File: <code>AnalyticsPage.vue</code>. Use <code>fmt()</code> (handles sub-cent). Done: high-cost low-volume feature shows high per-event cost.</div>
-      <div style="font-size:10px; color:#d29922; margin-top:6px;">TIER 2 &middot; Analytics &middot; DDS &middot; Independent</div>
-    </div>
-
-    <!-- DDS-8 moved to DONE column -->
-
-    <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #d29922; border-radius:6px; padding:10px; margin-bottom:8px;">
-      <div style="font-size:12px; font-weight:600; color:#f0f6fc;">[DDS-9] Re-enable Customer Detail signals</div>
-      <div style="font-size:11px; color:#8b949e; margin-top:4px;">Remove <code>v-if="false"</code> gate at <code>CustomerDetailPage.vue:403</code>. Remove model-swap signal (compares unrelated families). Add magnitude to declining-usage signal ("down X%"). Revenue guard at line 122 already works. File: <code>CustomerDetailPage.vue</code>. Done: unprofitable/zero-revenue/declining signals show; no model-swap noise.</div>
-      <div style="font-size:10px; color:#d29922; margin-top:6px;">TIER 2 &middot; Customer Detail &middot; DDS &middot; Independent</div>
-    </div>
-
-    <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #d29922; border-radius:6px; padding:10px; margin-bottom:8px;">
-      <div style="font-size:12px; font-weight:600; color:#f0f6fc;">[DDS-10] Show "Bundled" label for bundle features</div>
-      <div style="font-size:11px; color:#8b949e; margin-top:4px;">In CustomerDetailPage "Usage by Feature" table, show <code>&lt;Badge&gt;Bundled&lt;/Badge&gt;</code> instead of "---" when revenue is null on a flat/bundled plan. Users think data is missing. File: <code>CustomerDetailPage.vue</code>. Done: flat-plan customer shows "Bundled" badges; metered customer shows actual revenue.</div>
-      <div style="font-size:10px; color:#d29922; margin-top:6px;">TIER 2 &middot; Customer Detail &middot; DDS &middot; Independent</div>
-    </div>
+    <!-- DDS-6,7,9,10 moved to DONE column -->
 
     <!-- ── UX audit findings (2026-04-22) ── -->
 
@@ -643,27 +619,11 @@ accounts ┘                   │
       <div style="font-size:10px; color:#d29922; margin-top:6px;">UX &middot; Guest Experience &middot; Independent</div>
     </div>
 
-    <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #d29922; border-radius:6px; padding:10px; margin-bottom:8px;">
-      <div style="font-size:12px; font-weight:600; color:#f0f6fc;">[UX-2] Sample traces missing trace detail data</div>
-      <div style="font-size:11px; color:#8b949e; margin-top:4px;">Guest preview traces show in the list but clicking shows no span detail. Sample data in <code>src/lib/guest-preview.ts</code> needs trace_id, span_id, parent_span_id, and duration_ms populated so the trace detail view renders. File: <code>src/lib/guest-preview.ts</code>. Done: guest traces are clickable and show span hierarchy.</div>
-      <div style="font-size:10px; color:#d29922; margin-top:6px;">UX &middot; Guest Experience &middot; Independent</div>
-    </div>
-
-    <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #f85149; border-radius:6px; padding:10px; margin-bottom:8px;">
-      <div style="font-size:12px; font-weight:600; color:#f0f6fc;">[BUG] Events page "0 total events" counter</div>
-      <div style="font-size:11px; color:#8b949e; margin-top:4px;">Events page header shows "0 total events" badge while body shows "28 / 10,000 events this month" and event rows exist. Counter pulls from a different source than the table. File: <code>src/pages/EventsPage.vue</code>. Done: header counter matches actual event count.</div>
-      <div style="font-size:10px; color:#f85149; margin-top:6px;">BUG &middot; Events &middot; Audit 2026-04-22</div>
-    </div>
-
-    <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #d29922; border-radius:6px; padding:10px; margin-bottom:8px;">
-      <div style="font-size:12px; font-weight:600; color:#f0f6fc;">[UX-3] Models page Usage column missing unit label</div>
-      <div style="font-size:11px; color:#8b949e; margin-top:4px;">Models table "Usage" column shows raw numbers (1,173 / 4,118) with no unit. Users can't tell if these are tokens, requests, or something else. Add "(tokens)" to column header or a tooltip. File: <code>src/pages/ModelsPage.vue</code>. Done: column header says "Usage (tokens)" or tooltip explains.</div>
-      <div style="font-size:10px; color:#d29922; margin-top:6px;">UX &middot; Models &middot; Independent</div>
-    </div>
+    <!-- UX-2,3 and events bug moved to DONE column -->
 
     <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #d29922; border-radius:6px; padding:10px; margin-bottom:8px;">
       <div style="font-size:12px; font-weight:600; color:#f0f6fc;">[UX-4] Customers page empty state despite customers existing</div>
-      <div style="font-size:11px; color:#8b949e; margin-top:4px;">Customers/Cohorts page shows empty state while Analytics → By Customer lists 14 customers. Likely related to customer ID mismatch bug (BUG card below) — cohorts query returns 0 rows because event customer_ids don't match subscription customer_ids after reset. Fix depends on resolving the ID mismatch. Files: <code>server/routes/cohorts.ts</code>. Done: customers visible on cohorts page when they exist in events.</div>
+      <div style="font-size:11px; color:#8b949e; margin-top:4px;">Cohorts query requires non-Stripe SDK events. Analytics "By Customer" has no such filter. Not a code bug — root cause is customer ID mismatch after account reset. Fix depends on resolving that bug.</div>
       <div style="font-size:10px; color:#d29922; margin-top:6px;">UX &middot; Customers &middot; Depends on BUG: Customer ID mismatch</div>
     </div>
 
@@ -761,6 +721,66 @@ accounts ┘                   │
       <div style="font-size:12px; font-weight:600; color:#f0f6fc;">[DDS-8] Margin benchmark tooltip</div>
       <div style="font-size:11px; color:#8b949e; margin-top:4px;">MarginBadge shadcn Tooltip: "AI SaaS target: 60-80% gross margin."</div>
       <div style="font-size:10px; color:#3fb950; margin-top:6px;">DDS &middot; c61cbc4</div>
+    </div>
+
+    <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #3fb950; border-radius:6px; padding:10px; margin-bottom:8px;">
+      <div style="font-size:12px; font-weight:600; color:#f0f6fc;">[DDS-6] Gross Profit column on Customers</div>
+      <div style="font-size:11px; color:#8b949e; margin-top:4px;">Revenue - Cost in absolute $. Green/red coloring.</div>
+      <div style="font-size:10px; color:#3fb950; margin-top:6px;">DDS &middot; d4988ee</div>
+    </div>
+
+    <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #3fb950; border-radius:6px; padding:10px; margin-bottom:8px;">
+      <div style="font-size:12px; font-weight:600; color:#f0f6fc;">[DDS-7] Cost-per-event on feature breakdown</div>
+      <div style="font-size:11px; color:#8b949e; margin-top:4px;">Inline ($/event) next to feature cost bars.</div>
+      <div style="font-size:10px; color:#3fb950; margin-top:6px;">DDS &middot; 6b22d32</div>
+    </div>
+
+    <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #3fb950; border-radius:6px; padding:10px; margin-bottom:8px;">
+      <div style="font-size:12px; font-weight:600; color:#f0f6fc;">[DDS-9] Customer Detail signals re-enabled</div>
+      <div style="font-size:11px; color:#8b949e; margin-top:4px;">Removed v-if="false" gate. Removed model-swap signal. Added trend magnitude.</div>
+      <div style="font-size:10px; color:#3fb950; margin-top:6px;">DDS &middot; 92c6c71</div>
+    </div>
+
+    <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #3fb950; border-radius:6px; padding:10px; margin-bottom:8px;">
+      <div style="font-size:12px; font-weight:600; color:#f0f6fc;">[DDS-10] Bundled badge for flat-pricing features</div>
+      <div style="font-size:11px; color:#8b949e; margin-top:4px;">Shows "Bundled" instead of "---" in feature revenue column for flat subs.</div>
+      <div style="font-size:10px; color:#3fb950; margin-top:6px;">DDS &middot; 92c6c71</div>
+    </div>
+
+    <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #3fb950; border-radius:6px; padding:10px; margin-bottom:8px;">
+      <div style="font-size:12px; font-weight:600; color:#f0f6fc;">[UX-2] Guest trace span details</div>
+      <div style="font-size:11px; color:#8b949e; margin-top:4px;">All 5 guest traces now have clickable span hierarchies with realistic data.</div>
+      <div style="font-size:10px; color:#3fb950; margin-top:6px;">UX &middot; 4fbd470</div>
+    </div>
+
+    <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #3fb950; border-radius:6px; padding:10px; margin-bottom:8px;">
+      <div style="font-size:12px; font-weight:600; color:#f0f6fc;">[UX-3] Usage (tokens) label on Models</div>
+      <div style="font-size:11px; color:#8b949e; margin-top:4px;">Column header now says "Usage (tokens)".</div>
+      <div style="font-size:10px; color:#3fb950; margin-top:6px;">UX &middot; b0120c7</div>
+    </div>
+
+    <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #3fb950; border-radius:6px; padding:10px; margin-bottom:8px;">
+      <div style="font-size:12px; font-weight:600; color:#f0f6fc;">Events page counter fix</div>
+      <div style="font-size:11px; color:#8b949e; margin-top:4px;">Header badge now falls back to events.length when total is falsy.</div>
+      <div style="font-size:10px; color:#3fb950; margin-top:6px;">BUG FIX &middot; d26ed62</div>
+    </div>
+
+    <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #3fb950; border-radius:6px; padding:10px; margin-bottom:8px;">
+      <div style="font-size:12px; font-weight:600; color:#f0f6fc;">Model customer overlap hint + Data Sources guest preview</div>
+      <div style="font-size:11px; color:#8b949e; margin-top:4px;">"per model" sub-label, duplicate accordion fix, connected-state preview for guests.</div>
+      <div style="font-size:10px; color:#3fb950; margin-top:6px;">UX &middot; 2ee37f1</div>
+    </div>
+
+    <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #3fb950; border-radius:6px; padding:10px; margin-bottom:8px;">
+      <div style="font-size:12px; font-weight:600; color:#f0f6fc;">Revenue vs Cost chart MRR fallback</div>
+      <div style="font-size:11px; color:#8b949e; margin-top:4px;">Chart shows subscription MRR as flat line when per-event revenue is $0 (flat subs).</div>
+      <div style="font-size:10px; color:#3fb950; margin-top:6px;">BUG FIX &middot; 09935e1</div>
+    </div>
+
+    <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #3fb950; border-radius:6px; padding:10px; margin-bottom:8px;">
+      <div style="font-size:12px; font-weight:600; color:#f0f6fc;">Gross margin >99% edge case</div>
+      <div style="font-size:11px; color:#8b949e; margin-top:4px;">Shows ">99%" instead of rounding to 100% when cost is non-zero.</div>
+      <div style="font-size:10px; color:#3fb950; margin-top:6px;">BUG FIX &middot; 7f5aa48</div>
     </div>
 
     <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #3fb950; border-radius:6px; padding:10px; margin-bottom:8px;">
