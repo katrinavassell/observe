@@ -28,14 +28,15 @@ async function resolveStripeCustomerNames(
   pool: Pool,
   userId: string,
   accountId: number | null,
-  customerIds: string[],
+  customerStripeMap: Map<string, string>,
 ): Promise<void> {
-  if (customerIds.length === 0 || accountId == null) return;
+  if (customerStripeMap.size === 0 || accountId == null) return;
+  const dbIds = [...customerStripeMap.keys()];
   const unresolved = await pool.query(
     `SELECT customer_id FROM customers
      WHERE account_id = $1 AND customer_id = ANY($2)
        AND (name = customer_id OR name IS NULL)`,
-    [accountId, customerIds],
+    [accountId, dbIds],
   );
   if (unresolved.rows.length === 0) return;
   let stripe;
@@ -49,8 +50,10 @@ async function resolveStripeCustomerNames(
     return;
   }
   for (const row of unresolved.rows) {
+    const stripeId = customerStripeMap.get(row.customer_id);
+    if (!stripeId) continue;
     try {
-      const cust = await stripe.customers.retrieve(row.customer_id);
+      const cust = await stripe.customers.retrieve(stripeId);
       if (cust.deleted) continue;
       const name = cust.name || cust.email || row.customer_id;
       const email = cust.email || null;
@@ -63,6 +66,8 @@ async function resolveStripeCustomerNames(
       console.error(
         "resolveStripeCustomerNames: failed to resolve",
         row.customer_id,
+        "via",
+        stripeId,
         err,
       );
       continue;
@@ -1307,6 +1312,42 @@ export function createEventsRoutes(
           }
         }
 
+        // Auto-create customer records for new customers in this batch
+        if (inserted > 0 && accountId != null) {
+          const uniqueCustomerIds = [
+            ...new Set(
+              validEvents
+                .map(
+                  (e: { customerReferenceId?: string }) =>
+                    e.customerReferenceId,
+                )
+                .filter((id): id is string => typeof id === "string" && !!id),
+            ),
+          ];
+          if (uniqueCustomerIds.length > 0) {
+            const custPlaceholders: string[] = [];
+            const custValues: unknown[] = [];
+            let custIdx = 1;
+            for (const cid of uniqueCustomerIds) {
+              custPlaceholders.push(
+                `($${custIdx}, $${custIdx + 1}, $${custIdx + 2}, $${custIdx + 3})`,
+              );
+              custValues.push(userId, accountId, cid, cid);
+              custIdx += 4;
+            }
+            pool
+              .query(
+                `INSERT INTO customers (user_id, account_id, customer_id, name)
+                 VALUES ${custPlaceholders.join(", ")}
+                 ON CONFLICT DO NOTHING`,
+                custValues,
+              )
+              .catch((err) =>
+                console.error("Auto-create customers failed:", err),
+              );
+          }
+        }
+
         // Auto-trigger inference profile learning in the background (fire-and-forget)
         if (inserted > 0) {
           // First-ever SDK event for this user — fire the activation milestone.
@@ -1382,12 +1423,29 @@ export function createEventsRoutes(
               console.error("checkCustomerAlerts error (ingest):", err),
             );
           }
-          // Resolve Stripe customer names for any cus_* IDs missing a real name
+          // Resolve Stripe customer names — map each customer_id to
+          // the Stripe ID to look up (either the ID itself if cus_*, or
+          // meta.stripe_customer_id if provided)
+          const customerStripeMap = new Map<string, string>();
+          for (const evt of validEvents) {
+            const cid = (evt as { customerReferenceId?: string })
+              .customerReferenceId;
+            if (!cid) continue;
+            if (cid.startsWith("cus_")) {
+              customerStripeMap.set(cid, cid);
+            }
+            const metaStripeId = (
+              evt as { meta?: { stripe_customer_id?: string } }
+            ).meta?.stripe_customer_id;
+            if (metaStripeId) {
+              customerStripeMap.set(cid, metaStripeId);
+            }
+          }
           resolveStripeCustomerNames(
             pool,
             userId!,
             accountId,
-            alertCustomerIds.filter((id) => id.startsWith("cus_")),
+            customerStripeMap,
           ).catch((err) =>
             console.error("resolveStripeCustomerNames error (ingest):", err),
           );
