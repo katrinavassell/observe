@@ -155,9 +155,7 @@ const hasRevenue = computed(() => totalRevenue.value > 0);
 
 const grossMarginPct = computed(() => {
   if (totalRevenue.value === 0) return null;
-  return Math.round(
-    ((totalRevenue.value - totalCost.value) / totalRevenue.value) * 100,
-  );
+  return ((totalRevenue.value - totalCost.value) / totalRevenue.value) * 100;
 });
 
 const sortedFeatures = computed(() => {
