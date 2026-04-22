@@ -178,13 +178,27 @@ export async function runRevenueBackfill(
     );
 
   // ── 2. Resolve customer names from Stripe ─────────────────────────
-  const unresolvedCustomers = await pool.query(
-    `SELECT customer_id, stripe_customer_id FROM customers
-     WHERE account_id = $1
-       AND stripe_customer_id IS NOT NULL
-       AND (name = customer_id OR name IS NULL)`,
-    [accountId],
-  );
+  let unresolvedCustomers: { rows: Array<Record<string, unknown>> } = {
+    rows: [],
+  };
+  try {
+    unresolvedCustomers = await pool.query(
+      `SELECT customer_id, stripe_customer_id FROM customers
+       WHERE account_id = $1
+         AND stripe_customer_id IS NOT NULL
+         AND (name = customer_id OR name IS NULL)`,
+      [accountId],
+    );
+  } catch {
+    // stripe_customer_id column may not exist yet — fall back to cus_* IDs
+    unresolvedCustomers = await pool.query(
+      `SELECT customer_id FROM customers
+       WHERE account_id = $1
+         AND customer_id LIKE 'cus_%'
+         AND (name = customer_id OR name IS NULL)`,
+      [accountId],
+    );
+  }
 
   if (unresolvedCustomers.rows.length > 0) {
     let stripe;
@@ -197,7 +211,7 @@ export async function runRevenueBackfill(
     if (stripe) {
       for (const row of unresolvedCustomers.rows) {
         const cid = row.customer_id as string;
-        const stripeId = row.stripe_customer_id as string;
+        const stripeId = (row.stripe_customer_id as string) || cid;
         try {
           const cust = await stripe.customers.retrieve(stripeId);
           if (cust.deleted) continue;
@@ -233,14 +247,18 @@ export async function runRevenueBackfill(
   }
 
   // Build app_customer_id -> stripe_customer_id bridge from customers table
-  const bridgeResult = await pool.query(
-    `SELECT customer_id, stripe_customer_id FROM customers
-     WHERE account_id = $1 AND stripe_customer_id IS NOT NULL`,
-    [accountId],
-  );
   const appToStripe = new Map<string, string>();
-  for (const row of bridgeResult.rows) {
-    appToStripe.set(row.customer_id, row.stripe_customer_id);
+  try {
+    const bridgeResult = await pool.query(
+      `SELECT customer_id, stripe_customer_id FROM customers
+       WHERE account_id = $1 AND stripe_customer_id IS NOT NULL`,
+      [accountId],
+    );
+    for (const row of bridgeResult.rows) {
+      appToStripe.set(row.customer_id, row.stripe_customer_id);
+    }
+  } catch {
+    // stripe_customer_id column may not exist yet
   }
 
   // Load subscriptions keyed by Stripe customer ID

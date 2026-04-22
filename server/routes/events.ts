@@ -33,7 +33,7 @@ async function resolveStripeCustomerNames(
   if (customerStripeMap.size === 0 || accountId == null) return;
   const dbIds = [...customerStripeMap.keys()];
   const unresolved = await pool.query(
-    `SELECT customer_id, stripe_customer_id FROM customers
+    `SELECT customer_id FROM customers
      WHERE account_id = $1 AND customer_id = ANY($2)
        AND (name = customer_id OR name IS NULL)`,
     [accountId, dbIds],
@@ -50,8 +50,7 @@ async function resolveStripeCustomerNames(
     return;
   }
   for (const row of unresolved.rows) {
-    const stripeId =
-      row.stripe_customer_id || customerStripeMap.get(row.customer_id);
+    const stripeId = customerStripeMap.get(row.customer_id);
     if (!stripeId) continue;
     try {
       const cust = await stripe.customers.retrieve(stripeId);
@@ -61,11 +60,10 @@ async function resolveStripeCustomerNames(
       await pool.query(
         `UPDATE customers
          SET name = $1, email = COALESCE(customers.email, $2),
-             stripe_customer_id = COALESCE(customers.stripe_customer_id, $3),
              updated_at = NOW()
-         WHERE account_id = $4 AND customer_id = $5
+         WHERE account_id = $3 AND customer_id = $4
            AND (name = customer_id OR name IS NULL)`,
-        [name, email, stripeId, accountId, row.customer_id],
+        [name, email, accountId, row.customer_id],
       );
     } catch (err) {
       console.error(
@@ -1091,14 +1089,18 @@ export function createEventsRoutes(
           .map((e) => e.customerReferenceId)
           .filter((id) => !appToStripe.has(id));
         if (unmappedIds.length > 0 && accountId != null) {
-          const bridgeResult = await pool.query(
-            `SELECT customer_id, stripe_customer_id FROM customers
-             WHERE account_id = $1 AND customer_id = ANY($2)
-               AND stripe_customer_id IS NOT NULL`,
-            [accountId, unmappedIds],
-          );
-          for (const row of bridgeResult.rows) {
-            appToStripe.set(row.customer_id, row.stripe_customer_id);
+          try {
+            const bridgeResult = await pool.query(
+              `SELECT customer_id, stripe_customer_id FROM customers
+               WHERE account_id = $1 AND customer_id = ANY($2)
+                 AND stripe_customer_id IS NOT NULL`,
+              [accountId, unmappedIds],
+            );
+            for (const row of bridgeResult.rows) {
+              appToStripe.set(row.customer_id, row.stripe_customer_id);
+            }
+          } catch {
+            // stripe_customer_id column may not exist yet
           }
         }
 
@@ -1359,25 +1361,18 @@ export function createEventsRoutes(
             const custPlaceholders: string[] = [];
             const custValues: unknown[] = [];
             let custIdx = 1;
-            for (const [cid, stripeId] of customerMetaMap) {
+            for (const [cid] of customerMetaMap) {
               custPlaceholders.push(
-                `($${custIdx}, $${custIdx + 1}, $${custIdx + 2}, $${custIdx + 3}, $${custIdx + 4})`,
+                `($${custIdx}, $${custIdx + 1}, $${custIdx + 2}, $${custIdx + 3})`,
               );
-              custValues.push(
-                userId,
-                accountId,
-                cid,
-                cid,
-                cid.startsWith("cus_") ? cid : stripeId,
-              );
-              custIdx += 5;
+              custValues.push(userId, accountId, cid, cid);
+              custIdx += 4;
             }
             pool
               .query(
-                `INSERT INTO customers (user_id, account_id, customer_id, name, stripe_customer_id)
+                `INSERT INTO customers (user_id, account_id, customer_id, name)
                  VALUES ${custPlaceholders.join(", ")}
-                 ON CONFLICT (user_id, customer_id) DO UPDATE
-                   SET stripe_customer_id = COALESCE(customers.stripe_customer_id, EXCLUDED.stripe_customer_id)`,
+                 ON CONFLICT DO NOTHING`,
                 custValues,
               )
               .catch((err) =>
