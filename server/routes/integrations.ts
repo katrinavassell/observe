@@ -83,6 +83,9 @@ export async function syncStripeDataForUser(
     userId,
     accountId,
   );
+  if (resolvedAccountId == null) {
+    throw new Error("Cannot sync Stripe: no account_id resolved for this user");
+  }
   const stripe = apiKey
     ? createStripeClientFromKey(apiKey)
     : await getStripeClientForUser(pool, userId, resolvedAccountId);
@@ -1065,7 +1068,8 @@ export function createIntegrationsRoutes(
         });
       } catch (err) {
         console.error("Stripe connect error:", err);
-        res.status(500).json({ error: "Failed to connect Stripe" });
+        const detail = err instanceof Error ? err.message : String(err);
+        res.status(500).json({ error: "Failed to connect Stripe", detail });
       }
     },
   );
