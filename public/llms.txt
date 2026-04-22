@@ -232,7 +232,7 @@ curl -X POST https://observe.tansohq.com/api/events/ingest \
     {
       // REQUIRED
       "eventName":           string,  // short label, e.g. "chat", "embed", "eval", "api_call"
-      "customerReferenceId": string,  // your end-user's ID (Stripe customer ID recommended)
+      "customerReferenceId": string,  // your end-user's stable ID. If connecting Stripe, link via meta.stripe_customer_id (see Revenue section below).
       "featureKey":          string,  // product feature powered by this call
 
       // STRONGLY RECOMMENDED — enables automatic cost computation from token counts
@@ -253,6 +253,7 @@ curl -X POST https://observe.tansohq.com/api/events/ingest \
       "traceId":             string,  // group spans into a trace
       "spanId":              string,  // this span's ID
       "parentSpanId":        string,  // parent span (for nested agent calls)
+      "meta":                object,  // system-level metadata, e.g. { stripe_customer_id: "cus_xxx" } for Stripe revenue matching
       "properties":          object,  // arbitrary JSON metadata (searchable)
       "requestBody":         object,  // optional — prompt/messages you sent
       "responseBody":        object   // optional — provider response body
@@ -387,6 +388,15 @@ Revenue is attributed to each event at ingest time (`server/lib/enrich-revenue.t
    events are written to `observe_events` from Stripe — this prevents double-counting
    and fake features.
 
+Revenue lookup resolves the Stripe customer in order: (1) meta.stripe_customer_id on
+the event, (2) stripe_customer_id persisted on the customer record from a prior event,
+(3) direct match of customerReferenceId to Stripe customer.id (legacy path, works when
+users send cus_xxx directly).
+
+If your app uses internal IDs as customerReferenceId, send meta: { stripe_customer_id:
+'cus_xxx' } on at least one event per customer. Observe persists this mapping, so
+subsequent events auto-resolve Stripe revenue without sending meta again.
+
 The `revenue_source` field on each event indicates how the number was derived:
 `feature_pricing`, `per_unit`, `tiered`, `hybrid`, `subscription`, `explicit`, or `none`.
 
@@ -441,8 +451,9 @@ When revenue is 0 and cost > 0, margin is -100%. When both are 0, margin is null
    `inputTokens`, `outputTokens`. For non-LLM features, include `costAmount`
    and/or `usageUnits`. Always include `durationMs` and `idempotencyKey`.
    Fire-and-forget; catch and log on failure.
-5. Use the end-user's ID (Stripe customer ID if available, else stable user ID)
-   as `customerReferenceId`. Never "default" or a hardcoded value.
+5. Use the end-user's stable ID as `customerReferenceId`. If connecting Stripe,
+   link via `meta: { stripe_customer_id: "cus_xxx" }` (see Revenue section).
+   Never "default" or a hardcoded value.
 6. Use one stable `featureKey` per user-facing feature — e.g. `ai_chat`,
    `summarize_email`, `code_autocomplete`, `pdf_export`, `api_request`.
    Not per model. Track all billable features, not just AI ones.
