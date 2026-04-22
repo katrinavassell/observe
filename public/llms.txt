@@ -75,6 +75,7 @@ async function chat(user: { id: string }, messages: any[]) {
         outputTokens: res.usage?.completion_tokens,
         durationMs: Date.now() - started,
         idempotencyKey: res.id,
+        meta: user.stripeCustomerId ? { stripe_customer_id: user.stripeCustomerId } : undefined,
       }],
     }),
   }).catch((err) => console.error('observe ingest failed:', err))
@@ -93,7 +94,7 @@ const anthropic = new Anthropic()
 async function chat(user, messages) {
   const started = Date.now()
   const res = await anthropic.messages.create({
-    model: 'claude-3-5-sonnet-latest',
+    model: 'claude-sonnet-4-6',
     max_tokens: 1024,
     messages,
   })
@@ -110,12 +111,13 @@ async function chat(user, messages) {
         eventName: 'chat',
         customerReferenceId: user.id,
         featureKey: 'ai_chat',
-        model: 'claude-3-5-sonnet-latest',
+        model: 'claude-sonnet-4-6',
         modelProvider: 'anthropic',
         inputTokens: res.usage?.input_tokens,
         outputTokens: res.usage?.output_tokens,
         durationMs: Date.now() - started,
         idempotencyKey: res.id,
+        meta: user.stripeCustomerId ? { stripe_customer_id: user.stripeCustomerId } : undefined,
       }],
     }),
   }).catch((err) => console.error('observe ingest failed:', err))
@@ -236,7 +238,7 @@ curl -X POST https://observe.tansohq.com/api/events/ingest \
       "featureKey":          string,  // product feature powered by this call
 
       // STRONGLY RECOMMENDED — enables automatic cost computation from token counts
-      "model":               string,  // e.g. "gpt-4o-mini", "claude-3-5-sonnet-latest"
+      "model":               string,  // e.g. "gpt-4o-mini", "claude-sonnet-4-6"
       "modelProvider":       string,  // "openai" | "anthropic" | "google" | "mistral" | ...
       "inputTokens":         number,
       "outputTokens":        number,
@@ -362,8 +364,9 @@ on the customers page — their margins would be meaningless without cost data. 
 intended flow is:
 
 1. **SDK event arrives** with a `customerReferenceId` → customer appears in Observe.
-2. **Stripe enriches revenue** → the event gets `revenue_amount` stamped at ingest.
-3. **Margins become real** — cost from the SDK event, revenue from Stripe data.
+2. **Stripe resolves the customer name** → if the `customerReferenceId` is a Stripe customer ID (`cus_...`), Observe looks up the name and email from Stripe automatically. Pass the Stripe customer ID in `meta.stripe_customer_id` as well to link to Stripe revenue data.
+3. **Stripe enriches revenue** → the event gets `revenue_amount` stamped at ingest.
+4. **Margins become real** — cost from the SDK event, revenue from Stripe data.
 
 This is a deliberate design choice. Observe is a cost observability tool — a customer
 without usage events has no cost data, so showing them with $0/$0 would produce
