@@ -379,13 +379,6 @@ MRR could appear both as a Stripe event and via enrichment. All analytics querie
 margin from `SUM(revenue_amount)` and `SUM(cost_amount)` on `observe_events`. They do NOT
 add subscription MRR on top.
 
-### Customer identity
-
-Users send their own IDs as `customerReferenceId`. Stripe linking happens via
-`meta.stripe_customer_id` on events, persisted to `customers.stripe_customer_id` for
-future auto-resolution. Revenue enrichment resolves: `meta.stripe_customer_id` →
-`customers.stripe_customer_id` → direct `customerReferenceId` match.
-
 ### MRR calculation
 
 `SUM(COALESCE(mrr_override, plan.price_amount))` across active subscriptions per customer.

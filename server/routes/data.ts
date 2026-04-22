@@ -1128,9 +1128,11 @@ export function createDataRoutes(
         await client.query("BEGIN");
 
         // Clear existing revenue data
-        // NOTE: customers are NOT deleted — upsert preserves is_internal/stripe_customer_id
         const acctStripe = req.accountId ?? null;
         await client.query("DELETE FROM subscriptions WHERE account_id = $1", [
+          acctStripe,
+        ]);
+        await client.query("DELETE FROM customers WHERE account_id = $1", [
           acctStripe,
         ]);
         await client.query("DELETE FROM plans WHERE account_id = $1", [
@@ -1191,7 +1193,7 @@ export function createDataRoutes(
           );
         }
 
-        // Insert customers — batched (upsert to preserve is_internal/stripe_customer_id)
+        // Insert customers — batched
         const validCustomers = stripeCustomers.data.filter(
           (c) => typeof c !== "string",
         );
@@ -1202,7 +1204,7 @@ export function createDataRoutes(
           let idx = 1;
           for (const customer of batch) {
             placeholders.push(
-              `($${idx++}, $${idx++}, $${idx++}, $${idx++}, $${idx++}, $${idx++})`,
+              `($${idx++}, $${idx++}, $${idx++}, $${idx++}, $${idx++})`,
             );
             values.push(
               req.visitorId,
@@ -1210,11 +1212,10 @@ export function createDataRoutes(
               customer.id,
               customer.email || customer.id,
               customer.email || null,
-              customer.id,
             );
           }
           await client.query(
-            `INSERT INTO customers (user_id, account_id, customer_id, name, email, stripe_customer_id) VALUES ${placeholders.join(", ")} ON CONFLICT (user_id, customer_id) DO UPDATE SET name = EXCLUDED.name, email = COALESCE(EXCLUDED.email, customers.email), stripe_customer_id = EXCLUDED.stripe_customer_id, account_id = COALESCE(customers.account_id, EXCLUDED.account_id), updated_at = NOW()`,
+            `INSERT INTO customers (user_id, account_id, customer_id, name, email) VALUES ${placeholders.join(", ")} ON CONFLICT DO NOTHING`,
             values,
           );
         }

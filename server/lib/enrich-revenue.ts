@@ -113,7 +113,6 @@ export async function enrichRevenue(
   customerId: string,
   featureKey: string,
   usageUnits: number,
-  meta?: Record<string, string>,
 ): Promise<RevenueResult> {
   if (accountId == null) return { revenue: 0, revenueSource: "none" };
 
@@ -136,35 +135,16 @@ export async function enrichRevenue(
     return { revenue: 0, revenueSource: "none" };
   }
 
-  // Resolve the effective Stripe customer ID for subscription lookup.
-  // Priority: explicit meta override > persisted mapping > direct match (legacy)
-  let stripeCustomerId = customerId;
-  if (meta?.stripe_customer_id) {
-    stripeCustomerId = meta.stripe_customer_id;
-  } else if (customerId) {
-    try {
-      const custResult = await pool.query(
-        "SELECT stripe_customer_id FROM customers WHERE account_id = $1 AND customer_id = $2 AND stripe_customer_id IS NOT NULL",
-        [accountId, customerId],
-      );
-      if (custResult.rows.length > 0) {
-        stripeCustomerId = custResult.rows[0].stripe_customer_id;
-      }
-    } catch (err) {
-      console.error("Stripe customer ID lookup failed:", err);
-    }
-  }
-
   try {
-    const subMeta = await loadSubMeta(pool, accountId, stripeCustomerId);
-    if (!subMeta) return { revenue: 0, revenueSource: "none" };
+    const meta = await loadSubMeta(pool, accountId, customerId);
+    if (!meta) return { revenue: 0, revenueSource: "none" };
 
     const mtdUsage =
-      subMeta.pricingModel === "tiered" || subMeta.pricingModel === "hybrid"
-        ? await loadMtdUsage(pool, accountId, stripeCustomerId)
+      meta.pricingModel === "tiered" || meta.pricingModel === "hybrid"
+        ? await loadMtdUsage(pool, accountId, customerId)
         : 0;
 
-    return enrichRevenueFromSub(subMeta, usageUnits, mtdUsage);
+    return enrichRevenueFromSub(meta, usageUnits, mtdUsage);
   } catch (err) {
     console.error("Subscription enrichment failed:", err);
     return { revenue: 0, revenueSource: "none" };

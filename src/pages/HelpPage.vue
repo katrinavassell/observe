@@ -80,10 +80,6 @@ const sections = [
         q: "What is the health score?",
         a: "A 0-100 score combining margin (60% weight) and activity in the last 30 days (40% weight). Drives cohort assignment: Champion (high margin + active), At Risk, Unprofitable, Inactive, Rising Cost.",
       },
-      {
-        q: "How do I link SDK events to Stripe customers?",
-        a: "Send your own stable user ID as customerReferenceId. To link to Stripe for revenue, include meta: { stripe_customer_id: 'cus_xxx' } on at least one event per customer. Observe remembers the mapping — future events auto-resolve Stripe revenue without meta.",
-      },
     ],
   },
   {
