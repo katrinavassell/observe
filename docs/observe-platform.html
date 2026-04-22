@@ -635,6 +635,38 @@ accounts ┘                   │
       <div style="font-size:10px; color:#d29922; margin-top:6px;">TIER 2 &middot; Customer Detail &middot; DDS &middot; Independent</div>
     </div>
 
+    <!-- ── UX audit findings (2026-04-22) ── -->
+
+    <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #d29922; border-radius:6px; padding:10px; margin-bottom:8px;">
+      <div style="font-size:12px; font-weight:600; color:#f0f6fc;">[UX-1] Guest auth gate: prompt sign-up on blocked actions</div>
+      <div style="font-size:11px; color:#8b949e; margin-top:4px;">Logged-out users can click nav items that require auth but get empty pages or nothing. Should show a sign-up prompt/modal when they click Events, Traces, Alerts, or any auth-gated action. Pattern: check <code>isLoggedIn</code> in click handlers or route guards, show CTA modal. Files: <code>src/router.ts</code>, each page's empty state. Done: clicking any auth-required feature as guest shows "Sign up to access" prompt.</div>
+      <div style="font-size:10px; color:#d29922; margin-top:6px;">UX &middot; Guest Experience &middot; Independent</div>
+    </div>
+
+    <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #d29922; border-radius:6px; padding:10px; margin-bottom:8px;">
+      <div style="font-size:12px; font-weight:600; color:#f0f6fc;">[UX-2] Sample traces missing trace detail data</div>
+      <div style="font-size:11px; color:#8b949e; margin-top:4px;">Guest preview traces show in the list but clicking shows no span detail. Sample data in <code>src/lib/guest-preview.ts</code> needs trace_id, span_id, parent_span_id, and duration_ms populated so the trace detail view renders. File: <code>src/lib/guest-preview.ts</code>. Done: guest traces are clickable and show span hierarchy.</div>
+      <div style="font-size:10px; color:#d29922; margin-top:6px;">UX &middot; Guest Experience &middot; Independent</div>
+    </div>
+
+    <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #f85149; border-radius:6px; padding:10px; margin-bottom:8px;">
+      <div style="font-size:12px; font-weight:600; color:#f0f6fc;">[BUG] Events page "0 total events" counter</div>
+      <div style="font-size:11px; color:#8b949e; margin-top:4px;">Events page header shows "0 total events" badge while body shows "28 / 10,000 events this month" and event rows exist. Counter pulls from a different source than the table. File: <code>src/pages/EventsPage.vue</code>. Done: header counter matches actual event count.</div>
+      <div style="font-size:10px; color:#f85149; margin-top:6px;">BUG &middot; Events &middot; Audit 2026-04-22</div>
+    </div>
+
+    <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #d29922; border-radius:6px; padding:10px; margin-bottom:8px;">
+      <div style="font-size:12px; font-weight:600; color:#f0f6fc;">[UX-3] Models page Usage column missing unit label</div>
+      <div style="font-size:11px; color:#8b949e; margin-top:4px;">Models table "Usage" column shows raw numbers (1,173 / 4,118) with no unit. Users can't tell if these are tokens, requests, or something else. Add "(tokens)" to column header or a tooltip. File: <code>src/pages/ModelsPage.vue</code>. Done: column header says "Usage (tokens)" or tooltip explains.</div>
+      <div style="font-size:10px; color:#d29922; margin-top:6px;">UX &middot; Models &middot; Independent</div>
+    </div>
+
+    <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #d29922; border-radius:6px; padding:10px; margin-bottom:8px;">
+      <div style="font-size:12px; font-weight:600; color:#f0f6fc;">[UX-4] Customers page empty state despite customers existing</div>
+      <div style="font-size:11px; color:#8b949e; margin-top:4px;">Customers/Cohorts page shows empty state while Analytics → By Customer lists 14 customers. Likely related to customer ID mismatch bug (BUG card below) — cohorts query returns 0 rows because event customer_ids don't match subscription customer_ids after reset. Fix depends on resolving the ID mismatch. Files: <code>server/routes/cohorts.ts</code>. Done: customers visible on cohorts page when they exist in events.</div>
+      <div style="font-size:10px; color:#d29922; margin-top:6px;">UX &middot; Customers &middot; Depends on BUG: Customer ID mismatch</div>
+    </div>
+
     <!-- ── BUGS: Found via dogfooding (2026-04-22) ── -->
 
     <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #f85149; border-radius:6px; padding:10px; margin-bottom:8px;">
