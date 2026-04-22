@@ -1085,6 +1085,76 @@ export function createIntegrationsRoutes(
     },
   );
 
+  router.get(
+    "/integrations/stripe/diagnostics",
+    ensureVisitor,
+    async (req: AuthRequest, res: Response) => {
+      const acct = req.accountId ?? null;
+      if (!acct) {
+        res.status(400).json({ error: "No account resolved" });
+        return;
+      }
+      try {
+        const [unresolved, missingRevenue, subsSummary, syncStatus, dupes] =
+          await Promise.all([
+            pool.query(
+              `SELECT customer_id, name, email, created_at
+               FROM customers
+               WHERE account_id = $1 AND customer_id LIKE 'cus_%'
+                 AND (name = customer_id OR name IS NULL)
+               ORDER BY created_at DESC LIMIT 50`,
+              [acct],
+            ),
+            pool.query(
+              `SELECT COUNT(*)::int AS count, oe.customer_id, MAX(s.pricing_model) AS pricing_model
+               FROM observe_events oe
+               JOIN subscriptions s ON s.account_id = oe.account_id AND s.customer_id = oe.customer_id AND s.is_active = true
+               WHERE oe.account_id = $1
+                 AND oe.revenue_amount = 0
+                 AND (oe.revenue_source = 'none' OR oe.revenue_source IS NULL)
+                 AND oe.timestamp >= NOW() - INTERVAL '30 days'
+               GROUP BY oe.customer_id
+               ORDER BY count DESC LIMIT 20`,
+              [acct],
+            ),
+            pool.query(
+              `SELECT pricing_model, COUNT(*)::int AS count, COALESCE(SUM(mrr_override), 0) AS total_mrr
+               FROM subscriptions
+               WHERE account_id = $1 AND is_active = true
+               GROUP BY pricing_model`,
+              [acct],
+            ),
+            pool.query(
+              `SELECT connected_at, last_synced_at,
+                      EXTRACT(EPOCH FROM (NOW() - last_synced_at))::int AS seconds_since_sync
+               FROM integrations
+               WHERE account_id = $1 AND provider = 'stripe'`,
+              [acct],
+            ),
+            pool.query(
+              `SELECT customer_id, COUNT(*)::int AS row_count
+               FROM customers
+               WHERE account_id = $1
+               GROUP BY customer_id
+               HAVING COUNT(*) > 1
+               LIMIT 20`,
+              [acct],
+            ),
+          ]);
+        res.json({
+          unresolved_customers: unresolved.rows,
+          events_missing_revenue: missingRevenue.rows,
+          subscriptions_summary: subsSummary.rows,
+          sync_status: syncStatus.rows[0] ?? null,
+          customer_duplicates: dupes.rows,
+        });
+      } catch (err) {
+        console.error("Stripe diagnostics error:", err);
+        res.status(500).json({ error: "Failed to run diagnostics" });
+      }
+    },
+  );
+
   // POST /integrations/stripe/sync - Re-sync Stripe data using stored key
   router.post(
     "/integrations/stripe/sync",
