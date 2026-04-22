@@ -41,6 +41,7 @@ erDiagram
         text customer_id
         text name
         text email
+        text stripe_customer_id
         boolean is_internal
     }
 
@@ -489,3 +490,26 @@ Event has cus_* customer ID → async after ingest response:
 |----------|--------|---------|
 | `/sdk-keys` | GET/POST | List/create SDK keys |
 | `/sdk-keys/:id` | DELETE | Revoke key |
+
+---
+
+## Changelog (2026-04-22)
+
+### Events page filters fixed
+- Dropdown filters (feature, customer, model, source) were broken — Vue compiled the HOF `onSelectUpdate` as an inline handler, discarding the returned function. Pre-created named handlers so Vue uses them directly.
+
+### Event detail expansion: error surfacing
+- Silent catch in `toggleEvent` swallowed all `getEventDetail` failures. Now logs errors, shows the actual message, and retries on re-expand.
+- List query switched from `SELECT oe.*` to explicit columns, excluding large `request_body`/`response_body` JSONB from the 50-event list payload.
+
+### Stripe customer enrichment pipeline
+- **`stripe_customer_id` column added to `customers` table** — direct link between app customer IDs and Stripe customer IDs. Populated from Stripe sync, SDK ingest (`meta.stripe_customer_id`), and backfill.
+- **Auto-create customer records during ingest** — events now create customer records on insert (like `feature_definitions`), using `ON CONFLICT DO NOTHING` to preserve Stripe-synced names.
+- **`resolveStripeCustomerNames` expanded** — uses `stripe_customer_id` column directly instead of scanning events. Handles both `cus_*` IDs and `meta.stripe_customer_id` mapping.
+
+### Revenue backfill
+- **`POST /backfill/revenue`** — re-enriches existing events with `revenue_source=none` using current subscription data and feature pricing. Also resolves missing customer names from Stripe.
+- **Auto-runs after Stripe sync** — `syncStripeDataForUser` now calls `runRevenueBackfill` after pulling customers/subscriptions/plans, so existing events get revenue attribution immediately.
+
+### Docs
+- `requestBody` and `responseBody` promoted to RECOMMENDED tier in `llms.txt` and added to the curl example so users include them by default.
