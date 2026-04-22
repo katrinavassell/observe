@@ -547,7 +547,7 @@ export function createBackfillRoutes(pool: Pool, ensureVisitor: any) {
       };
 
       console.warn(
-        `Backfill complete for ${userId} (${provider}):`,
+        `Backfill complete for ${req.visitorId} (${provider}):`,
         JSON.stringify(summary),
       );
       res.json(summary);
