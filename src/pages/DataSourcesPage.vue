@@ -1527,9 +1527,10 @@ fetch(<span class="text-amber-300">'{{ ingestUrl }}'</span>, {
             <p class="text-xs text-muted-foreground">
               Permanently deletes <strong>all</strong> events, customers,
               subscriptions, integrations, SDK keys, features, alerts, and
-              cohorts. Your account and team members are kept. After reset:
-              generate a new API key, re-connect Stripe, and send events to
-              start fresh.
+              cohorts. Your account and team members are kept.
+              <strong>Your existing API key will stop working.</strong>
+              After reset: update your app with the new API key, re-connect
+              Stripe, and send events to start fresh.
             </p>
             <Button
               variant="destructive"
