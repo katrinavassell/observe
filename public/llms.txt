@@ -155,7 +155,7 @@ const portkey = new Portkey({
   // Observe reads these custom headers on the way through — Portkey forwards them.
   customHeaders: {
     'observe-key': process.env.OBSERVE_API_KEY!,
-    'observe-customer': user.stripeCustomerId,
+    'observe-customer': user.id,
     'observe-feature': 'ai_chat',
   },
 })
@@ -182,7 +182,7 @@ import { Observe } from '@tansohq/observe'
 import OpenAI from 'openai'
 
 Observe.configure({ apiKey: process.env.OBSERVE_API_KEY! })
-Observe.identify({ customerId: user.stripeCustomerId })
+Observe.identify({ customerId: user.id })
 Observe.feature('ai_chat')
 
 const openai = Observe.wrap(new OpenAI())
