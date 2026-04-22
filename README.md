@@ -162,7 +162,7 @@ import OpenAI from 'openai'
 Observe.configure({ apiKey: process.env.OBSERVE_API_KEY! })
 
 // 2. Identify the current customer at request time
-Observe.identify({ customerId: user.stripeCustomerId })
+Observe.identify({ customerId: user.id })
 
 // 3. Wrap the OpenAI client — all calls are auto-tracked
 const openai = Observe.wrap(new OpenAI())
