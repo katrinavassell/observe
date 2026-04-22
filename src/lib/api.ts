@@ -596,7 +596,6 @@ export interface IngestEvent {
   modelProvider?: string;
   properties?: Record<string, unknown>;
   idempotencyKey?: string;
-  meta?: Record<string, string>;
 }
 
 export interface IngestResponse {

@@ -105,10 +105,13 @@ export async function syncStripeDataForUser(
   ]);
 
   // Clear existing Stripe-sourced data before re-syncing
-  // NOTE: customers are NOT deleted — upsert preserves is_internal/stripe_customer_id
   await pool.query("DELETE FROM subscriptions WHERE account_id = $1", [
     resolvedAccountId,
   ]);
+  await pool.query(
+    "DELETE FROM customers WHERE account_id = $1 OR (user_id = $2 AND account_id IS NULL)",
+    [resolvedAccountId, userId],
+  );
   await pool.query("DELETE FROM plans WHERE account_id = $1", [
     resolvedAccountId,
   ]);
@@ -166,7 +169,7 @@ export async function syncStripeDataForUser(
     );
   }
 
-  // Insert customers (upsert to preserve is_internal / stripe_customer_id)
+  // Insert customers
   const validCustomers = stripeCustomersList.filter(
     (c) => typeof c !== "string",
   );
@@ -177,7 +180,7 @@ export async function syncStripeDataForUser(
     let idx = 1;
     for (const customer of batch) {
       placeholders.push(
-        `($${idx++}, $${idx++}, $${idx++}, $${idx++}, $${idx++}, $${idx++})`,
+        `($${idx++}, $${idx++}, $${idx++}, $${idx++}, $${idx++})`,
       );
       values.push(
         userId,
@@ -185,11 +188,10 @@ export async function syncStripeDataForUser(
         customer.id,
         customer.name || customer.email || customer.id,
         customer.email || null,
-        customer.id,
       );
     }
     await pool.query(
-      `INSERT INTO customers (user_id, account_id, customer_id, name, email, stripe_customer_id) VALUES ${placeholders.join(", ")} ON CONFLICT (user_id, customer_id) DO UPDATE SET name = EXCLUDED.name, email = COALESCE(EXCLUDED.email, customers.email), stripe_customer_id = EXCLUDED.stripe_customer_id, account_id = COALESCE(customers.account_id, EXCLUDED.account_id), updated_at = NOW()`,
+      `INSERT INTO customers (user_id, account_id, customer_id, name, email) VALUES ${placeholders.join(", ")} ON CONFLICT DO NOTHING`,
       values,
     );
   }
