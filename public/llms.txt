@@ -541,3 +541,13 @@ To get per-event revenue, either:
 - **Revenue** = what YOUR CUSTOMER pays you (from Stripe subscription or explicit)
 - **Margin** = (revenue - cost) / revenue — only meaningful at the customer level
   for flat subscriptions
+
+**Q: My customer has multiple subscriptions with different pricing models. Why does
+Observe pick the wrong one?**
+
+If a customer has both a flat and a metered subscription, Observe currently
+detects the pricing model per-customer by picking the highest alphabetically
+(e.g., "metered" instead of "hybrid"). This is a known limitation for
+multi-subscription customers with mixed pricing. We're working on proper hybrid
+detection. If this affects you, let us know — open the feedback modal in the app
+to request this feature.
