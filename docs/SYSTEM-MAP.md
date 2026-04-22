@@ -549,6 +549,124 @@ Event has cus_* customer ID → async after ingest response:
 |----------|--------|---------|
 | `/sdk-keys` | GET/POST | List/create SDK keys |
 | `/sdk-keys/:id` | DELETE | Revoke key |
+| `/backfill/revenue` | POST | Re-enrich revenue + customer names from Stripe |
+| `/backfill/tokens` | POST | Backfill token splits from OpenAI/Anthropic |
+
+---
+
+## User Stories & Acceptance Criteria
+
+### Domain: Event Ingestion
+
+**US-1: Ingest SDK events with cost attribution**
+> As a developer, I send events via the SDK so that my LLM costs are tracked per customer and feature.
+
+| Acceptance Criteria | Verified By |
+|---|---|
+| Event stored in `observe_events` with `customer_id`, `feature_key`, `model`, `source='sdk'` | Query `observe_events` |
+| Cost auto-calculated from `model` + `inputTokens` + `outputTokens` if `costAmount` omitted | Check `cost_amount > 0` |
+| Customer record auto-created in `customers` table if new | Query `customers` |
+| `stripe_customer_id` populated on customer from `meta.stripe_customer_id` | Query `customers.stripe_customer_id` |
+| Feature definition auto-created in `feature_definitions` if new | Query `feature_definitions` |
+| Idempotency: duplicate `idempotencyKey` rejected silently | Send same event twice, check `accepted: 0` |
+
+**US-2: View request/response in event detail**
+> As a user, I expand an event row to see the LLM prompt and completion.
+
+| Acceptance Criteria | Verified By |
+|---|---|
+| `requestBody` and `responseBody` stored as JSONB on event | Expand event row |
+| OpenAI format: `messages[]` rendered with role icons | Expand OpenAI event |
+| Anthropic format: `content[].text` rendered | Expand Anthropic event |
+| Missing bodies show hint with code snippet | Expand event without bodies |
+| Failed fetch shows actual error, not generic message | Disconnect network, expand |
+
+### Domain: Stripe Revenue Attribution
+
+**US-3: Connect Stripe and sync customer data**
+> As a user, I connect my Stripe API key so my customers, subscriptions, and plans are imported.
+
+| Acceptance Criteria | Verified By |
+|---|---|
+| API key validated, encrypted (AES-256-GCM), stored in `integrations` | Check `integrations` row |
+| Customers synced to `customers` table with `name`, `email`, `stripe_customer_id` | Query `customers` |
+| Subscriptions synced with `pricing_model` detection (flat/metered/tiered/hybrid) | Query `subscriptions` |
+| Plans synced from Stripe products + prices | Query `plans` |
+| Revenue backfill runs automatically after sync | Check `observe_events.revenue_source != 'none'` |
+| Customer names resolved from Stripe | Check `customers.name != customers.customer_id` |
+
+**US-4: Revenue enrichment on event ingest**
+> As a user with Stripe connected, each SDK event is automatically enriched with revenue based on the customer's subscription pricing model.
+
+| Acceptance Criteria | Verified By |
+|---|---|
+| Bridge map built: `customer_id` → `stripe_customer_id` → subscription | Logs / diagnostics |
+| Metered: `revenue = unitPrice × usageUnits`, source = `per_unit` | Query event |
+| Tiered: `revenue = tierPrice(mtdUsage) × usageUnits`, source = `tiered` | Query event |
+| Flat: `revenue = 0`, source = `subscription` (MRR tracked at customer level) | Query event |
+| Explicit `revenueAmount` overrides all auto-calculation | Send event with `revenueAmount` |
+| Feature pricing overrides subscription pricing | Set feature pricing, check event |
+| Events before Stripe sync get backfilled when sync runs | Check `runRevenueBackfill` after sync |
+
+**US-5: Revenue backfill**
+> As a user, I trigger a backfill to re-enrich existing events after connecting Stripe or changing pricing.
+
+| Acceptance Criteria | Verified By |
+|---|---|
+| `POST /backfill/revenue` processes up to 50k events | Check response `events_checked` |
+| Events with `revenue_source = 'none'` get re-enriched | Check `events_updated > 0` |
+| Customer names resolved from Stripe where missing | Check `customers_resolved > 0` |
+| `stripe_customer_id` backfilled from event `meta` onto customer records | Query `customers` |
+| Auto-runs after `syncStripeDataForUser()` | Connect Stripe, check logs |
+
+### Domain: Event Filtering & Analytics
+
+**US-6: Filter events by feature, customer, model, source**
+> As a user, I filter the events table to drill into specific segments.
+
+| Acceptance Criteria | Verified By |
+|---|---|
+| Each dropdown (feature, customer, model, source) updates the query | Select filter, check table |
+| Filters compose (AND logic) | Select multiple filters |
+| URL preserves filter state for sharing | Copy URL, paste in new tab |
+| Pagination resets when filter changes | Apply filter, check page = 1 |
+| "Clear filters" button resets all | Click button, verify all reset |
+
+**US-7: View customer P&L**
+> As a user, I click a customer to see their cost, revenue, margin, and subscription details.
+
+| Acceptance Criteria | Verified By |
+|---|---|
+| Customer name (not raw ID) shown | Check `/customers/:id` page |
+| Revenue, cost, margin % calculated | Check KPI cards |
+| Active subscriptions listed with pricing model | Check subscriptions section |
+| Recent events shown | Check events section |
+| Model breakdown (which models this customer uses) | Check model section |
+
+### Domain: Alerts
+
+**US-8: Alert on cost/margin thresholds**
+> As a user, I create alert rules that fire when cost exceeds budget or margin drops.
+
+| Acceptance Criteria | Verified By |
+|---|---|
+| Rule created with metric, operator, threshold | Create rule in UI |
+| Evaluated on each event ingest | Send events, check `alert_history` |
+| Per-customer alerts supported | Set `segment_type = 'customer'` |
+| Cooldown prevents re-firing within window | Check `last_triggered_at` |
+| History shows firing details | Check `/alerts` history tab |
+
+### Domain: Onboarding
+
+**US-9: First-time setup**
+> As a new user, I generate an SDK key and send my first event.
+
+| Acceptance Criteria | Verified By |
+|---|---|
+| SDK key generated on `/data-sources` | Click generate, see key |
+| Key shown once, stored hashed | Check `sdk_api_keys.key_hash` |
+| First event triggers activation milestone | Check `users.first_sdk_event_at` |
+| Event appears on `/events` page | Navigate to events |
 
 ---
 

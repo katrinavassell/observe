@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Observe — Platform Architecture</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0d1117; color: #c9d1d9; display: flex; }
+
+  nav { position: fixed; top: 0; left: 0; width: 220px; height: 100vh; background: #010409; border-right: 1px solid #21262d; padding: 20px 0; overflow-y: auto; z-index: 10; }
+  nav h2 { color: #f0f6fc; font-size: 14px; padding: 0 16px 12px; border-bottom: 1px solid #21262d; margin-bottom: 8px; }
+  nav a { display: block; padding: 6px 16px; font-size: 12px; color: #8b949e; text-decoration: none; border-left: 2px solid transparent; }
+  nav a:hover { color: #c9d1d9; background: #161b22; }
+  nav a.section-head { color: #c9d1d9; font-weight: 600; margin-top: 12px; font-size: 13px; }
+
+  main { margin-left: 220px; padding: 32px 40px; max-width: 1000px; width: 100%; }
+  h1 { color: #f0f6fc; font-size: 26px; margin-bottom: 4px; }
+  .subtitle { color: #8b949e; font-size: 14px; margin-bottom: 32px; }
+  h2 { color: #f0f6fc; font-size: 20px; margin-top: 48px; margin-bottom: 16px; padding-top: 16px; border-top: 1px solid #21262d; }
+  h3 { color: #f0f6fc; font-size: 16px; margin-top: 24px; margin-bottom: 10px; }
+  h4 { color: #c9d1d9; font-size: 14px; margin-top: 16px; margin-bottom: 6px; }
+  p, li { font-size: 13px; line-height: 1.7; }
+  ul { padding-left: 20px; margin: 8px 0; }
+
+  table { width: 100%; border-collapse: collapse; margin: 12px 0; }
+  th, td { text-align: left; padding: 6px 10px; font-size: 12px; border-bottom: 1px solid #21262d; }
+  th { color: #8b949e; font-weight: 600; background: #0d1117; position: sticky; top: 0; }
+  code { background: #21262d; padding: 2px 6px; border-radius: 4px; font-size: 11px; color: #79c0ff; }
+  pre { background: #161b22; border-radius: 8px; padding: 16px; overflow-x: auto; font-size: 12px; line-height: 1.7; border: 1px solid #21262d; margin: 12px 0; }
+
+  .card-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 16px 0; }
+  .card { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px; }
+  .card.red { border-left: 3px solid #f85149; }
+  .card.green { border-left: 3px solid #3fb950; }
+  .card h4 { margin-top: 0; }
+  .card.red h4 { color: #f85149; }
+  .card.green h4 { color: #3fb950; }
+
+  .erd-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; margin: 16px 0; }
+  .entity { background: #161b22; border: 1px solid #30363d; border-radius: 6px; overflow: hidden; }
+  .entity-hdr { background: #21262d; padding: 6px 10px; font-weight: 600; font-size: 13px; color: #f0f6fc; display: flex; align-items: center; gap: 6px; }
+  .entity-hdr .dot { width: 8px; height: 8px; border-radius: 50%; }
+  .dot-core { background: #3fb950; } .dot-stripe { background: #a371f7; } .dot-analytics { background: #79c0ff; } .dot-routing { background: #d29922; } .dot-other { background: #8b949e; }
+  .entity td { padding: 2px 10px; font-size: 11px; }
+  .entity td:first-child { color: #79c0ff; font-family: monospace; }
+  .entity td:last-child { color: #8b949e; text-align: right; }
+  .pk { color: #d29922 !important; font-weight: 600; }
+  .fk { color: #a371f7 !important; }
+  .new-col { background: #3fb95010; }
+
+  .warn { background: #d2992215; border: 1px solid #d2992233; border-radius: 6px; padding: 12px 16px; margin: 12px 0; }
+  .warn strong { color: #d29922; }
+
+  .us { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px; margin: 16px 0; }
+  .us-title { font-size: 14px; font-weight: 600; color: #f0f6fc; margin-bottom: 4px; }
+  .us-story { font-size: 13px; color: #8b949e; font-style: italic; margin-bottom: 12px; }
+  .us table th { font-size: 11px; }
+  .us table td { font-size: 11px; }
+
+  blockquote { border-left: 3px solid #30363d; padding-left: 12px; color: #8b949e; margin: 8px 0; font-style: italic; }
+</style>
+</head>
+<body>
+
+<nav>
+  <h2>Observe Platform</h2>
+  <a href="#definitions" class="section-head">Definitions</a>
+  <a href="#two-stripes">Two Stripe Connections</a>
+  <a href="#revenue-pipeline">Revenue Pipeline</a>
+  <a href="#erd" class="section-head">ERD</a>
+  <a href="#erd-core">Core Tables</a>
+  <a href="#erd-stripe">Stripe/Revenue Tables</a>
+  <a href="#erd-analytics">Analytics Tables</a>
+  <a href="#erd-routing">Routing/Proxy</a>
+  <a href="#erd-other">Other Tables</a>
+  <a href="#relationships">Relationships</a>
+  <a href="#customer-model" class="section-head">Customer Model</a>
+  <a href="#layer1">Layer 1: Observe Users</a>
+  <a href="#layer2">Layer 2: Their Customers</a>
+  <a href="#conflation">Conflation Risks</a>
+  <a href="#user-stories" class="section-head">User Stories</a>
+  <a href="#us-ingest">Event Ingestion</a>
+  <a href="#us-stripe">Stripe Revenue</a>
+  <a href="#us-filtering">Filtering & Analytics</a>
+  <a href="#us-alerts">Alerts</a>
+  <a href="#us-onboarding">Onboarding</a>
+  <a href="#pages" class="section-head">Pages & Routes</a>
+  <a href="#api" class="section-head">API Surface</a>
+  <a href="#api-events">Events</a>
+  <a href="#api-analytics">Analytics</a>
+  <a href="#api-integrations">Integrations</a>
+  <a href="#api-proxy">Proxy/Gateway</a>
+  <a href="#changelog" class="section-head">Changelog</a>
+</nav>
+
+<main>
+
+<h1>Observe Platform Architecture</h1>
+<p class="subtitle">Definitions, ERD, customer model, user stories, API surface. Updated 2026-04-22.</p>
+
+<!-- ────────────────── DEFINITIONS ────────────────── -->
+<h2 id="definitions">Definitions</h2>
+<p>These terms have precise meanings. Mixing them up breaks revenue enrichment.</p>
+<table>
+  <tr><th>Term</th><th>Meaning</th><th>Table</th><th>Example</th></tr>
+  <tr><td><strong>Observe user</strong></td><td>Person who signs up for Observe</td><td><code>users</code></td><td>Kat, Doug</td></tr>
+  <tr><td><strong>Account</strong></td><td>Billing/data-ownership unit (1 user can have many)</td><td><code>accounts</code></td><td>"Acme AI" org</td></tr>
+  <tr><td><strong>Customer</strong></td><td>End-user of the Observe user's product — NOT an Observe user</td><td><code>customers</code></td><td>"FlatCo", "MeteredInc"</td></tr>
+  <tr><td><code>customer_id</code></td><td>App-level ID from SDK <code>customerReferenceId</code></td><td><code>observe_events</code>, <code>customers</code></td><td><code>"flatco"</code>, <code>"user_123"</code></td></tr>
+  <tr><td><code>stripe_customer_id</code></td><td>Stripe <code>cus_*</code> ID from the user's own Stripe account</td><td><code>customers.stripe_customer_id</code></td><td><code>"cus_abc123"</code></td></tr>
+  <tr><td><code>accounts.stripe_customer_id</code></td><td>Observe user as a Tanso billing customer (DIFFERENT Stripe account)</td><td><code>accounts</code></td><td><code>"cus_tanso_xyz"</code></td></tr>
+</table>
+
+<div class="warn"><strong>Key rule:</strong> <code>customer_id</code> != <code>stripe_customer_id</code>. They used to be the same, but now SDK events send an app-level <code>customerReferenceId</code> and pass the Stripe ID in <code>meta.stripe_customer_id</code>. The <code>customers.stripe_customer_id</code> column bridges them.</div>
+
+<!-- ────────────────── TWO STRIPES ────────────────── -->
+<h3 id="two-stripes">Two Stripe Connections (never confuse these)</h3>
+<div class="card-grid">
+  <div class="card red">
+    <h4>Tanso's Stripe (our billing)</h4>
+    <table>
+      <tr><td>API keys</td><td>Env: <code>STRIPE_SECRET_KEY</code></td></tr>
+      <tr><td>Routes</td><td><code>/billing/checkout</code>, <code>/billing/webhook</code></td></tr>
+      <tr><td>Writes to</td><td><code>accounts.stripe_plan</code></td></tr>
+      <tr><td>Customer ID</td><td><code>accounts.stripe_customer_id</code></td></tr>
+    </table>
+  </div>
+  <div class="card green">
+    <h4>User's Stripe (their revenue data)</h4>
+    <table>
+      <tr><td>API key</td><td><code>integrations.encrypted_api_key</code></td></tr>
+      <tr><td>Routes</td><td><code>/integrations/stripe/*</code></td></tr>
+      <tr><td>Writes to</td><td><code>customers</code>, <code>subscriptions</code>, <code>plans</code></td></tr>
+      <tr><td>Customer ID</td><td><code>customers.stripe_customer_id</code></td></tr>
+    </table>
+  </div>
+</div>
+
+<!-- ────────────────── REVENUE PIPELINE ────────────────── -->
+<h3 id="revenue-pipeline">Revenue Enrichment Pipeline</h3>
+<pre>
+SDK event arrives: customerReferenceId = "flatco", meta.stripe_customer_id = "cus_abc"
+
+<strong>Step 1: Build bridge map</strong> (app ID → Stripe ID)
+  "flatco" → "cus_abc"
+  Sources: meta.stripe_customer_id → customers.stripe_customer_id → cus_* detection
+
+<strong>Step 2: Look up subscription by Stripe ID</strong>
+  subscriptions WHERE customer_id = "cus_abc" → metered, unit_price = 0.01
+
+<strong>Step 3: Calculate revenue</strong>
+  metered:  unitPrice × usageUnits → revenue_source = "per_unit"
+  tiered:   tierPrice(mtdUsage) × usageUnits → revenue_source = "tiered"
+  flat:     $0 per event → revenue_source = "subscription"
+
+<strong>Step 4: Store on event</strong>
+  observe_events.revenue_amount, observe_events.revenue_source
+
+<strong>Step 5: Resolve customer name</strong> (async)
+  customers.stripe_customer_id → stripe.customers.retrieve() → update name + email
+</pre>
+
+<!-- ────────────────── ERD ────────────────── -->
+<h2 id="erd">Entity Relationship Diagram</h2>
+
+<h3 id="erd-core">Core (Auth & Data Ownership)</h3>
+<div class="erd-grid">
+  <div class="entity"><div class="entity-hdr"><div class="dot dot-core"></div>users</div><table>
+    <tr><td class="pk">id</td><td>SERIAL PK</td></tr>
+    <tr><td>email</td><td>TEXT UNIQUE</td></tr>
+    <tr><td>visitor_id</td><td>TEXT UNIQUE</td></tr>
+    <tr><td>stripe_customer_id</td><td>TEXT (Tanso billing)</td></tr>
+    <tr><td>stripe_plan</td><td>TEXT</td></tr>
+  </table></div>
+  <div class="entity"><div class="entity-hdr"><div class="dot dot-core"></div>accounts</div><table>
+    <tr><td class="pk">id</td><td>SERIAL PK</td></tr>
+    <tr><td>name</td><td>TEXT</td></tr>
+    <tr><td>clerk_org_id</td><td>TEXT UNIQUE</td></tr>
+    <tr><td>stripe_customer_id</td><td>TEXT (Tanso billing)</td></tr>
+    <tr><td>stripe_plan</td><td>free|growth</td></tr>
+  </table></div>
+  <div class="entity"><div class="entity-hdr"><div class="dot dot-core"></div>user_accounts</div><table>
+    <tr><td class="pk">id</td><td>SERIAL PK</td></tr>
+    <tr><td class="fk">user_id</td><td>FK → users</td></tr>
+    <tr><td class="fk">account_id</td><td>FK → accounts</td></tr>
+    <tr><td>role</td><td>owner|admin|viewer</td></tr>
+  </table></div>
+  <div class="entity"><div class="entity-hdr"><div class="dot dot-core"></div>sdk_api_keys</div><table>
+    <tr><td class="pk">id</td><td>SERIAL PK</td></tr>
+    <tr><td class="fk">account_id</td><td>FK → accounts</td></tr>
+    <tr><td>key_hash</td><td>TEXT UNIQUE</td></tr>
+    <tr><td>key_prefix</td><td>TEXT</td></tr>
+    <tr><td>name</td><td>TEXT</td></tr>
+  </table></div>
+</div>
+
+<h3 id="erd-stripe">Stripe / Revenue</h3>
+<div class="erd-grid">
+  <div class="entity"><div class="entity-hdr"><div class="dot dot-stripe"></div>customers</div><table>
+    <tr><td class="pk">id</td><td>SERIAL PK</td></tr>
+    <tr><td class="fk">account_id</td><td>FK → accounts</td></tr>
+    <tr><td>customer_id</td><td>TEXT (app ID)</td></tr>
+    <tr><td>name</td><td>TEXT</td></tr>
+    <tr><td>email</td><td>TEXT</td></tr>
+    <tr class="new-col"><td>stripe_customer_id</td><td>TEXT (cus_*) — BRIDGE</td></tr>
+    <tr><td>is_internal</td><td>BOOLEAN</td></tr>
+  </table></div>
+  <div class="entity"><div class="entity-hdr"><div class="dot dot-stripe"></div>subscriptions</div><table>
+    <tr><td class="pk">id</td><td>SERIAL PK</td></tr>
+    <tr><td class="fk">account_id</td><td>FK → accounts</td></tr>
+    <tr><td>subscription_id</td><td>TEXT (sub_*)</td></tr>
+    <tr><td>customer_id</td><td>TEXT (cus_* from Stripe)</td></tr>
+    <tr><td>plan_id</td><td>TEXT</td></tr>
+    <tr><td>is_active</td><td>BOOLEAN</td></tr>
+    <tr><td>pricing_model</td><td>flat|metered|tiered|hybrid</td></tr>
+    <tr><td>pricing_tiers</td><td>JSONB</td></tr>
+    <tr><td>unit_price</td><td>NUMERIC</td></tr>
+    <tr><td>mrr_override</td><td>DECIMAL</td></tr>
+  </table></div>
+  <div class="entity"><div class="entity-hdr"><div class="dot dot-stripe"></div>plans</div><table>
+    <tr><td class="pk">id</td><td>SERIAL PK</td></tr>
+    <tr><td class="fk">account_id</td><td>FK → accounts</td></tr>
+    <tr><td>plan_id</td><td>TEXT</td></tr>
+    <tr><td>name</td><td>TEXT</td></tr>
+    <tr><td>price_amount</td><td>DECIMAL</td></tr>
+    <tr><td>billing_model</td><td>TEXT</td></tr>
+  </table></div>
+  <div class="entity"><div class="entity-hdr"><div class="dot dot-stripe"></div>integrations</div><table>
+    <tr><td class="pk">id</td><td>SERIAL PK</td></tr>
+    <tr><td class="fk">account_id</td><td>FK → accounts</td></tr>
+    <tr><td>provider</td><td>stripe|openai|anthropic</td></tr>
+    <tr><td>encrypted_api_key</td><td>TEXT (AES-256)</td></tr>
+    <tr><td>stripe_account_id</td><td>TEXT</td></tr>
+    <tr><td>last_synced_at</td><td>TIMESTAMPTZ</td></tr>
+  </table></div>
+  <div class="entity"><div class="entity-hdr"><div class="dot dot-stripe"></div>feature_pricing</div><table>
+    <tr><td class="pk">id</td><td>SERIAL PK</td></tr>
+    <tr><td class="fk">account_id</td><td>FK → accounts</td></tr>
+    <tr><td>feature_key</td><td>TEXT</td></tr>
+    <tr><td>revenue_per_unit</td><td>NUMERIC</td></tr>
+  </table></div>
+</div>
+
+<h3 id="erd-analytics">Analytics / Events</h3>
+<div class="erd-grid">
+  <div class="entity"><div class="entity-hdr"><div class="dot dot-analytics"></div>observe_events</div><table>
+    <tr><td class="pk">id</td><td>SERIAL PK</td></tr>
+    <tr><td class="fk">account_id</td><td>FK → accounts</td></tr>
+    <tr><td>customer_id</td><td>TEXT (app ID)</td></tr>
+    <tr><td>feature_key</td><td>TEXT</td></tr>
+    <tr><td>event_name</td><td>TEXT</td></tr>
+    <tr><td>timestamp</td><td>TIMESTAMPTZ</td></tr>
+    <tr><td>cost_amount</td><td>NUMERIC</td></tr>
+    <tr><td>revenue_amount</td><td>NUMERIC</td></tr>
+    <tr><td>revenue_source</td><td>TEXT</td></tr>
+    <tr><td>model / model_provider</td><td>TEXT</td></tr>
+    <tr><td>source</td><td>sdk|proxy|stripe|csv</td></tr>
+    <tr><td>input_tokens / output_tokens</td><td>INT</td></tr>
+    <tr><td>trace_id / span_id</td><td>TEXT</td></tr>
+    <tr><td>request_body / response_body</td><td>JSONB</td></tr>
+    <tr><td>meta</td><td>JSONB (stripe_customer_id)</td></tr>
+  </table></div>
+  <div class="entity"><div class="entity-hdr"><div class="dot dot-analytics"></div>feature_definitions</div><table>
+    <tr><td class="pk">id</td><td>SERIAL PK</td></tr>
+    <tr><td class="fk">account_id</td><td>FK → accounts</td></tr>
+    <tr><td>feature_key</td><td>TEXT</td></tr>
+    <tr><td>name</td><td>TEXT</td></tr>
+    <tr><td>kind</td><td>cost|value|outcome</td></tr>
+  </table></div>
+  <div class="entity"><div class="entity-hdr"><div class="dot dot-analytics"></div>alert_rules</div><table>
+    <tr><td class="pk">id</td><td>SERIAL PK</td></tr>
+    <tr><td class="fk">account_id</td><td>FK → accounts</td></tr>
+    <tr><td>name / metric</td><td>TEXT</td></tr>
+    <tr><td>threshold</td><td>NUMERIC</td></tr>
+    <tr><td>trigger_type</td><td>TEXT</td></tr>
+  </table></div>
+  <div class="entity"><div class="entity-hdr"><div class="dot dot-analytics"></div>alert_history</div><table>
+    <tr><td class="pk">id</td><td>SERIAL PK</td></tr>
+    <tr><td class="fk">alert_rule_id</td><td>FK → alert_rules</td></tr>
+    <tr><td>customer_id</td><td>TEXT</td></tr>
+    <tr><td>current_value</td><td>NUMERIC</td></tr>
+    <tr><td>fired_at</td><td>TIMESTAMPTZ</td></tr>
+  </table></div>
+  <div class="entity"><div class="entity-hdr"><div class="dot dot-analytics"></div>custom_cohorts</div><table>
+    <tr><td class="pk">id</td><td>SERIAL PK</td></tr>
+    <tr><td class="fk">account_id</td><td>FK → accounts</td></tr>
+    <tr><td>name</td><td>TEXT</td></tr>
+    <tr><td>cohort_type</td><td>static|dynamic</td></tr>
+    <tr><td>rules</td><td>JSONB</td></tr>
+  </table></div>
+  <div class="entity"><div class="entity-hdr"><div class="dot dot-analytics"></div>cohort_members</div><table>
+    <tr><td class="fk">cohort_id</td><td>FK → custom_cohorts</td></tr>
+    <tr><td>customer_id</td><td>TEXT</td></tr>
+  </table></div>
+</div>
+
+<h3 id="erd-routing">Routing / Proxy</h3>
+<div class="erd-grid">
+  <div class="entity"><div class="entity-hdr"><div class="dot dot-routing"></div>routing_configs</div><table>
+    <tr><td class="pk">id</td><td>SERIAL PK</td></tr>
+    <tr><td class="fk">account_id</td><td>FK → accounts</td></tr>
+    <tr><td>name</td><td>TEXT</td></tr>
+    <tr><td>is_active</td><td>BOOLEAN</td></tr>
+  </table></div>
+  <div class="entity"><div class="entity-hdr"><div class="dot dot-routing"></div>routing_targets</div><table>
+    <tr><td class="fk">config_id</td><td>FK → routing_configs</td></tr>
+    <tr><td>provider / model</td><td>TEXT</td></tr>
+    <tr><td>priority / weight</td><td>INT</td></tr>
+  </table></div>
+  <div class="entity"><div class="entity-hdr"><div class="dot dot-routing"></div>proxy_cache</div><table>
+    <tr><td class="fk">account_id</td><td>FK → accounts</td></tr>
+    <tr><td>cache_key / model</td><td>TEXT</td></tr>
+    <tr><td>response_body</td><td>JSONB</td></tr>
+    <tr><td>tokens_saved</td><td>INT</td></tr>
+  </table></div>
+</div>
+
+<h3 id="erd-other">Other (WIP / Hidden / Inactive)</h3>
+<p style="font-size:12px; color:#8b949e; margin-bottom:12px;">These tables exist in the schema but are not actively used in the current product. Hidden from UI or still in development.</p>
+<div class="erd-grid">
+  <div class="entity" style="opacity:0.6;"><div class="entity-hdr"><div class="dot dot-other"></div>simulations <span style="font-size:10px;color:#d29922;margin-left:6px;">WIP</span></div><table>
+    <tr><td class="fk">account_id</td><td>FK → accounts</td></tr>
+    <tr><td>name / status</td><td>TEXT</td></tr>
+    <tr><td>scenarios / results</td><td>JSONB</td></tr>
+  </table></div>
+  <div class="entity" style="opacity:0.6;"><div class="entity-hdr"><div class="dot dot-other"></div>recommendations <span style="font-size:10px;color:#d29922;margin-left:6px;">WIP</span></div><table>
+    <tr><td class="fk">account_id</td><td>FK → accounts</td></tr>
+    <tr><td>type / title</td><td>TEXT</td></tr>
+    <tr><td>action_payload</td><td>JSONB</td></tr>
+    <tr><td>status</td><td>pending|applied|dismissed</td></tr>
+  </table></div>
+  <div class="entity" style="opacity:0.6;"><div class="entity-hdr"><div class="dot dot-other"></div>ai_insights <span style="font-size:10px;color:#d29922;margin-left:6px;">HIDDEN</span></div><table>
+    <tr><td class="fk">account_id</td><td>FK → accounts</td></tr>
+    <tr><td>insight_type / title</td><td>TEXT</td></tr>
+    <tr><td>severity</td><td>TEXT</td></tr>
+  </table></div>
+</div>
+
+<!-- ────────────────── RELATIONSHIPS ────────────────── -->
+<h3 id="relationships">Relationships</h3>
+<pre>
+users ──┐
+        ├── user_accounts ──┐
+accounts ┘                   │
+  │                          └── (role: owner|admin|viewer)
+  ├── customers ←→ observe_events    (via account_id + customer_id)
+  ├── customers ←→ subscriptions     (via customers.stripe_customer_id = subscriptions.customer_id)
+  ├── subscriptions → plans          (via plan_id)
+  ├── integrations                   (encrypted Stripe/OpenAI/Anthropic keys)
+  ├── sdk_api_keys                   (for event ingest auth)
+  ├── feature_definitions ←→ observe_events (via feature_key)
+  ├── feature_pricing ←→ feature_definitions (via feature_key)
+  ├── alert_rules → alert_history    (ON DELETE CASCADE)
+  ├── custom_cohorts → cohort_members (ON DELETE CASCADE)
+  └── routing_configs → routing_targets, routing_rules (ON DELETE CASCADE)
+</pre>
+
+<!-- ────────────────── CUSTOMER MODEL ────────────────── -->
+<h2 id="customer-model">Customer Model: Two Layers</h2>
+
+<div class="card-grid">
+  <div class="card red" id="layer1">
+    <h4>Layer 1 — Observe's Customers</h4>
+    <p style="font-size:12px; color:#8b949e;">Companies that sign up and pay for Observe.</p>
+    <table>
+      <tr><th>Table</th><th>Key Columns</th></tr>
+      <tr><td><code>users</code></td><td>email, visitor_id, stripe_customer_id, stripe_plan</td></tr>
+      <tr><td><code>accounts</code></td><td>name, clerk_org_id, stripe_customer_id, stripe_plan</td></tr>
+      <tr><td><code>user_accounts</code></td><td>user_id, account_id, role</td></tr>
+    </table>
+    <p style="font-size:11px; color:#484f58; margin-top:8px;">Stripe: Tanso's own account. Routes: <code>/billing/*</code></p>
+  </div>
+  <div class="card green" id="layer2">
+    <h4>Layer 2 — Their Customers' Customers</h4>
+    <p style="font-size:12px; color:#8b949e;">End-users of the Observe customer's product.</p>
+    <table>
+      <tr><th>Table</th><th>Key Columns</th></tr>
+      <tr><td><code>customers</code></td><td>customer_id, name, email, stripe_customer_id</td></tr>
+      <tr><td><code>subscriptions</code></td><td>subscription_id, customer_id, pricing_model</td></tr>
+      <tr><td><code>observe_events</code></td><td>customer_id, revenue_amount, cost_amount</td></tr>
+    </table>
+    <p style="font-size:11px; color:#484f58; margin-top:8px;">Stripe: user's own account. Routes: <code>/integrations/stripe/*</code></p>
+  </div>
+</div>
+
+<div class="warn" id="conflation">
+  <strong>Conflation risks:</strong><br>
+  1. <code>users.stripe_customer_id</code> (Layer 1) vs <code>customers.stripe_customer_id</code> (Layer 2) — same name, different Stripe accounts<br>
+  2. <code>/billing/*</code> uses Tanso keys; <code>/integrations/stripe/*</code> uses user's key — wrong client = wrong account<br>
+  3. "customer" in code sometimes means Observe user (billing), sometimes end-user (analytics)
+</div>
+
+<!-- ────────────────── USER STORIES ────────────────── -->
+<h2 id="user-stories">User Stories & Acceptance Criteria</h2>
+
+<div class="us" id="us-ingest">
+  <div class="us-title">US-1: Ingest SDK events with cost attribution</div>
+  <div class="us-story">As a developer, I send events via the SDK so that my LLM costs are tracked per customer and feature.</div>
+  <table>
+    <tr><th>Acceptance Criteria</th><th>Verified By</th></tr>
+    <tr><td>Event stored with customer_id, feature_key, model, source='sdk'</td><td>Query observe_events</td></tr>
+    <tr><td>Cost auto-calculated from model + tokens if costAmount omitted</td><td>Check cost_amount > 0</td></tr>
+    <tr><td>Customer record auto-created if new</td><td>Query customers table</td></tr>
+    <tr><td>stripe_customer_id populated from meta</td><td>Query customers.stripe_customer_id</td></tr>
+    <tr><td>Feature definition auto-created if new</td><td>Query feature_definitions</td></tr>
+    <tr><td>Duplicate idempotencyKey rejected</td><td>Send same event twice</td></tr>
+  </table>
+</div>
+
+<div class="us">
+  <div class="us-title">US-2: View request/response in event detail</div>
+  <div class="us-story">As a user, I expand an event row to see the LLM prompt and completion.</div>
+  <table>
+    <tr><th>Acceptance Criteria</th><th>Verified By</th></tr>
+    <tr><td>requestBody/responseBody stored as JSONB</td><td>Expand event row</td></tr>
+    <tr><td>OpenAI messages[] rendered with role icons</td><td>Expand OpenAI event</td></tr>
+    <tr><td>Missing bodies show hint with code snippet</td><td>Expand event without bodies</td></tr>
+    <tr><td>Failed fetch shows actual error, not generic</td><td>Disconnect network, expand</td></tr>
+  </table>
+</div>
+
+<div class="us" id="us-stripe">
+  <div class="us-title">US-3: Connect Stripe and sync customer data</div>
+  <div class="us-story">As a user, I connect my Stripe API key so my customers, subscriptions, and plans are imported.</div>
+  <table>
+    <tr><th>Acceptance Criteria</th><th>Verified By</th></tr>
+    <tr><td>API key encrypted (AES-256-GCM), stored in integrations</td><td>Check integrations row</td></tr>
+    <tr><td>Customers synced with name, email, stripe_customer_id</td><td>Query customers</td></tr>
+    <tr><td>Subscriptions synced with pricing_model detection</td><td>Query subscriptions</td></tr>
+    <tr><td>Revenue backfill runs automatically after sync</td><td>Check observe_events.revenue_source</td></tr>
+    <tr><td>Customer names resolved from Stripe</td><td>Check customers.name != customer_id</td></tr>
+  </table>
+</div>
+
+<div class="us">
+  <div class="us-title">US-4: Revenue enrichment on event ingest</div>
+  <div class="us-story">As a user with Stripe connected, each SDK event gets revenue based on the customer's subscription.</div>
+  <table>
+    <tr><th>Acceptance Criteria</th><th>Verified By</th></tr>
+    <tr><td>Bridge map built: customer_id → stripe_customer_id → subscription</td><td>Logs</td></tr>
+    <tr><td>Metered: unitPrice × usageUnits, source = per_unit</td><td>Query event</td></tr>
+    <tr><td>Tiered: tierPrice(mtdUsage) × usageUnits, source = tiered</td><td>Query event</td></tr>
+    <tr><td>Flat: $0 per event, source = subscription</td><td>Query event</td></tr>
+    <tr><td>Explicit revenueAmount overrides all</td><td>Send with revenueAmount</td></tr>
+    <tr><td>Feature pricing overrides subscription</td><td>Set feature pricing</td></tr>
+    <tr><td>Old events backfilled on sync</td><td>Check after sync</td></tr>
+  </table>
+</div>
+
+<div class="us">
+  <div class="us-title">US-5: Revenue backfill</div>
+  <div class="us-story">As a user, I trigger a backfill to re-enrich existing events after connecting Stripe.</div>
+  <table>
+    <tr><th>Acceptance Criteria</th><th>Verified By</th></tr>
+    <tr><td>POST /backfill/revenue processes up to 50k events</td><td>Check response</td></tr>
+    <tr><td>Events with revenue_source=none get re-enriched</td><td>events_updated > 0</td></tr>
+    <tr><td>Customer names resolved from Stripe</td><td>customers_resolved > 0</td></tr>
+    <tr><td>stripe_customer_id backfilled from event meta</td><td>Query customers</td></tr>
+    <tr><td>Auto-runs after Stripe sync</td><td>Connect Stripe, check logs</td></tr>
+  </table>
+</div>
+
+<div class="us" id="us-filtering">
+  <div class="us-title">US-6: Filter events by feature, customer, model, source</div>
+  <div class="us-story">As a user, I filter the events table to drill into specific segments.</div>
+  <table>
+    <tr><th>Acceptance Criteria</th><th>Verified By</th></tr>
+    <tr><td>Each dropdown updates the query</td><td>Select filter, check table</td></tr>
+    <tr><td>Filters compose (AND logic)</td><td>Select multiple</td></tr>
+    <tr><td>URL preserves filter state</td><td>Copy URL, new tab</td></tr>
+    <tr><td>Pagination resets on filter change</td><td>Apply filter, check page</td></tr>
+  </table>
+</div>
+
+<div class="us">
+  <div class="us-title">US-7: View customer P&L</div>
+  <div class="us-story">As a user, I click a customer to see cost, revenue, margin, and subscriptions.</div>
+  <table>
+    <tr><th>Acceptance Criteria</th><th>Verified By</th></tr>
+    <tr><td>Customer name shown (not raw ID)</td><td>/customers/:id page</td></tr>
+    <tr><td>Revenue, cost, margin % calculated</td><td>KPI cards</td></tr>
+    <tr><td>Active subscriptions listed</td><td>Subscriptions section</td></tr>
+    <tr><td>Model breakdown shown</td><td>Model section</td></tr>
+  </table>
+</div>
+
+<div class="us" id="us-alerts">
+  <div class="us-title">US-8: Alert on cost/margin thresholds</div>
+  <div class="us-story">As a user, I create alert rules that fire when cost exceeds budget or margin drops.</div>
+  <table>
+    <tr><th>Acceptance Criteria</th><th>Verified By</th></tr>
+    <tr><td>Rule created with metric, operator, threshold</td><td>Create in UI</td></tr>
+    <tr><td>Evaluated on each event ingest</td><td>Check alert_history</td></tr>
+    <tr><td>Per-customer alerts supported</td><td>segment_type = customer</td></tr>
+    <tr><td>Cooldown prevents rapid re-firing</td><td>Check last_triggered_at</td></tr>
+  </table>
+</div>
+
+<div class="us" id="us-onboarding">
+  <div class="us-title">US-9: First-time setup</div>
+  <div class="us-story">As a new user, I generate an SDK key and send my first event.</div>
+  <table>
+    <tr><th>Acceptance Criteria</th><th>Verified By</th></tr>
+    <tr><td>SDK key generated on /data-sources</td><td>Click generate</td></tr>
+    <tr><td>Key shown once, stored hashed</td><td>Check sdk_api_keys</td></tr>
+    <tr><td>First event triggers activation milestone</td><td>Check first_sdk_event_at</td></tr>
+    <tr><td>Event appears on /events page</td><td>Navigate to events</td></tr>
+  </table>
+</div>
+
+<!-- ────────────────── PAGES ────────────────── -->
+<h2 id="pages">Pages & Routes</h2>
+<table>
+  <tr><th>Path</th><th>Page</th><th>Purpose</th></tr>
+  <tr><td><code>/analytics</code></td><td>AnalyticsPage</td><td>Main dashboard: events by feature/model/customer, MRR</td></tr>
+  <tr><td><code>/events</code></td><td>EventsPage</td><td>Event log with filters + expandable detail</td></tr>
+  <tr><td><code>/features</code></td><td>FeaturesPage</td><td>Auto-detected features, per-feature pricing</td></tr>
+  <tr><td><code>/models</code></td><td>ModelsPage</td><td>Model breakdown: cost, revenue, usage</td></tr>
+  <tr><td><code>/cohorts</code></td><td>CohortsPage</td><td>Customer segments + custom cohorts</td></tr>
+  <tr><td><code>/customers/:id</code></td><td>CustomerDetailPage</td><td>Single customer P&L, subscriptions, events</td></tr>
+  <tr><td><code>/data-sources</code></td><td>DataSourcesPage</td><td>SDK keys, Stripe/OpenAI/Anthropic integrations</td></tr>
+  <tr><td><code>/alerts</code></td><td>AlertsPage</td><td>Alert rules and history</td></tr>
+  <tr><td><code>/traces</code></td><td>TracesPage</td><td>Distributed trace/span viewer</td></tr>
+  <tr><td><code>/team</code></td><td>TeamSettingsPage</td><td>Team members and invites</td></tr>
+  <tr><td><code>/plans</code></td><td>PlansPage</td><td>Pricing plans and usage limits</td></tr>
+</table>
+
+<!-- ────────────────── API ────────────────── -->
+<h2 id="api">API Surface</h2>
+
+<h3 id="api-events">Events & Ingest</h3>
+<table>
+  <tr><th>Endpoint</th><th>Method</th><th>Purpose</th></tr>
+  <tr><td><code>/events/ingest</code></td><td>POST</td><td>Ingest events (batch up to 1000)</td></tr>
+  <tr><td><code>/events</code></td><td>GET</td><td>Query events with filters</td></tr>
+  <tr><td><code>/events/:id</code></td><td>GET</td><td>Event detail with request/response bodies</td></tr>
+  <tr><td><code>/events/traces</code></td><td>GET</td><td>List distributed traces</td></tr>
+  <tr><td><code>/events/trace/:id</code></td><td>GET</td><td>Trace detail with all spans</td></tr>
+</table>
+
+<h3 id="api-analytics">Analytics</h3>
+<table>
+  <tr><th>Endpoint</th><th>Method</th><th>Purpose</th></tr>
+  <tr><td><code>/metrics/summary</code></td><td>GET</td><td>Total customers, MRR, ARR, ARPC</td></tr>
+  <tr><td><code>/analytics/customer-pnl</code></td><td>GET</td><td>Per-customer P&L</td></tr>
+  <tr><td><code>/analytics/margin-trends</code></td><td>GET</td><td>Monthly margin %</td></tr>
+  <tr><td><code>/analytics/mrr-movements</code></td><td>GET</td><td>Churn, expansion, contraction</td></tr>
+  <tr><td><code>/customers/:id</code></td><td>GET</td><td>Customer detail</td></tr>
+</table>
+
+<h3 id="api-integrations">Integrations</h3>
+<table>
+  <tr><th>Endpoint</th><th>Method</th><th>Purpose</th></tr>
+  <tr><td><code>/integrations/stripe/connect</code></td><td>POST</td><td>Connect Stripe API key</td></tr>
+  <tr><td><code>/integrations/stripe/sync</code></td><td>POST</td><td>Re-sync Stripe data + revenue backfill</td></tr>
+  <tr><td><code>/integrations/stripe/status</code></td><td>GET</td><td>Connection status</td></tr>
+  <tr><td><code>/integrations/stripe/diagnostics</code></td><td>GET</td><td>Health checks</td></tr>
+  <tr><td><code>/backfill/revenue</code></td><td>POST</td><td>Re-enrich revenue + customer names</td></tr>
+  <tr><td><code>/backfill/tokens</code></td><td>POST</td><td>Backfill token splits from providers</td></tr>
+</table>
+
+<h3 id="api-proxy">Proxy / Gateway</h3>
+<table>
+  <tr><th>Endpoint</th><th>Method</th><th>Purpose</th></tr>
+  <tr><td><code>/v1/chat/completions</code></td><td>POST</td><td>OpenAI-compatible proxy</td></tr>
+  <tr><td><code>/v1/messages</code></td><td>POST</td><td>Anthropic Messages proxy</td></tr>
+  <tr><td><code>/v1/embeddings</code></td><td>POST</td><td>Embedding proxy</td></tr>
+  <tr><td><code>/gateway/configs</code></td><td>GET/POST</td><td>Routing configurations</td></tr>
+</table>
+
+<!-- ────────────────── CHANGELOG ────────────────── -->
+<h2 id="changelog">Changelog (2026-04-22)</h2>
+<ul>
+  <li><strong>Events page filters fixed</strong> — Vue HOF bug discarded selected values; pre-created named handlers</li>
+  <li><strong>Event detail error surfacing</strong> — replaced silent catch with error display + retry on re-expand</li>
+  <li><strong>List query optimized</strong> — excluded request_body/response_body JSONB from list payload</li>
+  <li><strong>stripe_customer_id column</strong> — added to customers table; bridges app IDs to Stripe IDs</li>
+  <li><strong>Auto-create customers on ingest</strong> — like feature_definitions; includes stripe_customer_id from meta</li>
+  <li><strong>Revenue enrichment bridge</strong> — subscription lookup now goes through appToStripe map instead of direct customer_id match</li>
+  <li><strong>Revenue backfill endpoint</strong> — POST /backfill/revenue re-enriches events + resolves customer names</li>
+  <li><strong>Auto-backfill after Stripe sync</strong> — runRevenueBackfill() fires after syncStripeDataForUser()</li>
+  <li><strong>Docs promoted requestBody/responseBody</strong> — moved to RECOMMENDED tier in llms.txt with curl example</li>
+</ul>
+
+</main>
+</body>
+</html>
