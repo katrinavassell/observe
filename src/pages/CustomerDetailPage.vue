@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useQuery } from "@tanstack/vue-query";
 import {
@@ -32,10 +32,41 @@ const { isLoggedIn } = useAuth();
 
 const customerId = computed(() => route.params.id as string);
 
+type BillingPeriod = "this_month" | "last_month" | "all_time";
+const selectedPeriod = ref<BillingPeriod>("this_month");
+
+function formatLocalDate(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+const periodParams = computed(() => {
+  const now = new Date();
+  if (selectedPeriod.value === "this_month") {
+    const start = new Date(now.getFullYear(), now.getMonth(), 1);
+    return {
+      period_start: formatLocalDate(start),
+      period_end: formatLocalDate(now),
+    };
+  }
+  if (selectedPeriod.value === "last_month") {
+    const start = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const end = new Date(now.getFullYear(), now.getMonth(), 0);
+    return {
+      period_start: formatLocalDate(start),
+      period_end: formatLocalDate(end),
+    };
+  }
+  return {};
+});
+
 const { data: detail, isLoading: detailLoading } = useQuery({
-  queryKey: ["customer-detail", customerId],
-  queryFn: () => getCustomerDetail(customerId.value),
+  queryKey: ["customer-detail", customerId, selectedPeriod],
+  queryFn: () => getCustomerDetail(customerId.value, periodParams.value),
   enabled: () => isLoggedIn.value && !!customerId.value,
+  placeholderData: (prev) => prev,
 });
 
 const { data: timeseries, isLoading: tsLoading } = useQuery({
@@ -277,6 +308,28 @@ const costPerEvent = computed(() => {
           </div>
         </div>
         <MarginBadge :margin="detail.margin_pct" />
+      </div>
+
+      <!-- Period selector -->
+      <div class="flex items-center gap-2">
+        <span class="text-xs text-muted-foreground">Period:</span>
+        <button
+          v-for="p in [
+            { key: 'this_month', label: 'This Month' },
+            { key: 'last_month', label: 'Last Month' },
+            { key: 'all_time', label: 'All Time' },
+          ] as const"
+          :key="p.key"
+          class="px-2.5 py-1 rounded text-xs font-medium transition-colors"
+          :class="
+            selectedPeriod === p.key
+              ? 'bg-primary text-primary-foreground'
+              : 'bg-muted text-muted-foreground hover:text-foreground'
+          "
+          @click="selectedPeriod = p.key"
+        >
+          {{ p.label }}
+        </button>
       </div>
 
       <!-- Trend chart -->

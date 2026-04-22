@@ -610,7 +610,13 @@ export function createCohortsRoutes(pool: Pool, ensureVisitor: any) {
           }
         }
 
-        res.json({ customers, summary, totals });
+        res.json({
+          customers,
+          summary,
+          totals,
+          period_start: periodStart || null,
+          period_end: periodEnd || null,
+        });
       } catch (error) {
         console.error("GET /cohorts error:", error);
         res.status(500).json({ error: "Failed to compute cohorts" });

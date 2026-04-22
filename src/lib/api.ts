@@ -563,8 +563,15 @@ export async function getModels(): Promise<ModelSummary[]> {
   return request("/models");
 }
 
-export async function getCustomerDetail(id: string): Promise<CustomerDetail> {
-  return request(`/customers/${encodeURIComponent(id)}`);
+export async function getCustomerDetail(
+  id: string,
+  period?: { period_start?: string; period_end?: string },
+): Promise<CustomerDetail> {
+  const params = new URLSearchParams();
+  if (period?.period_start) params.set("period_start", period.period_start);
+  if (period?.period_end) params.set("period_end", period.period_end);
+  const qs = params.toString();
+  return request(`/customers/${encodeURIComponent(id)}${qs ? "?" + qs : ""}`);
 }
 
 export interface CustomerTimeseriesPoint {
@@ -1058,12 +1065,23 @@ export async function getHealthHistory(
   return request(`/cohorts/${encodeURIComponent(customerId)}/health-history`);
 }
 
-export async function getCohorts(showInternal = false): Promise<{
+export async function getCohorts(
+  opts: {
+    showInternal?: boolean;
+    periodStart?: string;
+    periodEnd?: string;
+  } = {},
+): Promise<{
   customers: CohortCustomer[];
   summary: Record<CohortLabel, CohortSummary>;
   totals: CohortTotals;
 }> {
-  return request(`/cohorts${showInternal ? "?show_internal=true" : ""}`);
+  const params = new URLSearchParams();
+  if (opts.showInternal) params.set("show_internal", "true");
+  if (opts.periodStart) params.set("period_start", opts.periodStart);
+  if (opts.periodEnd) params.set("period_end", opts.periodEnd);
+  const qs = params.toString();
+  return request(`/cohorts${qs ? `?${qs}` : ""}`);
 }
 
 // ======================================================================// STRIPE INVOICES

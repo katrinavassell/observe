@@ -55,6 +55,31 @@ import {
 const queryClient = useQueryClient();
 const { isLoggedIn } = useAuth();
 
+// ── Period selector ─────────────────────────────────────────────────────────
+
+type PeriodKey = "this_month" | "last_month" | "all_time";
+const selectedPeriod = ref<PeriodKey>("this_month");
+
+const periodDates = computed(() => {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = now.getMonth();
+
+  if (selectedPeriod.value === "this_month") {
+    return {
+      periodStart: new Date(y, m, 1).toISOString(),
+      periodEnd: now.toISOString(),
+    };
+  }
+  if (selectedPeriod.value === "last_month") {
+    return {
+      periodStart: new Date(y, m - 1, 1).toISOString(),
+      periodEnd: new Date(y, m, 0, 23, 59, 59, 999).toISOString(),
+    };
+  }
+  return { periodStart: undefined, periodEnd: undefined };
+});
+
 // ── Create cohort dialog ────────────────────────────────────────────────────
 
 const createDialogOpen = ref(false);
@@ -386,8 +411,12 @@ const {
   isLoading: realIsLoading,
   isError,
 } = useQuery({
-  queryKey: ["cohorts"],
-  queryFn: () => getCohorts(),
+  queryKey: computed(() => ["cohorts", selectedPeriod.value]),
+  queryFn: () =>
+    getCohorts({
+      periodStart: periodDates.value.periodStart,
+      periodEnd: periodDates.value.periodEnd,
+    }),
   enabled: computed(() => isLoggedIn.value),
   placeholderData: { customers: [], summary: [], totals: null },
 });
@@ -718,6 +747,27 @@ const excludedCount = computed(() => {
             {{ fmt(totals?.cost ?? 0) }}
           </p>
         </Card>
+      </div>
+
+      <!-- Period selector -->
+      <div class="flex items-center gap-1 p-0.5 bg-muted rounded-md w-fit">
+        <button
+          v-for="p in [
+            { key: 'this_month', label: 'This Month' },
+            { key: 'last_month', label: 'Last Month' },
+            { key: 'all_time', label: 'All Time' },
+          ] as const"
+          :key="p.key"
+          class="px-3 py-1.5 rounded text-xs font-medium transition-colors"
+          :class="
+            selectedPeriod === p.key
+              ? 'bg-background shadow-sm text-foreground'
+              : 'text-muted-foreground hover:text-foreground'
+          "
+          @click="selectedPeriod = p.key"
+        >
+          {{ p.label }}
+        </button>
       </div>
 
       <!-- Cohort filter chips + column settings -->

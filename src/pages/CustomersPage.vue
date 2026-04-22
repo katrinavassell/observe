@@ -26,7 +26,7 @@ const { isLoggedIn } = useAuth();
 
 const { data, isLoading } = useQuery({
   queryKey: ["cohorts"],
-  queryFn: () => getCohorts(true),
+  queryFn: () => getCohorts({ showInternal: true }),
   enabled: isLoggedIn,
   placeholderData: { customers: [], totals: null },
 });
