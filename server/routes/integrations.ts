@@ -190,7 +190,7 @@ export async function syncStripeDataForUser(
       );
     }
     await pool.query(
-      `INSERT INTO customers (user_id, account_id, customer_id, name, email) VALUES ${placeholders.join(", ")} ON CONFLICT DO NOTHING`,
+      `INSERT INTO customers (user_id, account_id, customer_id, name, email) VALUES ${placeholders.join(", ")} ON CONFLICT (user_id, customer_id) DO UPDATE SET name = EXCLUDED.name, email = COALESCE(EXCLUDED.email, customers.email), account_id = COALESCE(EXCLUDED.account_id, customers.account_id), updated_at = NOW()`,
       values,
     );
   }
