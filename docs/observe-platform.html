@@ -763,14 +763,14 @@ accounts ┘                   │
 
 <table id="changelog-table">
   <tr><th style="width:80px;">Type</th><th style="width:100px;">Date</th><th>Change</th></tr>
-  <tr data-type="bug"><td><span style="color:#f85149;">BUG</span></td><td>2026-04-22</td><td><strong>Events page filters broken</strong> — all 4 dropdown filters (feature, customer, model, source) did nothing when selected</td></tr>
-  <tr data-type="bug"><td><span style="color:#f85149;">BUG</span></td><td>2026-04-22</td><td><strong>Event detail silent failure</strong> — getEventDetail errors swallowed, showing generic "Failed to load" with no retry</td></tr>
-  <tr data-type="bug"><td><span style="color:#f85149;">BUG</span></td><td>2026-04-22</td><td><strong>Customer records never created on ingest</strong> — features auto-created but customers weren't, breaking name resolution</td></tr>
-  <tr data-type="bug"><td><span style="color:#f85149;">BUG</span></td><td>2026-04-22</td><td><strong>Revenue enrichment broken for non-cus_* IDs</strong> — subscription lookup assumed customer_id = Stripe ID, but customer_id changed to app-level ID with Stripe ID in meta</td></tr>
-  <tr data-type="bug"><td><span style="color:#f85149;">BUG</span></td><td>2026-04-22</td><td><strong>No stripe_customer_id on customers table</strong> — only bridge was meta on individual events, requiring expensive scans</td></tr>
-  <tr data-type="bug"><td><span style="color:#f85149;">BUG</span></td><td>2026-04-22</td><td><strong>First-event-wins locked null stripe_customer_id</strong> — if first event in batch had no meta, ON CONFLICT DO NOTHING prevented later updates</td></tr>
-  <tr data-type="bug"><td><span style="color:#f85149;">BUG</span></td><td>2026-04-22</td><td><strong>Empty error message fell through to sign-in panel</strong> — network abort errors had empty message, v-else-if falsy check skipped error display</td></tr>
-  <tr data-type="bug"><td><span style="color:#f85149;">BUG</span></td><td>2026-04-22</td><td><strong>Silent catch in backfill Stripe client</strong> — decryption failures or DB errors swallowed without logging</td></tr>
+  <tr data-type="bug" style="cursor:pointer;" onclick="location.href='#pm1'"><td><span style="color:#f85149;">BUG</span></td><td>2026-04-22</td><td><strong>Events page filters broken</strong> — all 4 dropdown filters did nothing when selected <span style="color:#79c0ff;font-size:11px;">→ PM-1</span></td></tr>
+  <tr data-type="bug" style="cursor:pointer;" onclick="location.href='#pm3'"><td><span style="color:#f85149;">BUG</span></td><td>2026-04-22</td><td><strong>Event detail silent failure</strong> — errors swallowed, showing generic "Failed to load" <span style="color:#79c0ff;font-size:11px;">→ PM-3</span></td></tr>
+  <tr data-type="bug" style="cursor:pointer;" onclick="location.href='#pm4'"><td><span style="color:#f85149;">BUG</span></td><td>2026-04-22</td><td><strong>Customer records never created on ingest</strong> — breaking name resolution <span style="color:#79c0ff;font-size:11px;">→ PM-4</span></td></tr>
+  <tr data-type="bug" style="cursor:pointer;" onclick="location.href='#pm2'"><td><span style="color:#f85149;">BUG</span></td><td>2026-04-22</td><td><strong>Revenue enrichment broken for non-cus_* IDs</strong> — customer_id changed to app-level ID <span style="color:#79c0ff;font-size:11px;">→ PM-2</span></td></tr>
+  <tr data-type="bug" style="cursor:pointer;" onclick="location.href='#pm2'"><td><span style="color:#f85149;">BUG</span></td><td>2026-04-22</td><td><strong>No stripe_customer_id on customers table</strong> — no bridge between app IDs and Stripe IDs <span style="color:#79c0ff;font-size:11px;">→ PM-2</span></td></tr>
+  <tr data-type="bug" style="cursor:pointer;" onclick="location.href='#pm4'"><td><span style="color:#f85149;">BUG</span></td><td>2026-04-22</td><td><strong>First-event-wins locked null stripe_customer_id</strong> — ON CONFLICT DO NOTHING prevented updates <span style="color:#79c0ff;font-size:11px;">→ PM-4</span></td></tr>
+  <tr data-type="bug" style="cursor:pointer;" onclick="location.href='#pm3'"><td><span style="color:#f85149;">BUG</span></td><td>2026-04-22</td><td><strong>Empty error message fell through to sign-in panel</strong> — v-else-if falsy check <span style="color:#79c0ff;font-size:11px;">→ PM-3</span></td></tr>
+  <tr data-type="bug" style="cursor:pointer;" onclick="location.href='#pm3'"><td><span style="color:#f85149;">BUG</span></td><td>2026-04-22</td><td><strong>Silent catch in backfill Stripe client</strong> — errors swallowed without logging <span style="color:#79c0ff;font-size:11px;">→ PM-3</span></td></tr>
   <tr data-type="feature"><td><span style="color:#3fb950;">FEATURE</span></td><td>2026-04-22</td><td><strong>Revenue backfill endpoint</strong> — POST /backfill/revenue re-enriches up to 50k events + resolves customer names from Stripe</td></tr>
   <tr data-type="feature"><td><span style="color:#3fb950;">FEATURE</span></td><td>2026-04-22</td><td><strong>Auto-backfill after Stripe sync</strong> — runRevenueBackfill() fires automatically after syncStripeDataForUser()</td></tr>
   <tr data-type="feature"><td><span style="color:#3fb950;">FEATURE</span></td><td>2026-04-22</td><td><strong>stripe_customer_id column</strong> — bridges app customer IDs to Stripe IDs directly on the customers table</td></tr>
@@ -784,7 +784,7 @@ accounts ┘                   │
 <h2 id="postmortems">Bug Postmortems</h2>
 <p style="font-size:12px; color:#8b949e; margin-bottom:16px;">Root cause analysis so these patterns don't repeat.</p>
 
-<div class="us">
+<div class="us" id="pm1">
   <div class="us-title">PM-1: Events page filters did nothing</div>
   <table>
     <tr><th style="width:120px;">Field</th><th>Detail</th></tr>
@@ -795,7 +795,7 @@ accounts ┘                   │
   </table>
 </div>
 
-<div class="us">
+<div class="us" id="pm2">
   <div class="us-title">PM-2: Revenue enrichment broken after customer ID change</div>
   <table>
     <tr><th style="width:120px;">Field</th><th>Detail</th></tr>
@@ -806,7 +806,7 @@ accounts ┘                   │
   </table>
 </div>
 
-<div class="us">
+<div class="us" id="pm3">
   <div class="us-title">PM-3: Silent catches hiding real errors</div>
   <table>
     <tr><th style="width:120px;">Field</th><th>Detail</th></tr>
@@ -817,7 +817,7 @@ accounts ┘                   │
   </table>
 </div>
 
-<div class="us">
+<div class="us" id="pm4">
   <div class="us-title">PM-4: Customer records never created on ingest</div>
   <table>
     <tr><th style="width:120px;">Field</th><th>Detail</th></tr>
