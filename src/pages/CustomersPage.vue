@@ -125,12 +125,6 @@ function cohortBadgeClass(cohort: CohortLabel | null): string {
   );
 }
 
-function healthDotClass(score: number): string {
-  if (score < 30) return "bg-red-500";
-  if (score < 60) return "bg-yellow-500";
-  return "bg-green-500";
-}
-
 function trendDirection(trend: string): "up" | "down" | "stable" {
   if (trend === "up") return "up";
   if (trend === "down") return "down";

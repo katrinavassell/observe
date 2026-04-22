@@ -192,12 +192,6 @@ function cohortBadgeClass(cohort: CohortLabel | null): string {
   return map[cohort] ?? "bg-gray-100 text-gray-600";
 }
 
-function healthDotClass(score: number): string {
-  if (score < 30) return "bg-red-500";
-  if (score < 60) return "bg-yellow-500";
-  return "bg-green-500";
-}
-
 function formatDate(date: string): string {
   if (!date) return "—";
   return new Date(date).toLocaleDateString("en-US", {
