@@ -784,6 +784,12 @@ accounts ┘                   │
   <tr data-type="bug"><td><span style="color:#f85149;">BUG</span></td><td>2026-04-22</td><td><strong>Period selector crashed cohorts page</strong> — currentMrrMap reference caused serverless function crash. Reverted, hidden until fixed.</td></tr>
   <tr data-type="feature"><td><span style="color:#3fb950;">FEATURE</span></td><td>2026-04-22</td><td><strong>Revenue shows MRR for flat subs</strong> — Revenue column and customer detail use subscription MRR when event revenue is $0</td></tr>
   <tr data-type="feature"><td><span style="color:#3fb950;">FEATURE</span></td><td>2026-04-22</td><td><strong>Auto-backfill clerk_org_id</strong> — ensureVisitor stamps clerk_org_id on accounts when Clerk user logs in</td></tr>
+  <tr data-type="feature"><td><span style="color:#3fb950;">FEATURE</span></td><td>2026-04-22</td><td><strong>Reset Account Data</strong> — collapsible section on Data Sources page. Clears all data, SDK keys, integrations. Warns that existing API key stops working.</td></tr>
+  <tr data-type="bug"><td><span style="color:#f85149;">BUG</span></td><td>2026-04-22</td><td><strong>Reset failed — custom_cohorts missing account_id on prod</strong> — ALTER TABLE migration hadn't run on prod DB. Added column manually.</td></tr>
+  <tr data-type="bug"><td><span style="color:#f85149;">BUG</span></td><td>2026-04-22</td><td><strong>Duplicate /data/clear route in data.ts</strong> — same pattern as Stripe sync. customers.ts version was the one being hit.</td></tr>
+  <tr data-type="feature"><td><span style="color:#3fb950;">FEATURE</span></td><td>2026-04-22</td><td><strong>Tiny costs show &lt;$0.0001</strong> — sub-penny costs from short messages displayed as $0.0000 (looked like no cost). Now shows "&lt;$0.0001".</td></tr>
+  <tr data-type="docs"><td><span style="color:#8b949e;">DOCS</span></td><td>2026-04-22</td><td><strong>requestBody/responseBody in all code examples</strong> — llms.txt, DataSourcesPage snippet, EventsPage hint all include prompt/response fields</td></tr>
+  <tr data-type="docs"><td><span style="color:#8b949e;">DOCS</span></td><td>2026-04-22</td><td><strong>FAQ updates</strong> — multi-sub hybrid detection, billing period margin, tiny costs explanation</td></tr>
 </table>
 
 <!-- ────────────────── BUG POSTMORTEMS ────────────────── -->
