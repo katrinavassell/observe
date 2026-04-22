@@ -398,53 +398,33 @@ export function createCustomersRoutes(
     "/data/clear",
     ensureVisitor,
     async (req: AuthRequest, res: Response) => {
+      const acct = req.accountId ?? null;
+      const tables = [
+        "alert_rules",
+        "custom_cohorts",
+        "feature_pricing",
+        "feature_definitions",
+        "integrations",
+        "sdk_api_keys",
+        "ai_insights",
+        "observe_events",
+        "usage_records",
+        "cost_records",
+        "subscriptions",
+        "customers",
+        "plans",
+      ];
       const client = await pool.connect();
       try {
         await client.query("BEGIN");
-        await client.query("DELETE FROM alert_rules WHERE account_id = $1", [
-          req.accountId!,
-        ]);
-        await client.query("DELETE FROM custom_cohorts WHERE account_id = $1", [
-          req.accountId!,
-        ]);
-        await client.query(
-          "DELETE FROM feature_pricing WHERE account_id = $1",
-          [req.accountId!],
-        );
-        await client.query(
-          "DELETE FROM feature_definitions WHERE account_id = $1",
-          [req.accountId!],
-        );
-        await client.query("DELETE FROM integrations WHERE account_id = $1", [
-          req.accountId!,
-        ]);
-        await client.query("DELETE FROM sdk_api_keys WHERE account_id = $1", [
-          req.accountId!,
-        ]);
-        await client.query("DELETE FROM ai_insights WHERE account_id = $1", [
-          req.accountId!,
-        ]);
-        await client.query("DELETE FROM observe_events WHERE account_id = $1", [
-          req.accountId!,
-        ]);
-        await client.query("DELETE FROM usage_records WHERE account_id = $1", [
-          req.accountId!,
-        ]);
-        await client.query("DELETE FROM cost_records WHERE account_id = $1", [
-          req.accountId!,
-        ]);
-        await client.query("DELETE FROM subscriptions WHERE account_id = $1", [
-          req.accountId!,
-        ]);
-        await client.query("DELETE FROM customers WHERE account_id = $1", [
-          req.accountId!,
-        ]);
-        await client.query("DELETE FROM plans WHERE account_id = $1", [
-          req.accountId!,
-        ]);
+        for (const table of tables) {
+          await client.query(`DELETE FROM ${table} WHERE account_id = $1`, [
+            acct,
+          ]);
+        }
         await client.query(
           "UPDATE user_data_status SET data_mode = $2, updated_at = NOW() WHERE account_id = $1",
-          [req.accountId!, "none"],
+          [acct, "none"],
         );
         await client.query("COMMIT");
         res.json({ success: true });
@@ -452,7 +432,9 @@ export function createCustomersRoutes(
         await client.query("ROLLBACK");
         console.error("Clear data error:", error);
         const detail = error instanceof Error ? error.message : String(error);
-        res.status(500).json({ error: "Failed to clear data", detail });
+        res
+          .status(500)
+          .json({ error: "Failed to clear data", detail, account_id: acct });
       } finally {
         client.release();
       }
