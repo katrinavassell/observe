@@ -604,6 +604,18 @@ async function _doDbInit() {
       `ALTER TABLE customers ADD COLUMN IF NOT EXISTS is_internal BOOLEAN DEFAULT false`,
     );
 
+    await pool
+      .query(
+        `ALTER TABLE customers ADD COLUMN IF NOT EXISTS stripe_customer_id TEXT`,
+      )
+      .catch(() => {});
+
+    await pool
+      .query(
+        `CREATE INDEX IF NOT EXISTS idx_customers_stripe_cid ON customers(account_id, stripe_customer_id) WHERE stripe_customer_id IS NOT NULL`,
+      )
+      .catch(() => {});
+
     await pool.query(`
       CREATE TABLE IF NOT EXISTS subscriptions (
         id SERIAL PRIMARY KEY,
@@ -694,6 +706,12 @@ async function _doDbInit() {
       ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS pricing_tiers JSONB;
       ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS unit_price NUMERIC(12, 6);
     END $$`);
+
+    await pool
+      .query(
+        `ALTER TABLE observe_events ADD COLUMN IF NOT EXISTS meta JSONB DEFAULT '{}'::jsonb`,
+      )
+      .catch(() => {});
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS feature_pricing (

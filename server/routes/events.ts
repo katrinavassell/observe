@@ -944,6 +944,7 @@ export function createEventsRoutes(
           requestBody?: unknown;
           responseBody?: unknown;
           idempotencyKey?: string;
+          meta?: Record<string, string>;
           traceId?: string;
           spanId?: string;
           parentSpanId?: string;
@@ -1008,11 +1009,23 @@ export function createEventsRoutes(
         // Auto-enrich revenue from Stripe: look up subscriptions for customers
         // in this batch, carrying the pricing model so we pick the right
         // revenue derivation per event.
+        // When events carry meta.stripe_customer_id, use that to look up
+        // subscriptions (Stripe's cus_xxx) instead of the customerReferenceId.
         const customerIds = [
           ...new Set(validEvents.map((e) => e.customerReferenceId)),
         ];
+        const stripeCustomerIds = [
+          ...new Set(
+            validEvents
+              .map((e) => e.meta?.stripe_customer_id)
+              .filter((id): id is string => !!id),
+          ),
+        ];
+        const allSubLookupIds = [
+          ...new Set([...customerIds, ...stripeCustomerIds]),
+        ];
         const subByCustomer = new Map<string, SubMeta>();
-        if (customerIds.length > 0 && accountId != null) {
+        if (allSubLookupIds.length > 0 && accountId != null) {
           try {
             const subResult = await pool.query(
               `SELECT s.customer_id,
@@ -1024,7 +1037,7 @@ export function createEventsRoutes(
                FROM subscriptions s
                WHERE s.account_id = $1 AND s.is_active = true AND s.customer_id = ANY($2)
                GROUP BY s.customer_id`,
-              [accountId, customerIds],
+              [accountId, allSubLookupIds],
             );
             for (const row of subResult.rows) {
               subByCustomer.set(row.customer_id, {
@@ -1102,15 +1115,20 @@ export function createEventsRoutes(
           } else if (featurePricingMap.has(evt.featureKey)) {
             revenue = featurePricingMap.get(evt.featureKey)!;
             revenueSource = "feature_pricing";
-          } else if (subByCustomer.has(evt.customerReferenceId)) {
-            const meta = subByCustomer.get(evt.customerReferenceId)!;
-            const evtUsage =
-              evt.usageUnits ??
-              (evt.inputTokens || 0) + (evt.outputTokens || 0);
-            const mtd = mtdUsageByCustomer.get(evt.customerReferenceId) ?? 0;
-            const enriched = enrichRevenueFromSub(meta, evtUsage, mtd);
-            revenue = enriched.revenue;
-            revenueSource = enriched.revenueSource;
+          } else {
+            // Try meta.stripe_customer_id first, then fall back to customerReferenceId
+            const subLookupId =
+              evt.meta?.stripe_customer_id ?? evt.customerReferenceId;
+            if (subByCustomer.has(subLookupId)) {
+              const subMeta = subByCustomer.get(subLookupId)!;
+              const evtUsage =
+                evt.usageUnits ??
+                (evt.inputTokens || 0) + (evt.outputTokens || 0);
+              const mtd = mtdUsageByCustomer.get(subLookupId) ?? 0;
+              const enriched = enrichRevenueFromSub(subMeta, evtUsage, mtd);
+              revenue = enriched.revenue;
+              revenueSource = enriched.revenueSource;
+            }
           }
 
           // Only mark tokens_source='direct' when the SDK actually provided
@@ -1121,7 +1139,7 @@ export function createEventsRoutes(
               : null;
 
           placeholders.push(
-            `($${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, 'sdk', 'event', false, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++})`,
+            `($${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, 'sdk', 'event', false, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}::jsonb)`,
           );
           values.push(
             userId,
@@ -1156,6 +1174,7 @@ export function createEventsRoutes(
                 ? evt.responseBody
                 : JSON.stringify(evt.responseBody)
               : null,
+            evt.meta ? JSON.stringify(evt.meta) : null,
           );
         }
 
@@ -1166,7 +1185,7 @@ export function createEventsRoutes(
           model, model_provider, source, granularity, is_inferred, idempotency_key, revenue_source,
           trace_id, span_id, parent_span_id, duration_ms, cost_type,
           input_tokens, output_tokens, tokens_source,
-          request_body, response_body
+          request_body, response_body, meta
         ) VALUES ${placeholders.join(", ")}
         ON CONFLICT (account_id, idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING
       `;
@@ -1191,6 +1210,29 @@ export function createEventsRoutes(
         const result = await pool.query(insertQuery, values);
         const inserted = result.rowCount ?? 0;
         const deduped = validEvents.length - inserted;
+
+        // Persist stripe_customer_id from meta to customers table
+        if (inserted > 0 && accountId != null) {
+          const stripeIdPairs = new Map<string, string>();
+          for (const evt of validEvents) {
+            const sid = evt.meta?.stripe_customer_id;
+            if (sid) {
+              stripeIdPairs.set(evt.customerReferenceId, sid);
+            }
+          }
+          for (const [custRefId, stripeId] of stripeIdPairs) {
+            pool
+              .query(
+                `UPDATE customers SET stripe_customer_id = $1, updated_at = NOW()
+                 WHERE account_id = $2 AND customer_id = $3
+                   AND (stripe_customer_id IS NULL OR stripe_customer_id != $1)`,
+                [stripeId, accountId, custRefId],
+              )
+              .catch((err) =>
+                console.error("Stripe customer ID upsert failed:", err),
+              );
+          }
+        }
 
         res.json({
           accepted: inserted,
