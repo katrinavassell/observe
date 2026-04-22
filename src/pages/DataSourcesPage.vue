@@ -101,9 +101,9 @@ async function loadSdkKeys() {
 async function handleGenerateKey() {
   isGeneratingKey.value = true;
   try {
-    const result = await createSdkKey(newKeyName.value || undefined);
-    generatedKey.value = result.key;
+    await createSdkKey(newKeyName.value || undefined);
     newKeyName.value = "";
+    showKeyGenerator.value = false;
     await loadSdkKeys();
     window.posthog?.capture("sdk_key_created");
   } catch (error) {
