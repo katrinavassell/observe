@@ -828,6 +828,17 @@ accounts ┘                   │
   </table>
 </div>
 
+<div class="us" id="pm5">
+  <div class="us-title">PM-5: Stripe sync failed — dual unique constraint on customers table</div>
+  <table>
+    <tr><th style="width:120px;">Field</th><th>Detail</th></tr>
+    <tr><td><strong>Root Cause</strong></td><td><code>customers</code> has two unique constraints: <code>UNIQUE(user_id, customer_id)</code> and <code>idx_customers_account_customer(account_id, customer_id)</code>. When Stripe sync inserts a customer that matches BOTH constraints, PostgreSQL can't resolve the ambiguity with <code>ON CONFLICT (user_id, customer_id)</code> — the second constraint also fires.</td></tr>
+    <tr><td><strong>Impact</strong></td><td>Stripe sync fails entirely. No customers, subscriptions, or plans get updated. Revenue enrichment has stale data.</td></tr>
+    <tr><td><strong>Fix</strong></td><td>Switched to delete-then-insert pattern for Stripe-synced customers (matching the memory rule: "Stripe sync deletes first, fresh insert carries names"). DELETE only removes rows where <code>stripe_customer_id = customer_id</code> (Stripe-created) or IS NULL, preserving SDK-created customer records.</td></tr>
+    <tr><td><strong>Prevention</strong></td><td>Never use <code>ON CONFLICT</code> on tables with dual unique constraints. Use delete-then-insert or SELECT-first pattern. See <code>bugs_upsert_dual_unique.md</code> memory.</td></tr>
+  </table>
+</div>
+
 <script>
 function filterChangelog(type) {
   const rows = document.querySelectorAll('#changelog-table tr[data-type]');

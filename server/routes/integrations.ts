@@ -167,10 +167,22 @@ export async function syncStripeDataForUser(
     );
   }
 
-  // Insert customers
+  // Insert customers — delete Stripe-synced customers first, then fresh insert.
+  // This avoids the dual unique constraint bug (user_id,customer_id) vs
+  // (account_id,customer_id) and ensures fresh names from Stripe.
+  // SDK-created customers (without stripe_customer_id = customer_id) are preserved.
   const validCustomers = stripeCustomersList.filter(
     (c) => typeof c !== "string",
   );
+  if (validCustomers.length > 0 && resolvedAccountId != null) {
+    const stripeIds = validCustomers.map((c) => c.id);
+    await pool.query(
+      `DELETE FROM customers
+       WHERE account_id = $1 AND customer_id = ANY($2)
+         AND (stripe_customer_id = customer_id OR stripe_customer_id IS NULL)`,
+      [resolvedAccountId, stripeIds],
+    );
+  }
   for (let i = 0; i < validCustomers.length; i += batchSize) {
     const batch = validCustomers.slice(i, i + batchSize);
     const values: unknown[] = [];
@@ -190,7 +202,9 @@ export async function syncStripeDataForUser(
       );
     }
     await pool.query(
-      `INSERT INTO customers (user_id, account_id, customer_id, name, email, stripe_customer_id) VALUES ${placeholders.join(", ")} ON CONFLICT (user_id, customer_id) DO UPDATE SET account_id = COALESCE(customers.account_id, EXCLUDED.account_id), name = EXCLUDED.name, email = COALESCE(EXCLUDED.email, customers.email), stripe_customer_id = COALESCE(EXCLUDED.stripe_customer_id, customers.stripe_customer_id)`,
+      `INSERT INTO customers (user_id, account_id, customer_id, name, email, stripe_customer_id)
+       VALUES ${placeholders.join(", ")}
+       ON CONFLICT DO NOTHING`,
       values,
     );
   }
