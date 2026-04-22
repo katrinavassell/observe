@@ -77,8 +77,8 @@ const sections = [
         a: "Customers appear on the Customers page only after your app sends at least one SDK event with their customerReferenceId. Stripe-imported customers without usage data are hidden because margins would be meaningless without cost data. Connect Stripe, instrument your code, and customers appear automatically as events flow in.",
       },
       {
-        q: "What is the health score?",
-        a: "A 0-100 score combining margin (60% weight) and activity in the last 30 days (40% weight). Drives cohort assignment: Champion (high margin + active), Unprofitable, Inactive, Rising Cost.",
+        q: "What are the cohort labels?",
+        a: "Four cohorts with clear thresholds: Unprofitable (margin below 0%), Rising Cost (cost trending up with margin under 30%), Inactive (fewer than 3 active days and low adoption), Champion (margin above 50% with strong engagement). Customers not matching any cohort have no label.",
       },
     ],
   },

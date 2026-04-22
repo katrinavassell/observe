@@ -377,7 +377,7 @@ export function createAuthRoutes(
                   .query(
                     `INSERT INTO customers (user_id, account_id, customer_id, name, email)
                      VALUES ($1, $2, $3, $4, $5)
-                     ON CONFLICT DO NOTHING`,
+                     ON CONFLICT (user_id, customer_id) DO UPDATE SET account_id = COALESCE(customers.account_id, EXCLUDED.account_id), name = EXCLUDED.name, email = COALESCE(EXCLUDED.email, customers.email)`,
                     [
                       adminUid,
                       adminAccountId,

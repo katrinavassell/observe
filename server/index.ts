@@ -520,6 +520,28 @@ async function _doDbInit() {
     }
     // ── end Stage 5 migration ───────────────────────────────────────────
 
+    // ── Stage 6: add (account_id, customer_id) unique constraint ───────
+    // The original unique constraint is (user_id, customer_id) but all
+    // joins use account_id. Old customer rows with NULL account_id cause
+    // silent join failures — names don't show up.
+    await pool
+      .query(
+        `CREATE UNIQUE INDEX IF NOT EXISTS idx_customers_account_customer
+           ON customers (account_id, customer_id)
+          WHERE account_id IS NOT NULL`,
+      )
+      .catch((err) => console.error("Stage 6 customers unique index:", err));
+
+    // Also update customer_health_snapshots constraint to use account_id
+    await pool
+      .query(
+        `CREATE UNIQUE INDEX IF NOT EXISTS idx_health_snapshots_account
+           ON customer_health_snapshots (account_id, customer_id, snapshot_date)
+          WHERE account_id IS NOT NULL`,
+      )
+      .catch((err) => console.error("Stage 6 health snapshots index:", err));
+    // ── end Stage 6 migration ──────────────────────────────────────────
+
     // ── Stage 4: copy Stripe fields users → accounts ────────────────────
     // Additive + idempotent. Columns stay on `users` for rollback safety.
     // Runs after Stage 1 so accounts/user_accounts exist and owners are set.
