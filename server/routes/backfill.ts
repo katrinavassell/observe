@@ -232,6 +232,18 @@ export async function runRevenueBackfill(
     featurePricingMap.set(row.feature_key, parseFloat(row.revenue_per_unit));
   }
 
+  // Build app_customer_id -> stripe_customer_id bridge from customers table
+  const bridgeResult = await pool.query(
+    `SELECT customer_id, stripe_customer_id FROM customers
+     WHERE account_id = $1 AND stripe_customer_id IS NOT NULL`,
+    [accountId],
+  );
+  const appToStripe = new Map<string, string>();
+  for (const row of bridgeResult.rows) {
+    appToStripe.set(row.customer_id, row.stripe_customer_id);
+  }
+
+  // Load subscriptions keyed by Stripe customer ID
   const subResult = await pool.query(
     `SELECT s.customer_id,
             SUM(COALESCE(s.mrr_override, 0)) AS mrr,
@@ -244,9 +256,9 @@ export async function runRevenueBackfill(
      GROUP BY s.customer_id`,
     [accountId],
   );
-  const subByCustomer = new Map<string, SubMeta>();
+  const subByStripeId = new Map<string, SubMeta>();
   for (const row of subResult.rows) {
-    subByCustomer.set(row.customer_id, {
+    subByStripeId.set(row.customer_id, {
       mrr: parseFloat(row.mrr) || 0,
       pricingModel: row.pricing_model,
       pricingTiers: row.pricing_tiers ? JSON.parse(row.pricing_tiers) : null,
@@ -266,18 +278,19 @@ export async function runRevenueBackfill(
     [accountId],
   );
 
+  // MTD usage cache — query by app customer_id (how events are stored)
   const mtdCache = new Map<string, number>();
-  async function getMtdUsage(customerId: string): Promise<number> {
-    if (mtdCache.has(customerId)) return mtdCache.get(customerId)!;
+  async function getMtdUsage(appCustomerId: string): Promise<number> {
+    if (mtdCache.has(appCustomerId)) return mtdCache.get(appCustomerId)!;
     const result = await pool.query(
       `SELECT COALESCE(SUM(usage_units), 0) AS usage
        FROM observe_events
        WHERE account_id = $1 AND customer_id = $2
          AND timestamp >= date_trunc('month', NOW())`,
-      [accountId, customerId],
+      [accountId, appCustomerId],
     );
     const usage = parseFloat(result.rows[0]?.usage) || 0;
-    mtdCache.set(customerId, usage);
+    mtdCache.set(appCustomerId, usage);
     return usage;
   }
 
@@ -290,19 +303,18 @@ export async function runRevenueBackfill(
       revenue = featurePricingMap.get(evt.feature_key)!;
       revenueSource = "feature_pricing";
     } else {
-      const subKey =
-        (evt.meta_stripe_id && subByCustomer.has(evt.meta_stripe_id)
-          ? evt.meta_stripe_id
-          : null) ||
-        (subByCustomer.has(evt.customer_id) ? evt.customer_id : null);
+      const stripeId =
+        evt.meta_stripe_id ||
+        appToStripe.get(evt.customer_id) ||
+        (evt.customer_id.startsWith("cus_") ? evt.customer_id : null);
+      const subMeta = stripeId ? subByStripeId.get(stripeId) : null;
 
-      if (subKey) {
-        const subMeta = subByCustomer.get(subKey)!;
+      if (subMeta) {
         const evtUsage =
           parseFloat(evt.usage_units) ||
           (parseFloat(evt.input_tokens) || 0) +
             (parseFloat(evt.output_tokens) || 0);
-        const mtd = await getMtdUsage(subKey);
+        const mtd = await getMtdUsage(evt.customer_id);
         const enriched = enrichRevenueFromSub(subMeta, evtUsage, mtd);
         revenue = enriched.revenue;
         revenueSource = enriched.revenueSource;

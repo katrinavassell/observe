@@ -1074,18 +1074,37 @@ export function createEventsRoutes(
         }
 
         // Auto-enrich revenue from Stripe: look up subscriptions for customers
-        // in this batch, carrying the pricing model so we pick the right
-        // revenue derivation per event.
-        const customerIds = [
-          ...new Set([
-            ...validEvents.map((e) => e.customerReferenceId),
-            ...validEvents
-              .map((e) => e.meta?.stripe_customer_id)
-              .filter(Boolean),
-          ]),
-        ] as string[];
-        const subByCustomer = new Map<string, SubMeta>();
-        if (customerIds.length > 0 && accountId != null) {
+        // in this batch. Subscriptions use Stripe customer IDs (cus_*) but SDK
+        // events may use app-level IDs with stripe_customer_id in meta.
+        // Build a bridge: app_customer_id -> stripe_customer_id
+        const appToStripe = new Map<string, string>();
+        for (const evt of validEvents) {
+          const cid = evt.customerReferenceId;
+          if (cid.startsWith("cus_")) {
+            appToStripe.set(cid, cid);
+          } else if (evt.meta?.stripe_customer_id) {
+            appToStripe.set(cid, evt.meta.stripe_customer_id);
+          }
+        }
+        // Also check the customers table for stripe_customer_id mappings
+        const unmappedIds = validEvents
+          .map((e) => e.customerReferenceId)
+          .filter((id) => !appToStripe.has(id));
+        if (unmappedIds.length > 0 && accountId != null) {
+          const bridgeResult = await pool.query(
+            `SELECT customer_id, stripe_customer_id FROM customers
+             WHERE account_id = $1 AND customer_id = ANY($2)
+               AND stripe_customer_id IS NOT NULL`,
+            [accountId, unmappedIds],
+          );
+          for (const row of bridgeResult.rows) {
+            appToStripe.set(row.customer_id, row.stripe_customer_id);
+          }
+        }
+
+        const stripeIdsToLookup = [...new Set(appToStripe.values())];
+        const subByStripeId = new Map<string, SubMeta>();
+        if (stripeIdsToLookup.length > 0 && accountId != null) {
           try {
             const subResult = await pool.query(
               `SELECT s.customer_id,
@@ -1097,10 +1116,10 @@ export function createEventsRoutes(
                FROM subscriptions s
                WHERE s.account_id = $1 AND s.is_active = true AND s.customer_id = ANY($2)
                GROUP BY s.customer_id`,
-              [accountId, customerIds],
+              [accountId, stripeIdsToLookup],
             );
             for (const row of subResult.rows) {
-              subByCustomer.set(row.customer_id, {
+              subByStripeId.set(row.customer_id, {
                 mrr: parseFloat(row.mrr) || 0,
                 pricingModel: row.pricing_model,
                 pricingTiers: row.pricing_tiers
@@ -1115,17 +1134,20 @@ export function createEventsRoutes(
           }
         }
 
-        // Tiered-pricing: month-to-date usage per customer so we can resolve
-        // which tier each event lands in. One query covers all customers in
-        // the batch who have tiered/hybrid subs.
-        const tieredCustomers = [...subByCustomer.entries()]
-          .filter(
-            ([, meta]) =>
-              meta.pricingModel === "tiered" || meta.pricingModel === "hybrid",
-          )
-          .map(([cid]) => cid);
-        const mtdUsageByCustomer = new Map<string, number>();
-        if (tieredCustomers.length > 0 && accountId != null) {
+        // Tiered-pricing: month-to-date usage per customer. Events use app IDs
+        // so query by app IDs, then map results to Stripe IDs for tier lookup.
+        const tieredAppIds: string[] = [];
+        for (const [appId, stripeId] of appToStripe) {
+          const sub = subByStripeId.get(stripeId);
+          if (
+            sub &&
+            (sub.pricingModel === "tiered" || sub.pricingModel === "hybrid")
+          ) {
+            tieredAppIds.push(appId);
+          }
+        }
+        const mtdUsageByStripeId = new Map<string, number>();
+        if (tieredAppIds.length > 0 && accountId != null) {
           try {
             const usageResult = await pool.query(
               `SELECT customer_id, COALESCE(SUM(usage_units), 0) AS usage
@@ -1134,10 +1156,17 @@ export function createEventsRoutes(
                  AND customer_id = ANY($2)
                  AND timestamp >= date_trunc('month', NOW())
                GROUP BY customer_id`,
-              [accountId, tieredCustomers],
+              [accountId, tieredAppIds],
             );
             for (const row of usageResult.rows) {
-              mtdUsageByCustomer.set(row.customer_id, parseFloat(row.usage));
+              const stripeId = appToStripe.get(row.customer_id);
+              if (stripeId) {
+                mtdUsageByStripeId.set(
+                  stripeId,
+                  (mtdUsageByStripeId.get(stripeId) ?? 0) +
+                    parseFloat(row.usage),
+                );
+              }
             }
           } catch (err) {
             console.error("Tiered MTD usage lookup failed:", err);
@@ -1176,19 +1205,13 @@ export function createEventsRoutes(
             revenue = featurePricingMap.get(evt.featureKey)!;
             revenueSource = "feature_pricing";
           } else {
-            const subKey =
-              (evt.meta?.stripe_customer_id &&
-                subByCustomer.has(evt.meta.stripe_customer_id) &&
-                evt.meta.stripe_customer_id) ||
-              (subByCustomer.has(evt.customerReferenceId) &&
-                evt.customerReferenceId) ||
-              null;
-            if (subKey) {
-              const subMeta = subByCustomer.get(subKey)!;
+            const stripeId = appToStripe.get(evt.customerReferenceId);
+            const subMeta = stripeId ? subByStripeId.get(stripeId) : null;
+            if (subMeta) {
               const evtUsage =
                 evt.usageUnits ??
                 (evt.inputTokens || 0) + (evt.outputTokens || 0);
-              const mtd = mtdUsageByCustomer.get(subKey) ?? 0;
+              const mtd = mtdUsageByStripeId.get(stripeId!) ?? 0;
               const enriched = enrichRevenueFromSub(subMeta, evtUsage, mtd);
               revenue = enriched.revenue;
               revenueSource = enriched.revenueSource;
