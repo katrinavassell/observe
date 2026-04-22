@@ -39,7 +39,7 @@ const DEFAULT_COLUMNS: TableColumn[] = [
   { id: "events", label: "Events", visible: true, align: "right" },
   { id: "customers", label: "Customers", visible: true, align: "right" },
   { id: "features", label: "Features", visible: true, align: "right" },
-  { id: "usage", label: "Usage", visible: true, align: "right" },
+  { id: "usage", label: "Usage (tokens)", visible: true, align: "right" },
   { id: "total_cost", label: "Model Cost", visible: true, align: "right" },
   { id: "avg_cost", label: "Avg Cost/Event", visible: true, align: "right" },
   { id: "last_seen", label: "Last Seen", visible: true, align: "right" },
