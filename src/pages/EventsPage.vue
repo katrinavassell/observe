@@ -398,6 +398,7 @@ function resetPage() {
 function formatCost(val: number | null) {
   if (val === null) return "—";
   if (val === 0) return "$0";
+  if (val > 0 && val < 0.0001) return `<$0.0001`;
   return `$${val.toFixed(4)}`;
 }
 

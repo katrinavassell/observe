@@ -565,3 +565,11 @@ detects the pricing model per-customer by picking the highest alphabetically
 multi-subscription customers with mixed pricing. We're working on proper hybrid
 detection. If this affects you, let us know — open the feedback modal in the app
 to request this feature.
+
+**Q: Why does my event show $0 cost when I sent tokens?**
+
+Very short messages (under ~100 tokens) with cheap models like gpt-4o-mini
+can produce costs below $0.0001 — e.g., 13 input tokens at $0.15/M =
+$0.000002. Observe shows these as "<$0.0001" in the UI. The cost IS
+calculated, it's just too small to display at 4 decimal places. Send a longer
+message or check the event detail view for the exact input/output cost split.
