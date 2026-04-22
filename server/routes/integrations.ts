@@ -167,21 +167,16 @@ export async function syncStripeDataForUser(
     );
   }
 
-  // Insert customers — delete Stripe-synced customers first, then fresh insert.
-  // This avoids the dual unique constraint bug (user_id,customer_id) vs
-  // (account_id,customer_id) and ensures fresh names from Stripe.
-  // SDK-created customers (without stripe_customer_id = customer_id) are preserved.
+  // Insert customers — delete ALL for this account first, then fresh insert.
+  // Never use ON CONFLICT on customers — dual unique constraints break it.
+  // See bugs_customer_upsert.md and bugs_upsert_dual_unique.md.
   const validCustomers = stripeCustomersList.filter(
     (c) => typeof c !== "string",
   );
-  if (validCustomers.length > 0 && resolvedAccountId != null) {
-    const stripeIds = validCustomers.map((c) => c.id);
-    await pool.query(
-      `DELETE FROM customers
-       WHERE account_id = $1 AND customer_id = ANY($2)
-         AND (stripe_customer_id = customer_id OR stripe_customer_id IS NULL)`,
-      [resolvedAccountId, stripeIds],
-    );
+  if (resolvedAccountId != null) {
+    await pool.query(`DELETE FROM customers WHERE account_id = $1`, [
+      resolvedAccountId,
+    ]);
   }
   for (let i = 0; i < validCustomers.length; i += batchSize) {
     const batch = validCustomers.slice(i, i + batchSize);
@@ -203,8 +198,7 @@ export async function syncStripeDataForUser(
     }
     await pool.query(
       `INSERT INTO customers (user_id, account_id, customer_id, name, email, stripe_customer_id)
-       VALUES ${placeholders.join(", ")}
-       ON CONFLICT DO NOTHING`,
+       VALUES ${placeholders.join(", ")}`,
       values,
     );
   }
