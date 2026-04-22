@@ -616,18 +616,91 @@ accounts ┘                   │
 </table>
 
 <!-- ────────────────── CHANGELOG ────────────────── -->
-<h2 id="changelog">Changelog (2026-04-22)</h2>
-<ul>
-  <li><strong>Events page filters fixed</strong> — Vue HOF bug discarded selected values; pre-created named handlers</li>
-  <li><strong>Event detail error surfacing</strong> — replaced silent catch with error display + retry on re-expand</li>
-  <li><strong>List query optimized</strong> — excluded request_body/response_body JSONB from list payload</li>
-  <li><strong>stripe_customer_id column</strong> — added to customers table; bridges app IDs to Stripe IDs</li>
-  <li><strong>Auto-create customers on ingest</strong> — like feature_definitions; includes stripe_customer_id from meta</li>
-  <li><strong>Revenue enrichment bridge</strong> — subscription lookup now goes through appToStripe map instead of direct customer_id match</li>
-  <li><strong>Revenue backfill endpoint</strong> — POST /backfill/revenue re-enriches events + resolves customer names</li>
-  <li><strong>Auto-backfill after Stripe sync</strong> — runRevenueBackfill() fires after syncStripeDataForUser()</li>
-  <li><strong>Docs promoted requestBody/responseBody</strong> — moved to RECOMMENDED tier in llms.txt with curl example</li>
-</ul>
+<h2 id="changelog">Changelog</h2>
+
+<div style="margin-bottom:16px;">
+  <button onclick="filterChangelog('all')" style="background:#21262d;color:#c9d1d9;border:1px solid #30363d;padding:4px 12px;border-radius:4px;cursor:pointer;font-size:12px;margin-right:4px;">All</button>
+  <button onclick="filterChangelog('bug')" style="background:#da363322;color:#f85149;border:1px solid #da363344;padding:4px 12px;border-radius:4px;cursor:pointer;font-size:12px;margin-right:4px;">Bugs</button>
+  <button onclick="filterChangelog('feature')" style="background:#3fb95022;color:#3fb950;border:1px solid #3fb95044;padding:4px 12px;border-radius:4px;cursor:pointer;font-size:12px;margin-right:4px;">Features</button>
+  <button onclick="filterChangelog('perf')" style="background:#79c0ff22;color:#79c0ff;border:1px solid #79c0ff44;padding:4px 12px;border-radius:4px;cursor:pointer;font-size:12px;margin-right:4px;">Performance</button>
+  <button onclick="filterChangelog('docs')" style="background:#8b949e22;color:#8b949e;border:1px solid #8b949e44;padding:4px 12px;border-radius:4px;cursor:pointer;font-size:12px;">Docs</button>
+</div>
+
+<table id="changelog-table">
+  <tr><th style="width:80px;">Type</th><th style="width:100px;">Date</th><th>Change</th></tr>
+  <tr data-type="bug"><td><span style="color:#f85149;">BUG</span></td><td>2026-04-22</td><td><strong>Events page filters broken</strong> — all 4 dropdown filters (feature, customer, model, source) did nothing when selected</td></tr>
+  <tr data-type="bug"><td><span style="color:#f85149;">BUG</span></td><td>2026-04-22</td><td><strong>Event detail silent failure</strong> — getEventDetail errors swallowed, showing generic "Failed to load" with no retry</td></tr>
+  <tr data-type="bug"><td><span style="color:#f85149;">BUG</span></td><td>2026-04-22</td><td><strong>Customer records never created on ingest</strong> — features auto-created but customers weren't, breaking name resolution</td></tr>
+  <tr data-type="bug"><td><span style="color:#f85149;">BUG</span></td><td>2026-04-22</td><td><strong>Revenue enrichment broken for non-cus_* IDs</strong> — subscription lookup assumed customer_id = Stripe ID, but customer_id changed to app-level ID with Stripe ID in meta</td></tr>
+  <tr data-type="bug"><td><span style="color:#f85149;">BUG</span></td><td>2026-04-22</td><td><strong>No stripe_customer_id on customers table</strong> — only bridge was meta on individual events, requiring expensive scans</td></tr>
+  <tr data-type="bug"><td><span style="color:#f85149;">BUG</span></td><td>2026-04-22</td><td><strong>First-event-wins locked null stripe_customer_id</strong> — if first event in batch had no meta, ON CONFLICT DO NOTHING prevented later updates</td></tr>
+  <tr data-type="bug"><td><span style="color:#f85149;">BUG</span></td><td>2026-04-22</td><td><strong>Empty error message fell through to sign-in panel</strong> — network abort errors had empty message, v-else-if falsy check skipped error display</td></tr>
+  <tr data-type="bug"><td><span style="color:#f85149;">BUG</span></td><td>2026-04-22</td><td><strong>Silent catch in backfill Stripe client</strong> — decryption failures or DB errors swallowed without logging</td></tr>
+  <tr data-type="feature"><td><span style="color:#3fb950;">FEATURE</span></td><td>2026-04-22</td><td><strong>Revenue backfill endpoint</strong> — POST /backfill/revenue re-enriches up to 50k events + resolves customer names from Stripe</td></tr>
+  <tr data-type="feature"><td><span style="color:#3fb950;">FEATURE</span></td><td>2026-04-22</td><td><strong>Auto-backfill after Stripe sync</strong> — runRevenueBackfill() fires automatically after syncStripeDataForUser()</td></tr>
+  <tr data-type="feature"><td><span style="color:#3fb950;">FEATURE</span></td><td>2026-04-22</td><td><strong>stripe_customer_id column</strong> — bridges app customer IDs to Stripe IDs directly on the customers table</td></tr>
+  <tr data-type="feature"><td><span style="color:#3fb950;">FEATURE</span></td><td>2026-04-22</td><td><strong>Revenue enrichment bridge</strong> — appToStripe map resolves through meta, customers table, and cus_* detection</td></tr>
+  <tr data-type="perf"><td><span style="color:#79c0ff;">PERF</span></td><td>2026-04-22</td><td><strong>List query optimized</strong> — excluded request_body/response_body JSONB from GET /events list payload</td></tr>
+  <tr data-type="docs"><td><span style="color:#8b949e;">DOCS</span></td><td>2026-04-22</td><td><strong>requestBody/responseBody promoted to RECOMMENDED</strong> — added to curl example in llms.txt</td></tr>
+  <tr data-type="docs"><td><span style="color:#8b949e;">DOCS</span></td><td>2026-04-22</td><td><strong>Platform architecture doc</strong> — ERD, definitions, user stories, acceptance criteria, revenue pipeline</td></tr>
+</table>
+
+<!-- ────────────────── BUG POSTMORTEMS ────────────────── -->
+<h2 id="postmortems">Bug Postmortems</h2>
+<p style="font-size:12px; color:#8b949e; margin-bottom:16px;">Root cause analysis so these patterns don't repeat.</p>
+
+<div class="us">
+  <div class="us-title">PM-1: Events page filters did nothing</div>
+  <table>
+    <tr><th style="width:120px;">Field</th><th>Detail</th></tr>
+    <tr><td><strong>Root Cause</strong></td><td>Vue 3 compiled <code>@update:model-value="onSelectUpdate((v) => (selectedFeature = v))"</code> as an inline handler: <code>$event => onSelectUpdate(...)</code>. The HOF returned a function, but <code>$event</code> (the selected value) was never passed to it.</td></tr>
+    <tr><td><strong>Impact</strong></td><td>All 4 dropdown filters on the Events page were non-functional. Inline table clicks still worked (they set refs directly).</td></tr>
+    <tr><td><strong>Fix</strong></td><td>Pre-created named handler constants (<code>onFeatureChange</code>, etc.) so Vue uses them as method handlers, receiving the emitted value directly.</td></tr>
+    <tr><td><strong>Prevention</strong></td><td>Never use HOF calls as inline Vue event handlers. Use named constants or arrow functions with explicit <code>$event</code>.</td></tr>
+  </table>
+</div>
+
+<div class="us">
+  <div class="us-title">PM-2: Revenue enrichment broken after customer ID change</div>
+  <table>
+    <tr><th style="width:120px;">Field</th><th>Detail</th></tr>
+    <tr><td><strong>Root Cause</strong></td><td><code>customerReferenceId</code> used to BE the Stripe customer ID (<code>cus_*</code>). It changed to an app-level ID with the Stripe ID moved to <code>meta.stripe_customer_id</code>. The subscription lookup, MTD usage query, and name resolution all joined on <code>customer_id</code> directly — assuming it was the Stripe ID.</td></tr>
+    <tr><td><strong>Impact</strong></td><td>Revenue = $0 on all events. Customer names not resolved. Stripe data synced but never linked to events.</td></tr>
+    <tr><td><strong>Fix</strong></td><td>Added <code>stripe_customer_id</code> column to <code>customers</code> table. Built an <code>appToStripe</code> bridge map during ingest. Subscription lookup, MTD query, and name resolution now route through the bridge. Backfill populates <code>stripe_customer_id</code> from event meta for existing records.</td></tr>
+    <tr><td><strong>Prevention</strong></td><td>When changing what a field means (customer_id from Stripe ID to app ID), audit every query that uses that field. The SYSTEM-MAP.md definitions table now clarifies the distinction.</td></tr>
+  </table>
+</div>
+
+<div class="us">
+  <div class="us-title">PM-3: Silent catches hiding real errors</div>
+  <table>
+    <tr><th style="width:120px;">Field</th><th>Detail</th></tr>
+    <tr><td><strong>Root Cause</strong></td><td>Multiple <code>catch {}</code> blocks with no logging: <code>toggleEvent</code> in EventsPage.vue, <code>getStripeClientForUser</code> in backfill. When these failed, the user saw no error — just empty or missing data.</td></tr>
+    <tr><td><strong>Impact</strong></td><td>Event detail showed "Failed to load" with no clue why. Backfill silently skipped all customer name resolution if Stripe client failed for any reason (not just "no connection").</td></tr>
+    <tr><td><strong>Fix</strong></td><td>All catches now <code>console.error</code> the actual error. Frontend shows error message with retry on re-expand.</td></tr>
+    <tr><td><strong>Prevention</strong></td><td>Rule: <code>.claude/rules/no-silent-catches.md</code>. Every catch must either log or propagate. No exceptions.</td></tr>
+  </table>
+</div>
+
+<div class="us">
+  <div class="us-title">PM-4: Customer records never created on ingest</div>
+  <table>
+    <tr><th style="width:120px;">Field</th><th>Detail</th></tr>
+    <tr><td><strong>Root Cause</strong></td><td>The ingest route auto-created <code>feature_definitions</code> for new feature keys but had no equivalent for customers. The <code>customers</code> table was only populated by Stripe sync or CSV upload.</td></tr>
+    <tr><td><strong>Impact</strong></td><td>LEFT JOIN to <code>customers</code> returned NULL names. <code>resolveStripeCustomerNames</code> found no records to update. Events showed raw customer_id instead of resolved names.</td></tr>
+    <tr><td><strong>Fix</strong></td><td>Added auto-create block after feature_definitions. Uses <code>ON CONFLICT (user_id, customer_id) DO UPDATE SET stripe_customer_id = COALESCE(...)</code> to fill in stripe_customer_id on subsequent events without overwriting existing names.</td></tr>
+    <tr><td><strong>Prevention</strong></td><td>When adding auto-create for one entity type, check if related entities need the same treatment.</td></tr>
+  </table>
+</div>
+
+<script>
+function filterChangelog(type) {
+  const rows = document.querySelectorAll('#changelog-table tr[data-type]');
+  rows.forEach(row => {
+    row.style.display = (type === 'all' || row.dataset.type === type) ? '' : 'none';
+  });
+}
+</script>
 
 </main>
 </body>
