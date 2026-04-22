@@ -49,3 +49,4 @@ scripts/take-screenshots.ts
 scripts/wipe-user-data.ts
 uv.lock
 clerk-org-plan.html
+supabase/
