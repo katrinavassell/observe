@@ -286,6 +286,7 @@ first-class fields above are preferred.
 - If `revenueAmount` is omitted, Observe auto-attributes revenue from Stripe MRR or
   from feature pricing rules (set in the dashboard).
 - `idempotencyKey` guarantees at-most-once on retry. Recommended.
+- For Stripe: if the application uses Stripe, the user's Stripe Customer ID must be passed in `meta.stripe_customer_id`. Observe uses this to resolve customer names and link revenue data.
 
 ### Response
 
