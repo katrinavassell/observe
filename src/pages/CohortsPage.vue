@@ -41,7 +41,7 @@ import {
   DialogTitle,
   DialogClose,
 } from "radix-vue";
-import { Card, Skeleton, Button, Input } from "@/components/ui";
+import { Badge, Card, Skeleton, Button, Input } from "@/components/ui";
 import { formatCurrency as fmt, formatPct as fmtPct } from "@/lib/format";
 import { toast } from "vue-sonner";
 import { useAuth } from "@/composables/useAuth";
@@ -526,6 +526,13 @@ const cohortMeta: Record<
   },
 };
 
+const pricingModelBadge: Record<string, string> = {
+  flat: "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300",
+  metered: "bg-blue-100 text-blue-700",
+  tiered: "bg-purple-100 text-purple-700",
+  hybrid: "bg-teal-100 text-teal-700",
+};
+
 const mrrMeta: Record<string, { label: string; color: string }> = {
   new: { label: "New", color: "bg-blue-100 text-blue-700" },
   expansion: { label: "Expansion", color: "bg-green-100 text-green-700" },
@@ -934,13 +941,25 @@ const excludedCount = computed(() => {
                     <!-- Customer -->
                     <td v-if="col.id === 'customer'" class="p-3">
                       <div class="flex flex-col gap-0.5">
-                        <span
-                          v-if="
-                            c.customer_name && c.customer_name !== c.customer_id
-                          "
-                          class="text-sm font-medium"
-                          >{{ c.customer_name }}</span
-                        >
+                        <div class="flex items-center gap-1.5">
+                          <span
+                            v-if="
+                              c.customer_name &&
+                              c.customer_name !== c.customer_id
+                            "
+                            class="text-sm font-medium"
+                            >{{ c.customer_name }}</span
+                          >
+                          <Badge
+                            v-if="c.pricing_model"
+                            variant="outline"
+                            :class="pricingModelBadge[c.pricing_model]"
+                            >{{
+                              c.pricing_model.charAt(0).toUpperCase() +
+                              c.pricing_model.slice(1)
+                            }}</Badge
+                          >
+                        </div>
                         <code
                           class="font-mono text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded w-fit"
                           >{{ c.customer_id }}</code

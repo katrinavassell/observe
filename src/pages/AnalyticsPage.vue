@@ -13,8 +13,9 @@ import {
 } from "@/lib/api";
 import type {} from "@/lib/api";
 import { AlertCircle, Plug } from "lucide-vue-next";
-import { Card, Skeleton, Button } from "@/components/ui";
+import { Badge, Card, Skeleton, Button } from "@/components/ui";
 import SourceBadge from "@/components/shared/SourceBadge.vue";
+import MarginBadge from "@/components/shared/MarginBadge.vue";
 import { formatCurrency as fmt } from "@/lib/format";
 import { useAuth } from "@/composables/useAuth";
 import {
@@ -137,6 +138,20 @@ const totalCost = computed(() => {
   return featureData.value.reduce((s, f) => s + f.total_cost, 0);
 });
 
+const totalRevenue = computed(() => {
+  if (!customerData.value) return 0;
+  return customerData.value.reduce((s, c) => s + (c.total_revenue || 0), 0);
+});
+
+const hasRevenue = computed(() => totalRevenue.value > 0);
+
+const grossMarginPct = computed(() => {
+  if (totalRevenue.value === 0) return null;
+  return Math.round(
+    ((totalRevenue.value - totalCost.value) / totalRevenue.value) * 100,
+  );
+});
+
 const sortedFeatures = computed(() => {
   if (!featureData.value) return [];
   return [...featureData.value].sort((a, b) => b.total_cost - a.total_cost);
@@ -204,7 +219,7 @@ const totalEvents = computed(() => {
   if (!featureData.value) return 0;
   return featureData.value.reduce((s, f) => s + (f.event_count || 0), 0);
 });
-const _dataConfidence = computed(() => {
+const dataConfidence = computed(() => {
   const n = totalEvents.value;
   if (n === 0)
     return { label: "No data", color: "text-muted-foreground", pct: 0 };
@@ -227,7 +242,21 @@ function retry() {
     <!-- Page header -->
     <div class="flex items-start justify-between">
       <div>
-        <h1 class="text-2xl font-semibold tracking-tight">Analytics</h1>
+        <div class="flex items-center gap-2">
+          <h1 class="text-2xl font-semibold tracking-tight">Analytics</h1>
+          <Badge
+            v-if="
+              dataConfidence.label !== 'Good' && dataConfidence.label !== 'High'
+            "
+            :variant="
+              dataConfidence.color === 'text-destructive'
+                ? 'destructive'
+                : 'warning'
+            "
+          >
+            {{ dataConfidence.label }} &middot; {{ totalEvents }} events
+          </Badge>
+        </div>
         <div class="flex items-center gap-2 mt-1">
           <p class="text-muted-foreground">
             Cost breakdown by feature, model, and customer
@@ -287,6 +316,17 @@ function retry() {
     <template v-else>
       <!-- KPI cards -->
       <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <!-- Card 1: Revenue or Customers -->
+        <Card class="p-6">
+          <div class="text-sm font-medium text-muted-foreground">
+            {{ hasRevenue ? "Total Revenue" : "Customers Tracked" }}
+          </div>
+          <div class="text-3xl font-semibold tabular-nums mt-1">
+            {{ hasRevenue ? fmt(totalRevenue) : (customerData?.length ?? 0) }}
+          </div>
+        </Card>
+
+        <!-- Card 2: Total Cost (always) -->
         <Card class="p-6">
           <div class="text-sm font-medium text-muted-foreground">
             Total Cost
@@ -295,20 +335,17 @@ function retry() {
             {{ fmt(totalCost) }}
           </div>
         </Card>
+
+        <!-- Card 3: Gross Margin or Events Tracked -->
         <Card class="p-6">
           <div class="text-sm font-medium text-muted-foreground">
-            Features Tracked
+            {{ hasRevenue ? "Gross Margin" : "Events Tracked" }}
           </div>
-          <div class="text-3xl font-semibold tabular-nums mt-1">
-            {{ featureData?.length ?? 0 }}
+          <div v-if="hasRevenue" class="flex items-center gap-2 mt-1">
+            <MarginBadge :margin="grossMarginPct" class="text-base" />
           </div>
-        </Card>
-        <Card class="p-6">
-          <div class="text-sm font-medium text-muted-foreground">
-            Models Used
-          </div>
-          <div class="text-3xl font-semibold tabular-nums mt-1">
-            {{ modelData?.length ?? 0 }}
+          <div v-else class="text-3xl font-semibold tabular-nums mt-1">
+            {{ totalEvents.toLocaleString() }}
           </div>
         </Card>
       </div>

@@ -1019,6 +1019,7 @@ export interface CohortCustomer {
   top_model_cost: number | null;
   model_swap_suggestion: ModelSwapSuggestion | null;
   mrr_movement: MrrMovementCategory | null;
+  pricing_model: string | null;
   cohort: CohortLabel | null;
 }
 

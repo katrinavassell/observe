@@ -18,6 +18,14 @@ export function formatPct(val: number | string | null | undefined): string {
   return `${n.toFixed(0)}%`;
 }
 
+const exactFmt = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+});
+export function fmtExact(n: number): string {
+  return exactFmt.format(n);
+}
+
 export function computeMargin(revenue: number, cost: number): number | null {
   if (revenue === 0) return null;
   return ((revenue - cost) / revenue) * 100;

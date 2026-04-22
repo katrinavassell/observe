@@ -217,7 +217,8 @@ export function createCohortsRoutes(pool: Pool, ensureVisitor: any) {
           // 3. Subscription revenue per customer
           pool.query(
             `SELECT s.customer_id,
-                    COALESCE(SUM(COALESCE(s.mrr_override, p.price_amount)), 0) AS sub_revenue
+                    COALESCE(SUM(COALESCE(s.mrr_override, p.price_amount)), 0) AS sub_revenue,
+                    MAX(s.pricing_model) AS pricing_model
              FROM subscriptions s
              LEFT JOIN plans p ON s.account_id = p.account_id AND s.plan_id = p.plan_id
              WHERE s.account_id = $1 AND s.is_active = true
@@ -304,8 +305,11 @@ export function createCohortsRoutes(pool: Pool, ensureVisitor: any) {
 
         // Build lookup maps
         const subRevenueMap: Record<string, number> = {};
+        const pricingModelMap: Record<string, string> = {};
         for (const row of subRevenueResult.rows) {
           subRevenueMap[row.customer_id] = parseFloat(row.sub_revenue) || 0;
+          if (row.pricing_model)
+            pricingModelMap[row.customer_id] = row.pricing_model;
         }
 
         const costTrendMap: Record<string, { current: number; prior: number }> =
@@ -525,6 +529,7 @@ export function createCohortsRoutes(pool: Pool, ensureVisitor: any) {
             model_swap_suggestion: modelSwapSuggestion,
             mrr: currentMrr,
             mrr_movement: mrrMovement,
+            pricing_model: pricingModelMap[customerId] || null,
             cohort,
           };
         });
