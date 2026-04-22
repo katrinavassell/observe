@@ -923,13 +923,6 @@ const excludedCount = computed(() => {
                           class="text-xs text-muted-foreground"
                           >{{ c.customer_email }}</span
                         >
-                        <span
-                          v-if="c.cohort && cohortMeta[c.cohort]"
-                          class="inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium"
-                          :class="cohortMeta[c.cohort].color"
-                        >
-                          {{ cohortMeta[c.cohort].label }}
-                        </span>
                       </div>
                     </td>
 
@@ -968,17 +961,15 @@ const excludedCount = computed(() => {
                     </td>
 
                     <!-- MRR -->
-                    <td v-else-if="col.id === 'mrr'" class="p-3">
-                      <span
-                        v-if="c.mrr_movement"
-                        class="inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium"
-                        :class="
-                          mrrMeta[c.mrr_movement]?.color ??
-                          'bg-gray-100 text-gray-600'
-                        "
+                    <td v-else-if="col.id === 'mrr'" class="p-3 text-right">
+                      <span v-if="c.mrr > 0" class="font-medium"
+                        >${{
+                          c.mrr.toLocaleString(undefined, {
+                            minimumFractionDigits: 0,
+                            maximumFractionDigits: 0,
+                          })
+                        }}</span
                       >
-                        {{ mrrMeta[c.mrr_movement]?.label ?? c.mrr_movement }}
-                      </span>
                       <span v-else class="text-muted-foreground">—</span>
                     </td>
                   </template>

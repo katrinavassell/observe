@@ -503,6 +503,7 @@ export function createCohortsRoutes(pool: Pool, ensureVisitor: any) {
             top_model: topModel?.model || null,
             top_model_cost: topModel?.cost || null,
             model_swap_suggestion: modelSwapSuggestion,
+            mrr: currentMrr,
             mrr_movement: mrrMovement,
             cohort,
           };
