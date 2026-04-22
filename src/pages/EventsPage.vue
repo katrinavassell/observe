@@ -1234,26 +1234,17 @@ function usageTooltip(event: ObserveEvent): string {
                         No request/response body recorded
                       </p>
                       <p class="text-xs">
-                        To see the prompt + completion here, include them in
-                        <code class="font-mono">properties</code> when you send
-                        the event:
+                        To see the prompt + completion here, include
+                        <code class="font-mono">requestBody</code> and
+                        <code class="font-mono">responseBody</code> when you
+                        send the event:
                       </p>
                       <pre
                         class="text-[11px] bg-muted rounded p-2 mt-1 overflow-x-auto"
-                      ><code>properties: {
-  prompt: messages,
-  completion: res.choices[0].message.content,
+                      ><code>requestBody: { messages },
+responseBody: {
+  choices: [{ message: { content: res.choices[0].message.content } }],
 }</code></pre>
-                      <p class="text-xs">
-                        Full guidance:
-                        <a
-                          href="https://observe.tansohq.com/llms.txt"
-                          target="_blank"
-                          rel="noopener"
-                          class="underline"
-                          >observe.tansohq.com/llms.txt</a
-                        >
-                      </p>
                     </div>
 
                     <!-- Metadata -->
