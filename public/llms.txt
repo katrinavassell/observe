@@ -254,6 +254,7 @@ curl -X POST https://observe.tansohq.com/api/events/ingest \
       "spanId":              string,  // this span's ID
       "parentSpanId":        string,  // parent span (for nested agent calls)
       "properties":          object,  // arbitrary JSON metadata (searchable)
+      "meta":                object,  // { stripe_customer_id: "cus_..." } — links event to Stripe customer for revenue matching
       "requestBody":         object,  // optional — prompt/messages you sent
       "responseBody":        object   // optional — provider response body
     }
