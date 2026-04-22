@@ -118,7 +118,7 @@ async function handleGenerateKey() {
 async function handleRevokeKey(id: number) {
   try {
     await revokeSdkKey(id);
-    sdkKeys.value = sdkKeys.value.filter((k) => k.id !== id);
+    await loadSdkKeys();
     toast.success("API key revoked");
     window.posthog?.capture("sdk_key_revoked");
   } catch (error) {
