@@ -803,9 +803,20 @@ async function _doDbInit() {
     await pool.query(
       `CREATE INDEX IF NOT EXISTS idx_customers_user_id ON customers(user_id)`,
     );
-    await pool.query(
-      `CREATE UNIQUE INDEX IF NOT EXISTS idx_customers_account_customer ON customers(account_id, customer_id) WHERE account_id IS NOT NULL`,
-    );
+    await pool
+      .query(
+        `DELETE FROM customers a USING customers b
+         WHERE a.account_id = b.account_id AND a.customer_id = b.customer_id
+           AND a.account_id IS NOT NULL AND a.id > b.id`,
+      )
+      .catch(() => {});
+    await pool
+      .query(
+        `CREATE UNIQUE INDEX IF NOT EXISTS idx_customers_account_customer ON customers(account_id, customer_id) WHERE account_id IS NOT NULL`,
+      )
+      .catch((err) =>
+        console.error("Could not create customers unique index:", err.message),
+      );
     await pool.query(
       `CREATE INDEX IF NOT EXISTS idx_subscriptions_user_id ON subscriptions(user_id)`,
     );
