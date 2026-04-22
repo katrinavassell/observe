@@ -1242,17 +1242,20 @@ function usageTooltip(event: ObserveEvent): string {
                         No request/response body recorded
                       </p>
                       <p class="text-xs">
-                        To see the prompt + completion here, include
+                        Add
                         <code class="font-mono">requestBody</code> and
-                        <code class="font-mono">responseBody</code> when you
-                        send the event:
+                        <code class="font-mono">responseBody</code> to your
+                        ingest call:
                       </p>
                       <pre
                         class="text-[11px] bg-muted rounded p-2 mt-1 overflow-x-auto"
-                      ><code>requestBody: { messages },
-responseBody: {
-  choices: [{ message: { content: res.choices[0].message.content } }],
-}</code></pre>
+                      ><code>// OpenAI
+requestBody: { messages },
+responseBody: { choices: [{ message: res.choices[0].message }] },
+
+// Anthropic
+requestBody: { messages },
+responseBody: { content: res.content },</code></pre>
                     </div>
 
                     <!-- Metadata -->

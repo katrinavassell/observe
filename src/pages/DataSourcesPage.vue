@@ -231,7 +231,8 @@ Rules for Path 1:
 - \`idempotencyKey\` (use the provider's request ID when possible) makes retries safe.
 - Fire-and-forget is fine. Catch + log the error; do not block the user request on Observe.
 - For non-LLM costs (API calls, compute jobs, file processing), skip \`model\` and include \`costAmount\` (number, in \`costUnit\` which defaults to \`"usd"\`) and/or \`usageUnits\` (number — minutes, images, requests, etc.).
-- Other optional fields: \`timestamp\` (ISO 8601, defaults to now), \`revenueAmount\` (overrides auto-computed revenue), \`costType\` (defaults to \`"llm"\` if model is set, else \`"generic"\`), \`properties\` (arbitrary JSON metadata), \`requestBody\` / \`responseBody\` (for prompt/response logging — skip if sensitive).
+- **Recommended**: \`requestBody\` (the messages you sent) and \`responseBody\` (the provider's response) — without these, the event detail view can't show the prompt and completion.
+- Other optional fields: \`timestamp\` (ISO 8601, defaults to now), \`revenueAmount\` (overrides auto-computed revenue), \`costType\` (defaults to \`"llm"\` if model is set, else \`"generic"\`), \`properties\` (arbitrary JSON metadata).
 - Batch up to 1000 events per request.
 
 ## Step 3 — only if the user asks for auto-instrumentation (Path 3)
@@ -1131,6 +1132,8 @@ fetch(<span class="text-amber-300">'{{ ingestUrl }}'</span>, {
       <span class="text-sky-300">outputTokens</span>: res.usage?.completion_tokens,
       <span class="text-sky-300">durationMs</span>: Date.now() - started,
       <span class="text-sky-300">idempotencyKey</span>: res.id,                   <span class="text-zinc-500">// safe retries</span>
+      <span class="text-sky-300">requestBody</span>: { messages },                 <span class="text-zinc-500">// shows prompt in detail view</span>
+      <span class="text-sky-300">responseBody</span>: { <span class="text-sky-300">choices</span>: [{ <span class="text-sky-300">message</span>: res.choices[0].message }] },
       <span class="text-sky-300">meta</span>: { <span class="text-sky-300">stripe_customer_id</span>: user.stripeId }, <span class="text-zinc-500">// optional: links to Stripe</span>
     }],
   }),
