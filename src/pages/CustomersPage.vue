@@ -167,7 +167,7 @@ function sortIcon(key: SortKey) {
     </div>
 
     <!-- KPI cards -->
-    <div v-if="totals" class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+    <div v-if="totals" class="grid grid-cols-2 sm:grid-cols-3 gap-4">
       <Card>
         <CardContent class="p-4">
           <p class="text-xs text-muted-foreground">Customers</p>
@@ -191,14 +191,6 @@ function sortIcon(key: SortKey) {
                 ? `${Math.round(totals.margin_pct)}%`
                 : "—"
             }}
-          </p>
-        </CardContent>
-      </Card>
-      <Card>
-        <CardContent class="p-4">
-          <p class="text-xs text-muted-foreground">Avg Health</p>
-          <p class="text-2xl font-semibold">
-            {{ Math.round(totals.avg_health_score ?? 0) }}
           </p>
         </CardContent>
       </Card>
@@ -316,19 +308,6 @@ function sortIcon(key: SortKey) {
               Trend
             </th>
             <th
-              class="px-3 py-2.5 font-medium text-muted-foreground text-center cursor-pointer select-none"
-              @click="toggleSort('health_score')"
-            >
-              <span class="inline-flex items-center gap-1">
-                Health
-                <component
-                  :is="sortIcon('health_score')"
-                  v-if="sortIcon('health_score')"
-                  class="h-3 w-3"
-                />
-              </span>
-            </th>
-            <th
               class="px-3 py-2.5 font-medium text-muted-foreground text-right cursor-pointer select-none"
               @click="toggleSort('last_seen')"
             >
@@ -393,15 +372,6 @@ function sortIcon(key: SortKey) {
                 :direction="trendDirection(c.cost_trend)"
                 :invert-colors="true"
               />
-            </td>
-            <td class="px-3 py-2.5 text-center">
-              <div class="inline-flex items-center gap-1.5">
-                <span
-                  class="h-2.5 w-2.5 rounded-full shrink-0"
-                  :class="healthDotClass(c.health_score)"
-                />
-                <span class="text-xs">{{ c.health_score }}</span>
-              </div>
             </td>
             <td class="px-3 py-2.5 text-right text-muted-foreground text-xs">
               {{ formatLastSeen(c.last_seen) }}

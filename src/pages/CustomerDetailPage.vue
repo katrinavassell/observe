@@ -265,18 +265,6 @@ const costPerEvent = computed(() => {
               >
                 {{ cohortCustomer.cohort }}
               </span>
-              <span
-                v-if="cohortCustomer"
-                class="inline-flex items-center gap-1"
-              >
-                <span
-                  class="h-2.5 w-2.5 rounded-full"
-                  :class="healthDotClass(cohortCustomer.health_score)"
-                />
-                <span class="text-xs text-muted-foreground">{{
-                  cohortCustomer.health_score
-                }}</span>
-              </span>
             </div>
             <div class="flex items-center gap-3 text-sm text-muted-foreground">
               <span v-if="detail.customer.email">{{
