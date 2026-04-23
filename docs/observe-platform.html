@@ -627,6 +627,26 @@ accounts ┘                   │
       <div style="font-size:10px; color:#d29922; margin-top:6px;">UX &middot; Customers &middot; Depends on BUG: Customer ID mismatch</div>
     </div>
 
+    <!-- ── Signal scoring backlog (2026-04-22) ── -->
+
+    <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #a371f7; border-radius:6px; padding:10px; margin-bottom:8px;">
+      <div style="font-size:12px; font-weight:600; color:#f0f6fc;">Usage-based signals (separate from spend)</div>
+      <div style="font-size:11px; color:#8b949e; margin-top:4px;">Track actual event volume trends separately from cost trends. Spend can drop from model swaps while usage grows. Requires per-customer event_count timeseries (not currently stored).</div>
+      <div style="font-size:10px; color:#a371f7; margin-top:6px;">ROADMAP &middot; Signals</div>
+    </div>
+
+    <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #a371f7; border-radius:6px; padding:10px; margin-bottom:8px;">
+      <div style="font-size:12px; font-weight:600; color:#f0f6fc;">Model swap detection signal</div>
+      <div style="font-size:11px; color:#8b949e; margin-top:4px;">Removed from DDS-9 because it compared unrelated model families (e.g. GPT-4o vs Claude). Reintroduce when we can detect same-family downgrades (gpt-4o &rarr; gpt-4o-mini) or provider switches for the same feature.</div>
+      <div style="font-size:10px; color:#a371f7; margin-top:6px;">ROADMAP &middot; Signals</div>
+    </div>
+
+    <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #a371f7; border-radius:6px; padding:10px; margin-bottom:8px;">
+      <div style="font-size:12px; font-weight:600; color:#f0f6fc;">Expansion/contraction signal from MRR movement</div>
+      <div style="font-size:11px; color:#8b949e; margin-top:4px;">Surface MRR movement category (new, expansion, contraction, churned) as a signal on Customer Detail. Data exists in mrr_movements endpoint but isn't wired to signals yet.</div>
+      <div style="font-size:10px; color:#a371f7; margin-top:6px;">ROADMAP &middot; Signals</div>
+    </div>
+
     <!-- ── BUGS: Found via dogfooding (2026-04-22) ── -->
 
     <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #f85149; border-radius:6px; padding:10px; margin-bottom:8px;">
@@ -736,9 +756,9 @@ accounts ┘                   │
     </div>
 
     <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #3fb950; border-radius:6px; padding:10px; margin-bottom:8px;">
-      <div style="font-size:12px; font-weight:600; color:#f0f6fc;">[DDS-9] Customer Detail signals re-enabled</div>
-      <div style="font-size:11px; color:#8b949e; margin-top:4px;">Removed v-if="false" gate. Removed model-swap signal. Added trend magnitude. Renamed "Usage declining/growing" to "Spend declining/growing" (cost trend &ne; usage trend).</div>
-      <div style="font-size:10px; color:#3fb950; margin-top:6px;">DDS &middot; 92c6c71</div>
+      <div style="font-size:12px; font-weight:600; color:#f0f6fc;">[DDS-9] Customer Detail signals re-enabled + health score fix</div>
+      <div style="font-size:11px; color:#8b949e; margin-top:4px;">Removed v-if="false" gate. Removed model-swap signal (compared unrelated model families). Renamed "Usage declining/growing" to "Spend declining/growing" (cost trend &ne; usage trend). Fixed health score: null margin &rarr; 20 pts (neutral) not 0, growing + profitable customers score highest, cost-down + still-active gets neutral trend score.</div>
+      <div style="font-size:10px; color:#3fb950; margin-top:6px;">DDS &middot; 92c6c71, 01fd3ad</div>
     </div>
 
     <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #3fb950; border-radius:6px; padding:10px; margin-bottom:8px;">
