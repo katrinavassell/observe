@@ -10,6 +10,7 @@ import {
   Loader2,
   ExternalLink,
   ChevronLeft,
+  Send,
 } from "lucide-vue-next";
 import { useAuth } from "@/composables/useAuth";
 import {
@@ -24,6 +25,7 @@ import {
   createAlertRule,
   updateAlertRule,
   deleteAlertRule,
+  testAlertRule,
   listAlertHistory,
 } from "@/lib/api";
 import type { AlertRule } from "@/lib/api";
@@ -245,6 +247,30 @@ async function handleDelete(rule: AlertRule) {
     toast.success("Alert deleted");
   } catch {
     toast.error("Failed to delete alert");
+  }
+}
+
+const testingId = ref<number | null>(null);
+
+async function handleTest(rule: AlertRule) {
+  testingId.value = rule.id;
+  try {
+    const result = await testAlertRule(rule.id);
+    const channels = Object.entries(result.delivered)
+      .map(([ch, status]) => `${ch}: ${status}`)
+      .join(", ");
+    if (Object.values(result.delivered).every((s) => s === "sent")) {
+      toast.success("Test alert sent", { description: channels });
+    } else {
+      toast.warning("Test alert partially failed", { description: channels });
+    }
+  } catch (err) {
+    toast.error("Failed to send test alert", {
+      description:
+        err instanceof Error ? err.message : "Check delivery channels",
+    });
+  } finally {
+    testingId.value = null;
   }
 }
 
@@ -657,6 +683,21 @@ function relativeTime(dateStr: string) {
                 @click="handleToggle(rule)"
               >
                 {{ rule.enabled ? "Pause" : "Enable" }}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                class="h-7 text-xs"
+                :disabled="testingId === rule.id"
+                title="Send a test notification"
+                @click="handleTest(rule)"
+              >
+                <Loader2
+                  v-if="testingId === rule.id"
+                  class="h-3.5 w-3.5 mr-1 animate-spin"
+                />
+                <Send v-else class="h-3.5 w-3.5 mr-1" />
+                {{ testingId === rule.id ? "Sending..." : "Test" }}
               </Button>
               <Button
                 variant="ghost"

@@ -1381,6 +1381,12 @@ export async function deleteAlertRule(
   return request(`/alerts/${id}`, { method: "DELETE" });
 }
 
+export async function testAlertRule(
+  id: number,
+): Promise<{ delivered: Record<string, string> }> {
+  return request(`/alerts/${id}/test`, { method: "POST" });
+}
+
 export async function listAlertHistory(params?: {
   customer_id?: string;
   limit?: number;

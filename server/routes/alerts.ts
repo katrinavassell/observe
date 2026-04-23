@@ -754,6 +754,65 @@ export function createAlertRoutes(
     },
   );
 
+  // POST /alerts/:id/test — send a test notification without recording history
+  router.post(
+    "/alerts/:id/test",
+    ensureVisitor,
+    async (req: AuthRequest, res: Response) => {
+      try {
+        if (!req.accountEmail) {
+          return res.status(401).json({ error: "Authentication required" });
+        }
+        const id = parseInt(req.params.id);
+        const { rows } = await pool.query(
+          "SELECT * FROM alert_rules WHERE id = $1 AND account_id = $2",
+          [id, req.accountId],
+        );
+        if (rows.length === 0)
+          return res.status(404).json({ error: "Alert not found" });
+
+        const rule = rows[0];
+        const testValue =
+          rule.operator === "gt"
+            ? rule.threshold * 1.15
+            : rule.threshold * 0.85;
+
+        const testRule = {
+          name: `[TEST] ${rule.name}`,
+          metric: rule.metric || rule.trigger_type,
+          operator: rule.operator,
+          threshold: Number(rule.threshold),
+        };
+
+        const delivered: Record<string, string> = {};
+
+        if (rule.email) {
+          const ok = await sendAlertEmail(rule.email, testRule, testValue);
+          delivered.email = ok ? "sent" : "failed";
+        }
+        if (rule.webhook_url) {
+          const ok = await sendAlertWebhook(
+            rule.webhook_url,
+            testRule,
+            testValue,
+          );
+          delivered.webhook = ok ? "sent" : "failed";
+        }
+
+        if (!rule.email && !rule.webhook_url) {
+          return res
+            .status(400)
+            .json({ error: "No delivery channel configured on this alert" });
+        }
+
+        res.json({ delivered });
+      } catch (err) {
+        console.error("POST /alerts/:id/test error:", err);
+        res.status(500).json({ error: "Failed to send test alert" });
+      }
+    },
+  );
+
   // GET /alerts/history — paginated alert history
   router.get(
     "/alerts/history",
