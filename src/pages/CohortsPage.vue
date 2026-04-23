@@ -94,6 +94,7 @@ const periodDates = computed(() => {
 
 const createDialogOpen = ref(false);
 const newCohortName = ref("");
+const cohortNameError = ref(false);
 const newCohortDescription = ref("");
 const newCohortColor = ref("#6366f1");
 const selectedCustomerIds = ref<Set<string>>(new Set());
@@ -157,7 +158,7 @@ const filteredCustomerList = computed(() => {
   const q = customerSearch.value.toLowerCase();
   return list.filter(
     (c) =>
-      c.customer_name?.toLowerCase().includes(q) ||
+      (c.name || c.customer_name || "").toLowerCase().includes(q) ||
       c.customer_id.toLowerCase().includes(q),
   );
 });
@@ -183,8 +184,10 @@ function openCreateDialog() {
 async function handleCreate() {
   if (!newCohortName.value.trim()) {
     toast.error("Cohort name is required");
+    cohortNameError.value = true;
     return;
   }
+  cohortNameError.value = false;
   if (cohortType.value === "dynamic" && rules.value.length === 0) {
     toast.error("Add at least one rule");
     return;
@@ -1161,7 +1164,9 @@ const excludedCount = computed(() => {
               <input
                 v-model="newCohortName"
                 class="w-full rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                :class="cohortNameError ? 'border-destructive' : ''"
                 placeholder="e.g. Enterprise EU"
+                @input="cohortNameError = false"
               />
             </div>
 
@@ -1311,7 +1316,7 @@ const excludedCount = computed(() => {
                     class="h-3.5 w-3.5 rounded border-input accent-primary"
                     @change="toggleCustomer(c.customer_id)"
                   />
-                  <span>{{ c.customer_name || c.customer_id }}</span>
+                  <span>{{ c.name || c.customer_name || c.customer_id }}</span>
                 </label>
                 <div
                   v-if="filteredCustomerList.length === 0"
