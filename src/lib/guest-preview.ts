@@ -25,6 +25,7 @@ import type {
   CohortLabel,
   CohortSummary,
   CohortTotals,
+  EventDetail,
 } from "@/lib/api";
 
 const ISO = (offsetMinutes: number) =>
@@ -672,6 +673,192 @@ export const GUEST_EVENTS: ObserveEvent[] = Array.from(
     };
   },
 );
+
+const SAMPLE_REQUEST_RESPONSE: Record<
+  string,
+  {
+    request_body: Record<string, unknown>;
+    response_body: Record<string, unknown>;
+  }
+> = {
+  rag_query: {
+    request_body: {
+      messages: [
+        {
+          role: "system",
+          content:
+            "You are a helpful assistant. Use the provided context to answer questions accurately.",
+        },
+        {
+          role: "user",
+          content:
+            "What were our top-performing product features last quarter?",
+        },
+      ],
+    },
+    response_body: {
+      choices: [
+        {
+          message: {
+            role: "assistant",
+            content:
+              "Based on the retrieved documents, your top-performing features last quarter were:\n\n1. **AI Chat** - 42% of total usage, 68% margin\n2. **Document Search** - 28% of usage, generating $12.4k revenue\n3. **Code Review** - fastest growing at 3.2x MoM\n\nAI Chat had the highest margin due to efficient prompt caching, while Code Review showed the strongest growth trajectory.",
+          },
+        },
+      ],
+    },
+  },
+  code_review_agent: {
+    request_body: {
+      messages: [
+        {
+          role: "system",
+          content:
+            "You are a senior code reviewer. Analyze the diff for bugs, security issues, and style problems.",
+        },
+        {
+          role: "user",
+          content:
+            'Review this PR diff:\n```diff\n- const user = await db.query("SELECT * FROM users WHERE id = " + userId)\n+ const user = await db.query("SELECT * FROM users WHERE id = $1", [userId])\n```',
+        },
+      ],
+    },
+    response_body: {
+      choices: [
+        {
+          message: {
+            role: "assistant",
+            content:
+              "Good fix. The original code was vulnerable to SQL injection. The parameterized query properly escapes the userId input. No other issues found.",
+          },
+        },
+      ],
+    },
+  },
+  content_pipeline: {
+    request_body: {
+      messages: [
+        {
+          role: "user",
+          content:
+            "Write a concise product changelog entry for: Added real-time margin tracking per customer with Stripe MRR integration.",
+        },
+      ],
+    },
+    response_body: {
+      choices: [
+        {
+          message: {
+            role: "assistant",
+            content:
+              "**Real-time margin tracking** - See per-customer margins calculated from your Stripe MRR and AI costs. Margins update automatically as new events flow in.",
+          },
+        },
+      ],
+    },
+  },
+  document_extraction: {
+    request_body: {
+      messages: [
+        {
+          role: "user",
+          content:
+            "Extract the following fields from this invoice: vendor name, total amount, due date, line items.",
+        },
+      ],
+    },
+    response_body: {
+      choices: [
+        {
+          message: {
+            role: "assistant",
+            content:
+              '{"vendor": "AWS", "total": 2847.32, "due_date": "2026-05-01", "line_items": [{"service": "EC2", "amount": 1240.00}, {"service": "S3", "amount": 89.32}, {"service": "RDS", "amount": 1518.00}]}',
+          },
+        },
+      ],
+    },
+  },
+  semantic_search: {
+    request_body: {
+      messages: [
+        {
+          role: "user",
+          content: "Find documentation about webhook retry logic",
+        },
+      ],
+    },
+    response_body: {
+      choices: [
+        {
+          message: {
+            role: "assistant",
+            content:
+              "Found 3 relevant documents:\n1. Webhook Delivery Guide (92% match)\n2. Event Processing Architecture (78% match)\n3. Error Handling Playbook (71% match)",
+          },
+        },
+      ],
+    },
+  },
+  email_draft: {
+    request_body: {
+      messages: [
+        {
+          role: "user",
+          content:
+            "Draft a follow-up email to a customer whose AI costs increased 40% this month.",
+        },
+      ],
+    },
+    response_body: {
+      choices: [
+        {
+          message: {
+            role: "assistant",
+            content:
+              "Subject: Your AI usage grew 40% this month - here's what we recommend\n\nHi there,\n\nWe noticed your AI costs increased 40% month-over-month. A few quick wins:\n\n- Switch low-priority calls from GPT-4o to GPT-4o-mini (est. 60% savings)\n- Enable prompt caching for repeated system prompts\n\nWant to review your usage together? Happy to hop on a quick call.\n\nBest,\nThe Observe Team",
+          },
+        },
+      ],
+    },
+  },
+};
+
+export function getGuestEventDetail(id: number): EventDetail | null {
+  const event = GUEST_EVENTS.find((e) => e.id === id);
+  if (!event) return null;
+  const sample = SAMPLE_REQUEST_RESPONSE[event.feature_key];
+  const inputTokens = Math.floor((event.usage_units ?? 500) * 0.7);
+  const outputTokens = (event.usage_units ?? 500) - inputTokens;
+  return {
+    id: event.id,
+    user_id: event.user_id,
+    customer_id: event.customer_id,
+    customer_name: event.customer_name,
+    feature_key: event.feature_key,
+    event_name: event.event_name,
+    timestamp: event.timestamp,
+    cost_amount: event.cost_amount,
+    revenue_amount: event.revenue_amount ?? 0,
+    usage_units: event.usage_units ?? 0,
+    input_tokens: inputTokens,
+    output_tokens: outputTokens,
+    input_cost: event.cost_amount
+      ? Number((event.cost_amount * 0.3).toFixed(6))
+      : null,
+    output_cost: event.cost_amount
+      ? Number((event.cost_amount * 0.7).toFixed(6))
+      : null,
+    revenue_source: "per_unit",
+    model: event.model,
+    model_provider: event.model_provider,
+    source: event.source,
+    request_body: sample?.request_body ?? null,
+    response_body: sample?.response_body ?? null,
+    duration_ms: event.duration_ms,
+    cost_type: event.cost_type,
+  };
+}
 
 export const GUEST_MODELS: ModelSummary[] = [
   {

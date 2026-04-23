@@ -272,10 +272,13 @@ After wiring up, run the app once and make one LLM call. Use \`"Observe Test"\` 
 }
 
 async function copyAiInstallPrompt() {
-  const key =
-    generatedKey.value ||
-    sdkKeys.value[0]?.full_key ||
-    (sdkKeys.value[0]?.key_prefix ? sdkKeys.value[0].key_prefix + "..." : null);
+  const key = isLoggedIn.value
+    ? generatedKey.value ||
+      sdkKeys.value[0]?.full_key ||
+      (sdkKeys.value[0]?.key_prefix
+        ? sdkKeys.value[0].key_prefix + "..."
+        : null)
+    : "YOUR_API_KEY";
 
   if (!key) {
     toast.error("Generate an API key first");
@@ -556,7 +559,25 @@ async function handleResetAccountData() {
 // =============================================================================
 
 onMounted(async () => {
-  if (!isLoggedIn.value) return;
+  if (!isLoggedIn.value) {
+    sdkKeys.value = [
+      {
+        id: 0,
+        name: "Default",
+        key_prefix: "obs_a1b2c3d4",
+        full_key: null,
+        created_at: new Date().toISOString(),
+      },
+    ];
+    eventCount.value = 20;
+    stripeStatus.value = {
+      connected: true,
+      account_id: "acct_1Example",
+      account_name: "Acme Corp",
+      last_synced_at: new Date(Date.now() - 2 * 3600_000).toISOString(),
+    };
+    return;
+  }
   await Promise.all([loadSdkKeys(), loadStripeStatus(), loadProviderStatus()]);
 
   window.localStorage.removeItem("observe:fresh_sdk_key");
@@ -590,253 +611,30 @@ watch(
       </p>
     </div>
 
-    <!-- Guest: sign-in banner + preview of integration steps -->
-    <template v-if="!isLoggedIn">
-      <Card class="border-primary/40 bg-primary/5">
-        <CardContent
-          class="p-5 flex items-center justify-between gap-4 flex-wrap"
-        >
-          <div>
-            <h2 class="font-semibold text-base">Sign up to start tracking</h2>
-            <p class="text-sm text-muted-foreground">
-              Get an API key, paste one prompt, see events in 30 seconds. Free.
-            </p>
-          </div>
-          <div class="flex gap-2">
-            <Button @click="router.push('/signup')">Sign up free</Button>
-            <Button variant="outline" @click="router.push('/login')">
-              Log in
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      <!-- Preview: How it works -->
-      <div class="space-y-4">
-        <h2
-          class="text-sm font-semibold text-muted-foreground uppercase tracking-wider"
-        >
-          How it works
-        </h2>
-
-        <!-- Step 1 preview -->
-        <Card class="border-muted">
-          <CardContent class="p-5 space-y-3">
-            <div class="flex items-center gap-2">
-              <div
-                class="flex items-center justify-center w-6 h-6 rounded-full bg-primary text-primary-foreground text-xs font-bold"
-              >
-                1
-              </div>
-              <h3 class="font-semibold">Copy one prompt</h3>
-            </div>
-            <p class="text-sm text-muted-foreground">
-              Sign up, click "Copy install prompt", and paste it into Cursor,
-              Claude Code, or Copilot. The prompt includes your API key and
-              tells the agent exactly how to wire Observe into your repo. No
-              config, no SDK, no code to write.
-            </p>
-            <div class="rounded-lg border bg-muted/30 p-4 space-y-3">
-              <div class="flex items-center gap-3 text-sm">
-                <div
-                  class="flex items-center justify-center w-5 h-5 rounded-full bg-primary/10 text-primary text-[10px] font-bold shrink-0"
-                >
-                  1
-                </div>
-                <span>Sign up and get your API key (auto-generated)</span>
-              </div>
-              <div class="flex items-center gap-3 text-sm">
-                <div
-                  class="flex items-center justify-center w-5 h-5 rounded-full bg-primary/10 text-primary text-[10px] font-bold shrink-0"
-                >
-                  2
-                </div>
-                <span
-                  >Click
-                  <span class="font-medium">"Copy install prompt"</span></span
-                >
-              </div>
-              <div class="flex items-center gap-3 text-sm">
-                <div
-                  class="flex items-center justify-center w-5 h-5 rounded-full bg-primary/10 text-primary text-[10px] font-bold shrink-0"
-                >
-                  3
-                </div>
-                <span
-                  >Paste into your AI coding agent. It handles the rest.</span
-                >
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <!-- Step 2 preview -->
-        <Card class="border-muted">
-          <CardContent class="p-5">
-            <div class="flex items-center gap-3">
-              <div
-                class="flex items-center justify-center w-6 h-6 rounded-full bg-primary text-primary-foreground text-xs font-bold"
-              >
-                2
-              </div>
-              <div>
-                <h3 class="font-semibold">Events flow in automatically</h3>
-                <p class="text-sm text-muted-foreground">
-                  Run your app, make one LLM call, and Observe picks it up.
-                  Cost, model, customer, and feature are all tracked per event.
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <!-- Step 3 preview -->
-        <Card class="border-muted">
-          <CardContent class="p-5">
-            <div class="flex items-center gap-3">
-              <div
-                class="flex items-center justify-center w-6 h-6 rounded-full bg-muted text-muted-foreground text-xs font-bold"
-              >
-                3
-              </div>
-              <div>
-                <h3 class="font-semibold">
-                  Connect revenue
-                  <span class="text-xs font-normal text-muted-foreground"
-                    >(optional)</span
-                  >
-                </h3>
-                <p class="text-sm text-muted-foreground">
-                  Link Stripe to see margins per feature and customer. Also
-                  supports OpenAI and Anthropic dashboard syncs for historical
-                  cost data.
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      <!-- Preview: What connected sources look like -->
-      <div class="space-y-4">
-        <h2
-          class="text-sm font-semibold text-muted-foreground uppercase tracking-wider"
-        >
-          What you'll see when connected
-        </h2>
-
-        <!-- SDK key preview -->
-        <Card class="border-muted opacity-80">
-          <CardContent class="p-5 space-y-3">
-            <div class="flex items-center gap-2">
-              <Key class="h-4 w-4 text-primary" />
-              <h3 class="font-semibold text-sm">SDK API Key</h3>
-              <span
-                class="ml-auto text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700"
-                >Connected</span
-              >
-            </div>
-            <div
-              class="rounded-md border bg-muted/30 p-3 font-mono text-xs text-muted-foreground"
-            >
-              obs_a1b2c3d4e5f6...
-            </div>
-            <div class="flex items-center gap-4 text-xs text-muted-foreground">
-              <span
-                >Ingest URL:
-                <code class="font-mono"
-                  >https://app.observe.tanso.io/api/events/ingest</code
-                ></span
-              >
-            </div>
-          </CardContent>
-        </Card>
-
-        <!-- Stripe preview -->
-        <Card class="border-muted opacity-80">
-          <CardContent class="p-5">
-            <div class="flex items-center gap-2">
-              <CreditCard class="h-4 w-4 text-primary" />
-              <h3 class="font-semibold text-sm">Stripe</h3>
-              <span
-                class="ml-auto text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700"
-                >Connected</span
-              >
-            </div>
-            <div class="mt-3 grid grid-cols-3 gap-3 text-center">
-              <div class="rounded-md border p-2">
-                <div class="text-lg font-semibold">142</div>
-                <div class="text-xs text-muted-foreground">Customers</div>
-              </div>
-              <div class="rounded-md border p-2">
-                <div class="text-lg font-semibold">89</div>
-                <div class="text-xs text-muted-foreground">Subscriptions</div>
-              </div>
-              <div class="rounded-md border p-2">
-                <div class="text-lg font-semibold">$24k</div>
-                <div class="text-xs text-muted-foreground">MRR</div>
-              </div>
-            </div>
-            <p class="text-xs text-muted-foreground mt-2">
-              Last synced 2 hours ago
-            </p>
-          </CardContent>
-        </Card>
-
-        <!-- Provider cost preview -->
-        <Card class="border-muted opacity-80">
-          <CardContent class="p-5">
-            <div class="flex items-center gap-2">
-              <Radio class="h-4 w-4 text-primary" />
-              <h3 class="font-semibold text-sm">OpenAI</h3>
-              <span
-                class="ml-auto text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700"
-                >Connected</span
-              >
-            </div>
-            <p class="text-xs text-muted-foreground mt-2">
-              Syncs historical cost data from your OpenAI dashboard for cost
-              reconciliation.
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-
-      <!-- Manual integration preview -->
-      <details class="group">
-        <summary
-          class="cursor-pointer text-sm font-medium text-muted-foreground hover:text-foreground flex items-center gap-1.5"
-        >
-          <ArrowRight
-            class="h-3.5 w-3.5 transition-transform group-open:rotate-90"
-          />
-          Manual integration (code snippets)
-        </summary>
-        <Card class="mt-3 border-muted opacity-80">
-          <CardContent class="p-4">
-            <pre
-              class="text-xs font-mono text-muted-foreground overflow-x-auto"
-            ><code>import Observe from '@anthropic/observe';
-
-const observe = new Observe({
-  apiKey: 'obs_...',  // from Data Sources page
-});
-
-// Wrap any LLM call
-const result = await observe.track({
-  featureKey: 'chat_response',
-  customerReferenceId: 'cus_123',
-}, () => openai.chat.completions.create({...}));</code></pre>
-          </CardContent>
-        </Card>
-      </details>
-    </template>
+    <!-- Guest: sign-up banner -->
+    <Card v-if="!isLoggedIn" class="border-primary/40 bg-primary/5">
+      <CardContent
+        class="p-5 flex items-center justify-between gap-4 flex-wrap"
+      >
+        <div>
+          <h2 class="font-semibold text-base">Sign up to start tracking</h2>
+          <p class="text-sm text-muted-foreground">
+            Get an API key, paste one prompt, see events in 30 seconds. Free.
+          </p>
+        </div>
+        <div class="flex gap-2">
+          <Button @click="router.push('/signup')">Sign up free</Button>
+          <Button variant="outline" @click="router.push('/login')">
+            Log in
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
 
     <!-- ================================================================== -->
     <!-- STEP 1: Install — hero prompt + API key                            -->
     <!-- ================================================================== -->
     <Card
-      v-if="isLoggedIn"
       class="border-primary/40 bg-gradient-to-br from-violet-500/10 via-primary/5 to-blue-500/10"
     >
       <CardContent class="p-6 space-y-5">
@@ -1059,7 +857,6 @@ const result = await observe.track({
     <!-- STEP 2: Verify — listening for events                              -->
     <!-- ================================================================== -->
     <Card
-      v-if="isLoggedIn"
       :class="
         hasEvents
           ? 'border-success/40 bg-success/5'
@@ -1114,7 +911,7 @@ const result = await observe.track({
     <!-- ================================================================== -->
     <!-- STEP 3: Connect revenue (Stripe)                                   -->
     <!-- ================================================================== -->
-    <div v-if="isLoggedIn" class="space-y-2">
+    <div class="space-y-2">
       <Card id="stripe-section" class="border-[#635bff]/20">
         <CardContent class="p-6">
           <template v-if="!stripeStatus.connected">
@@ -1221,7 +1018,7 @@ const result = await observe.track({
     <!-- ================================================================== -->
     <!-- ADVANCED: manual snippet (collapsed)                               -->
     <!-- ================================================================== -->
-    <details v-if="isLoggedIn" class="group">
+    <details class="group">
       <summary
         class="text-sm font-medium text-muted-foreground cursor-pointer hover:text-foreground transition-colors"
       >

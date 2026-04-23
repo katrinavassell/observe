@@ -35,6 +35,7 @@ import {
   GUEST_EVENTS,
   GUEST_EVENTS_BY_CUSTOMER,
   GUEST_EVENTS_BY_MODEL,
+  getGuestEventDetail,
 } from "@/lib/guest-preview";
 
 const { isLoggedIn } = useAuth();
@@ -205,6 +206,11 @@ async function toggleEvent(id: number) {
   window.posthog?.capture("event_expanded", { event_id: id });
   delete detailErrors[id];
   if (!eventDetails[id]) {
+    if (!isLoggedIn.value) {
+      const guest = getGuestEventDetail(id);
+      if (guest) eventDetails[id] = guest;
+      return;
+    }
     loadingDetails.add(id);
     try {
       eventDetails[id] = await getEventDetail(id);
@@ -313,11 +319,18 @@ const modelAgg = computed(() =>
 const { data: usageLimits } = useQuery({
   queryKey: ["usage-limits"],
   queryFn: getUsageLimits,
+  enabled: computed(() => isLoggedIn.value),
 });
 
-const eventUsage = computed(
-  () => usageLimits.value?.event_ingest?.usage ?? null,
-);
+const eventUsage = computed(() => {
+  if (!isLoggedIn.value)
+    return {
+      used: GUEST_EVENTS.length,
+      limit: 10_000,
+      remaining: 10_000 - GUEST_EVENTS.length,
+    };
+  return usageLimits.value?.event_ingest?.usage ?? null;
+});
 const eventUsagePct = computed(() => {
   if (!eventUsage.value || !eventUsage.value.limit) return 0;
   return Math.min(
@@ -554,9 +567,7 @@ function usageTooltip(event: ObserveEvent): string {
       >
         <Activity class="h-4 w-4" />
         <span v-if="eventsData" class="font-medium text-foreground"
-          >{{
-            (eventsData.total || eventsData.events.length).toLocaleString()
-          }}
+          >{{ (eventsData.total || eventsData.events.length).toLocaleString() }}
           total
           {{
             (eventsData.total || eventsData.events.length) === 1
