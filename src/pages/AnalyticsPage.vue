@@ -440,6 +440,19 @@ function retry() {
           No feature data yet
         </div>
         <div
+          v-if="sortedFeatures.length"
+          class="flex items-center gap-3 px-3 pb-1"
+        >
+          <span class="w-36 text-xs text-muted-foreground">Feature</span>
+          <div class="flex-1" />
+          <span class="w-20 text-right text-xs text-muted-foreground"
+            >Cost</span
+          >
+          <span class="w-28 text-right text-xs text-muted-foreground"
+            >Per event</span
+          >
+        </div>
+        <div
           v-for="f in sortedFeatures"
           :key="f.feature_key"
           class="flex items-center gap-3 rounded-md px-3 py-2.5 hover:bg-muted/50 transition-colors"
@@ -473,6 +486,19 @@ function retry() {
           class="py-8 text-center text-sm text-muted-foreground"
         >
           No model data yet
+        </div>
+        <div
+          v-if="sortedModels.length"
+          class="flex items-center gap-3 px-3 pb-1"
+        >
+          <span class="w-36 text-xs text-muted-foreground">Model</span>
+          <div class="flex-1" />
+          <span class="w-20 text-right text-xs text-muted-foreground"
+            >Cost</span
+          >
+          <span class="w-28 text-right text-xs text-muted-foreground"
+            >Per event</span
+          >
         </div>
         <div
           v-for="m in sortedModels"
