@@ -108,15 +108,22 @@ export async function syncStripeDataForUser(
       .autoPagingToArray({ limit: 10000 }),
   ]);
 
-  // Clear subscriptions + plans before re-syncing.
-  // Revenue events (source='stripe') are NOT deleted here — the invoice
-  // sync endpoint manages those with its own delete-then-reinsert.
-  await pool.query("DELETE FROM subscriptions WHERE account_id = $1", [
-    resolvedAccountId,
-  ]);
-  await pool.query("DELETE FROM plans WHERE account_id = $1", [
-    resolvedAccountId,
-  ]);
+  // Only delete Stripe-sourced subscriptions and plans before re-syncing.
+  // SDK-created rows are preserved.
+  const stripeSubIds = stripeSubscriptionsList.map((s) => s.id);
+  if (stripeSubIds.length > 0) {
+    await pool.query(
+      "DELETE FROM subscriptions WHERE account_id = $1 AND subscription_id = ANY($2)",
+      [resolvedAccountId, stripeSubIds],
+    );
+  }
+  const stripePlanIds = pricesList.map((p) => p.id);
+  if (stripePlanIds.length > 0) {
+    await pool.query(
+      "DELETE FROM plans WHERE account_id = $1 AND plan_id = ANY($2)",
+      [resolvedAccountId, stripePlanIds],
+    );
+  }
   const batchSize = 500;
 
   // Insert plans from Stripe products + prices
@@ -166,16 +173,17 @@ export async function syncStripeDataForUser(
     );
   }
 
-  // Insert customers — delete ALL for this account first, then fresh insert.
-  // Never use ON CONFLICT on customers — dual unique constraints break it.
-  // See bugs_customer_upsert.md and bugs_upsert_dual_unique.md.
+  // Only delete Stripe-sourced customers (customer_id = cus_*), then re-insert.
+  // SDK-created customers with app-level IDs are preserved.
   const validCustomers = stripeCustomersList.filter(
     (c) => typeof c !== "string",
   );
-  if (resolvedAccountId != null) {
-    await pool.query(`DELETE FROM customers WHERE account_id = $1`, [
-      resolvedAccountId,
-    ]);
+  const stripeCustomerIds = validCustomers.map((c) => c.id);
+  if (resolvedAccountId != null && stripeCustomerIds.length > 0) {
+    await pool.query(
+      `DELETE FROM customers WHERE account_id = $1 AND customer_id = ANY($2)`,
+      [resolvedAccountId, stripeCustomerIds],
+    );
   }
   for (let i = 0; i < validCustomers.length; i += batchSize) {
     const batch = validCustomers.slice(i, i + batchSize);
