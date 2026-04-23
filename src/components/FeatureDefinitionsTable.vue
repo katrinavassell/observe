@@ -11,7 +11,16 @@ import {
   DialogTitle,
   DialogClose,
 } from "radix-vue";
-import { Card, CardContent, Button, Input, Label } from "@/components/ui";
+import {
+  Card,
+  CardContent,
+  Button,
+  Input,
+  Label,
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+} from "@/components/ui";
 import {
   listFeatureDefinitions,
   createFeatureDefinition,
@@ -252,13 +261,17 @@ async function sendTestEvent() {
                 >{{ def.feature_key }}</code
               >
             </div>
-            <button
-              class="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive shrink-0"
-              title="Delete"
-              @click="handleDelete(def, $event)"
-            >
-              <Trash2 class="w-3.5 h-3.5" />
-            </button>
+            <Tooltip>
+              <TooltipTrigger as-child>
+                <button
+                  class="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive shrink-0"
+                  @click="handleDelete(def, $event)"
+                >
+                  <Trash2 class="w-3.5 h-3.5" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>Delete</TooltipContent>
+            </Tooltip>
           </div>
 
           <div class="grid grid-cols-2 gap-2 text-xs">

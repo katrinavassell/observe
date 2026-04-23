@@ -37,6 +37,9 @@ import {
   CardDescription,
   Input,
   Badge,
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
 } from "@/components/ui";
 
 const {
@@ -320,14 +323,14 @@ function memberLabel(member: OrgMember) {
             </template>
             <template v-else>
               <span class="text-lg font-semibold flex-1">{{ org.name }}</span>
-              <Button
-                variant="ghost"
-                size="icon"
-                title="Rename team"
-                @click="startEditName"
-              >
-                <Pencil class="h-4 w-4" />
-              </Button>
+              <Tooltip>
+                <TooltipTrigger as-child>
+                  <Button variant="ghost" size="icon" @click="startEditName">
+                    <Pencil class="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Rename team</TooltipContent>
+              </Tooltip>
             </template>
           </div>
         </CardContent>
@@ -437,18 +440,23 @@ function memberLabel(member: OrgMember) {
                 </div>
               </div>
 
-              <Button
+              <Tooltip
                 v-if="
                   member.visitor_id !== currentVisitorId && !isOwner(member)
                 "
-                variant="ghost"
-                size="icon"
-                class="text-muted-foreground hover:text-destructive h-8 w-8"
-                title="Remove member"
-                @click="handleRemove(member)"
               >
-                <Trash2 class="h-4 w-4" />
-              </Button>
+                <TooltipTrigger as-child>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    class="text-muted-foreground hover:text-destructive h-8 w-8"
+                    @click="handleRemove(member)"
+                  >
+                    <Trash2 class="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Remove member</TooltipContent>
+              </Tooltip>
             </li>
           </ul>
         </CardContent>

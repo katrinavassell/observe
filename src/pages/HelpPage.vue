@@ -28,6 +28,14 @@ const sections = [
         q: "Do I need to connect Stripe?",
         a: "No. Stripe is optional. Without it, Observe tracks cost only. With Stripe connected, it auto-attributes revenue from subscriptions so you can see margins per customer.",
       },
+      {
+        q: "Is there a walkthrough I can follow?",
+        a: "Yes — we have an interactive walkthrough that covers connecting Stripe and setting up cost alerts.",
+        link: {
+          url: "https://app.arcade.software/share/zlgVxH8jCm5sGpfKh4MZ",
+          label: "Watch the setup walkthrough",
+        },
+      },
     ],
   },
   {
@@ -211,6 +219,15 @@ const sections = [
             <h3 class="font-medium text-sm mb-2">{{ item.q }}</h3>
             <p class="text-sm text-muted-foreground leading-relaxed">
               {{ item.a }}
+              <a
+                v-if="item.link"
+                :href="item.link.url"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="inline-block mt-1 text-primary underline underline-offset-2"
+              >
+                {{ item.link.label }} &rarr;
+              </a>
             </p>
           </div>
         </div>

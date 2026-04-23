@@ -19,6 +19,9 @@ import {
   CardHeader,
   CardTitle,
   Button,
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
 } from "@/components/ui";
 import {
   listAlertRules,
@@ -690,32 +693,40 @@ function relativeTime(dateStr: string) {
               >
                 {{ rule.enabled ? "Pause" : "Enable" }}
               </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                class="h-7 text-xs"
-                :disabled="testingId === rule.id"
-                title="Send a test notification"
-                @click="handleTest(rule)"
-              >
-                <Loader2
-                  v-if="testingId === rule.id"
-                  class="h-3.5 w-3.5 mr-1 animate-spin"
-                />
-                <Send v-else class="h-3.5 w-3.5 mr-1" />
-                {{ testingId === rule.id ? "Sending..." : "Test" }}
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                class="h-7 text-xs text-muted-foreground hover:text-destructive"
-                aria-label="Delete alert"
-                title="Delete this alert rule"
-                @click="handleDelete(rule)"
-              >
-                <Trash2 class="h-3.5 w-3.5 mr-1" />
-                Delete
-              </Button>
+              <Tooltip>
+                <TooltipTrigger as-child>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    class="h-7 text-xs"
+                    :disabled="testingId === rule.id"
+                    @click="handleTest(rule)"
+                  >
+                    <Loader2
+                      v-if="testingId === rule.id"
+                      class="h-3.5 w-3.5 mr-1 animate-spin"
+                    />
+                    <Send v-else class="h-3.5 w-3.5 mr-1" />
+                    {{ testingId === rule.id ? "Sending..." : "Test" }}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Send a test notification</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger as-child>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    class="h-7 text-xs text-muted-foreground hover:text-destructive"
+                    aria-label="Delete alert"
+                    @click="handleDelete(rule)"
+                  >
+                    <Trash2 class="h-3.5 w-3.5 mr-1" />
+                    Delete
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Delete this alert rule</TooltipContent>
+              </Tooltip>
             </div>
           </div>
         </CardContent>

@@ -24,6 +24,11 @@ import {
 import { OrganizationSwitcher, OrganizationProfile } from "@clerk/vue";
 import ErrorBoundary from "@/components/shared/ErrorBoundary.vue";
 import FeedbackModal from "@/components/shared/FeedbackModal.vue";
+import {
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+} from "@/components/ui/tooltip";
 
 import { useAuth } from "@/composables/useAuth";
 import { useDataMode } from "@/composables/useDataMode";
@@ -273,31 +278,35 @@ function isActive(path: string) {
                   >Account</span
                 >
               </div>
-              <router-link
-                :to="item.path"
-                :title="item.description"
-                :class="[
-                  'group relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-all duration-150',
-                  isActive(item.path)
-                    ? 'bg-sidebar-accent text-sidebar-accent-foreground font-medium'
-                    : 'text-sidebar-foreground/60 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground',
-                ]"
-              >
-                <div
-                  v-if="isActive(item.path)"
-                  class="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-[3px] rounded-full bg-sidebar-primary"
-                />
-                <component
-                  :is="item.icon"
-                  :class="[
-                    'h-4 w-4 shrink-0 transition-colors duration-150',
-                    isActive(item.path)
-                      ? 'text-sidebar-accent-foreground'
-                      : 'text-sidebar-foreground/40 group-hover:text-sidebar-foreground/70',
-                  ]"
-                />
-                <span>{{ item.label }}</span>
-              </router-link>
+              <Tooltip>
+                <TooltipTrigger as-child>
+                  <router-link
+                    :to="item.path"
+                    :class="[
+                      'group relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-all duration-150',
+                      isActive(item.path)
+                        ? 'bg-sidebar-accent text-sidebar-accent-foreground font-medium'
+                        : 'text-sidebar-foreground/60 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground',
+                    ]"
+                  >
+                    <div
+                      v-if="isActive(item.path)"
+                      class="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-[3px] rounded-full bg-sidebar-primary"
+                    />
+                    <component
+                      :is="item.icon"
+                      :class="[
+                        'h-4 w-4 shrink-0 transition-colors duration-150',
+                        isActive(item.path)
+                          ? 'text-sidebar-accent-foreground'
+                          : 'text-sidebar-foreground/40 group-hover:text-sidebar-foreground/70',
+                      ]"
+                    />
+                    <span>{{ item.label }}</span>
+                  </router-link>
+                </TooltipTrigger>
+                <TooltipContent>{{ item.description }}</TooltipContent>
+              </Tooltip>
             </template>
             <button
               v-if="isLoggedIn"
@@ -343,14 +352,18 @@ function isActive(path: string) {
                 {{ account.email }}
               </div>
             </div>
-            <button
-              @click="logout"
-              aria-label="Sign out"
-              class="ml-2 p-1.5 rounded-md text-sidebar-foreground/40 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-all duration-150"
-              title="Sign out"
-            >
-              <LogOut class="h-4 w-4" />
-            </button>
+            <Tooltip>
+              <TooltipTrigger as-child>
+                <button
+                  @click="logout"
+                  aria-label="Sign out"
+                  class="ml-2 p-1.5 rounded-md text-sidebar-foreground/40 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-all duration-150"
+                >
+                  <LogOut class="h-4 w-4" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>Sign out</TooltipContent>
+            </Tooltip>
           </div>
           <!-- Help + Feedback -->
           <div class="flex items-center gap-1 px-2 pt-1">

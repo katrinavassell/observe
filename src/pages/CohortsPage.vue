@@ -807,28 +807,31 @@ const excludedCount = computed(() => {
 
       <!-- Cohort filter chips + column settings -->
       <div class="flex flex-wrap items-center gap-2">
-        <button
-          v-for="label in cohortLabels"
-          :key="label"
-          class="px-3 py-1.5 rounded-full text-xs font-medium transition-colors"
-          :class="[
-            activeCohort === label
-              ? cohortMeta[label].color + ' ring-2 ring-offset-1 ring-current'
-              : 'bg-muted text-muted-foreground hover:bg-muted/80',
-          ]"
-          :title="cohortMeta[label].criteria"
-          @click="toggleCohortFilter(label)"
-        >
-          {{ cohortMeta[label].label }}
-          <span v-if="summary[label]" class="ml-1 opacity-70"
-            >({{ summary[label].count }})</span
-          >
-          <span
-            v-if="activeCohort === label"
-            class="ml-1 opacity-60 font-normal"
-            >· {{ cohortMeta[label].criteria }}</span
-          >
-        </button>
+        <Tooltip v-for="label in cohortLabels" :key="label">
+          <TooltipTrigger as-child>
+            <button
+              class="px-3 py-1.5 rounded-full text-xs font-medium transition-colors"
+              :class="[
+                activeCohort === label
+                  ? cohortMeta[label].color +
+                    ' ring-2 ring-offset-1 ring-current'
+                  : 'bg-muted text-muted-foreground hover:bg-muted/80',
+              ]"
+              @click="toggleCohortFilter(label)"
+            >
+              {{ cohortMeta[label].label }}
+              <span v-if="summary[label]" class="ml-1 opacity-70"
+                >({{ summary[label].count }})</span
+              >
+              <span
+                v-if="activeCohort === label"
+                class="ml-1 opacity-60 font-normal"
+                >· {{ cohortMeta[label].criteria }}</span
+              >
+            </button>
+          </TooltipTrigger>
+          <TooltipContent>{{ cohortMeta[label].criteria }}</TooltipContent>
+        </Tooltip>
 
         <!-- Custom cohort pills -->
         <template v-if="customCohorts.length > 0">

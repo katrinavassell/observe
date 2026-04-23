@@ -29,7 +29,15 @@ import {
   User,
 } from "lucide-vue-next";
 import SourceBadge from "@/components/shared/SourceBadge.vue";
-import { Select, Input, Button, Skeleton } from "@/components/ui";
+import {
+  Select,
+  Input,
+  Button,
+  Skeleton,
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+} from "@/components/ui";
 import { useAuth } from "@/composables/useAuth";
 import {
   GUEST_EVENTS,
@@ -976,12 +984,16 @@ function usageTooltip(event: ObserveEvent): string {
                         resetPage();
                       "
                     >
-                      <span
-                        class="font-mono text-xs bg-muted text-muted-foreground px-2 py-0.5 rounded-md border truncate max-w-[120px] inline-block align-middle"
-                        :title="event.model"
-                      >
-                        {{ event.model }}
-                      </span>
+                      <Tooltip>
+                        <TooltipTrigger as-child>
+                          <span
+                            class="font-mono text-xs bg-muted text-muted-foreground px-2 py-0.5 rounded-md border truncate max-w-[120px] inline-block align-middle"
+                          >
+                            {{ event.model }}
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent>{{ event.model }}</TooltipContent>
+                      </Tooltip>
                     </button>
                     <span v-else class="text-muted-foreground text-sm">—</span>
                   </td>
@@ -1373,24 +1385,28 @@ responseBody: { content: res.content },</code></pre>
                       <span v-if="eventDetails[event.id].feature_key"
                         >Feature: {{ eventDetails[event.id].feature_key }}</span
                       >
-                      <span
+                      <Tooltip
                         v-if="
                           eventDetails[event.id].revenue_source &&
                           eventDetails[event.id].revenue_source !== 'none'
                         "
-                        :title="
+                      >
+                        <TooltipTrigger as-child>
+                          <span>
+                            Revenue:
+                            {{
+                              revenueShortLabel(
+                                eventDetails[event.id].revenue_source,
+                              ) || eventDetails[event.id].revenue_source
+                            }}
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent>{{
                           revenueSourceTooltip(
                             eventDetails[event.id].revenue_source,
                           )
-                        "
-                      >
-                        Revenue:
-                        {{
-                          revenueShortLabel(
-                            eventDetails[event.id].revenue_source,
-                          ) || eventDetails[event.id].revenue_source
-                        }}
-                      </span>
+                        }}</TooltipContent>
+                      </Tooltip>
                     </div>
                     <!-- Revenue onboarding hint -->
                     <div

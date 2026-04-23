@@ -21,7 +21,14 @@ import {
   ShieldCheck,
   Info,
 } from "lucide-vue-next";
-import { Card, CardContent, Button } from "@/components/ui";
+import {
+  Card,
+  CardContent,
+  Button,
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+} from "@/components/ui";
 import { CostsSection, UsageSection } from "@/components/data-sources";
 import StripeApiKeyModal from "@/components/integrations/StripeApiKeyModal.vue";
 import OpenAIApiKeyModal from "@/components/integrations/OpenAIApiKeyModal.vue";
@@ -638,6 +645,14 @@ watch(
       <h1 class="text-2xl font-semibold tracking-tight">Data Sources</h1>
       <p class="text-muted-foreground">
         Three steps: get your key, install, verify events are flowing.
+        <a
+          href="https://app.arcade.software/share/zlgVxH8jCm5sGpfKh4MZ"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="text-primary underline underline-offset-2 ml-1"
+        >
+          Watch the setup walkthrough &rarr;
+        </a>
       </p>
     </div>
 
@@ -783,48 +798,64 @@ watch(
                 >
               </div>
               <div class="flex items-center gap-1.5 shrink-0">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  class="h-8 text-xs"
-                  :disabled="!key.full_key"
-                  :title="
-                    !key.full_key
-                      ? 'Legacy key — roll to view full key'
-                      : copiedPrefixId === key.id
-                        ? 'Copied!'
-                        : 'Copy key'
-                  "
-                  @click="copyKeyValue(key)"
-                >
-                  <Check
-                    v-if="copiedPrefixId === key.id"
-                    class="h-3.5 w-3.5 mr-1"
-                  />
-                  <Copy v-else class="h-3.5 w-3.5 mr-1" />
-                  {{ copiedPrefixId === key.id ? "Copied" : "Copy" }}
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  class="h-8 text-xs"
-                  title="Roll — invalidates the old key and shows the new one"
-                  @click="handleResetKey(key.id)"
-                >
-                  <RefreshCw class="h-3.5 w-3.5 mr-1" />
-                  Roll
-                </Button>
-                <Button
-                  v-if="sdkKeys.length > 1"
-                  variant="outline"
-                  size="sm"
-                  class="h-8 text-xs hover:text-destructive"
-                  title="Delete key"
-                  @click="handleRevokeKey(key.id)"
-                >
-                  <Trash2 class="h-3.5 w-3.5 mr-1" />
-                  Delete
-                </Button>
+                <Tooltip>
+                  <TooltipTrigger as-child>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      class="h-8 text-xs"
+                      :disabled="!key.full_key"
+                      @click="copyKeyValue(key)"
+                    >
+                      <Check
+                        v-if="copiedPrefixId === key.id"
+                        class="h-3.5 w-3.5 mr-1"
+                      />
+                      <Copy v-else class="h-3.5 w-3.5 mr-1" />
+                      {{ copiedPrefixId === key.id ? "Copied" : "Copy" }}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    {{
+                      !key.full_key
+                        ? "Legacy key — roll to view full key"
+                        : copiedPrefixId === key.id
+                          ? "Copied!"
+                          : "Copy key"
+                    }}
+                  </TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger as-child>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      class="h-8 text-xs"
+                      @click="handleResetKey(key.id)"
+                    >
+                      <RefreshCw class="h-3.5 w-3.5 mr-1" />
+                      Roll
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent
+                    >Roll — invalidates the old key and shows the new
+                    one</TooltipContent
+                  >
+                </Tooltip>
+                <Tooltip v-if="sdkKeys.length > 1">
+                  <TooltipTrigger as-child>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      class="h-8 text-xs hover:text-destructive"
+                      @click="handleRevokeKey(key.id)"
+                    >
+                      <Trash2 class="h-3.5 w-3.5 mr-1" />
+                      Delete
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Delete key</TooltipContent>
+                </Tooltip>
               </div>
             </div>
             <p class="text-[11px] text-muted-foreground">
