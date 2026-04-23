@@ -316,7 +316,10 @@ export async function syncStripeDataForUser(
       customerId: sub.customer as string,
       priceId: firstPriceId,
       productName: priceToProductName.get(firstPriceId) || "subscription",
-      isActive: sub.status === "active",
+      isActive:
+        sub.status === "active" ||
+        sub.status === "trialing" ||
+        sub.status === "past_due",
       mrr: Math.round(aggregatedMrr * 100) / 100,
       pricingModel,
       pricingTiers: tieredPayload,
@@ -367,17 +370,27 @@ export async function syncStripeDataForUser(
     [resolvedAccountId],
   );
 
-  // Re-enrich existing events with freshly synced subscription/customer data
+  // Re-enrich existing events with freshly synced subscription/customer data.
+  // Awaited so the sync response reflects completed backfill — fire-and-forget
+  // silently swallowed failures and left events un-enriched.
+  let backfillSummary = null;
   if (resolvedAccountId != null) {
-    runRevenueBackfill(pool, userId, resolvedAccountId).catch((err) =>
-      console.error("Post-sync revenue backfill failed:", err),
-    );
+    try {
+      backfillSummary = await runRevenueBackfill(
+        pool,
+        userId,
+        resolvedAccountId,
+      );
+    } catch (err) {
+      console.error("Post-sync revenue backfill failed:", err);
+    }
   }
 
   return {
     customers: validCustomers.length,
     subscriptions: syncedSubs,
     plans: planIds.size,
+    backfill: backfillSummary,
   };
 }
 

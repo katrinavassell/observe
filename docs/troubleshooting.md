@@ -163,3 +163,26 @@ This clears `observe_events` and legacy tables for the current user only. Other 
   - `SESSION_SECRET` -- required for session encryption.
 
 - **DB driver.** `DB_DRIVER` can typically be left as the default for Vercel deployments, which uses the Neon serverless driver.
+
+---
+
+## "Customers not enriched after connecting Stripe" (post-mortem, 2026-04-22)
+
+**Problem:** Events sent before Stripe is connected show `$0` revenue. After connecting Stripe, existing events and customers are not retroactively enriched with subscription/revenue data.
+
+**Root cause (two issues):**
+
+1. **`isActive` too strict.** `syncStripeDataForUser()` set `isActive: sub.status === "active"`, excluding trialing and past_due subscriptions. The revenue backfill only queries `WHERE s.is_active = true`, so those customers got `$0` revenue even though they have real subscriptions.
+
+2. **Backfill was fire-and-forget.** `runRevenueBackfill()` was called with `.catch()` — if it failed, the error was logged to console but the sync response reported success. The user had no way to know the backfill didn't complete.
+
+**Fix:**
+
+1. Broadened `isActive` to include `trialing` and `past_due` statuses — these are real subscriptions with revenue.
+2. Changed backfill from fire-and-forget to `await` — sync now blocks until backfill completes and returns the summary in the response.
+
+**How to verify:** Connect Stripe on a fresh account after sending events. The sync response should include `backfill: { events_updated: N }` with `N > 0`. Customers page should show names and revenue immediately.
+
+**Lessons:**
+- Fire-and-forget async is fine for non-critical telemetry, not for data enrichment the user expects to see immediately.
+- Subscription status filtering should match business intent (trialing = will pay, past_due = was paying), not just Stripe's `"active"` string.
