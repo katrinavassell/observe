@@ -867,7 +867,7 @@ async function _doDbInit() {
       `ALTER TABLE observe_events ADD COLUMN IF NOT EXISTS idempotency_key TEXT`,
     );
     await pool.query(
-      `CREATE UNIQUE INDEX IF NOT EXISTS idx_observe_events_idempotency ON observe_events(user_id, idempotency_key) WHERE idempotency_key IS NOT NULL`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS idx_observe_events_idempotency ON observe_events(account_id, idempotency_key) WHERE idempotency_key IS NOT NULL`,
     );
     await pool.query(
       `CREATE INDEX IF NOT EXISTS idx_observe_events_inferred ON observe_events(user_id, is_inferred) WHERE is_inferred = true`,
