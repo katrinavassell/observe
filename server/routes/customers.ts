@@ -1064,9 +1064,7 @@ export function createCustomersRoutes(
           );
         const totalRevenue = hasPeriod
           ? subscriptionMrr
-          : eventRevenue > 0
-            ? eventRevenue
-            : subscriptionMrr;
+          : Math.max(eventRevenue, subscriptionMrr);
         const marginPct =
           totalRevenue > 0
             ? Math.round(((totalRevenue - totalCost) / totalRevenue) * 100)
