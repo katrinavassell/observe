@@ -832,9 +832,8 @@ export function createCustomersRoutes(
         if (Array.isArray(customers)) {
           for (const customer of customers) {
             await client.query(
-              "INSERT INTO customers (user_id, account_id, customer_id, name, email, segment) VALUES ($1, $2, $3, $4, $5, $6)",
+              "INSERT INTO customers (account_id, customer_id, name, email, segment) VALUES ($1, $2, $3, $4, $5)",
               [
-                req.visitorId,
                 acctId,
                 customer.customer_id,
                 customer.name,
@@ -1200,10 +1199,10 @@ export function createCustomersRoutes(
         if (result.rows.length === 0) {
           // Customer might only exist in observe_events, not customers table — upsert
           await pool.query(
-            `INSERT INTO customers (user_id, account_id, customer_id, name, is_internal)
-             VALUES ($1, $2, $3, $3, $4)
-             ON CONFLICT (account_id, customer_id) DO UPDATE SET is_internal = $4, updated_at = NOW()`,
-            [req.visitorId, req.accountId ?? null, customerId, is_internal],
+            `INSERT INTO customers (account_id, customer_id, name, is_internal)
+             VALUES ($1, $2, $2, $3)
+             ON CONFLICT (account_id, customer_id) DO UPDATE SET is_internal = $3, updated_at = NOW()`,
+            [req.accountId ?? null, customerId, is_internal],
           );
         }
         res.json({ customer_id: customerId, is_internal });

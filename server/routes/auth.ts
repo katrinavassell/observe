@@ -175,7 +175,7 @@ export function createEnsureVisitor(pool: Pool) {
               [clerkUserId],
             );
             await pool.query(
-              "DELETE FROM customers WHERE user_id = $1 AND customer_id IN ('cus_001','cus_002','cus_003','cus_004','cus_005','acme_saas','tidewater_ai','neondata','circleops','blazeml','quantumhr')",
+              "DELETE FROM customers WHERE account_id IN (SELECT ua.account_id FROM user_accounts ua JOIN users u ON u.id = ua.user_id WHERE u.visitor_id = $1) AND customer_id IN ('cus_001','cus_002','cus_003','cus_004','cus_005','acme_saas','tidewater_ai','neondata','circleops','blazeml','quantumhr')",
               [clerkUserId],
             );
             await pool.query(
@@ -410,16 +410,10 @@ export function createAuthRoutes(
                   (row.account_id as number | null) ?? null;
                 await pool
                   .query(
-                    `INSERT INTO customers (user_id, account_id, customer_id, name, email)
-                     VALUES ($1, $2, $3, $4, $5)
-                     ON CONFLICT (user_id, customer_id) DO UPDATE SET account_id = COALESCE(customers.account_id, EXCLUDED.account_id), name = EXCLUDED.name, email = COALESCE(EXCLUDED.email, customers.email)`,
-                    [
-                      adminUid,
-                      adminAccountId,
-                      email,
-                      name?.trim() || email,
-                      email,
-                    ],
+                    `INSERT INTO customers (account_id, customer_id, name, email)
+                     VALUES ($1, $2, $3, $4)
+                     ON CONFLICT (account_id, customer_id) DO UPDATE SET name = EXCLUDED.name, email = COALESCE(EXCLUDED.email, customers.email)`,
+                    [adminAccountId, email, name?.trim() || email, email],
                   )
                   .catch((err) =>
                     console.error("Dogfood customer insert failed:", err),
@@ -448,7 +442,7 @@ export function createAuthRoutes(
           [userId, "sample"],
         );
         await pool.query(
-          "DELETE FROM customers WHERE user_id = $1 AND customer_id IN ('cus_001','cus_002','cus_003','cus_004','cus_005','acme_saas','tidewater_ai','neondata','circleops','blazeml','quantumhr')",
+          "DELETE FROM customers WHERE account_id IN (SELECT ua.account_id FROM user_accounts ua JOIN users u ON u.id = ua.user_id WHERE u.visitor_id = $1) AND customer_id IN ('cus_001','cus_002','cus_003','cus_004','cus_005','acme_saas','tidewater_ai','neondata','circleops','blazeml','quantumhr')",
           [userId],
         );
         await pool.query(

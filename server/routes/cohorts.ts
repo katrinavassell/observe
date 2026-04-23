@@ -153,16 +153,15 @@ export function createCohortsRoutes(pool: Pool, ensureVisitor: any) {
         // no matching row in the customers table yet.
         await pool
           .query(
-            `INSERT INTO customers (user_id, account_id, customer_id, name)
-             SELECT DISTINCT oe.user_id, oe.account_id, oe.customer_id, oe.customer_id
+            `INSERT INTO customers (account_id, customer_id, name)
+             SELECT DISTINCT oe.account_id, oe.customer_id, oe.customer_id
              FROM observe_events oe
              WHERE oe.account_id = $1 AND oe.customer_id IS NOT NULL
                AND NOT EXISTS (
                  SELECT 1 FROM customers c
                  WHERE c.account_id = oe.account_id AND c.customer_id = oe.customer_id
                )
-             ON CONFLICT (user_id, customer_id) DO UPDATE SET
-               account_id = COALESCE(customers.account_id, EXCLUDED.account_id)`,
+             ON CONFLICT (account_id, customer_id) DO NOTHING`,
             [accountId],
           )
           .catch(() => {});

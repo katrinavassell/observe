@@ -740,11 +740,8 @@ export function createBillingApiRoutes(
           const placeholders: string[] = [];
           let idx = 1;
           for (const customer of batch) {
-            placeholders.push(
-              `($${idx++}, $${idx++}, $${idx++}, $${idx++}, $${idx++})`,
-            );
+            placeholders.push(`($${idx++}, $${idx++}, $${idx++}, $${idx++})`);
             values.push(
-              req.visitorId,
               req.accountId ?? null,
               customer.id,
               customer.email || customer.id,
@@ -752,7 +749,7 @@ export function createBillingApiRoutes(
             );
           }
           await client.query(
-            `INSERT INTO customers (user_id, account_id, customer_id, name, email) VALUES ${placeholders.join(", ")} ON CONFLICT (user_id, customer_id) DO UPDATE SET account_id = COALESCE(customers.account_id, EXCLUDED.account_id), name = EXCLUDED.name, email = COALESCE(EXCLUDED.email, customers.email)`,
+            `INSERT INTO customers (account_id, customer_id, name, email) VALUES ${placeholders.join(", ")} ON CONFLICT (account_id, customer_id) DO UPDATE SET name = EXCLUDED.name, email = COALESCE(EXCLUDED.email, customers.email)`,
             values,
           );
         }

@@ -244,32 +244,6 @@ app.post("/admin/digest", ensureVisitor, async (req: any, res: any) => {
 
 // ─── Database initialization ────────────────────────────────────────────────
 
-async function clearSampleData(
-  db: { query: (text: string, params: unknown[]) => Promise<unknown> },
-  userId: string,
-): Promise<void> {
-  await db.query(
-    "DELETE FROM observe_events WHERE user_id = $1 AND source = 'sample'",
-    [userId],
-  );
-  await db.query(
-    "DELETE FROM cost_records WHERE user_id = $1 AND cost_type = 'ai_inference' AND customer_id IS NULL AND period_start IS NOT NULL",
-    [userId],
-  );
-  await db.query(
-    "DELETE FROM subscriptions WHERE user_id = $1 AND subscription_id IN ('sub_001','sub_002','sub_003','sub_004','sub_005','sub_acme','sub_acme_addon','sub_tidewater','sub_neon','sub_neon_addon','sub_circle','sub_blaze','sub_quantum')",
-    [userId],
-  );
-  await db.query(
-    "DELETE FROM customers WHERE user_id = $1 AND customer_id IN ('cus_001','cus_002','cus_003','cus_004','cus_005','acme_saas','tidewater_ai','neondata','circleops','blazeml','quantumhr')",
-    [userId],
-  );
-  await db.query(
-    "DELETE FROM plans WHERE user_id = $1 AND plan_id IN ('starter', 'pro', 'enterprise')",
-    [userId],
-  );
-}
-
 let dbInitialized = false;
 let dbInitPromise: Promise<void> | null = null;
 async function ensureDbInitialized() {
@@ -613,7 +587,7 @@ async function _doDbInit() {
     await pool.query(`
       CREATE TABLE IF NOT EXISTS customers (
         id SERIAL PRIMARY KEY,
-        user_id TEXT NOT NULL,
+        user_id TEXT,
         customer_id TEXT NOT NULL,
         name TEXT NOT NULL,
         email TEXT,
@@ -842,9 +816,7 @@ async function _doDbInit() {
     await pool.query(
       `CREATE INDEX IF NOT EXISTS idx_plans_user_id ON plans(user_id)`,
     );
-    await pool.query(
-      `CREATE INDEX IF NOT EXISTS idx_customers_user_id ON customers(user_id)`,
-    );
+    await pool.query(`DROP INDEX IF EXISTS idx_customers_user_id`);
     await pool.query(
       `CREATE INDEX IF NOT EXISTS idx_subscriptions_user_id ON subscriptions(user_id)`,
     );

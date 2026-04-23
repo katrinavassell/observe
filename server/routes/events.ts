@@ -1378,14 +1378,14 @@ export function createEventsRoutes(
             let custIdx = 1;
             for (const [cid] of customerMetaMap) {
               custPlaceholders.push(
-                `($${custIdx}, $${custIdx + 1}, $${custIdx + 2}, $${custIdx + 3})`,
+                `($${custIdx}, $${custIdx + 1}, $${custIdx + 2})`,
               );
-              custValues.push(userId, accountId, cid, cid);
-              custIdx += 4;
+              custValues.push(accountId, cid, cid);
+              custIdx += 3;
             }
             pool
               .query(
-                `INSERT INTO customers (user_id, account_id, customer_id, name)
+                `INSERT INTO customers (account_id, customer_id, name)
                  VALUES ${custPlaceholders.join(", ")}
                  ON CONFLICT DO NOTHING`,
                 custValues,
