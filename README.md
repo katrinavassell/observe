@@ -201,7 +201,7 @@ Wrap all OpenAI/Anthropic calls to report cost, customer, and feature.
 For providers without a gateway, or when you need to attach revenue data, send events directly.
 
 ```bash
-curl -X POST https://observe.tansohq.com/events/ingest \
+curl -X POST https://observe.tansohq.com/api/events/ingest \
   -H "Authorization: Bearer obs_..." \
   -H "Content-Type: application/json" \
   -d '{

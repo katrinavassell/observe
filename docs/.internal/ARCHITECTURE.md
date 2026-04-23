@@ -302,10 +302,11 @@ PostgreSQL with support for both standard `pg` driver and `@neondatabase/serverl
 - `organizations` / `organization_members` / `visitor_org_map` -- team structure
 - `sdk_api_keys` -- API keys for programmatic event ingestion
 - `integrations` -- connected API key providers (OpenAI, Anthropic, Stripe)
+- `stripe_customers` -- Stripe customer data, bridges app IDs to Stripe IDs
+- `customers` -- app-level customer records (from SDK events or Stripe sync)
+- `subscriptions` -- Stripe subscription data with MRR
+- `plans` -- pricing plans from Stripe
 - `alert_rules` -- threshold-based cost alert definitions
-
-### Legacy Tables (kept for pricing analyzer)
-`plans`, `customers`, `subscriptions`, `usage_records`, `cost_records`, `user_data_status`
 
 ### Supporting Tables
 - `simulations`, `ai_insights` -- simulation and insight records
