@@ -665,11 +665,7 @@ accounts ┘                   │
       <div style="font-size:10px; color:#d29922; margin-top:6px;">ACTIVE &middot; Doug &middot; Started 2026-04-22</div>
     </div>
 
-    <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #d29922; border-radius:6px; padding:10px; margin-bottom:8px;">
-      <div style="font-size:12px; font-weight:600; color:#f0f6fc;">Stripe revenue enrichment testing</div>
-      <div style="font-size:11px; color:#8b949e; margin-top:4px;">Bridge map, backfill, auto-enrich deployed. Needs production testing with real Stripe data to verify revenue shows on events.</div>
-      <div style="font-size:10px; color:#d29922; margin-top:6px;">ACTIVE &middot; Kat &middot; Deployed 2026-04-22</div>
-    </div>
+    <!-- Stripe revenue enrichment testing moved to DONE -->
   </div>
 
   <!-- REVIEW / TEST -->
@@ -844,6 +840,18 @@ accounts ┘                   │
     <!-- Team management UI + Revenue enrichment MRR moved to DONE column -->
 
     <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #3fb950; border-radius:6px; padding:10px; margin-bottom:8px;">
+      <div style="font-size:12px; font-weight:600; color:#f0f6fc;">Stripe revenue enrichment testing</div>
+      <div style="font-size:11px; color:#8b949e; margin-top:4px;">Bridge map, backfill, auto-enrich verified. isActive broadened to include trialing/past_due. Backfill awaited instead of fire-and-forget.</div>
+      <div style="font-size:10px; color:#3fb950; margin-top:6px;">DONE &middot; a7a161b</div>
+    </div>
+
+    <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #3fb950; border-radius:6px; padding:10px; margin-bottom:8px;">
+      <div style="font-size:12px; font-weight:600; color:#f0f6fc;">QA report bug fixes (6 items)</div>
+      <div style="font-size:11px; color:#8b949e; margin-top:4px;">Revenue label mismatch, model count badge, embedding cost display, event count wording, trace revenue card removed, nav description aligned.</div>
+      <div style="font-size:10px; color:#3fb950; margin-top:6px;">BUG FIX &middot; d931a82</div>
+    </div>
+
+    <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #3fb950; border-radius:6px; padding:10px; margin-bottom:8px;">
       <div style="font-size:12px; font-weight:600; color:#f0f6fc;">Multi-sub hybrid detection</div>
       <div style="font-size:11px; color:#8b949e; margin-top:4px;">Fixed: MAX(pricing_model) picked alphabetically (flat+metered="metered"). Now uses COUNT(DISTINCT) > 1 to detect hybrid.</div>
       <div style="font-size:10px; color:#3fb950; margin-top:6px;">Revenue</div>
@@ -1010,6 +1018,13 @@ accounts ┘                   │
   <tr data-type="feature"><td><span style="color:#3fb950;">FEATURE</span></td><td>2026-04-22</td><td><strong>Tiny costs show &lt;$0.0001</strong> — sub-penny costs from short messages displayed as $0.0000 (looked like no cost). Now shows "&lt;$0.0001".</td></tr>
   <tr data-type="docs"><td><span style="color:#8b949e;">DOCS</span></td><td>2026-04-22</td><td><strong>requestBody/responseBody in all code examples</strong> — llms.txt, DataSourcesPage snippet, EventsPage hint all include prompt/response fields</td></tr>
   <tr data-type="docs"><td><span style="color:#8b949e;">DOCS</span></td><td>2026-04-22</td><td><strong>FAQ updates</strong> — multi-sub hybrid detection, billing period margin, tiny costs explanation</td></tr>
+  <tr data-type="bug"><td><span style="color:#f85149;">BUG</span></td><td>2026-04-22</td><td><strong>Stripe backfill missed trialing/past_due subs</strong> — isActive only matched "active"; backfill was fire-and-forget. Fixed: broadened status check, awaited backfill. <a href="troubleshooting.md#customers-not-enriched-after-connecting-stripe-post-mortem-2026-04-22" style="color:#79c0ff;">Postmortem</a></td></tr>
+  <tr data-type="bug"><td><span style="color:#f85149;">BUG</span></td><td>2026-04-22</td><td><strong>Revenue label collision</strong> — Analytics and Customers both showed "Revenue" for different metrics. Analytics now says "Usage Revenue", Customers says "Total Revenue" with distinct tooltips.</td></tr>
+  <tr data-type="bug"><td><span style="color:#f85149;">BUG</span></td><td>2026-04-22</td><td><strong>Model count badge off by one</strong> — Analytics "By Model" tab filtered out zero-cost models (embeddings). Badge now counts all models.</td></tr>
+  <tr data-type="bug"><td><span style="color:#f85149;">BUG</span></td><td>2026-04-22</td><td><strong>Embedding cost showed "&mdash; output"</strong> — null output_cost displayed as dash. Now shows "(input only)" for models with no output tokens.</td></tr>
+  <tr data-type="bug"><td><span style="color:#f85149;">BUG</span></td><td>2026-04-22</td><td><strong>Event count said "total" but excluded system events</strong> — heading said "17 total events" while quota badge counted 18 (includes revenue events). Removed "total" to avoid implying completeness.</td></tr>
+  <tr data-type="bug"><td><span style="color:#f85149;">BUG</span></td><td>2026-04-22</td><td><strong>Trace detail showed $0 revenue</strong> — revenue is event-level, not trace-level; card always showed $0. Removed the misleading card.</td></tr>
+  <tr data-type="bug"><td><span style="color:#f85149;">BUG</span></td><td>2026-04-22</td><td><strong>Nav description mismatched Customers page</strong> — tooltip said "segments by profitability and behavior" but page shows individual customer health. Aligned.</td></tr>
 </table>
 
 <!-- ────────────────── BUG POSTMORTEMS ────────────────── -->
