@@ -197,9 +197,38 @@ export async function syncStripeDataForUser(
     );
   }
 
-  // Auto-link stripe_customers to existing customers rows where possible.
-  // Match by: customers.stripe_customer_id = stripe_customers.stripe_customer_id
-  // OR customers.customer_id = stripe_customers.stripe_customer_id (user used Stripe ID directly)
+  // Upsert into customers table so the UI can display them.
+  // Uses stripe_customer_id as customer_id for Stripe-sourced customers.
+  for (let i = 0; i < validCustomers.length; i += batchSize) {
+    const batch = validCustomers.slice(i, i + batchSize);
+    const values: unknown[] = [];
+    const placeholders: string[] = [];
+    let idx = 1;
+    for (const customer of batch) {
+      placeholders.push(
+        `($${idx++}, $${idx++}, $${idx++}, $${idx++}, $${idx++})`,
+      );
+      values.push(
+        resolvedAccountId,
+        customer.id,
+        customer.name || customer.email || customer.id,
+        customer.email || null,
+        customer.id,
+      );
+    }
+    await pool.query(
+      `INSERT INTO customers (account_id, customer_id, name, email, stripe_customer_id)
+       VALUES ${placeholders.join(", ")}
+       ON CONFLICT (account_id, customer_id) DO UPDATE SET
+         name = EXCLUDED.name,
+         email = COALESCE(EXCLUDED.email, customers.email),
+         stripe_customer_id = EXCLUDED.stripe_customer_id,
+         updated_at = NOW()`,
+      values,
+    );
+  }
+
+  // Auto-link stripe_customers to customers rows.
   if (resolvedAccountId != null) {
     await pool.query(
       `UPDATE stripe_customers sc
