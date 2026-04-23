@@ -571,11 +571,7 @@ accounts ┘                   │
   <div id="board-backlog" style="background:#161b22; border:1px solid #21262d; border-radius:8px; padding:12px;">
     <div style="font-size:13px; font-weight:600; color:#8b949e; margin-bottom:10px; padding-bottom:6px; border-bottom:1px solid #21262d;">BACKLOG</div>
 
-    <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #a371f7; border-radius:6px; padding:10px; margin-bottom:8px;">
-      <div style="font-size:12px; font-weight:600; color:#f0f6fc;">Multi-sub hybrid detection</div>
-      <div style="font-size:11px; color:#8b949e; margin-top:4px;">MAX(pricing_model) picks alphabetically. Flat + metered = "metered" not "hybrid". Needs CASE WHEN COUNT(DISTINCT) > 1.</div>
-      <div style="font-size:10px; color:#a371f7; margin-top:6px;">ROADMAP &middot; Revenue</div>
-    </div>
+    <!-- Multi-sub hybrid detection moved to DONE -->
 
     <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #a371f7; border-radius:6px; padding:10px; margin-bottom:8px;">
       <div style="font-size:12px; font-weight:600; color:#f0f6fc;">Cohort-scoped alerts</div>
@@ -583,22 +579,10 @@ accounts ┘                   │
       <div style="font-size:10px; color:#a371f7; margin-top:6px;">ROADMAP &middot; Alerts</div>
     </div>
 
-    <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #3fb950; border-radius:6px; padding:10px; margin-bottom:8px; opacity:0.6;">
-      <div style="font-size:12px; font-weight:600; color:#f0f6fc;"><s>Team management UI</s> DONE</div>
-      <div style="font-size:11px; color:#8b949e; margin-top:4px;">Live in sidebar. Built on Clerk orgs — invite, remove members, rename team.</div>
-      <div style="font-size:10px; color:#3fb950; margin-top:6px;">COMPLETE &middot; Platform</div>
-    </div>
-
     <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #a371f7; border-radius:6px; padding:10px; margin-bottom:8px;">
       <div style="font-size:12px; font-weight:600; color:#f0f6fc;">Pricing simulation</div>
       <div style="font-size:11px; color:#8b949e; margin-top:4px;">Simulation models, retention cohorts, Markov CLV, feature pricing. WIP table exists but hidden.</div>
       <div style="font-size:10px; color:#a371f7; margin-top:6px;">ROADMAP &middot; Analytics</div>
-    </div>
-
-    <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #3fb950; border-radius:6px; padding:10px; margin-bottom:8px; opacity:0.6;">
-      <div style="font-size:12px; font-weight:600; color:#f0f6fc;"><s>Revenue enrichment from MRR allocation</s> DONE (at customer level)</div>
-      <div style="font-size:11px; color:#8b949e; margin-top:4px;">MRR shows on cohorts page from subscriptions. Per-event $0 for flat subs is correct by design — revenue attribution at customer level is the right signal (PM-7).</div>
-      <div style="font-size:10px; color:#3fb950; margin-top:6px;">COMPLETE &middot; Revenue</div>
     </div>
 
     <!-- ── DDS: Data Display Strategy cards (2026-04-22) ── -->
@@ -610,6 +594,18 @@ accounts ┘                   │
     <!-- DDS-4,5 moved to DONE column -->
 
     <!-- DDS-6,7,9,10 moved to DONE column -->
+
+    <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #a371f7; border-radius:6px; padding:10px; margin-bottom:8px;">
+      <div style="font-size:12px; font-weight:600; color:#f0f6fc;">[DDS-H] Revenue column on Analytics "By Feature" tab</div>
+      <div style="font-size:11px; color:#8b949e; margin-top:4px;">Where feature_pricing rules exist, show feature-level revenue alongside cost + margin per feature. Answers "is this feature profitable?" not just "is it expensive?"</div>
+      <div style="font-size:10px; color:#a371f7; margin-top:6px;">ROADMAP &middot; Analytics &middot; DDS Tier 2</div>
+    </div>
+
+    <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #a371f7; border-radius:6px; padding:10px; margin-bottom:8px;">
+      <div style="font-size:12px; font-weight:600; color:#f0f6fc;">[DDS-J] Free tier cost of service</div>
+      <div style="font-size:11px; color:#8b949e; margin-top:4px;">Aggregate cost to serve customers with $0 revenue (free tier, trial, no Stripe). Show as separate line on Analytics. CAC-adjacent metric.</div>
+      <div style="font-size:10px; color:#a371f7; margin-top:6px;">ROADMAP &middot; Analytics &middot; DDS Tier 2</div>
+    </div>
 
     <!-- ── UX audit findings (2026-04-22) ── -->
 
@@ -789,6 +785,24 @@ accounts ┘                   │
       <div style="font-size:12px; font-weight:600; color:#f0f6fc;">Model customer overlap hint + Data Sources guest preview</div>
       <div style="font-size:11px; color:#8b949e; margin-top:4px;">"per model" sub-label, duplicate accordion fix, connected-state preview for guests.</div>
       <div style="font-size:10px; color:#3fb950; margin-top:6px;">UX &middot; 2ee37f1</div>
+    </div>
+
+    <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #3fb950; border-radius:6px; padding:10px; margin-bottom:8px;">
+      <div style="font-size:12px; font-weight:600; color:#f0f6fc;">Team management UI</div>
+      <div style="font-size:11px; color:#8b949e; margin-top:4px;">Live in sidebar. Built on Clerk orgs — invite, remove members, rename team.</div>
+      <div style="font-size:10px; color:#3fb950; margin-top:6px;">Platform</div>
+    </div>
+
+    <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #3fb950; border-radius:6px; padding:10px; margin-bottom:8px;">
+      <div style="font-size:12px; font-weight:600; color:#f0f6fc;">Revenue enrichment from MRR allocation</div>
+      <div style="font-size:11px; color:#8b949e; margin-top:4px;">MRR shows on cohorts page from subscriptions. Per-event $0 for flat subs is correct by design — revenue attribution at customer level is the right signal (PM-7).</div>
+      <div style="font-size:10px; color:#3fb950; margin-top:6px;">Revenue</div>
+    </div>
+
+    <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #3fb950; border-radius:6px; padding:10px; margin-bottom:8px;">
+      <div style="font-size:12px; font-weight:600; color:#f0f6fc;">Multi-sub hybrid detection</div>
+      <div style="font-size:11px; color:#8b949e; margin-top:4px;">Fixed: MAX(pricing_model) picked alphabetically (flat+metered="metered"). Now uses COUNT(DISTINCT) > 1 to detect hybrid.</div>
+      <div style="font-size:10px; color:#3fb950; margin-top:6px;">Revenue</div>
     </div>
 
     <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #3fb950; border-radius:6px; padding:10px; margin-bottom:8px;">

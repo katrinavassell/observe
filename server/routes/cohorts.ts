@@ -218,7 +218,7 @@ export function createCohortsRoutes(pool: Pool, ensureVisitor: any) {
           pool.query(
             `SELECT s.customer_id,
                     COALESCE(SUM(COALESCE(s.mrr_override, p.price_amount)), 0) AS sub_revenue,
-                    MAX(s.pricing_model) AS pricing_model
+                    CASE WHEN COUNT(DISTINCT s.pricing_model) > 1 THEN 'hybrid' ELSE MAX(s.pricing_model) END AS pricing_model
              FROM subscriptions s
              LEFT JOIN plans p ON s.account_id = p.account_id AND s.plan_id = p.plan_id
              WHERE s.account_id = $1 AND s.is_active = true

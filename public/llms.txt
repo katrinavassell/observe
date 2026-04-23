@@ -441,7 +441,9 @@ Very low (<10 events), Low (<50), Medium (<200). Hidden when Good (≥500).
 
 Each customer on the Cohorts page shows a pricing model badge derived from their
 Stripe subscription: Flat, Metered, Tiered, or Hybrid. This is queried from
-`subscriptions.pricing_model` via a JOIN in the cohorts endpoint.
+`subscriptions.pricing_model` via a JOIN in the cohorts endpoint. When a customer
+has multiple active subscriptions with different pricing models, the badge
+automatically shows "Hybrid" (`COUNT(DISTINCT pricing_model) > 1`).
 
 #### Margin calculation
 
@@ -591,15 +593,13 @@ Month" shows cost accumulated so far this month against your monthly MRR.
 "All Time" shows lifetime cost against MRR — which can look worse because cost
 accumulates over months but MRR is a single month's revenue.
 
-**Q: My customer has multiple subscriptions with different pricing models. Why does
-Observe pick the wrong one?**
+**Q: My customer has multiple subscriptions with different pricing models. How
+does Observe detect "Hybrid"?**
 
-If a customer has both a flat and a metered subscription, Observe currently
-detects the pricing model per-customer by picking the highest alphabetically
-(e.g., "metered" instead of "hybrid"). This is a known limitation for
-multi-subscription customers with mixed pricing. We're working on proper hybrid
-detection. If this affects you, let us know — open the feedback modal in the app
-to request this feature.
+If a customer has both a flat and a metered subscription (or any mix of distinct
+pricing models), Observe automatically labels them "Hybrid". The cohorts query
+uses `COUNT(DISTINCT pricing_model) > 1` to detect this. Single-model customers
+show their actual model (Flat, Metered, or Tiered).
 
 **Q: Why does my event show $0 cost when I sent tokens?**
 
