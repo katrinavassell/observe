@@ -617,11 +617,7 @@ accounts ┘                   │
 
     <!-- UX-2,3 and events bug moved to DONE column -->
 
-    <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #d29922; border-radius:6px; padding:10px; margin-bottom:8px;">
-      <div style="font-size:12px; font-weight:600; color:#f0f6fc;">[UX-4] Customers page empty state despite customers existing</div>
-      <div style="font-size:11px; color:#8b949e; margin-top:4px;">Cohorts query requires non-Stripe SDK events. Analytics "By Customer" has no such filter. Not a code bug — root cause is customer ID mismatch after account reset. Fix depends on resolving that bug.</div>
-      <div style="font-size:10px; color:#d29922; margin-top:6px;">UX &middot; Customers &middot; Depends on BUG: Customer ID mismatch</div>
-    </div>
+    <!-- [UX-4] Customers page empty — CLOSED 2026-04-23: same root cause as Customer ID mismatch (test env only) -->
 
     <!-- ── Signal scoring backlog (2026-04-22) ── -->
 
@@ -645,17 +641,11 @@ accounts ┘                   │
 
     <!-- ── BUGS: Found via dogfooding (2026-04-22) ── -->
 
-    <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #f85149; border-radius:6px; padding:10px; margin-bottom:8px;">
-      <div style="font-size:12px; font-weight:600; color:#f0f6fc;">[BUG] Customer ID mismatch after account reset</div>
-      <div style="font-size:11px; color:#8b949e; margin-top:4px;">Events sent after account reset use new Stripe cus_* IDs. Subscriptions from prior sync have old cus_* IDs. Bridge can't match — completely different IDs, no overlap. Root cause: reset clears data but Stripe creates new customers on re-sync. Fix: auto-re-sync Stripe after reset, or reconcile by email instead of cus_* ID. Files: <code>server/routes/data.ts</code> (clear), <code>server/routes/integrations.ts</code> (sync). Dogfood: katrinavassell+123@gmail.com.</div>
-      <div style="font-size:10px; color:#f85149; margin-top:6px;">BUG &middot; Revenue &middot; Dogfood 2026-04-22</div>
-    </div>
+    <!-- [BUG] Customer ID mismatch — CLOSED 2026-04-23: not a bug, test env created new Stripe customers -->
 
-    <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #f85149; border-radius:6px; padding:10px; margin-bottom:8px;">
-      <div style="font-size:12px; font-weight:600; color:#f0f6fc;">[BUG] Metered pricing not detected by Stripe sync</div>
-      <div style="font-size:11px; color:#8b949e; margin-top:4px;">All subscriptions show <code>pricing_model: "flat"</code> even for customers with metered components (Orion Analytics, Vanta Labs, Cobalt AI). <code>unit_price: null</code>. Metered detection logic in <code>server/routes/integrations.ts</code> not finding metered line items. Even with matching IDs, enrichment produces $0 for these. File: <code>server/routes/integrations.ts</code> (pricing model detection). Dogfood: katrinavassell+123@gmail.com.</div>
-      <div style="font-size:10px; color:#f85149; margin-top:6px;">BUG &middot; Revenue &middot; Dogfood 2026-04-22</div>
-    </div>
+    <!-- Metered pricing bug closed — detection logic is correct (checks
+         price.recurring.usage_type === "metered"). Test Stripe prices were
+         standard recurring, not metered. Not a code bug. -->
 
   </div>
 
@@ -702,6 +692,18 @@ accounts ┘                   │
   <!-- DONE -->
   <div id="board-done" style="background:#161b22; border:1px solid #21262d; border-radius:8px; padding:12px;">
     <div style="font-size:13px; font-weight:600; color:#3fb950; margin-bottom:10px; padding-bottom:6px; border-bottom:1px solid #21262d;">DONE (2026-04-22)</div>
+
+    <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #3fb950; border-radius:6px; padding:10px; margin-bottom:8px;">
+      <div style="font-size:12px; font-weight:600; color:#f0f6fc;">Team management UI</div>
+      <div style="font-size:11px; color:#8b949e; margin-top:4px;">Live in sidebar. Built on Clerk orgs — invite, remove members, rename team.</div>
+      <div style="font-size:10px; color:#3fb950; margin-top:6px;">COMPLETE &middot; Platform</div>
+    </div>
+
+    <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #3fb950; border-radius:6px; padding:10px; margin-bottom:8px;">
+      <div style="font-size:12px; font-weight:600; color:#f0f6fc;">Revenue enrichment from MRR allocation</div>
+      <div style="font-size:11px; color:#8b949e; margin-top:4px;">MRR shows on cohorts page from subscriptions. Per-event $0 for flat subs is correct by design — revenue attribution at customer level is the right signal (PM-7).</div>
+      <div style="font-size:10px; color:#3fb950; margin-top:6px;">COMPLETE &middot; Revenue</div>
+    </div>
 
     <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #3fb950; border-radius:6px; padding:10px; margin-bottom:8px;">
       <div style="font-size:12px; font-weight:600; color:#f0f6fc;">[DDS-1] Replace Analytics KPI cards</div>
@@ -787,17 +789,7 @@ accounts ┘                   │
       <div style="font-size:10px; color:#3fb950; margin-top:6px;">UX &middot; 2ee37f1</div>
     </div>
 
-    <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #3fb950; border-radius:6px; padding:10px; margin-bottom:8px;">
-      <div style="font-size:12px; font-weight:600; color:#f0f6fc;">Team management UI</div>
-      <div style="font-size:11px; color:#8b949e; margin-top:4px;">Live in sidebar. Built on Clerk orgs — invite, remove members, rename team.</div>
-      <div style="font-size:10px; color:#3fb950; margin-top:6px;">Platform</div>
-    </div>
-
-    <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #3fb950; border-radius:6px; padding:10px; margin-bottom:8px;">
-      <div style="font-size:12px; font-weight:600; color:#f0f6fc;">Revenue enrichment from MRR allocation</div>
-      <div style="font-size:11px; color:#8b949e; margin-top:4px;">MRR shows on cohorts page from subscriptions. Per-event $0 for flat subs is correct by design — revenue attribution at customer level is the right signal (PM-7).</div>
-      <div style="font-size:10px; color:#3fb950; margin-top:6px;">Revenue</div>
-    </div>
+    <!-- Team management UI + Revenue enrichment MRR moved to DONE column -->
 
     <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #3fb950; border-radius:6px; padding:10px; margin-bottom:8px;">
       <div style="font-size:12px; font-weight:600; color:#f0f6fc;">Multi-sub hybrid detection</div>
