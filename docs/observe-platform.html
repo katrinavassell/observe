@@ -737,7 +737,7 @@ accounts ┘                   │
 
     <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #3fb950; border-radius:6px; padding:10px; margin-bottom:8px;">
       <div style="font-size:12px; font-weight:600; color:#f0f6fc;">[DDS-9] Customer Detail signals re-enabled</div>
-      <div style="font-size:11px; color:#8b949e; margin-top:4px;">Removed v-if="false" gate. Removed model-swap signal. Added trend magnitude.</div>
+      <div style="font-size:11px; color:#8b949e; margin-top:4px;">Removed v-if="false" gate. Removed model-swap signal. Added trend magnitude. Renamed "Usage declining/growing" to "Spend declining/growing" (cost trend &ne; usage trend).</div>
       <div style="font-size:10px; color:#3fb950; margin-top:6px;">DDS &middot; 92c6c71</div>
     </div>
 
@@ -907,6 +907,8 @@ accounts ┘                   │
   <tr data-type="bug" style="cursor:pointer;" onclick="location.href='#pm2'"><td><span style="color:#f85149;">BUG</span></td><td>2026-04-22</td><td><strong>No stripe_customer_id on customers table</strong> — no bridge between app IDs and Stripe IDs <span style="color:#79c0ff;font-size:11px;">→ PM-2</span></td></tr>
   <tr data-type="bug" style="cursor:pointer;" onclick="location.href='#pm4'"><td><span style="color:#f85149;">BUG</span></td><td>2026-04-22</td><td><strong>First-event-wins locked null stripe_customer_id</strong> — ON CONFLICT DO NOTHING prevented updates <span style="color:#79c0ff;font-size:11px;">→ PM-4</span></td></tr>
   <tr data-type="bug" style="cursor:pointer;" onclick="location.href='#pm3'"><td><span style="color:#f85149;">BUG</span></td><td>2026-04-22</td><td><strong>Empty error message fell through to sign-in panel</strong> — v-else-if falsy check <span style="color:#79c0ff;font-size:11px;">→ PM-3</span></td></tr>
+  <tr data-type="bug"><td><span style="color:#f85149;">BUG</span></td><td>2026-04-23</td><td><strong>Health score penalized growing customers</strong> — trend component gave 5/20 pts for cost going up, but rising costs = rising usage in AI SaaS. Fixed: trend is now margin-aware (cost up + margin &ge; 30% = 20 pts, cost up + low margin = 5 pts). Also: null margin (no revenue data) defaulted to 0 pts, penalizing pre-Stripe customers by 40 pts; now defaults to neutral midpoint (20 pts).</td></tr>
+  <tr data-type="bug"><td><span style="color:#f85149;">BUG</span></td><td>2026-04-23</td><td><strong>"Usage declining" mislabeled</strong> — customer detail signal showed "Usage declining" for cost_trend=down, but cost decreasing can mean model swap or efficiency gain, not disengagement. Renamed to "Spend declining" / "Spend growing".</td></tr>
   <tr data-type="bug" style="cursor:pointer;" onclick="location.href='#pm3'"><td><span style="color:#f85149;">BUG</span></td><td>2026-04-22</td><td><strong>Silent catch in backfill Stripe client</strong> — errors swallowed without logging <span style="color:#79c0ff;font-size:11px;">→ PM-3</span></td></tr>
   <tr data-type="feature"><td><span style="color:#3fb950;">FEATURE</span></td><td>2026-04-22</td><td><strong>Revenue backfill endpoint</strong> — POST /backfill/revenue re-enriches up to 50k events + resolves customer names from Stripe</td></tr>
   <tr data-type="feature"><td><span style="color:#3fb950;">FEATURE</span></td><td>2026-04-22</td><td><strong>Auto-backfill after Stripe sync</strong> — runRevenueBackfill() fires automatically after syncStripeDataForUser()</td></tr>

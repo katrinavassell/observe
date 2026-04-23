@@ -137,28 +137,29 @@ const signals = computed(() => {
     });
   }
 
-  // Usage declining — include magnitude from cost_trend_pct
+  // Spend declining — cost trend down != usage declining (could be model swap,
+  // efficiency gain, or cheaper provider)
   if (cc.cost_trend === "down" && cc.active_days_30d < 20) {
     const magnitude =
       cc.cost_trend_pct != null
-        ? `Usage down ${Math.abs(cc.cost_trend_pct)}% — `
+        ? `Spend down ${Math.abs(cc.cost_trend_pct)}% — `
         : "";
     items.push({
       type: "warning",
       icon: TrendingDown,
-      title: "Usage declining",
-      description: `${magnitude}cost trending down with only ${cc.active_days_30d} active days in the last 30. Possible churn risk.`,
+      title: "Spend declining",
+      description: `${magnitude}cost trending down with only ${cc.active_days_30d} active days in the last 30. Could indicate churn risk or cost optimization.`,
     });
   }
 
-  // Usage growing — include magnitude
+  // Spend growing — include magnitude
   if (cc.cost_trend === "up") {
     const magnitude =
-      cc.cost_trend_pct != null ? `Usage up ${cc.cost_trend_pct}% — ` : "";
+      cc.cost_trend_pct != null ? `Spend up ${cc.cost_trend_pct}% — ` : "";
     items.push({
       type: "success",
       icon: TrendingUp,
-      title: "Usage growing",
+      title: "Spend growing",
       description: `${magnitude}cost trending up, potential expansion opportunity.`,
     });
   }

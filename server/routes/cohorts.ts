@@ -425,21 +425,26 @@ export function createCohortsRoutes(pool: Pool, ensureVisitor: any) {
 
           // Health score (0-100)
           // Margin (40 pts): 40 * clamp(margin/100, 0, 1)
+          // Null margin (no revenue data yet) gets neutral midpoint, not 0
           const marginScore =
             marginPct !== null
               ? 40 * Math.max(0, Math.min(1, marginPct / 100))
-              : 0;
+              : 20;
           // Adoption (25 pts)
           const adoptionScore = 25 * Math.min(1, adoptionDepth / 100);
-          // Trend (20 pts): up=5, stable=15, down=20, new=10
+          // Trend (20 pts): margin-aware — growing + profitable = best
           const trendScore =
-            costTrend === "down"
-              ? 20
+            costTrend === "new"
+              ? 10
               : costTrend === "stable"
                 ? 15
-                : costTrend === "new"
-                  ? 10
-                  : 5;
+                : costTrend === "up" && marginPct !== null && marginPct >= 30
+                  ? 20
+                  : costTrend === "up"
+                    ? 5
+                    : costTrend === "down" && activeDays >= 15
+                      ? 15
+                      : 5;
           // Recency (15 pts): based on active days in 30d
           const recencyScore = 15 * Math.min(1, activeDays / 20);
           const healthScore = Math.round(
