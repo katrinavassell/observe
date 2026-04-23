@@ -146,6 +146,7 @@ const formName = ref("");
 const formThreshold = ref<number>(0);
 const formEmail = ref("");
 const formWebhookUrl = ref("");
+const deliveryError = ref(false);
 const formCooldown = ref(60);
 const newSegmentType = ref<"all" | "cohort" | "specific">("all");
 const newSegmentValue = ref("");
@@ -187,8 +188,10 @@ async function handleCreate() {
   if (!selectedTrigger.value) return;
   if (!formEmail.value && !formWebhookUrl.value) {
     toast.error("Add at least one delivery channel (email or webhook)");
+    deliveryError.value = true;
     return;
   }
+  deliveryError.value = false;
 
   const trigger = selectedTrigger.value;
   const operator = trigger.direction === "above" ? "gt" : "lt";
@@ -507,8 +510,16 @@ function relativeTime(dateStr: string) {
 
           <!-- Delivery -->
           <div>
-            <p class="text-xs font-medium text-muted-foreground mb-2">
+            <p
+              class="text-xs font-medium mb-2"
+              :class="
+                deliveryError ? 'text-destructive' : 'text-muted-foreground'
+              "
+            >
               Deliver to
+              <span v-if="deliveryError" class="font-normal ml-1"
+                >— add at least one</span
+              >
             </p>
             <div class="space-y-2">
               <input
@@ -516,6 +527,8 @@ function relativeTime(dateStr: string) {
                 type="email"
                 placeholder="Email address"
                 class="w-full h-9 rounded-md border bg-background px-3 text-sm"
+                :class="deliveryError ? 'border-destructive' : ''"
+                @input="deliveryError = false"
               />
               <div>
                 <input
@@ -523,6 +536,8 @@ function relativeTime(dateStr: string) {
                   type="url"
                   placeholder="Webhook URL (Slack-compatible)"
                   class="w-full h-9 rounded-md border bg-background px-3 text-sm font-mono text-xs"
+                  :class="deliveryError ? 'border-destructive' : ''"
+                  @input="deliveryError = false"
                 />
                 <p class="text-[11px] text-muted-foreground mt-1">
                   Slack incoming webhook or any endpoint accepting JSON POST
