@@ -569,15 +569,22 @@ const isFlat = computed(() => cohortCustomer.value?.pricing_model === "flat");
                       'text-muted-foreground': f.total_revenue === 0,
                     }"
                   >
-                    {{
-                      f.total_revenue > 0
-                        ? Math.round(
-                            ((f.total_revenue - f.total_cost) /
-                              f.total_revenue) *
-                              100,
-                          ) + "%"
-                        : "—"
-                    }}
+                    <Badge
+                      v-if="f.total_revenue === 0 && isFlat"
+                      variant="secondary"
+                      class="text-[10px] font-medium"
+                    >
+                      Bundled
+                    </Badge>
+                    <template v-else-if="f.total_revenue > 0">
+                      {{
+                        Math.round(
+                          ((f.total_revenue - f.total_cost) / f.total_revenue) *
+                            100,
+                        ) + "%"
+                      }}
+                    </template>
+                    <template v-else>—</template>
                   </td>
                 </tr>
               </tbody>
@@ -650,7 +657,14 @@ const isFlat = computed(() => cohortCustomer.value?.pricing_model === "flat");
                     {{ fmt(m.total_cost) }}
                   </td>
                   <td class="px-3 py-2 text-right font-mono">
-                    {{ fmt(m.total_revenue) }}
+                    <Badge
+                      v-if="m.total_revenue === 0 && isFlat"
+                      variant="secondary"
+                      class="text-[10px] font-medium"
+                    >
+                      Bundled
+                    </Badge>
+                    <template v-else>{{ fmt(m.total_revenue) }}</template>
                   </td>
                   <td
                     class="px-3 py-2 text-right font-mono"
@@ -668,15 +682,22 @@ const isFlat = computed(() => cohortCustomer.value?.pricing_model === "flat");
                       'text-muted-foreground': m.total_revenue === 0,
                     }"
                   >
-                    {{
-                      m.total_revenue > 0
-                        ? Math.round(
-                            ((m.total_revenue - m.total_cost) /
-                              m.total_revenue) *
-                              100,
-                          ) + "%"
-                        : "—"
-                    }}
+                    <Badge
+                      v-if="m.total_revenue === 0 && isFlat"
+                      variant="secondary"
+                      class="text-[10px] font-medium"
+                    >
+                      Bundled
+                    </Badge>
+                    <template v-else-if="m.total_revenue > 0">
+                      {{
+                        Math.round(
+                          ((m.total_revenue - m.total_cost) / m.total_revenue) *
+                            100,
+                        ) + "%"
+                      }}
+                    </template>
+                    <template v-else>—</template>
                   </td>
                 </tr>
               </tbody>
