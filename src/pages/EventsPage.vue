@@ -969,7 +969,8 @@ function usageTooltip(event: ObserveEvent): string {
                       "
                     >
                       <span
-                        class="font-mono text-xs bg-muted text-muted-foreground px-2 py-0.5 rounded-md border"
+                        class="font-mono text-xs bg-muted text-muted-foreground px-2 py-0.5 rounded-md border truncate max-w-[120px] inline-block align-middle"
+                        :title="event.model"
                       >
                         {{ event.model }}
                       </span>
@@ -1124,7 +1125,10 @@ function usageTooltip(event: ObserveEvent): string {
                   >
                     Loading...
                   </div>
-                  <div v-else-if="eventDetails[event.id]" class="p-5 space-y-4">
+                  <div
+                    v-else-if="eventDetails[event.id]"
+                    class="p-5 space-y-4 min-w-0 overflow-hidden"
+                  >
                     <!-- Request messages -->
                     <div v-if="eventDetails[event.id].request_body">
                       <p

@@ -60,7 +60,9 @@ function formatDate(ts: string) {
 }
 function formatCost(val: number) {
   if (val === 0) return "$0";
-  return `$${val.toFixed(4)}`;
+  if (val >= 0.01) return `$${val.toFixed(2)}`;
+  if (val > 0 && val < 0.0001) return "<$0.0001";
+  return `$${val.toFixed(4).replace(/0+$/, "").replace(/\.$/, ".00")}`;
 }
 function formatDuration(ms: number | null) {
   if (ms == null) return "—";

@@ -473,7 +473,9 @@ function retry() {
           @click="router.push(`/events?model=${encodeURIComponent(m.model)}`)"
         >
           <div class="w-36 min-w-0">
-            <div class="text-sm font-medium truncate">{{ m.model }}</div>
+            <div class="text-sm font-medium truncate" :title="m.model">
+              {{ m.model }}
+            </div>
             <div v-if="m.model_provider" class="text-xs text-muted-foreground">
               {{ m.model_provider }}
             </div>

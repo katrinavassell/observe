@@ -7,7 +7,7 @@ export function formatCurrency(
   if (n < 0) return `-${formatCurrency(-n)}`;
   if (n === 0) return "$0";
   if (n >= 1000) return `$${(n / 1000).toFixed(1)}k`;
-  if (n >= 0.01) return `$${n.toFixed(2)}`;
+  if (n >= 1) return `$${n.toFixed(2)}`;
   return `$${n.toFixed(4).replace(/0+$/, "").replace(/\.$/, ".00")}`;
 }
 
