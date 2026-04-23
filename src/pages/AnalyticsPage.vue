@@ -248,19 +248,27 @@ function retry() {
       <div>
         <div class="flex items-center gap-2">
           <h1 class="text-2xl font-semibold tracking-tight">Analytics</h1>
-          <Badge
-            v-if="
-              dataConfidence.label !== 'Good' && dataConfidence.label !== 'High'
-            "
-            :variant="
-              dataConfidence.color === 'text-destructive'
-                ? 'destructive'
-                : 'warning'
-            "
-            :title="`Data confidence: ${dataConfidence.label}. Send more events for higher accuracy.`"
-          >
-            {{ dataConfidence.label }} &middot; {{ totalEvents }} events
-          </Badge>
+          <Tooltip>
+            <TooltipTrigger as-child>
+              <Badge
+                v-if="
+                  dataConfidence.label !== 'Good' &&
+                  dataConfidence.label !== 'High'
+                "
+                :variant="
+                  dataConfidence.color === 'text-destructive'
+                    ? 'destructive'
+                    : 'warning'
+                "
+              >
+                {{ dataConfidence.label }} &middot; {{ totalEvents }} events
+              </Badge>
+            </TooltipTrigger>
+            <TooltipContent
+              >Data confidence: {{ dataConfidence.label }}. Send more events for
+              higher accuracy.</TooltipContent
+            >
+          </Tooltip>
         </div>
         <div class="flex items-center gap-2 mt-1">
           <p class="text-muted-foreground">
@@ -473,9 +481,14 @@ function retry() {
           @click="router.push(`/events?model=${encodeURIComponent(m.model)}`)"
         >
           <div class="w-36 min-w-0">
-            <div class="text-sm font-medium truncate" :title="m.model">
-              {{ m.model }}
-            </div>
+            <Tooltip>
+              <TooltipTrigger as-child>
+                <div class="text-sm font-medium truncate">
+                  {{ m.model }}
+                </div>
+              </TooltipTrigger>
+              <TooltipContent>{{ m.model }}</TooltipContent>
+            </Tooltip>
             <div v-if="m.model_provider" class="text-xs text-muted-foreground">
               {{ m.model_provider }}
             </div>

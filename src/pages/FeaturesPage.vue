@@ -2,7 +2,14 @@
 import { useRouter } from "vue-router";
 import { ChevronRight } from "lucide-vue-next";
 import FeatureDefinitionsTable from "@/components/FeatureDefinitionsTable.vue";
-import { Button, Card, CardContent } from "@/components/ui";
+import {
+  Button,
+  Card,
+  CardContent,
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+} from "@/components/ui";
 import { useAuth } from "@/composables/useAuth";
 
 const router = useRouter();
@@ -31,27 +38,31 @@ function goBack() {
     </nav>
 
     <div class="flex items-start gap-3">
-      <Button
-        variant="ghost"
-        size="sm"
-        class="h-9 w-9 p-0 shrink-0 -ml-2"
-        title="Back"
-        @click="goBack"
-      >
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          class="h-5 w-5"
-        >
-          <path d="m12 19-7-7 7-7" />
-          <path d="M19 12H5" />
-        </svg>
-      </Button>
+      <Tooltip>
+        <TooltipTrigger as-child>
+          <Button
+            variant="ghost"
+            size="sm"
+            class="h-9 w-9 p-0 shrink-0 -ml-2"
+            @click="goBack"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              class="h-5 w-5"
+            >
+              <path d="m12 19-7-7 7-7" />
+              <path d="M19 12H5" />
+            </svg>
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>Back</TooltipContent>
+      </Tooltip>
       <div>
         <h1 class="text-2xl font-semibold tracking-tight">Features</h1>
         <p class="text-muted-foreground">
