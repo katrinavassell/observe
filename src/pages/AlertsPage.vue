@@ -682,15 +682,6 @@ function relativeTime(dateStr: string) {
               </p>
             </div>
             <div class="flex items-center gap-2">
-              <a
-                v-if="rule.metric && TANSO_UPSELLS[rule.metric]"
-                href="https://cal.com/katrina-laszlo/30-minute-meeting"
-                target="_blank"
-                class="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-700 hover:text-emerald-900 transition-colors"
-              >
-                Automate
-                <ExternalLink class="h-3 w-3" />
-              </a>
               <Button
                 variant="outline"
                 size="sm"
