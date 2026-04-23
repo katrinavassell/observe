@@ -506,6 +506,65 @@ Margin badges show a tooltip with benchmark context: "AI SaaS target: 60-80% gro
 
 ---
 
+## Tracing multi-step flows
+
+If the app chains multiple LLM calls or sub-tasks (e.g., an agent pipeline,
+RAG with retrieval + generation, or a review with parse + analyze + publish),
+add `traceId`, `spanId`, and `parentSpanId` to group them into a single trace
+on the Observe Traces page.
+
+- `traceId` — shared across all events in the flow (use a UUID or the
+  first call's request ID)
+- `spanId` — unique per event within the trace
+- `parentSpanId` — the `spanId` of the parent step (null for the root)
+
+```ts
+import { randomUUID } from 'crypto'
+
+const traceId = randomUUID()
+
+// Step 1: embed the query
+const embedRes = await openai.embeddings.create({
+  model: 'text-embedding-3-small', input: query,
+})
+fetch(OBSERVE_URL, {
+  method: 'POST',
+  headers: { Authorization: `Bearer ${OBSERVE_KEY}`, 'Content-Type': 'application/json' },
+  body: JSON.stringify({ events: [{
+    eventName: 'embed_query', featureKey: 'rag_search',
+    customerReferenceId: user.id,
+    model: 'text-embedding-3-small', modelProvider: 'openai',
+    inputTokens: embedRes.usage.prompt_tokens, outputTokens: 0,
+    traceId, spanId: 'embed', parentSpanId: null,
+  }]}),
+}).catch(console.error)
+
+// Step 2: generate answer (child of embed)
+const chatRes = await openai.chat.completions.create({
+  model: 'gpt-4o', messages: [{ role: 'user', content: query }],
+})
+fetch(OBSERVE_URL, {
+  method: 'POST',
+  headers: { Authorization: `Bearer ${OBSERVE_KEY}`, 'Content-Type': 'application/json' },
+  body: JSON.stringify({ events: [{
+    eventName: 'generate_answer', featureKey: 'rag_search',
+    customerReferenceId: user.id,
+    model: 'gpt-4o', modelProvider: 'openai',
+    inputTokens: chatRes.usage?.prompt_tokens,
+    outputTokens: chatRes.usage?.completion_tokens,
+    traceId, spanId: 'generate', parentSpanId: 'embed',
+  }]}),
+}).catch(console.error)
+```
+
+The Traces page (`/traces`) shows a waterfall view with per-span cost, duration,
+and model. Useful for spotting which step in a pipeline is most expensive.
+
+For Path 2/3 (gateway), use the request headers instead: `Observe-Trace-Id`,
+`Observe-Span-Id`, `Observe-Parent-Span-Id`.
+
+---
+
 ## What NOT to do
 
 - Do not install `@tanso/observe`. The correct package is `@tansohq/observe`.

@@ -236,6 +236,7 @@ Rules for Path 1:
 - **Recommended**: \`requestBody\` (the messages you sent) and \`responseBody\` (the provider's response) — without these, the event detail view can't show the prompt and completion.
 - Other optional fields: \`timestamp\` (ISO 8601, defaults to now), \`revenueAmount\` (overrides auto-computed revenue), \`costType\` (defaults to \`"llm"\` if model is set, else \`"generic"\`), \`properties\` (arbitrary JSON metadata).
 - Batch up to 1000 events per request.
+- **Tracing multi-step flows**: if the app chains multiple LLM calls (RAG, agent pipelines), add \`traceId\` (shared UUID), \`spanId\` (unique per step), and \`parentSpanId\` (the parent step's spanId, null for root). The Traces page shows a waterfall view with per-step cost.
 
 ## Step 3 — only if the user asks for auto-instrumentation (Path 3)
 
