@@ -169,9 +169,7 @@ const maxFeatureCost = computed(() => {
 
 const sortedModels = computed(() => {
   if (!modelData.value) return [];
-  return [...modelData.value]
-    .filter((m) => m.total_cost > 0)
-    .sort((a, b) => b.total_cost - a.total_cost);
+  return [...modelData.value].sort((a, b) => b.total_cost - a.total_cost);
 });
 const maxModelCost = computed(() => {
   if (!sortedModels.value.length) return 1;
@@ -327,14 +325,15 @@ function retry() {
           <div
             class="flex items-center gap-1 text-sm font-medium text-muted-foreground"
           >
-            {{ hasRevenue ? "Total Revenue" : "Customers Tracked" }}
+            {{ hasRevenue ? "Usage Revenue" : "Customers Tracked" }}
             <Tooltip v-if="hasRevenue">
               <TooltipTrigger as-child>
                 <Info class="h-3.5 w-3.5 text-muted-foreground cursor-help" />
               </TooltipTrigger>
               <TooltipContent class="max-w-xs"
-                >Sum of subscription MRR plus trailing 30-day usage revenue for
-                metered customers.</TooltipContent
+                >Sum of per-event usage revenue (metered + tiered) for the
+                selected period. Does not include flat subscription
+                MRR.</TooltipContent
               >
             </Tooltip>
           </div>

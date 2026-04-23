@@ -340,21 +340,6 @@ const maxDuration = computed(() => {
           </Card>
           <Card class="p-4">
             <div class="text-xs font-medium text-muted-foreground">
-              Total Revenue
-            </div>
-            <div class="text-2xl font-semibold tabular-nums mt-1">
-              {{
-                formatCost(
-                  traceDetail.spans.reduce(
-                    (s, sp) => s + parseFloat(String(sp.revenue_amount || 0)),
-                    0,
-                  ),
-                )
-              }}
-            </div>
-          </Card>
-          <Card class="p-4">
-            <div class="text-xs font-medium text-muted-foreground">
               Duration
             </div>
             <div class="text-2xl font-semibold tabular-nums mt-1">

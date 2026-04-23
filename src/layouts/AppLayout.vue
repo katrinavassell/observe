@@ -81,7 +81,7 @@ const navItems = computed(() => [
     path: "/cohorts",
     label: "Customers",
     icon: Users,
-    description: "Customer segments by profitability and behavior",
+    description: "Customer health, profitability, and usage trends",
   },
   {
     path: "/alerts",

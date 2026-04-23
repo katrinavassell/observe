@@ -764,14 +764,14 @@ const excludedCount = computed(() => {
           <div
             class="flex items-center gap-1 text-xs text-muted-foreground uppercase tracking-wider"
           >
-            Revenue
+            Total Revenue
             <Tooltip>
               <TooltipTrigger as-child>
                 <Info class="h-3.5 w-3.5 text-muted-foreground cursor-help" />
               </TooltipTrigger>
               <TooltipContent class="max-w-xs"
-                >Sum of all customer revenue for selected
-                period.</TooltipContent
+                >Subscription MRR plus usage revenue across all customers for
+                the selected period.</TooltipContent
               >
             </Tooltip>
           </div>

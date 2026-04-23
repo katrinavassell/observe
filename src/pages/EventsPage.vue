@@ -539,6 +539,9 @@ function isEstimateRevenue(src: RevenueKind): boolean {
 function costTooltip(event: ObserveEvent): string {
   if (event.input_cost != null || event.output_cost != null) {
     const inp = formatCost(event.input_cost);
+    if (event.output_cost == null && event.output_tokens == null) {
+      return `${inp} (input only)`;
+    }
     const out = formatCost(event.output_cost);
     return `${inp} input / ${out} output`;
   }
@@ -574,7 +577,6 @@ function usageTooltip(event: ObserveEvent): string {
         <Activity class="h-4 w-4" />
         <span v-if="eventsData" class="font-medium text-foreground"
           >{{ (eventsData.total || eventsData.events.length).toLocaleString() }}
-          total
           {{
             (eventsData.total || eventsData.events.length) === 1
               ? "event"
@@ -1321,10 +1323,19 @@ responseBody: { content: res.content },</code></pre>
                         ${{
                           (eventDetails[event.id].input_cost ?? 0).toFixed(4)
                         }}
-                        input / ${{
-                          (eventDetails[event.id].output_cost ?? 0).toFixed(4)
-                        }}
-                        output
+                        <template
+                          v-if="
+                            eventDetails[event.id].output_cost == null &&
+                            eventDetails[event.id].output_tokens == null
+                          "
+                          >(input only)</template
+                        >
+                        <template v-else>
+                          input / ${{
+                            (eventDetails[event.id].output_cost ?? 0).toFixed(4)
+                          }}
+                          output</template
+                        >
                       </span>
                       <span v-else-if="eventDetails[event.id].cost_amount"
                         >${{
