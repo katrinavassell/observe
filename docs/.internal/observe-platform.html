@@ -670,6 +670,12 @@ accounts ┘                   │
       <div style="font-size:11px; color:#8b949e; margin-top:4px;">Bridge map, backfill, auto-enrich deployed. Needs production testing with real Stripe data to verify revenue shows on events.</div>
       <div style="font-size:10px; color:#d29922; margin-top:6px;">ACTIVE &middot; Kat &middot; Deployed 2026-04-22</div>
     </div>
+
+    <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #d29922; border-radius:6px; padding:10px; margin-bottom:8px;">
+      <div style="font-size:12px; font-weight:600; color:#f0f6fc;">stripe_customers table refactor</div>
+      <div style="font-size:11px; color:#8b949e; margin-top:4px;">Separate <code>stripe_customers</code> table decouples Stripe data from app customers. Resync no longer destroys app-level customer records or ID mappings. Branch: <code>fix/customer-id-cleanup</code>. Per Doug's recommendation (2026-04-23 huddle).</div>
+      <div style="font-size:10px; color:#d29922; margin-top:6px;">ACTIVE &middot; Kat &middot; Started 2026-04-23</div>
+    </div>
   </div>
 
   <!-- REVIEW / TEST -->
