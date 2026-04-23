@@ -1965,3 +1965,26 @@ export async function updateFeatureDefinition(
 export async function deleteFeatureDefinition(id: number): Promise<void> {
   await request(`/feature-definitions/${id}`, { method: "DELETE" });
 }
+
+// ======================================================================// DATA QUALITY
+// ======================================================================
+export interface DataQualityAdvisory {
+  type: string;
+  severity: "warning" | "info";
+  title: string;
+  description: string;
+  affected_ids: string[];
+}
+
+export interface DataQualityResult {
+  advisories: DataQualityAdvisory[];
+  summary: string | null;
+}
+
+export async function getDataQuality(
+  includeLlm = false,
+): Promise<DataQualityResult> {
+  return request(
+    `/insights/data-quality${includeLlm ? "?include_llm=true" : ""}`,
+  );
+}

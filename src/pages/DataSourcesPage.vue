@@ -18,6 +18,8 @@ import {
   Radio,
   ArrowRight,
   AlertTriangle,
+  ShieldCheck,
+  Info,
 } from "lucide-vue-next";
 import { Card, CardContent, Button } from "@/components/ui";
 import { CostsSection, UsageSection } from "@/components/data-sources";
@@ -37,8 +39,9 @@ import {
   getEvents,
   uploadProviderCsv,
   backfillTokens,
+  getDataQuality,
 } from "@/lib/api";
-import type { SdkKey } from "@/lib/api";
+import type { SdkKey, DataQualityAdvisory } from "@/lib/api";
 import {
   getStripeStatus,
   syncStripeData,
@@ -556,6 +559,27 @@ async function handleResetAccountData() {
 }
 
 // =============================================================================
+// DATA QUALITY
+// =============================================================================
+
+const dataQualityAdvisories = ref<DataQualityAdvisory[]>([]);
+const dataQualitySummary = ref<string | null>(null);
+const isLoadingDataQuality = ref(false);
+
+async function loadDataQuality() {
+  isLoadingDataQuality.value = true;
+  try {
+    const result = await getDataQuality(false);
+    dataQualityAdvisories.value = result.advisories;
+    dataQualitySummary.value = result.summary;
+  } catch {
+    // Non-critical
+  } finally {
+    isLoadingDataQuality.value = false;
+  }
+}
+
+// =============================================================================
 // INIT
 // =============================================================================
 
@@ -579,7 +603,12 @@ onMounted(async () => {
     };
     return;
   }
-  await Promise.all([loadSdkKeys(), loadStripeStatus(), loadProviderStatus()]);
+  await Promise.all([
+    loadSdkKeys(),
+    loadStripeStatus(),
+    loadProviderStatus(),
+    loadDataQuality(),
+  ]);
 
   window.localStorage.removeItem("observe:fresh_sdk_key");
 
@@ -1015,6 +1044,75 @@ watch(
         </CardContent>
       </Card>
     </div>
+
+    <!-- ================================================================== -->
+    <!-- DATA HEALTH                                                        -->
+    <!-- ================================================================== -->
+    <Card
+      v-if="isLoggedIn && dataQualityAdvisories.length > 0"
+      class="border-amber-500/30"
+    >
+      <CardContent class="p-6 space-y-3">
+        <div class="flex items-center gap-2">
+          <AlertTriangle class="h-4 w-4 text-amber-500" />
+          <h2 class="font-semibold text-sm">
+            Data Health ·
+            {{ dataQualityAdvisories.length }}
+            {{ dataQualityAdvisories.length === 1 ? "issue" : "issues" }}
+          </h2>
+        </div>
+        <div
+          v-if="dataQualitySummary"
+          class="text-sm text-muted-foreground bg-muted/30 rounded-md px-3 py-2"
+        >
+          {{ dataQualitySummary }}
+        </div>
+        <div class="space-y-2">
+          <div
+            v-for="(adv, idx) in dataQualityAdvisories"
+            :key="idx"
+            class="flex items-start gap-2.5 rounded-md border px-3 py-2.5"
+            :class="
+              adv.severity === 'warning'
+                ? 'border-amber-500/20 bg-amber-500/5'
+                : 'border-border bg-muted/20'
+            "
+          >
+            <AlertTriangle
+              v-if="adv.severity === 'warning'"
+              class="h-3.5 w-3.5 text-amber-500 shrink-0 mt-0.5"
+            />
+            <Info
+              v-else
+              class="h-3.5 w-3.5 text-muted-foreground shrink-0 mt-0.5"
+            />
+            <div class="min-w-0">
+              <p class="text-sm font-medium">{{ adv.title }}</p>
+              <p class="text-xs text-muted-foreground mt-0.5">
+                {{ adv.description }}
+              </p>
+            </div>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+    <Card
+      v-else-if="
+        isLoggedIn &&
+        !isLoadingDataQuality &&
+        dataQualityAdvisories.length === 0 &&
+        hasEvents
+      "
+      class="border-success/30"
+    >
+      <CardContent class="p-4">
+        <div class="flex items-center gap-2 text-sm">
+          <ShieldCheck class="h-4 w-4 text-success" />
+          <span class="font-medium">Data Health</span>
+          <span class="text-muted-foreground">· No issues detected</span>
+        </div>
+      </CardContent>
+    </Card>
 
     <!-- ================================================================== -->
     <!-- ADVANCED: manual snippet (collapsed)                               -->

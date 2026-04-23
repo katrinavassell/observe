@@ -1010,5 +1010,180 @@ Return ONLY the JSON array, no markdown or explanation.`;
     },
   );
 
+  // GET /insights/data-quality — rule-based data quality checks + optional LLM summary
+  router.get(
+    "/insights/data-quality",
+    ensureVisitor,
+    async (req: AuthRequest, res: Response) => {
+      const accountId = req.accountId;
+      if (!accountId) return res.json({ advisories: [] });
+
+      try {
+        const [dupeNames, noSub, revenueGap, unresolvedNames, inactiveSub] =
+          await Promise.all([
+            // 1. Same name, different customer_id
+            pool.query(
+              `SELECT LOWER(name) as lname, COUNT(DISTINCT customer_id)::int as copies,
+                      array_agg(customer_id) as customer_ids
+               FROM customers WHERE account_id = $1 AND name IS NOT NULL
+               GROUP BY LOWER(name) HAVING COUNT(DISTINCT customer_id) > 1
+               LIMIT 10`,
+              [accountId],
+            ),
+            // 2. Customers with cus_* IDs but no subscription
+            pool.query(
+              `SELECT c.customer_id, c.name
+               FROM customers c
+               WHERE c.account_id = $1
+                 AND c.customer_id LIKE 'cus_%'
+                 AND NOT EXISTS (
+                   SELECT 1 FROM subscriptions s
+                   WHERE s.customer_id = c.customer_id AND s.account_id = $1
+                 )
+                 AND EXISTS (
+                   SELECT 1 FROM observe_events e
+                   WHERE e.customer_id = c.customer_id AND e.account_id = $1
+                 )
+               LIMIT 10`,
+              [accountId],
+            ),
+            // 3. Events with revenue_source='none' where customer has active subscription
+            pool.query(
+              `SELECT DISTINCT e.customer_id, c.name
+               FROM observe_events e
+               JOIN customers c ON c.customer_id = e.customer_id AND c.account_id = e.account_id
+               JOIN subscriptions s ON s.customer_id = e.customer_id AND s.account_id = e.account_id AND s.is_active = true
+               WHERE e.account_id = $1 AND e.revenue_source = 'none'
+               LIMIT 10`,
+              [accountId],
+            ),
+            // 4. Customers where name = customer_id (unresolved)
+            pool.query(
+              `SELECT c.customer_id, c.name
+               FROM customers c
+               WHERE c.account_id = $1 AND c.name = c.customer_id
+                 AND EXISTS (
+                   SELECT 1 FROM observe_events e
+                   WHERE e.customer_id = c.customer_id AND e.account_id = $1
+                 )
+               LIMIT 10`,
+              [accountId],
+            ),
+            // 5. Inactive subscriptions with recent events (last 7 days)
+            pool.query(
+              `SELECT DISTINCT e.customer_id, c.name, s.subscription_id
+               FROM observe_events e
+               JOIN customers c ON c.customer_id = e.customer_id AND c.account_id = e.account_id
+               JOIN subscriptions s ON s.customer_id = e.customer_id AND s.account_id = e.account_id
+               WHERE e.account_id = $1
+                 AND s.is_active = false
+                 AND e.timestamp > NOW() - INTERVAL '7 days'
+               LIMIT 10`,
+              [accountId],
+            ),
+          ]);
+
+        const advisories: Array<{
+          type: string;
+          severity: string;
+          title: string;
+          description: string;
+          affected_ids: string[];
+        }> = [];
+
+        for (const row of dupeNames.rows) {
+          advisories.push({
+            type: "duplicate_customers",
+            severity: "warning",
+            title: `"${row.lname}" appears ${row.copies} times`,
+            description: `${row.copies} customers share the name "${row.lname}" but have different IDs. This may split revenue and cost data across duplicates.`,
+            affected_ids: row.customer_ids,
+          });
+        }
+
+        for (const row of noSub.rows) {
+          advisories.push({
+            type: "missing_subscription",
+            severity: "info",
+            title: `${row.name || row.customer_id} has no subscription`,
+            description: `Stripe customer ${row.customer_id} has events but no subscription. Revenue attribution will show $0. Sync Stripe or check if the subscription is missing.`,
+            affected_ids: [row.customer_id],
+          });
+        }
+
+        for (const row of revenueGap.rows) {
+          advisories.push({
+            type: "revenue_gap",
+            severity: "warning",
+            title: `${row.name || row.customer_id} has events with no revenue despite active subscription`,
+            description: `Events for this customer show revenue_source="none" even though they have an active subscription. Revenue enrichment may have failed during ingest.`,
+            affected_ids: [row.customer_id],
+          });
+        }
+
+        for (const row of unresolvedNames.rows) {
+          advisories.push({
+            type: "unresolved_name",
+            severity: "info",
+            title: `${row.customer_id} has no display name`,
+            description: `Customer name is just the raw ID. Connect Stripe to resolve names automatically, or update via the Customers page.`,
+            affected_ids: [row.customer_id],
+          });
+        }
+
+        for (const row of inactiveSub.rows) {
+          advisories.push({
+            type: "inactive_sub_active_usage",
+            severity: "warning",
+            title: `${row.name || row.customer_id} is using the product but subscription is inactive`,
+            description: `This customer has events in the last 7 days but their subscription is marked inactive. They may be churned but still consuming resources.`,
+            affected_ids: [row.customer_id],
+          });
+        }
+
+        // Optional: LLM summary of findings
+        let llmSummary: string | null = null;
+        if (
+          advisories.length > 0 &&
+          req.query.include_llm === "true" &&
+          process.env.OPENAI_API_KEY
+        ) {
+          try {
+            const prompt = `You are a data quality analyst for an AI cost tracking platform. Summarize these data quality issues in 2-3 sentences. Be specific and actionable.\n\n${JSON.stringify(advisories, null, 2)}`;
+            const llmRes = await fetch(
+              "https://api.openai.com/v1/chat/completions",
+              {
+                method: "POST",
+                headers: {
+                  Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  model: "gpt-4o-mini",
+                  messages: [{ role: "user", content: prompt }],
+                  temperature: 0.2,
+                  max_tokens: 300,
+                }),
+              },
+            );
+            if (llmRes.ok) {
+              const data = (await llmRes.json()) as {
+                choices: Array<{ message: { content: string } }>;
+              };
+              llmSummary = data.choices?.[0]?.message?.content ?? null;
+            }
+          } catch {
+            // LLM summary is best-effort
+          }
+        }
+
+        res.json({ advisories, summary: llmSummary });
+      } catch (error) {
+        console.error("Data quality check error:", error);
+        res.status(500).json({ error: "Failed to run data quality checks" });
+      }
+    },
+  );
+
   return router;
 }
