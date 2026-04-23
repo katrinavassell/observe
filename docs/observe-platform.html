@@ -691,7 +691,47 @@ accounts ┘                   │
 
   <!-- DONE -->
   <div id="board-done" style="background:#161b22; border:1px solid #21262d; border-radius:8px; padding:12px;">
-    <div style="font-size:13px; font-weight:600; color:#3fb950; margin-bottom:10px; padding-bottom:6px; border-bottom:1px solid #21262d;">DONE (2026-04-22)</div>
+    <div style="font-size:13px; font-weight:600; color:#3fb950; margin-bottom:10px; padding-bottom:6px; border-bottom:1px solid #21262d;">DONE (2026-04-22 &ndash; 2026-04-23)</div>
+
+    <!-- ── 2026-04-23 session ── -->
+
+    <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #3fb950; border-radius:6px; padding:10px; margin-bottom:8px;">
+      <div style="font-size:12px; font-weight:600; color:#f0f6fc;">Guest view: event details, usage count, data sources preview</div>
+      <div style="font-size:11px; color:#8b949e; margin-top:4px;">Event expand was hitting API with no account (404). Now returns client-side sample detail with request/response bodies. Usage bar shows 20/10k for guests. Data Sources page shows real layout with fake API key instead of static "How it works" cards.</div>
+      <div style="font-size:10px; color:#3fb950; margin-top:6px;">COMPLETE &middot; UX &middot; 06ea6d8</div>
+    </div>
+
+    <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #3fb950; border-radius:6px; padding:10px; margin-bottom:8px;">
+      <div style="font-size:12px; font-weight:600; color:#f0f6fc;">Test event: gpt-4o with visible cost + revenue onboarding hint</div>
+      <div style="font-size:11px; color:#8b949e; margin-top:4px;">Test event now uses gpt-4o with 1000/500 tokens (~$0.0075 cost). Includes sample request/response bodies. "Revenue: none" replaced with onboarding hint linking to Stripe connect.</div>
+      <div style="font-size:10px; color:#3fb950; margin-top:6px;">COMPLETE &middot; UX &middot; bc6b434</div>
+    </div>
+
+    <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #3fb950; border-radius:6px; padding:10px; margin-bottom:8px;">
+      <div style="font-size:12px; font-weight:600; color:#f0f6fc;">Tracing docs in llms.txt and install prompt</div>
+      <div style="font-size:11px; color:#8b949e; margin-top:4px;">AI agents didn't know how to send traces. Added dedicated "Tracing multi-step flows" section with RAG pipeline example + one-liner in install prompt checklist.</div>
+      <div style="font-size:10px; color:#3fb950; margin-top:6px;">COMPLETE &middot; Docs &middot; a322d9d</div>
+    </div>
+
+    <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #3fb950; border-radius:6px; padding:10px; margin-bottom:8px;">
+      <div style="font-size:12px; font-weight:600; color:#f0f6fc;">"Bundled" badges + tooltips on flat-sub feature/model tables</div>
+      <div style="font-size:11px; color:#8b949e; margin-top:4px;">Revenue and margin columns for flat-sub customers showed &mdash; while top-level KPI showed real margin. Now shows "Bundled" badge with tooltip explaining flat-rate revenue is tracked at customer level.</div>
+      <div style="font-size:10px; color:#3fb950; margin-top:6px;">COMPLETE &middot; UX &middot; fc33084, c748c8f</div>
+    </div>
+
+    <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #3fb950; border-radius:6px; padding:10px; margin-bottom:8px;">
+      <div style="font-size:12px; font-weight:600; color:#f0f6fc;">Data quality advisor (rule-based + LLM)</div>
+      <div style="font-size:11px; color:#8b949e; margin-top:4px;">SQL-based checks for duplicate customers, missing subscriptions, revenue gaps, unresolved names. Optional LLM summary via existing insights infra. Displayed on Data Sources page.</div>
+      <div style="font-size:10px; color:#3fb950; margin-top:6px;">COMPLETE &middot; Platform &middot; bfdd89b</div>
+    </div>
+
+    <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #3fb950; border-radius:6px; padding:10px; margin-bottom:8px;">
+      <div style="font-size:12px; font-weight:600; color:#f0f6fc;">Test alert button</div>
+      <div style="font-size:11px; color:#8b949e; margin-top:4px;">POST /alerts/:id/test sends [TEST]-prefixed notification through configured email/webhook. UI shows Test button per rule with loading state and toast feedback. Does not write to alert_history.</div>
+      <div style="font-size:10px; color:#3fb950; margin-top:6px;">COMPLETE &middot; Alerts &middot; 8507644</div>
+    </div>
+
+    <!-- ── 2026-04-22 session ── -->
 
     <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #3fb950; border-radius:6px; padding:10px; margin-bottom:8px;">
       <div style="font-size:12px; font-weight:600; color:#f0f6fc;">Team management UI</div>
