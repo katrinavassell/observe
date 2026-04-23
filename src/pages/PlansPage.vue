@@ -2,7 +2,7 @@
 import { computed } from "vue";
 import { useRouter } from "vue-router";
 import { useQuery } from "@tanstack/vue-query";
-import { Check, ExternalLink, ArrowRight } from "lucide-vue-next";
+import { Check, ArrowRight } from "lucide-vue-next";
 import { Card, CardContent, Button } from "@/components/ui";
 import { getUsageLimits } from "@/lib/api";
 import { useAuth } from "@/composables/useAuth";
@@ -61,8 +61,6 @@ const tansoFeatures = [
   "Revenue recovery & dunning",
   "Priority support",
 ];
-
-const repoUrl = "https://github.com/katrinalaszlo/observe";
 </script>
 
 <template>
@@ -87,7 +85,7 @@ const repoUrl = "https://github.com/katrinalaszlo/observe";
             <div>
               <h3 class="text-lg font-semibold">Observe</h3>
               <p class="text-xs text-muted-foreground mt-1">
-                AI cost observability, open source
+                AI cost observability
               </p>
             </div>
 
@@ -115,19 +113,7 @@ const repoUrl = "https://github.com/katrinalaszlo/observe";
             </div>
           </div>
 
-          <div class="pt-6 mt-auto">
-            <a
-              :href="repoUrl"
-              target="_blank"
-              rel="noopener noreferrer"
-              class="block"
-            >
-              <Button variant="outline" class="w-full">
-                <ExternalLink class="h-4 w-4 mr-2" />
-                View on GitHub
-              </Button>
-            </a>
-          </div>
+          <div class="pt-6 mt-auto"></div>
         </CardContent>
       </Card>
 
