@@ -278,35 +278,31 @@ function isActive(path: string) {
                   >Account</span
                 >
               </div>
-              <Tooltip>
-                <TooltipTrigger as-child>
-                  <router-link
-                    :to="item.path"
-                    :class="[
-                      'group relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-all duration-150',
-                      isActive(item.path)
-                        ? 'bg-sidebar-accent text-sidebar-accent-foreground font-medium'
-                        : 'text-sidebar-foreground/60 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground',
-                    ]"
-                  >
-                    <div
-                      v-if="isActive(item.path)"
-                      class="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-[3px] rounded-full bg-sidebar-primary"
-                    />
-                    <component
-                      :is="item.icon"
-                      :class="[
-                        'h-4 w-4 shrink-0 transition-colors duration-150',
-                        isActive(item.path)
-                          ? 'text-sidebar-accent-foreground'
-                          : 'text-sidebar-foreground/40 group-hover:text-sidebar-foreground/70',
-                      ]"
-                    />
-                    <span>{{ item.label }}</span>
-                  </router-link>
-                </TooltipTrigger>
-                <TooltipContent>{{ item.description }}</TooltipContent>
-              </Tooltip>
+              <router-link
+                :to="item.path"
+                :title="item.description"
+                :class="[
+                  'group relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-all duration-150',
+                  isActive(item.path)
+                    ? 'bg-sidebar-accent text-sidebar-accent-foreground font-medium'
+                    : 'text-sidebar-foreground/60 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground',
+                ]"
+              >
+                <div
+                  v-if="isActive(item.path)"
+                  class="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-[3px] rounded-full bg-sidebar-primary"
+                />
+                <component
+                  :is="item.icon"
+                  :class="[
+                    'h-4 w-4 shrink-0 transition-colors duration-150',
+                    isActive(item.path)
+                      ? 'text-sidebar-accent-foreground'
+                      : 'text-sidebar-foreground/40 group-hover:text-sidebar-foreground/70',
+                  ]"
+                />
+                <span>{{ item.label }}</span>
+              </router-link>
             </template>
             <button
               v-if="isLoggedIn"
