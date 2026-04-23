@@ -142,62 +142,71 @@ export async function runRevenueBackfill(
   let eventsSkipped = 0;
   let customersResolved = 0;
 
-  // ── 1. Backfill stripe_customer_id from event meta where missing ────
+  // ── 1. Populate stripe_customers from event meta where missing ────
+  await pool
+    .query(
+      `INSERT INTO stripe_customers (account_id, stripe_customer_id, customer_id)
+       SELECT DISTINCT ON (oe.customer_id)
+              $1, meta->>'stripe_customer_id', oe.customer_id
+       FROM observe_events oe
+       WHERE oe.account_id = $1
+         AND meta->>'stripe_customer_id' IS NOT NULL
+       ON CONFLICT (account_id, stripe_customer_id)
+       DO UPDATE SET customer_id = COALESCE(stripe_customers.customer_id, EXCLUDED.customer_id)`,
+      [accountId],
+    )
+    .catch((err) => console.error("Backfill stripe_customers from meta:", err));
+
+  // Also link cus_* customer_ids directly (they ARE Stripe IDs)
+  await pool
+    .query(
+      `INSERT INTO stripe_customers (account_id, stripe_customer_id, customer_id)
+       SELECT $1, customer_id, customer_id
+       FROM customers
+       WHERE account_id = $1
+         AND customer_id LIKE 'cus_%'
+       ON CONFLICT (account_id, stripe_customer_id) DO NOTHING`,
+      [accountId],
+    )
+    .catch((err) =>
+      console.error("Backfill stripe_customers for cus_* IDs:", err),
+    );
+
+  // Keep customers.stripe_customer_id in sync for backward compat
   await pool
     .query(
       `UPDATE customers c
-       SET stripe_customer_id = sub.stripe_id
-       FROM (
-         SELECT DISTINCT ON (oe.customer_id)
-                oe.customer_id, meta->>'stripe_customer_id' AS stripe_id
-         FROM observe_events oe
-         WHERE oe.account_id = $1
-           AND meta->>'stripe_customer_id' IS NOT NULL
-       ) sub
-       WHERE c.account_id = $1
-         AND c.customer_id = sub.customer_id
+       SET stripe_customer_id = sc.stripe_customer_id
+       FROM stripe_customers sc
+       WHERE c.account_id = $1 AND sc.account_id = $1
+         AND sc.customer_id = c.customer_id
          AND c.stripe_customer_id IS NULL`,
       [accountId],
     )
     .catch((err) =>
-      console.error("Backfill stripe_customer_id from meta:", err),
-    );
-
-  // Also set stripe_customer_id = customer_id for cus_* records
-  await pool
-    .query(
-      `UPDATE customers
-       SET stripe_customer_id = customer_id
-       WHERE account_id = $1
-         AND customer_id LIKE 'cus_%'
-         AND stripe_customer_id IS NULL`,
-      [accountId],
-    )
-    .catch((err) =>
-      console.error("Backfill stripe_customer_id for cus_* IDs:", err),
+      console.error(
+        "Sync customers.stripe_customer_id from stripe_customers:",
+        err,
+      ),
     );
 
   // ── 2. Resolve customer names from Stripe ─────────────────────────
+  // Use stripe_customers as the authoritative source for Stripe IDs
   let unresolvedCustomers: { rows: Array<Record<string, unknown>> } = {
     rows: [],
   };
   try {
     unresolvedCustomers = await pool.query(
-      `SELECT customer_id, stripe_customer_id FROM customers
-       WHERE account_id = $1
-         AND stripe_customer_id IS NOT NULL
-         AND (name = customer_id OR name IS NULL)`,
+      `SELECT c.customer_id, COALESCE(sc.stripe_customer_id, c.stripe_customer_id) AS stripe_customer_id
+       FROM customers c
+       LEFT JOIN stripe_customers sc ON sc.account_id = c.account_id AND sc.customer_id = c.customer_id
+       WHERE c.account_id = $1
+         AND (sc.stripe_customer_id IS NOT NULL OR c.stripe_customer_id IS NOT NULL OR c.customer_id LIKE 'cus_%')
+         AND (c.name = c.customer_id OR c.name IS NULL)`,
       [accountId],
     );
-  } catch {
-    // stripe_customer_id column may not exist yet — fall back to cus_* IDs
-    unresolvedCustomers = await pool.query(
-      `SELECT customer_id FROM customers
-       WHERE account_id = $1
-         AND customer_id LIKE 'cus_%'
-         AND (name = customer_id OR name IS NULL)`,
-      [accountId],
-    );
+  } catch (err) {
+    console.error("Backfill: unresolved customers query failed:", err);
   }
 
   if (unresolvedCustomers.rows.length > 0) {
@@ -246,19 +255,19 @@ export async function runRevenueBackfill(
     featurePricingMap.set(row.feature_key, parseFloat(row.revenue_per_unit));
   }
 
-  // Build app_customer_id -> stripe_customer_id bridge from customers table
+  // Build app_customer_id -> stripe_customer_id bridge from stripe_customers table
   const appToStripe = new Map<string, string>();
   try {
     const bridgeResult = await pool.query(
-      `SELECT customer_id, stripe_customer_id FROM customers
-       WHERE account_id = $1 AND stripe_customer_id IS NOT NULL`,
+      `SELECT customer_id, stripe_customer_id FROM stripe_customers
+       WHERE account_id = $1 AND customer_id IS NOT NULL`,
       [accountId],
     );
     for (const row of bridgeResult.rows) {
       appToStripe.set(row.customer_id, row.stripe_customer_id);
     }
   } catch {
-    // stripe_customer_id column may not exist yet
+    // stripe_customers table may not exist yet
   }
 
   // Load subscriptions keyed by Stripe customer ID

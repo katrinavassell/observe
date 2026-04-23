@@ -166,14 +166,13 @@ export async function syncStripeDataForUser(
     );
   }
 
-  // Insert customers — delete ALL for this account first, then fresh insert.
-  // Never use ON CONFLICT on customers — dual unique constraints break it.
-  // See bugs_customer_upsert.md and bugs_upsert_dual_unique.md.
+  // Sync Stripe customers into stripe_customers table (delete + reinsert).
+  // The customers table is NOT touched — it holds app-level customer references.
   const validCustomers = stripeCustomersList.filter(
     (c) => typeof c !== "string",
   );
   if (resolvedAccountId != null) {
-    await pool.query(`DELETE FROM customers WHERE account_id = $1`, [
+    await pool.query(`DELETE FROM stripe_customers WHERE account_id = $1`, [
       resolvedAccountId,
     ]);
   }
@@ -183,22 +182,33 @@ export async function syncStripeDataForUser(
     const placeholders: string[] = [];
     let idx = 1;
     for (const customer of batch) {
-      placeholders.push(
-        `($${idx++}, $${idx++}, $${idx++}, $${idx++}, $${idx++}, $${idx++})`,
-      );
+      placeholders.push(`($${idx++}, $${idx++}, $${idx++}, $${idx++})`);
       values.push(
-        userId,
         resolvedAccountId,
         customer.id,
         customer.name || customer.email || customer.id,
         customer.email || null,
-        customer.id,
       );
     }
     await pool.query(
-      `INSERT INTO customers (user_id, account_id, customer_id, name, email, stripe_customer_id)
+      `INSERT INTO stripe_customers (account_id, stripe_customer_id, name, email)
        VALUES ${placeholders.join(", ")}`,
       values,
+    );
+  }
+
+  // Auto-link stripe_customers to existing customers rows where possible.
+  // Match by: customers.stripe_customer_id = stripe_customers.stripe_customer_id
+  // OR customers.customer_id = stripe_customers.stripe_customer_id (user used Stripe ID directly)
+  if (resolvedAccountId != null) {
+    await pool.query(
+      `UPDATE stripe_customers sc
+       SET customer_id = c.customer_id
+       FROM customers c
+       WHERE sc.account_id = $1 AND c.account_id = $1
+         AND sc.customer_id IS NULL
+         AND (c.stripe_customer_id = sc.stripe_customer_id OR c.customer_id = sc.stripe_customer_id)`,
+      [resolvedAccountId],
     );
   }
 

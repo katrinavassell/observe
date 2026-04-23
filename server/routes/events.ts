@@ -32,6 +32,23 @@ async function resolveStripeCustomerNames(
 ): Promise<void> {
   if (customerStripeMap.size === 0 || accountId == null) return;
   const dbIds = [...customerStripeMap.keys()];
+
+  // Also pull mappings from stripe_customers table
+  try {
+    const scRows = await pool.query(
+      `SELECT stripe_customer_id, customer_id FROM stripe_customers
+       WHERE account_id = $1 AND customer_id = ANY($2)`,
+      [accountId, dbIds],
+    );
+    for (const row of scRows.rows) {
+      if (row.customer_id && !customerStripeMap.has(row.customer_id)) {
+        customerStripeMap.set(row.customer_id, row.stripe_customer_id);
+      }
+    }
+  } catch {
+    // stripe_customers table may not exist yet
+  }
+
   const unresolved = await pool.query(
     `SELECT customer_id, stripe_customer_id FROM customers
      WHERE account_id = $1 AND customer_id = ANY($2)
@@ -1073,36 +1090,32 @@ export function createEventsRoutes(
           }
         }
 
-        // Auto-enrich revenue from Stripe: look up subscriptions for customers
-        // in this batch. Subscriptions use Stripe customer IDs (cus_*) but SDK
-        // events may use app-level IDs with stripe_customer_id in meta.
-        // Build a bridge: app_customer_id -> stripe_customer_id
+        // Auto-enrich revenue from Stripe subscriptions.
+        // Build bridge: app_customer_id -> stripe_customer_id
+        // Sources: stripe_customers table (authoritative), event meta (inline), cus_* prefix (direct)
         const appToStripe = new Map<string, string>();
-        for (const evt of validEvents) {
-          const cid = evt.customerReferenceId;
-          if (cid.startsWith("cus_")) {
-            appToStripe.set(cid, cid);
-          } else if (evt.meta?.stripe_customer_id) {
-            appToStripe.set(cid, evt.meta.stripe_customer_id);
-          }
-        }
-        // Also check the customers table for stripe_customer_id mappings
-        const unmappedIds = validEvents
-          .map((e) => e.customerReferenceId)
-          .filter((id) => !appToStripe.has(id));
-        if (unmappedIds.length > 0 && accountId != null) {
+        if (accountId != null) {
           try {
             const bridgeResult = await pool.query(
-              `SELECT customer_id, stripe_customer_id FROM customers
-               WHERE account_id = $1 AND customer_id = ANY($2)
-                 AND stripe_customer_id IS NOT NULL`,
-              [accountId, unmappedIds],
+              `SELECT stripe_customer_id, customer_id FROM stripe_customers
+               WHERE account_id = $1 AND customer_id IS NOT NULL`,
+              [accountId],
             );
             for (const row of bridgeResult.rows) {
               appToStripe.set(row.customer_id, row.stripe_customer_id);
             }
           } catch {
-            // stripe_customer_id column may not exist yet
+            // stripe_customers table may not exist yet
+          }
+        }
+        for (const evt of validEvents) {
+          const cid = evt.customerReferenceId;
+          if (!appToStripe.has(cid)) {
+            if (cid.startsWith("cus_")) {
+              appToStripe.set(cid, cid);
+            } else if (evt.meta?.stripe_customer_id) {
+              appToStripe.set(cid, evt.meta.stripe_customer_id);
+            }
           }
         }
 
@@ -1380,6 +1393,22 @@ export function createEventsRoutes(
               .catch((err) =>
                 console.error("Auto-create customers failed:", err),
               );
+
+            // Link to stripe_customers where meta.stripe_customer_id was provided
+            for (const [cid, stripeId] of customerMetaMap) {
+              if (!stripeId) continue;
+              pool
+                .query(
+                  `INSERT INTO stripe_customers (account_id, stripe_customer_id, customer_id)
+                   VALUES ($1, $2, $3)
+                   ON CONFLICT (account_id, stripe_customer_id)
+                   DO UPDATE SET customer_id = COALESCE(stripe_customers.customer_id, $3)`,
+                  [accountId, stripeId, cid],
+                )
+                .catch((err) =>
+                  console.error("Auto-link stripe_customers failed:", err),
+                );
+            }
           }
         }
 

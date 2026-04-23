@@ -632,6 +632,20 @@ async function _doDbInit() {
     );
 
     await pool.query(`
+      CREATE TABLE IF NOT EXISTS stripe_customers (
+        id SERIAL PRIMARY KEY,
+        account_id INTEGER NOT NULL REFERENCES accounts(id),
+        stripe_customer_id TEXT NOT NULL,
+        customer_id TEXT,
+        name TEXT,
+        email TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(account_id, stripe_customer_id)
+      )
+    `);
+
+    await pool.query(`
       CREATE TABLE IF NOT EXISTS subscriptions (
         id SERIAL PRIMARY KEY,
         user_id TEXT NOT NULL,
