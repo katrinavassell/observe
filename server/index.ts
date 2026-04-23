@@ -605,6 +605,12 @@ async function _doDbInit() {
       `ALTER TABLE customers ADD COLUMN IF NOT EXISTS stripe_customer_id TEXT`,
     );
 
+    await pool
+      .query(
+        `ALTER TABLE customers DROP CONSTRAINT IF EXISTS customers_user_id_customer_id_key`,
+      )
+      .catch(() => {});
+
     await pool.query(`
       CREATE TABLE IF NOT EXISTS stripe_customers (
         id SERIAL PRIMARY KEY,
