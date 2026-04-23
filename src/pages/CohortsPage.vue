@@ -753,7 +753,7 @@ const excludedCount = computed(() => {
               <TooltipTrigger as-child>
                 <Info class="h-3.5 w-3.5 text-muted-foreground cursor-help" />
               </TooltipTrigger>
-              <TooltipContent class="max-w-xs"
+              <TooltipContent class="max-w-xs normal-case"
                 >Active customers with at least one event or
                 subscription.</TooltipContent
               >
@@ -772,7 +772,7 @@ const excludedCount = computed(() => {
               <TooltipTrigger as-child>
                 <Info class="h-3.5 w-3.5 text-muted-foreground cursor-help" />
               </TooltipTrigger>
-              <TooltipContent class="max-w-xs"
+              <TooltipContent class="max-w-xs normal-case"
                 >Subscription MRR plus usage revenue across all customers for
                 the selected period.</TooltipContent
               >
@@ -791,7 +791,7 @@ const excludedCount = computed(() => {
               <TooltipTrigger as-child>
                 <Info class="h-3.5 w-3.5 text-muted-foreground cursor-help" />
               </TooltipTrigger>
-              <TooltipContent class="max-w-xs"
+              <TooltipContent class="max-w-xs normal-case"
                 >Sum of all tracked AI costs across all
                 customers.</TooltipContent
               >
