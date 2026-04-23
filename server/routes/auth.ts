@@ -33,6 +33,32 @@ export function createEnsureVisitor(pool: Pool) {
       ) {
         req.visitorId = req.headers["x-test-user-id"] as string;
         req.accountEmail = "test@observe.test";
+
+        const testAccountResult = await pool.query(
+          `SELECT ua.account_id FROM user_accounts ua JOIN users u ON u.id = ua.user_id WHERE u.visitor_id = $1 AND ua.status = 'active' LIMIT 1`,
+          [req.visitorId],
+        );
+        if (testAccountResult.rows[0]) {
+          req.accountId = testAccountResult.rows[0].account_id;
+        } else {
+          await pool.query(
+            "INSERT INTO users (visitor_id) VALUES ($1) ON CONFLICT DO NOTHING",
+            [req.visitorId],
+          );
+          const userRow = await pool.query(
+            "SELECT id FROM users WHERE visitor_id = $1",
+            [req.visitorId],
+          );
+          const accountRow = await pool.query(
+            "INSERT INTO accounts (name) VALUES ($1) RETURNING id",
+            ["Test Account"],
+          );
+          req.accountId = accountRow.rows[0].id;
+          await pool.query(
+            "INSERT INTO user_accounts (user_id, account_id, role, status, joined_at) VALUES ($1, $2, 'owner', 'active', NOW()) ON CONFLICT DO NOTHING",
+            [userRow.rows[0].id, req.accountId],
+          );
+        }
         return next();
       }
 
