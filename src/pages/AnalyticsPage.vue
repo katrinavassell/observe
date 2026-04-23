@@ -375,8 +375,7 @@ function retry() {
                 <Info class="h-3.5 w-3.5 text-muted-foreground cursor-help" />
               </TooltipTrigger>
               <TooltipContent class="max-w-xs"
-                >Revenue minus cost, divided by revenue. AI SaaS target:
-                60-80%.</TooltipContent
+                >Revenue minus cost, divided by revenue.</TooltipContent
               >
             </Tooltip>
           </div>

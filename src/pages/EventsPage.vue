@@ -248,6 +248,14 @@ function getResponseContent(
   return null;
 }
 
+function renderText(text: string): string {
+  const escaped = text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+  return escaped.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+}
+
 // ── Filters & queries ────────────────────────────────────────────────────────
 
 const SOURCES = [
@@ -1165,9 +1173,10 @@ function usageTooltip(event: ObserveEvent): string {
                               class="text-[10px] font-medium text-muted-foreground uppercase"
                               >{{ msg.role }}</span
                             >
-                            <p class="text-sm whitespace-pre-wrap break-words">
-                              {{ msg.content }}
-                            </p>
+                            <p
+                              class="text-sm whitespace-pre-wrap break-words"
+                              v-html="renderText(msg.content)"
+                            />
                           </div>
                         </div>
                       </div>
@@ -1200,13 +1209,16 @@ function usageTooltip(event: ObserveEvent): string {
                         class="flex gap-2"
                       >
                         <Bot class="h-4 w-4 text-success shrink-0 mt-0.5" />
-                        <p class="text-sm whitespace-pre-wrap break-words">
-                          {{
-                            getResponseContent(
-                              eventDetails[event.id].response_body,
+                        <p
+                          class="text-sm whitespace-pre-wrap break-words"
+                          v-html="
+                            renderText(
+                              getResponseContent(
+                                eventDetails[event.id].response_body,
+                              )!,
                             )
-                          }}
-                        </p>
+                          "
+                        />
                       </div>
                       <pre
                         v-else

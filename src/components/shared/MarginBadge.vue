@@ -1,5 +1,5 @@
 <template>
-  <Tooltip>
+  <Tooltip v-if="margin !== null">
     <TooltipTrigger as-child>
       <span
         :class="[
@@ -11,7 +11,7 @@
       </span>
     </TooltipTrigger>
     <TooltipContent>
-      AI SaaS target: 60-80% gross margin. Below 30% is typically unsustainable.
+      Gross margin: revenue minus cost, divided by revenue.
     </TooltipContent>
   </Tooltip>
 </template>
