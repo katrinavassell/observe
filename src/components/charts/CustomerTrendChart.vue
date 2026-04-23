@@ -47,16 +47,15 @@ const chartData = computed(() => {
     }
     return date.toLocaleDateString("en-US", {
       month: "short",
-      year: "2-digit",
+      year: "numeric",
     });
   });
 
   const hasEventRevenue = props.data.some((d) => d.total_revenue > 0);
-  const revenueLabel = hasEventRevenue ? "Revenue" : "MRR";
 
   const datasets = [
     {
-      label: revenueLabel,
+      label: "Revenue",
       data: props.data.map((d) =>
         hasEventRevenue ? d.total_revenue : (props.mrr ?? 0),
       ),

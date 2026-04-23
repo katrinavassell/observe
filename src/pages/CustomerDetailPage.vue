@@ -164,8 +164,9 @@ const signals = computed(() => {
     });
   }
 
-  // Inactive — add historical context when we have >= 2 prior months of data
-  if (cc.active_days_30d < 3) {
+  // Inactive — skip if customer has an active subscription (low usage is normal for new/light users)
+  const hasActiveSub = detail.value?.subscriptions?.some((s) => s.is_active);
+  if (cc.active_days_30d < 3 && !hasActiveSub) {
     const historical =
       cc.active_days_prior_avg != null
         ? ` (usually ${cc.active_days_prior_avg})`
@@ -174,7 +175,7 @@ const signals = computed(() => {
       type: "warning",
       icon: Clock,
       title: "Inactive",
-      description: `Only ${cc.active_days_30d} active day${cc.active_days_30d === 1 ? "" : "s"} in the last 30${historical}.`,
+      description: `Only ${cc.active_days_30d} active day${cc.active_days_30d === 1 ? "" : "s"} in the last 30${historical}. No active subscription.`,
     });
   }
 
@@ -232,11 +233,12 @@ function formatDate(date: string): string {
 }
 
 const avgEventsPerDay = computed(() => {
-  if (!timeseries.value?.timeseries.length) return null;
-  const ts = timeseries.value.timeseries;
-  const totalEvents = ts.reduce((s, t) => s + t.event_count, 0);
-  const months = ts.length || 1;
-  return Math.round(totalEvents / (months * 30));
+  if (!cohortCustomer.value) return null;
+  const activeDays = cohortCustomer.value.active_days_30d ?? 0;
+  if (activeDays === 0) return 0;
+  const totalEvents =
+    detail.value?.by_feature.reduce((s, f) => s + f.event_count, 0) ?? 0;
+  return Math.round((totalEvents / activeDays) * 10) / 10;
 });
 
 const costPerEvent = computed(() => {
