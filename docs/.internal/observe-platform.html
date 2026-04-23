@@ -671,11 +671,7 @@ accounts ┘                   │
       <div style="font-size:10px; color:#d29922; margin-top:6px;">ACTIVE &middot; Kat &middot; Deployed 2026-04-22</div>
     </div>
 
-    <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #d29922; border-radius:6px; padding:10px; margin-bottom:8px;">
-      <div style="font-size:12px; font-weight:600; color:#f0f6fc;">stripe_customers table refactor</div>
-      <div style="font-size:11px; color:#8b949e; margin-top:4px;">Separate <code>stripe_customers</code> table decouples Stripe data from app customers. Resync no longer destroys app-level customer records or ID mappings. Branch: <code>fix/customer-id-cleanup</code>. Per Doug's recommendation (2026-04-23 huddle).</div>
-      <div style="font-size:10px; color:#d29922; margin-top:6px;">ACTIVE &middot; Kat &middot; Started 2026-04-23</div>
-    </div>
+    <!-- stripe_customers refactor moved to DONE -->
   </div>
 
   <!-- REVIEW / TEST -->
@@ -706,6 +702,24 @@ accounts ┘                   │
     <div style="font-size:13px; font-weight:600; color:#3fb950; margin-bottom:10px; padding-bottom:6px; border-bottom:1px solid #21262d;">DONE (2026-04-22 &ndash; 2026-04-23)</div>
 
     <!-- ── 2026-04-23 session ── -->
+
+    <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #3fb950; border-radius:6px; padding:10px; margin-bottom:8px;">
+      <div style="font-size:12px; font-weight:600; color:#f0f6fc;">stripe_customers table + drop customers.user_id</div>
+      <div style="font-size:11px; color:#8b949e; margin-top:4px;">Created <code>stripe_customers</code> table as single source of truth for Stripe customer data. Resync now only touches <code>stripe_customers</code>, preserving app-level customer records. Dropped <code>user_id</code> from customers table, migrated all queries to use <code>account_id</code>. Fixed Stripe resync deleting revenue events (BUG-007). Per Doug's recommendation.</div>
+      <div style="font-size:10px; color:#3fb950; margin-top:6px;">COMPLETE &middot; Schema &middot; acf8df9, 8ce8678</div>
+    </div>
+
+    <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #3fb950; border-radius:6px; padding:10px; margin-bottom:8px;">
+      <div style="font-size:12px; font-weight:600; color:#f0f6fc;">Repo made private, open source refs removed</div>
+      <div style="font-size:11px; color:#8b949e; margin-top:4px;">katrinalaszlo/observe set to private. Removed GitHub link and "open source" label from Plans page. Added internal docs to repo.</div>
+      <div style="font-size:10px; color:#3fb950; margin-top:6px;">COMPLETE &middot; Ops &middot; 518239d, bd5fa16</div>
+    </div>
+
+    <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #3fb950; border-radius:6px; padding:10px; margin-bottom:8px;">
+      <div style="font-size:12px; font-weight:600; color:#f0f6fc;">Fix test auth bypass + alert test</div>
+      <div style="font-size:11px; color:#8b949e; margin-top:4px;">TEST_AUTH_BYPASS path was missing <code>accountId</code> resolution, so all queries with <code>WHERE account_id = $1</code> got NULL. Alert API tests now pass.</div>
+      <div style="font-size:10px; color:#3fb950; margin-top:6px;">COMPLETE &middot; Bug &middot; 593e9bf</div>
+    </div>
 
     <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #3fb950; border-radius:6px; padding:10px; margin-bottom:8px;">
       <div style="font-size:12px; font-weight:600; color:#f0f6fc;">Guest view: event details, usage count, data sources preview</div>
