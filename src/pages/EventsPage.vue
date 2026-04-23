@@ -498,6 +498,12 @@ function revenueSourceTooltip(src: RevenueKind): string {
   }
 }
 
+const accountHasRevenue = computed(() =>
+  (eventsData.value?.events ?? []).some(
+    (e) => e.revenue_amount != null && e.revenue_amount > 0,
+  ),
+);
+
 function marginForEvent(event: ObserveEvent): number | null {
   if (
     event.revenue_amount == null ||
@@ -1341,7 +1347,10 @@ responseBody: { content: res.content },</code></pre>
                         >Feature: {{ eventDetails[event.id].feature_key }}</span
                       >
                       <span
-                        v-if="eventDetails[event.id].revenue_source"
+                        v-if="
+                          eventDetails[event.id].revenue_source &&
+                          eventDetails[event.id].revenue_source !== 'none'
+                        "
                         :title="
                           revenueSourceTooltip(
                             eventDetails[event.id].revenue_source,
@@ -1355,6 +1364,25 @@ responseBody: { content: res.content },</code></pre>
                           ) || eventDetails[event.id].revenue_source
                         }}
                       </span>
+                    </div>
+                    <!-- Revenue onboarding hint -->
+                    <div
+                      v-if="
+                        eventDetails[event.id].revenue_source === 'none' &&
+                        !accountHasRevenue
+                      "
+                      class="text-xs text-muted-foreground border-t pt-2 mt-1"
+                    >
+                      Revenue not configured yet.
+                      <router-link
+                        to="/data-sources#stripe-section"
+                        class="text-primary hover:underline"
+                        @click.stop
+                        >Connect Stripe</router-link
+                      >
+                      or send
+                      <code class="font-mono text-[11px]">revenueAmount</code>
+                      on events.
                     </div>
                   </div>
                   <div

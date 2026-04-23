@@ -1531,9 +1531,9 @@ export function createEventsRoutes(
           return res.status(400).json({ error: "featureKey is required" });
         }
 
-        const model = "gpt-4o-mini";
-        const inputTokens = 100;
-        const outputTokens = 50;
+        const model = "gpt-4o";
+        const inputTokens = 1000;
+        const outputTokens = 500;
         const cost = await calcCostFromDb(
           pool,
           model,
@@ -1542,19 +1542,46 @@ export function createEventsRoutes(
           userId,
         );
 
+        const requestBody = JSON.stringify({
+          messages: [
+            {
+              role: "system",
+              content: `You are a helpful assistant for the "${featureKey}" feature.`,
+            },
+            {
+              role: "user",
+              content:
+                "Summarize the key metrics from last week's usage report.",
+            },
+          ],
+        });
+        const responseBody = JSON.stringify({
+          choices: [
+            {
+              message: {
+                role: "assistant",
+                content:
+                  "Last week's usage highlights:\n\n1. **Total requests**: 12,847 (+18% WoW)\n2. **Avg latency**: 340ms (down from 380ms)\n3. **Top model**: gpt-4o (62% of calls)\n4. **Cost**: $47.20 (within budget)\n\nNotable: Cache hit rate improved to 34%, saving ~$16 in redundant calls.",
+              },
+            },
+          ],
+        });
+
         const insertResult = await pool.query(
           `INSERT INTO observe_events (
              user_id, account_id, customer_id, feature_key, event_name, timestamp,
              cost_amount, cost_unit, revenue_amount, usage_units,
              model, model_provider, source, granularity, is_inferred,
              idempotency_key, revenue_source, duration_ms, cost_type,
-             input_tokens, output_tokens, tokens_source
+             input_tokens, output_tokens, tokens_source,
+             request_body, response_body
            ) VALUES (
              $1, $2, 'test_customer', $3, 'test_event', NOW(),
              $4, 'usd', 0, $5,
              $6, 'openai', 'sdk', 'event', false,
              $7, 'none', 500, 'llm',
-             $8, $9, 'direct'
+             $8, $9, 'direct',
+             $10::jsonb, $11::jsonb
            )
            ON CONFLICT (account_id, idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING
            RETURNING *`,
@@ -1568,6 +1595,8 @@ export function createEventsRoutes(
             `test-${Date.now()}`,
             inputTokens,
             outputTokens,
+            requestBody,
+            responseBody,
           ],
         );
 
