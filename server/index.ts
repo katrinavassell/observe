@@ -503,8 +503,7 @@ async function _doDbInit() {
     await pool
       .query(
         `CREATE UNIQUE INDEX IF NOT EXISTS idx_customers_account_customer
-           ON customers (account_id, customer_id)
-          WHERE account_id IS NOT NULL`,
+           ON customers (account_id, customer_id)`,
       )
       .catch((err) => console.error("Stage 6 customers unique index:", err));
 
