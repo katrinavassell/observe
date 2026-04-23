@@ -653,20 +653,6 @@ accounts ┘                   │
          price.recurring.usage_type === "metered"). Test Stripe prices were
          standard recurring, not metered. Not a code bug. -->
 
-    <!-- ── Schema cleanup backlog (2026-04-23) ── -->
-
-    <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #a371f7; border-radius:6px; padding:10px; margin-bottom:8px;">
-      <div style="font-size:12px; font-weight:600; color:#f0f6fc;">Drop <code>users.stripe_customer_id</code> column</div>
-      <div style="font-size:11px; color:#8b949e; margin-top:4px;">Legacy column. Data already migrated to <code>accounts.stripe_customer_id</code>. Two startup migrations (Stage 1, Stage 4 in index.ts) still read it for backfill. Update migrations to skip the users column read, then drop it. <code>customers.stripe_customer_id</code> is separate and must stay (app-to-Stripe ID bridge for revenue enrichment).</div>
-      <div style="font-size:10px; color:#a371f7; margin-top:6px;">CLEANUP &middot; Schema &middot; server/index.ts</div>
-    </div>
-
-    <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #a371f7; border-radius:6px; padding:10px; margin-bottom:8px;">
-      <div style="font-size:12px; font-weight:600; color:#f0f6fc;">Remove dead invoice sync endpoint</div>
-      <div style="font-size:11px; color:#8b949e; margin-top:4px;">POST <code>/data/stripe-invoices</code> in data.ts creates <code>observe_events</code> with <code>source='stripe'</code>, but every analytics query excludes <code>source='stripe'</code>. Revenue comes from subscription MRR via backfill, not invoices. Endpoint is dead weight. Was also the root cause of BUG-007 (resync deleted these events permanently). Remove endpoint and related code.</div>
-      <div style="font-size:10px; color:#a371f7; margin-top:6px;">CLEANUP &middot; Dead Code &middot; server/routes/data.ts</div>
-    </div>
-
   </div>
 
   <!-- IN PROGRESS -->
