@@ -544,13 +544,20 @@ const isFlat = computed(() => cohortCustomer.value?.pricing_model === "flat");
                     {{ fmt(f.total_cost) }}
                   </td>
                   <td class="px-3 py-2 text-right font-mono">
-                    <Badge
-                      v-if="f.total_revenue === 0 && isFlat"
-                      variant="secondary"
-                      class="text-[10px] font-medium"
-                    >
-                      Bundled
-                    </Badge>
+                    <Tooltip v-if="f.total_revenue === 0 && isFlat">
+                      <TooltipTrigger as-child>
+                        <Badge
+                          variant="secondary"
+                          class="text-[10px] font-medium cursor-help"
+                        >
+                          Bundled
+                        </Badge>
+                      </TooltipTrigger>
+                      <TooltipContent class="max-w-xs"
+                        >Flat-rate subscription revenue is tracked at the
+                        customer level, not per feature.</TooltipContent
+                      >
+                    </Tooltip>
                     <template v-else>{{ fmt(f.total_revenue) }}</template>
                   </td>
                   <td
@@ -569,13 +576,20 @@ const isFlat = computed(() => cohortCustomer.value?.pricing_model === "flat");
                       'text-muted-foreground': f.total_revenue === 0,
                     }"
                   >
-                    <Badge
-                      v-if="f.total_revenue === 0 && isFlat"
-                      variant="secondary"
-                      class="text-[10px] font-medium"
-                    >
-                      Bundled
-                    </Badge>
+                    <Tooltip v-if="f.total_revenue === 0 && isFlat">
+                      <TooltipTrigger as-child>
+                        <Badge
+                          variant="secondary"
+                          class="text-[10px] font-medium cursor-help"
+                        >
+                          Bundled
+                        </Badge>
+                      </TooltipTrigger>
+                      <TooltipContent class="max-w-xs"
+                        >Flat-rate subscription revenue is tracked at the
+                        customer level, not per feature.</TooltipContent
+                      >
+                    </Tooltip>
                     <template v-else-if="f.total_revenue > 0">
                       {{
                         Math.round(
@@ -657,13 +671,20 @@ const isFlat = computed(() => cohortCustomer.value?.pricing_model === "flat");
                     {{ fmt(m.total_cost) }}
                   </td>
                   <td class="px-3 py-2 text-right font-mono">
-                    <Badge
-                      v-if="m.total_revenue === 0 && isFlat"
-                      variant="secondary"
-                      class="text-[10px] font-medium"
-                    >
-                      Bundled
-                    </Badge>
+                    <Tooltip v-if="m.total_revenue === 0 && isFlat">
+                      <TooltipTrigger as-child>
+                        <Badge
+                          variant="secondary"
+                          class="text-[10px] font-medium cursor-help"
+                        >
+                          Bundled
+                        </Badge>
+                      </TooltipTrigger>
+                      <TooltipContent class="max-w-xs"
+                        >Flat-rate subscription revenue is tracked at the
+                        customer level, not per model.</TooltipContent
+                      >
+                    </Tooltip>
                     <template v-else>{{ fmt(m.total_revenue) }}</template>
                   </td>
                   <td
@@ -682,13 +703,20 @@ const isFlat = computed(() => cohortCustomer.value?.pricing_model === "flat");
                       'text-muted-foreground': m.total_revenue === 0,
                     }"
                   >
-                    <Badge
-                      v-if="m.total_revenue === 0 && isFlat"
-                      variant="secondary"
-                      class="text-[10px] font-medium"
-                    >
-                      Bundled
-                    </Badge>
+                    <Tooltip v-if="m.total_revenue === 0 && isFlat">
+                      <TooltipTrigger as-child>
+                        <Badge
+                          variant="secondary"
+                          class="text-[10px] font-medium cursor-help"
+                        >
+                          Bundled
+                        </Badge>
+                      </TooltipTrigger>
+                      <TooltipContent class="max-w-xs"
+                        >Flat-rate subscription revenue is tracked at the
+                        customer level, not per model.</TooltipContent
+                      >
+                    </Tooltip>
                     <template v-else-if="m.total_revenue > 0">
                       {{
                         Math.round(
