@@ -36,6 +36,6 @@ const badgeClass = computed(() => {
 
 const formattedMargin = computed(() => {
   if (props.margin === null) return "—";
-  return `${props.margin}%`;
+  return `${Math.round(props.margin)}%`;
 });
 </script>
