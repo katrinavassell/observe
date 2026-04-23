@@ -604,6 +604,9 @@ async function _doDbInit() {
     await pool.query(
       `ALTER TABLE customers ADD COLUMN IF NOT EXISTS stripe_customer_id TEXT`,
     );
+    await pool
+      .query(`ALTER TABLE customers ALTER COLUMN user_id DROP NOT NULL`)
+      .catch(() => {});
 
     await pool
       .query(
