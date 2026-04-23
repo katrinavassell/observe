@@ -812,7 +812,7 @@ function relativeTime(dateStr: string) {
 
     <!-- Empty state (logged-in only — guests see the CTA above) -->
     <div
-      v-else-if="!isLoading && isLoggedIn"
+      v-else-if="!isLoading && isLoggedIn && !showForm"
       class="flex flex-col items-center justify-center py-16 text-center max-w-md mx-auto"
     >
       <Bell class="h-10 w-10 text-muted-foreground/40 mb-3" />

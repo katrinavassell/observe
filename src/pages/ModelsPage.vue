@@ -130,7 +130,10 @@ const models = computed(() =>
 );
 
 function formatDate(ts: string) {
-  return new Date(ts).toLocaleDateString();
+  return new Date(ts).toLocaleString(undefined, {
+    dateStyle: "short",
+    timeStyle: "short",
+  });
 }
 
 const providerColors: Record<string, string> = {

@@ -257,6 +257,7 @@ function retry() {
                 ? 'destructive'
                 : 'warning'
             "
+            :title="`Data confidence: ${dataConfidence.label}. Send more events for higher accuracy.`"
           >
             {{ dataConfidence.label }} &middot; {{ totalEvents }} events
           </Badge>
