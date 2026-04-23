@@ -634,6 +634,12 @@ accounts ┘                   │
     </div>
 
     <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #a371f7; border-radius:6px; padding:10px; margin-bottom:8px;">
+      <div style="font-size:12px; font-weight:600; color:#f0f6fc;">Data quality advisor with actionable remediation</div>
+      <div style="font-size:11px; color:#8b949e; margin-top:4px;">API endpoint exists (GET /insights/data-quality). Needs: UI with per-advisory actions (merge duplicates, re-sync Stripe, resolve names). Consider AI fuzzy matching for near-duplicate customers. UI was removed because advisories without actions were confusing.</div>
+      <div style="font-size:10px; color:#a371f7; margin-top:6px;">ROADMAP &middot; Platform</div>
+    </div>
+
+    <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #a371f7; border-radius:6px; padding:10px; margin-bottom:8px;">
       <div style="font-size:12px; font-weight:600; color:#f0f6fc;">Expansion/contraction signal from MRR movement</div>
       <div style="font-size:11px; color:#8b949e; margin-top:4px;">Surface MRR movement category (new, expansion, contraction, churned) as a signal on Customer Detail. Data exists in mrr_movements endpoint but isn't wired to signals yet.</div>
       <div style="font-size:10px; color:#a371f7; margin-top:6px;">ROADMAP &middot; Signals</div>
@@ -720,9 +726,15 @@ accounts ┘                   │
     </div>
 
     <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #3fb950; border-radius:6px; padding:10px; margin-bottom:8px;">
-      <div style="font-size:12px; font-weight:600; color:#f0f6fc;">Data quality advisor (rule-based + LLM)</div>
-      <div style="font-size:11px; color:#8b949e; margin-top:4px;">SQL-based checks for duplicate customers, missing subscriptions, revenue gaps, unresolved names. Optional LLM summary via existing insights infra. Displayed on Data Sources page.</div>
-      <div style="font-size:10px; color:#3fb950; margin-top:6px;">COMPLETE &middot; Platform &middot; bfdd89b</div>
+      <div style="font-size:12px; font-weight:600; color:#f0f6fc;">Data quality advisor API (rule-based + LLM)</div>
+      <div style="font-size:11px; color:#8b949e; margin-top:4px;">GET /insights/data-quality: SQL checks for duplicate customers, missing subs, revenue gaps, unresolved names, inactive subs with active usage. Optional LLM summary. UI removed &mdash; endpoint stays for future use when actionable remediation is added.</div>
+      <div style="font-size:10px; color:#3fb950; margin-top:6px;">COMPLETE &middot; Platform &middot; bfdd89b, 3cdcb58</div>
+    </div>
+
+    <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #3fb950; border-radius:6px; padding:10px; margin-bottom:8px;">
+      <div style="font-size:12px; font-weight:600; color:#f0f6fc;">Fix 4 customer detail audit issues</div>
+      <div style="font-size:11px; color:#8b949e; margin-top:4px;">Avg Events/Day was 0 (divided by months*30 instead of active days). Chart date "Apr 26" ambiguous (now "Apr 2026"). Inactive signal fired on paying customers with active subs (now suppressed). Chart legend inconsistently showed "MRR" vs "Revenue" (now always "Revenue").</div>
+      <div style="font-size:10px; color:#3fb950; margin-top:6px;">COMPLETE &middot; UX &middot; ffebcdd</div>
     </div>
 
     <div style="background:#0d1117; border:1px solid #30363d; border-left:3px solid #3fb950; border-radius:6px; padding:10px; margin-bottom:8px;">
