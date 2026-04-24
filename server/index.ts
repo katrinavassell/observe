@@ -31,6 +31,9 @@ import {
   createInferenceRoutes,
   computeInferenceProfiles,
 } from "./routes/inference.js";
+import { createDataManagementRoutes } from "./routes/data-management.js";
+import { createDataUploadRoutes } from "./routes/data-uploads.js";
+import { createStripeRoutes } from "./routes/stripe-routes.js";
 
 const app = express();
 
@@ -218,6 +221,20 @@ app.use(createInferenceRoutes(pool, ensureVisitor));
 app.use(createA2ARoutes(pool, ensureVisitor));
 app.use(createCloudCostRoutes(pool, ensureVisitor));
 app.use(createBackfillRoutes(pool, ensureVisitor));
+app.use(createDataManagementRoutes(pool, ensureVisitor));
+app.use(
+  createDataUploadRoutes(pool, ensureVisitor, {
+    checkBillingFeatureAccess,
+    trackBillingUsage,
+    convertReferralIfPending,
+  }),
+);
+app.use(
+  createStripeRoutes(pool, ensureVisitor, {
+    trackBillingUsage,
+    convertReferralIfPending,
+  }),
+);
 
 // ─── Weekly digest (cloud-only, manual trigger for admin) ───────────────────
 import { runWeeklyDigest } from "./digest.js";
