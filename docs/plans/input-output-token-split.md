@@ -2,7 +2,7 @@
 
 ## Why
 
-Input and output tokens have **different prices** on every major provider (GPT-4o: 4×, Claude Sonnet/Opus: 5×). The SDK already sends them as separate fields (`inputTokens`, `outputTokens`), and `calculateCostFromTokens` in `server/model-pricing.ts:715` already prices them correctly. But at ingest time in `server/routes/events.ts:928`, we **sum them into one `usage_units` column** and throw the split away.
+Input and output tokens have **different prices** on every major provider (GPT-4o: 4×, Claude Sonnet/Opus: 5×). The SDK already sends them as separate fields (`inputTokens`, `outputTokens`), and `calculateCostFromTokens` in `server/model-pricing.ts:715` already prices them correctly. But at ingest time in `server/routes/events-ingest.ts`, we **sum them into one `usage_units` column** and throw the split away.
 
 Consequences:
 - Historical cost is only as accurate as the ingest-time calc. We can't recompute it if pricing changes.
@@ -35,17 +35,17 @@ ALTER TABLE observe_events ADD COLUMN IF NOT EXISTS output_tokens INT;
 
 Nullable, no default. Old rows stay NULL (we don't know the split). New rows populate both. `usage_units` stays — it's the only signal we have for non-LLM events (custom `usageUnits` like messages or API calls).
 
-### 2. Ingest — `server/routes/events.ts`
+### 2. Ingest — `server/routes/events-ingest.ts`
 
 - Line ~917: extend the VALUES placeholder set by 2 params
 - Line ~928: keep `usage_units` as is (backward-compatible fallback for non-LLM events)
 - Add: `evt.inputTokens ?? null`, `evt.outputTokens ?? null`
 - Update the `INSERT INTO observe_events (...)` column list at line ~938 to include `input_tokens`, `output_tokens`
 
-### 3. GET events — `server/routes/events.ts`
+### 3. GET events — `server/routes/events-list.ts`
 
 - `coerceEventRow` (or wherever row-shape is normalized) — expose `input_tokens`, `output_tokens` in the response
-- `ObserveEvent` type in `src/lib/api.ts` — add both fields as `number | null`
+- `ObserveEvent` type in `src/lib/api/events.ts` — add both fields as `number | null`
 
 ### 4. UI — `src/pages/EventsPage.vue`
 

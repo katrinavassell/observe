@@ -6,7 +6,7 @@ For detailed API docs on specific subsystems, see the [api/](./api/) directory.
 
 ## Authentication
 
-Account-based auth with email/password. Session cookies are used for all authenticated requests. Include `credentials: 'include'` in fetch calls (handled by `src/lib/api.ts`).
+Account-based auth with email/password. Session cookies are used for all authenticated requests. Include `credentials: 'include'` in fetch calls (handled by `src/lib/api/base.ts`).
 
 Rate limited: 20 auth attempts per 15 minutes.
 

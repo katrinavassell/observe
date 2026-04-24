@@ -36,7 +36,7 @@ Common issues and how to fix them.
 
 - **Cross-origin mismatch.** The `ALLOWED_ORIGINS` environment variable must include your frontend URL (e.g., `http://localhost:5173`). Without this, the browser blocks the `Set-Cookie` header.
 
-- **Missing credentials in fetch.** All API calls must include `credentials: 'include'`. This is handled by `src/lib/api.ts` -- if you're making direct fetch calls elsewhere, add it manually.
+- **Missing credentials in fetch.** All API calls must include `credentials: 'include'`. This is handled by `src/lib/api/base.ts` -- if you're making direct fetch calls elsewhere, add it manually.
 
 - **Secure cookies in dev.** When `NODE_ENV=production`, cookies are set with `Secure: true`, which requires HTTPS. For local development, use `NODE_ENV=development` (or don't set it) so cookies work over HTTP.
 
