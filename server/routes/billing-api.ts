@@ -13,7 +13,7 @@ import {
   getBonusCredits,
   CREDIT_REWARDS,
 } from "../billing.js";
-import { calculateCostFromTokens as calcCostFromDb } from "../model-pricing.js";
+import { calculateCostFromTokens } from "../model-pricing.js";
 import { syncStripeDataForUser } from "./integrations.js";
 
 type TrackBillingUsageFn = (
@@ -916,7 +916,7 @@ export function createBillingApiRoutes(
                     const modelName = result.snapshot_id || "unknown";
                     const inputTokens = result.input_tokens || 0;
                     const outputTokens = result.output_tokens || 0;
-                    const cost = await calcCostFromDb(
+                    const cost = await calculateCostFromTokens(
                       pool,
                       modelName,
                       inputTokens,
@@ -1122,7 +1122,7 @@ export function createBillingApiRoutes(
                 const entryDate = entry.date
                   ? new Date(entry.date).toISOString()
                   : new Date().toISOString();
-                const cost = await calcCostFromDb(
+                const cost = await calculateCostFromTokens(
                   pool,
                   modelName,
                   inputTokens,

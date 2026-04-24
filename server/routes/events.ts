@@ -9,7 +9,7 @@ import {
   getStripeClientForUser,
 } from "../stripe-client.js";
 import {
-  calculateCostFromTokens as calcCostFromDb,
+  calculateCostFromTokens,
   resolveModelPricing,
   type ModelPrice,
 } from "../model-pricing.js";
@@ -1202,7 +1202,7 @@ export function createEventsRoutes(
           // Auto-calculate cost from model + tokens if costAmount not provided
           const cost =
             evt.costAmount ??
-            (await calcCostFromDb(
+            (await calculateCostFromTokens(
               pool,
               evt.model,
               evt.inputTokens,
@@ -1563,7 +1563,7 @@ export function createEventsRoutes(
         const model = "gpt-4o";
         const inputTokens = 1000;
         const outputTokens = 500;
-        const cost = await calcCostFromDb(
+        const cost = await calculateCostFromTokens(
           pool,
           model,
           inputTokens,

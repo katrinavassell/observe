@@ -2,7 +2,7 @@ import { Router, Request, Response } from "express";
 import type { Pool } from "pg";
 import crypto from "crypto";
 import { type AuthRequest } from "./auth.js";
-import { calculateCostFromTokens as calcCostFromDb } from "../model-pricing.js";
+import { calculateCostFromTokens } from "../model-pricing.js";
 import { checkAlerts } from "./alerts.js";
 import { enrichRevenue } from "../lib/enrich-revenue.js";
 
@@ -191,7 +191,7 @@ export function createProxyRoutes(
     inputTokens: number,
     outputTokens: number,
   ): Promise<number> {
-    return calcCostFromDb(pool, model, inputTokens, outputTokens);
+    return calculateCostFromTokens(pool, model, inputTokens, outputTokens);
   }
 
   async function resolveProxyUserId(
@@ -787,7 +787,7 @@ export function createProxyRoutes(
         const respModel = (data.model as string) || model;
         const inputTokens = usage.input_tokens || 0;
         const outputTokens = usage.output_tokens || 0;
-        const cost = await calcCostFromDb(
+        const cost = await calculateCostFromTokens(
           pool,
           respModel,
           inputTokens,
