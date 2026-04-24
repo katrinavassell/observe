@@ -507,8 +507,12 @@ const filteredPricing = computed(() => {
         <Tooltip v-for="p in costByProvider" :key="p.provider">
           <TooltipTrigger as-child>
             <div
-              :style="{ width: `${p.pct}%`, backgroundColor: p.color }"
-              class="h-full transition-all"
+              :style="{
+                width: `${p.pct}%`,
+                backgroundColor: p.color,
+                height: '100%',
+              }"
+              class="transition-all"
             />
           </TooltipTrigger>
           <TooltipContent

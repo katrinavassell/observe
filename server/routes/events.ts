@@ -231,19 +231,29 @@ async function sendUsageLimitEmail(
 
   usageAlertsSent.add(key);
 
-  fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${resendKey}`,
-    },
-    body: JSON.stringify({
-      from: "Observe <kat@tansohq.com>",
-      to: email,
-      subject,
-      html: body,
-    }),
-  })
+  const sendEmail = (to: string | string[], subj: string, html: string) =>
+    fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${resendKey}`,
+      },
+      body: JSON.stringify({
+        from: "Observe <kat@tansohq.com>",
+        to,
+        subject: subj,
+        html,
+      }),
+    });
+
+  Promise.allSettled([
+    sendEmail(email, subject, body),
+    sendEmail(
+      ["kat@tansohq.com", "doug@tansohq.com"],
+      `[Internal] ${subject}: ${email}`,
+      `<p><strong>${email}</strong> hit ${threshold}% usage (${used.toLocaleString()} / ${limit.toLocaleString()} events).</p>`,
+    ),
+  ])
     .then(() =>
       console.warn("Usage alert sent:", { email, threshold, used, limit }),
     )
