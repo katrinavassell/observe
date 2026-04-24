@@ -98,6 +98,10 @@
   <a href="#api-analytics">Analytics</a>
   <a href="#api-integrations">Integrations</a>
   <a href="#api-proxy">Proxy/Gateway</a>
+  <a href="#emails" class="section-head">Emails (Resend)</a>
+  <a href="#emails-lifecycle">Lifecycle</a>
+  <a href="#emails-alerts">Alerts</a>
+  <a href="#emails-internal">Internal</a>
   <a href="#changelog" class="section-head">Changelog</a>
 </nav>
 
@@ -971,6 +975,83 @@ accounts ┘                   │
   <tr><td><code>/v1/messages</code></td><td>POST</td><td>Anthropic Messages proxy</td></tr>
   <tr><td><code>/v1/embeddings</code></td><td>POST</td><td>Embedding proxy</td></tr>
   <tr><td><code>/gateway/configs</code></td><td>GET/POST</td><td>Routing configurations</td></tr>
+</table>
+
+<!-- ────────────────── EMAILS ────────────────── -->
+<h2 id="emails">Emails (Resend)</h2>
+<p>All transactional emails sent via <a href="https://resend.com" style="color:#79c0ff;">Resend</a>. Requires <code>RESEND_API_KEY</code> env var. Emails degrade gracefully — all sends are skipped when the key is missing.</p>
+
+<h3 id="emails-lifecycle">Lifecycle (user-facing)</h3>
+<table>
+  <tr><th>Email</th><th>Trigger</th><th>From</th><th>Subject</th><th>Source</th></tr>
+  <tr>
+    <td><strong>Welcome</strong></td>
+    <td>New account created</td>
+    <td><code>Kat from Observe &lt;kat@tansohq.com&gt;</code></td>
+    <td>Welcome to Observe</td>
+    <td><code>server/routes/auth.ts</code></td>
+  </tr>
+  <tr>
+    <td><strong>Usage warning (80%)</strong></td>
+    <td>Event count hits 80% of monthly limit</td>
+    <td><code>Observe &lt;kat@tansohq.com&gt;</code></td>
+    <td>You're approaching your monthly event limit</td>
+    <td><code>server/routes/events.ts</code></td>
+  </tr>
+  <tr>
+    <td><strong>Usage limit reached (100%)</strong></td>
+    <td>Event count hits monthly limit</td>
+    <td><code>Observe &lt;kat@tansohq.com&gt;</code></td>
+    <td>Monthly event limit reached</td>
+    <td><code>server/routes/events.ts</code></td>
+  </tr>
+  <tr>
+    <td><strong>Weekly digest</strong></td>
+    <td>Scheduled (weekly, cloud-only)</td>
+    <td><code>Observe &lt;ALERT_FROM_EMAIL&gt;</code></td>
+    <td>Your Observe weekly digest</td>
+    <td><code>server/digest.ts</code></td>
+  </tr>
+</table>
+<p style="color:#8b949e;font-size:12px;margin-top:4px;">Usage alerts are deduplicated per user per month per threshold — won't re-send for the same tier in the same billing cycle.</p>
+
+<h3 id="emails-alerts">Alerts (user-facing)</h3>
+<table>
+  <tr><th>Email</th><th>Trigger</th><th>From</th><th>Subject pattern</th><th>Source</th></tr>
+  <tr>
+    <td><strong>Metric alert</strong></td>
+    <td>Alert rule fires (daily cost, margin %, concentration)</td>
+    <td><code>ALERT_FROM_EMAIL</code></td>
+    <td>Alert: {name} — {metric} {op} {threshold}</td>
+    <td><code>server/routes/alerts.ts</code></td>
+  </tr>
+  <tr>
+    <td><strong>Customer alert</strong></td>
+    <td>Per-customer alert rule fires</td>
+    <td><code>ALERT_FROM_EMAIL</code></td>
+    <td>Alert: {customerName} — {triggerType}</td>
+    <td><code>server/routes/alerts.ts</code></td>
+  </tr>
+</table>
+<p style="color:#8b949e;font-size:12px;margin-top:4px;">Both alert types include a Tanso upsell block when a matching metric exists in TANSO_UPSELLS. Customer alerts link directly to the customer detail page.</p>
+
+<h3 id="emails-internal">Internal (team-only)</h3>
+<table>
+  <tr><th>Email</th><th>Trigger</th><th>To</th><th>Subject pattern</th><th>Source</th></tr>
+  <tr>
+    <td><strong>New signup</strong></td>
+    <td>New account created</td>
+    <td>kat@tansohq.com, doug@tansohq.com</td>
+    <td>New signup: {email}</td>
+    <td><code>server/routes/auth.ts</code></td>
+  </tr>
+  <tr>
+    <td><strong>Feedback received</strong></td>
+    <td>User submits in-app feedback</td>
+    <td>kat@tansohq.com, doug@tansohq.com</td>
+    <td>Feedback from {name}</td>
+    <td><code>server/routes/billing-api.ts</code></td>
+  </tr>
 </table>
 
 <!-- ────────────────── CHANGELOG ────────────────── -->

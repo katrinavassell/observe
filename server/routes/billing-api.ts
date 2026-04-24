@@ -282,7 +282,7 @@ export function createBillingApiRoutes(
               Authorization: `Bearer ${resendKey}`,
             },
             body: JSON.stringify({
-              from: "Observe <notifications@updates.tanso.io>",
+              from: "Observe <kat@tansohq.com>",
               to: ["kat@tansohq.com", "doug@tansohq.com"],
               subject: `Feedback from ${senderName}`,
               html: `<p><strong>From:</strong> ${senderName} (${sender})</p><p>${message.trim()}</p>`,
