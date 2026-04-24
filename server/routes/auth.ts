@@ -532,7 +532,7 @@ export function createAuthRoutes(
               to: email,
               subject: "Welcome to Observe",
               html: `<p>Hey there!</p>
-<p>Just wanted to say thank you for signing up for Observe by Tanso! Would love to learn about what you're building and what brought you to Observe.</p>
+<p>Just wanted to say thank you for signing up for Observe by Tanso! Would love to learn about what you're building and what brought you here.</p>
 <p>Feel free to reach out with any questions or feedback. Also down to hop on a quick call if that's easier: <a href="https://cal.com/katrina-laszlo/meeting">https://cal.com/katrina-laszlo/meeting</a></p>
 <p>Kat<br/>Co-founder, Tanso</p>`,
             }),
