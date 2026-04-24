@@ -504,19 +504,13 @@ const filteredPricing = computed(() => {
     <div v-if="costByProvider.length > 0" class="rounded-lg border bg-card p-4">
       <div class="text-xs text-muted-foreground mb-2">Cost by Provider</div>
       <div class="flex h-5 w-full rounded-full overflow-hidden bg-muted">
-        <Tooltip v-for="p in costByProvider" :key="p.provider">
-          <TooltipTrigger as-child>
-            <div
-              :style="{ width: `${p.pct}%`, backgroundColor: p.color }"
-              class="h-full transition-all"
-            />
-          </TooltipTrigger>
-          <TooltipContent
-            >{{ p.provider }}: {{ formatCurrency(p.cost) }} ({{
-              p.pct.toFixed(1)
-            }}%)</TooltipContent
-          >
-        </Tooltip>
+        <div
+          v-for="p in costByProvider"
+          :key="p.provider"
+          :style="{ width: `${p.pct}%`, backgroundColor: p.color }"
+          class="h-full transition-all"
+          :title="`${p.provider}: ${formatCurrency(p.cost)} (${p.pct.toFixed(1)}%)`"
+        />
       </div>
       <div class="flex flex-wrap gap-x-4 gap-y-1 mt-2">
         <div
