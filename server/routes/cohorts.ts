@@ -213,15 +213,16 @@ export function createCohortsRoutes(pool: Pool, ensureVisitor: any) {
              WHERE account_id = $1 AND feature_key IS NOT NULL`,
             [accountId],
           ),
-          // 3. Subscription revenue per customer
+          // 3. Subscription revenue per customer (bridged via customers.stripe_customer_id)
           pool.query(
-            `SELECT s.customer_id,
+            `SELECT COALESCE(c.customer_id, s.customer_id) AS customer_id,
                     COALESCE(SUM(COALESCE(s.mrr_override, p.price_amount)), 0) AS sub_revenue,
                     CASE WHEN COUNT(DISTINCT s.pricing_model) > 1 THEN 'hybrid' ELSE MAX(s.pricing_model) END AS pricing_model
              FROM subscriptions s
              LEFT JOIN plans p ON s.account_id = p.account_id AND s.plan_id = p.plan_id
+             LEFT JOIN customers c ON s.account_id = c.account_id AND c.stripe_customer_id = s.customer_id
              WHERE s.account_id = $1 AND s.is_active = true
-             GROUP BY s.customer_id`,
+             GROUP BY COALESCE(c.customer_id, s.customer_id)`,
             [accountId],
           ),
           // 4. Cost trend: current 30d vs prior 30d per customer
@@ -257,24 +258,26 @@ export function createCohortsRoutes(pool: Pool, ensureVisitor: any) {
              ORDER BY customer_id, model_cost DESC`,
             [accountId],
           ),
-          // 7. Current MRR per customer (active subs)
+          // 7. Current MRR per customer (active subs, bridged via customers.stripe_customer_id)
           pool.query(
-            `SELECT s.customer_id,
+            `SELECT COALESCE(c.customer_id, s.customer_id) AS customer_id,
                     COALESCE(SUM(COALESCE(s.mrr_override, p.price_amount)), 0) AS mrr
              FROM subscriptions s
              LEFT JOIN plans p ON s.account_id = p.account_id AND s.plan_id = p.plan_id
+             LEFT JOIN customers c ON s.account_id = c.account_id AND c.stripe_customer_id = s.customer_id
              WHERE s.account_id = $1 AND s.is_active = true
-             GROUP BY s.customer_id`,
+             GROUP BY COALESCE(c.customer_id, s.customer_id)`,
             [accountId],
           ),
-          // 8. Prior MRR per customer (subs created 60+ days ago)
+          // 8. Prior MRR per customer (subs created 60+ days ago, bridged via customers.stripe_customer_id)
           pool.query(
-            `SELECT s.customer_id,
+            `SELECT COALESCE(c.customer_id, s.customer_id) AS customer_id,
                     COALESCE(SUM(COALESCE(s.mrr_override, p.price_amount)), 0) AS mrr
              FROM subscriptions s
              LEFT JOIN plans p ON s.account_id = p.account_id AND s.plan_id = p.plan_id
+             LEFT JOIN customers c ON s.account_id = c.account_id AND c.stripe_customer_id = s.customer_id
              WHERE s.account_id = $1 AND s.created_at <= NOW() - INTERVAL '60 days'
-             GROUP BY s.customer_id`,
+             GROUP BY COALESCE(c.customer_id, s.customer_id)`,
             [accountId],
           ),
           // 9. Prior-months active-days average — used to contextualize

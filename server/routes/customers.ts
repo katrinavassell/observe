@@ -1013,7 +1013,7 @@ export function createCustomersRoutes(
               [req.accountId!, id],
             ),
             pool.query(
-              `SELECT s.*, p.name as plan_name, p.price_amount FROM subscriptions s LEFT JOIN plans p ON s.account_id = p.account_id AND s.plan_id = p.plan_id WHERE s.account_id = $1 AND s.customer_id = $2`,
+              `SELECT s.*, p.name as plan_name, p.price_amount FROM subscriptions s LEFT JOIN plans p ON s.account_id = p.account_id AND s.plan_id = p.plan_id WHERE s.account_id = $1 AND (s.customer_id = $2 OR s.customer_id = (SELECT stripe_customer_id FROM customers WHERE account_id = $1 AND customer_id = $2))`,
               [req.accountId!, id],
             ),
             pool.query(

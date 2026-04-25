@@ -17,8 +17,8 @@ export function createEventsRoutes(
 ) {
   const router = Router();
 
-  router.use(createEventsListRoutes(pool, ensureVisitor));
   router.use(createEventsAggregationRoutes(pool, ensureVisitor));
+  router.use(createEventsListRoutes(pool, ensureVisitor));
   router.use(createEventsIngestRoutes(pool, ensureVisitor, deps));
 
   return router;

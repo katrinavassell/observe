@@ -21,14 +21,23 @@ export function createAnalyticsReportRoutes(pool: Pool, ensureVisitor: any) {
           `SELECT oe.customer_id,
                 COALESCE(c.name, oe.customer_id) as customer_name,
                 COUNT(*) as event_count,
-                COALESCE(SUM(oe.revenue_amount), 0) as total_revenue,
-                COALESCE(SUM(oe.cost_amount), 0) as total_cost
+                COALESCE(SUM(oe.revenue_amount), 0) as event_revenue,
+                COALESCE(SUM(oe.cost_amount), 0) as total_cost,
+                COALESCE(sub_mrr.mrr, 0) as subscription_mrr
          FROM observe_events oe
          LEFT JOIN customers c ON oe.account_id = c.account_id AND oe.customer_id = c.customer_id
+         LEFT JOIN (
+           SELECT COALESCE(c2.customer_id, s.customer_id) AS customer_id, s.account_id,
+                  SUM(COALESCE(s.mrr_override, 0)) as mrr
+           FROM subscriptions s
+           LEFT JOIN customers c2 ON s.account_id = c2.account_id AND c2.stripe_customer_id = s.customer_id
+           WHERE s.is_active = true
+           GROUP BY COALESCE(c2.customer_id, s.customer_id), s.account_id
+         ) sub_mrr ON oe.account_id = sub_mrr.account_id AND oe.customer_id = sub_mrr.customer_id
          WHERE oe.account_id = $1 AND oe.customer_id IS NOT NULL
            AND (oe.source IS NULL OR oe.source != 'stripe')
-         GROUP BY oe.customer_id, c.name
-         ORDER BY COALESCE(SUM(oe.revenue_amount), 0) - COALESCE(SUM(oe.cost_amount), 0) ASC`,
+         GROUP BY oe.customer_id, c.name, sub_mrr.mrr
+         ORDER BY GREATEST(COALESCE(SUM(oe.revenue_amount), 0), COALESCE(sub_mrr.mrr, 0)) - COALESCE(SUM(oe.cost_amount), 0) ASC`,
           [req.accountId],
         );
 
@@ -47,11 +56,9 @@ export function createAnalyticsReportRoutes(pool: Pool, ensureVisitor: any) {
         }
 
         const customers = result.rows.map((row) => {
-          // PR #94 enriches per-event revenue from the active subscription at
-          // ingest, so observe_events.revenue_amount already includes the
-          // subscription contribution. Summing subscription MRR again here
-          // would double-count.
-          const totalRevenue = parseFloat(row.total_revenue) || 0;
+          const eventRevenue = parseFloat(row.event_revenue) || 0;
+          const subscriptionMrr = parseFloat(row.subscription_mrr) || 0;
+          const totalRevenue = Math.max(eventRevenue, subscriptionMrr);
           const totalCost = parseFloat(row.total_cost) || 0;
           const marginPct =
             totalRevenue > 0
@@ -102,18 +109,29 @@ export function createAnalyticsReportRoutes(pool: Pool, ensureVisitor: any) {
         // 1. Customers with negative margin
         const custResult = await pool.query(
           `SELECT oe.customer_id, COALESCE(c.name, oe.customer_id) as customer_name,
-                COALESCE(SUM(oe.revenue_amount), 0) as total_revenue,
-                COALESCE(SUM(oe.cost_amount), 0) as total_cost
+                COALESCE(SUM(oe.revenue_amount), 0) as event_revenue,
+                COALESCE(SUM(oe.cost_amount), 0) as total_cost,
+                COALESCE(sub_mrr.mrr, 0) as subscription_mrr
          FROM observe_events oe
          LEFT JOIN customers c ON oe.account_id = c.account_id AND oe.customer_id = c.customer_id
+         LEFT JOIN (
+           SELECT COALESCE(c2.customer_id, s.customer_id) AS customer_id, s.account_id,
+                  SUM(COALESCE(s.mrr_override, 0)) as mrr
+           FROM subscriptions s
+           LEFT JOIN customers c2 ON s.account_id = c2.account_id AND c2.stripe_customer_id = s.customer_id
+           WHERE s.is_active = true
+           GROUP BY COALESCE(c2.customer_id, s.customer_id), s.account_id
+         ) sub_mrr ON oe.account_id = sub_mrr.account_id AND oe.customer_id = sub_mrr.customer_id
          WHERE oe.account_id = $1 AND oe.customer_id IS NOT NULL
            AND (oe.source IS NULL OR oe.source != 'stripe')
-         GROUP BY oe.customer_id, c.name
-         HAVING COALESCE(SUM(oe.cost_amount), 0) > COALESCE(SUM(oe.revenue_amount), 0)`,
+         GROUP BY oe.customer_id, c.name, sub_mrr.mrr
+         HAVING COALESCE(SUM(oe.cost_amount), 0) > GREATEST(COALESCE(SUM(oe.revenue_amount), 0), COALESCE(sub_mrr.mrr, 0))`,
           [req.accountId],
         );
         for (const row of custResult.rows) {
-          const rev = parseFloat(row.total_revenue) || 0;
+          const eventRev = parseFloat(row.event_revenue) || 0;
+          const subMrr = parseFloat(row.subscription_mrr) || 0;
+          const rev = Math.max(eventRev, subMrr);
           const cost = parseFloat(row.total_cost) || 0;
           const margin =
             rev > 0 ? Math.round(((rev - cost) / rev) * 100) : -100;
