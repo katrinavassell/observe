@@ -32,7 +32,11 @@ export const SAMPLE_CUSTOMER_IDS = [
   "blazeml",
   "quantumhr",
 ];
-export const SAMPLE_PLAN_IDS = ["starter", "pro", "enterprise"];
+export const SAMPLE_PLAN_IDS = [
+  "_sample_starter",
+  "_sample_pro",
+  "_sample_enterprise",
+];
 
 export async function resolveAccountIdForUser(
   pool: Pool,

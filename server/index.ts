@@ -39,7 +39,7 @@ const app = express();
 
 const pool = new Pg.Pool({
   connectionString: process.env.DATABASE_URL,
-  max: parseInt(process.env.PG_POOL_MAX || "8", 10),
+  max: Math.max(1, parseInt(process.env.PG_POOL_MAX || "8", 10) || 8),
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 5000,
 });
@@ -53,20 +53,12 @@ app.use((req, res, next) => {
   }
 });
 
-// Strip /api prefix so routes work in both dev (Vite proxy) and production (same origin)
-app.use((req, _res, next) => {
-  if (req.path.startsWith("/api/")) {
-    req.url = req.url.replace("/api", "");
-  }
-  next();
-});
-
 // Security headers
 app.use(helmet());
 
 // CORS — restrict to known origins
-const allowedOrigins = process.env.ALLOWED_ORIGINS
-  ? process.env.ALLOWED_ORIGINS.split(",")
+const allowedOrigins = process.env.ALLOWED_ORIGINS?.trim()
+  ? process.env.ALLOWED_ORIGINS.split(",").map((o) => o.trim())
   : ["http://localhost:5000", "http://localhost:5173"];
 app.use(
   cors({
@@ -75,7 +67,7 @@ app.use(
   }),
 );
 
-// Rate limiting
+// Rate limiting — must be mounted BEFORE the /api/ prefix strip
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 20, // 20 attempts per window
@@ -92,6 +84,14 @@ const apiLimiter = rateLimit({
 });
 app.use("/auth/", authLimiter);
 app.use("/api/", apiLimiter);
+
+// Strip /api prefix so routes work in both dev (Vite proxy) and production (same origin)
+app.use((req, _res, next) => {
+  if (req.path.startsWith("/api/")) {
+    req.url = req.url.replace("/api", "");
+  }
+  next();
+});
 
 // Ensure DB tables exist before anything else (critical for serverless cold starts)
 app.use(async (_req: Request, _res: Response, next: NextFunction) => {
@@ -243,7 +243,10 @@ app.post("/admin/digest", ensureVisitor, async (req: any, res: any) => {
     process.env.ADMIN_EMAILS ||
     process.env.ADMIN_EMAIL ||
     ""
-  ).toLowerCase();
+  )
+    .split(",")
+    .map((e: string) => e.trim().toLowerCase())
+    .filter(Boolean);
   if (
     !req.accountEmail ||
     !adminEmails.includes(req.accountEmail.toLowerCase())
