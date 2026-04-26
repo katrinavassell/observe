@@ -1,6 +1,6 @@
 # Database Schema Reference
 
-PostgreSQL with support for standard `pg` driver or `@neondatabase/serverless` (selected via `DB_DRIVER` env var). Data isolation is enforced at the application level -- all queries filter by `user_id` (visitor session ID).
+PostgreSQL with support for standard `pg` driver or `@neondatabase/serverless` (selected via `DB_DRIVER` env var). Data isolation is enforced at the application level -- all queries filter by `account_id` (organization).
 
 ## Overview
 
@@ -20,13 +20,13 @@ PostgreSQL with support for standard `pg` driver or `@neondatabase/serverless` (
 └─────────────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────────────┐
-│                     LEGACY (Pricing Analyzer)                        │
+│                     BILLING & REVENUE                                 │
 │  ┌───────────┐  ┌──────────────┐  ┌───────────────┐                │
 │  │   plans   │  │  customers   │  │ subscriptions │                │
 │  └───────────┘  └──────────────┘  └───────────────┘                │
-│  ┌───────────────┐  ┌───────────────┐  ┌────────────────┐          │
-│  │ usage_records │  │ cost_records  │  │user_data_status│          │
-│  └───────────────┘  └───────────────┘  └────────────────┘          │
+│  ┌──────────────────┐  ┌───────────────┐  ┌────────────────┐       │
+│  │stripe_customers  │  │ cost_records  │  │ usage_records  │       │
+│  └──────────────────┘  └───────────────┘  └────────────────┘       │
 └─────────────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────────────┐
@@ -109,7 +109,7 @@ User accounts for authentication.
 |--------|------|-------------|-------------|
 | `id` | SERIAL | PK | Internal ID |
 | `email` | TEXT | UNIQUE, NOT NULL | Email address |
-| `password_hash` | TEXT | NOT NULL | Legacy column; new rows store `'supabase-managed'` — auth is handled by Supabase |
+| `password_hash` | TEXT | NOT NULL | Legacy column, unused — auth is handled by Clerk |
 | `name` | TEXT | NULL | Display name |
 | `visitor_id` | TEXT | UNIQUE | Linked visitor session |
 | `created_at` | TIMESTAMPTZ | DEFAULT NOW() | Created |
@@ -301,9 +301,9 @@ UNIQUE(user_id, profile_type, scope_key)
 
 ---
 
-## Legacy Tables (Pricing Analyzer)
+## Billing & Revenue Tables
 
-These tables are maintained for backwards compatibility with the pricing analyzer. New data is dual-written to both legacy tables and `observe_events`.
+Tables for customer billing, subscriptions, and revenue data. Populated by Stripe sync and SDK events. Data is dual-written to both these tables and `observe_events`.
 
 ### plans
 

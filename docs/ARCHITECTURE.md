@@ -197,7 +197,7 @@ The sidebar shows these items in order:
 | Team Settings | `/team` | TeamSettingsPage |
 | Admin | `/admin` | AdminPage (visible to @tansohq.com emails only) |
 
-Additional routes (not in sidebar): `/login`, `/signup`, `/forgot-password`, `/reset-password`, `/checkout/success`, `/join/:token`.
+Additional routes (not in sidebar): `/login`, `/signup`, `/checkout/success`, `/join/:token`.
 
 Several legacy routes (`/features`, `/features/:key`, `/customers`, `/customers/:id`, `/insights`, `/pricing`, `/referrals`, `/onboarding`, `/dashboard`, `/analytics`, `/admin/pricing`) redirect to `/` or `/data-sources` or `/models`.
 
@@ -205,7 +205,7 @@ Several legacy routes (`/features`, `/features/:key`, `/customers`, `/customers/
 
 | Composable | Purpose |
 |------------|---------|
-| `useAuth` | Login, signup, logout, password reset, session state |
+| `useAuth` | Clerk auth state, login, signup, logout, session |
 | `useDataMode` | Track data mode (none/sample/user) via `/data/status` |
 | `useOnline` | Detect network connectivity for offline-aware UI |
 | `useTeam` | Fetch team info, roles, manage invites |
@@ -222,7 +222,7 @@ Single Express app on port 3001, proxied by Vite at `/api/*`. The `/api` prefix 
 
 | Module | Purpose |
 |--------|---------|
-| `auth.ts` | Signup, login, logout, password reset, session init |
+| `auth.ts` | Clerk JWT verification, session init, team management |
 | `data.ts` | CSV upload, Stripe sync, data status |
 | `billing-api.ts` | Billing status, Stripe checkout/portal/webhook, feature pricing, integrations, referrals |
 | `events.ts` | Event CRUD, aggregations (by-feature/customer/model/agent/cost-type), traces, SDK key management, batch ingestion with usage limit enforcement |
@@ -296,7 +296,7 @@ PostgreSQL with support for both standard `pg` driver and `@neondatabase/serverl
 
 ### Core Tables
 - `observe_events` -- unified event store for all data
-- `accounts` -- user accounts with hashed passwords
+- `accounts` -- user accounts (auth via Clerk)
 - `organizations` / `organization_members` / `visitor_org_map` -- team structure
 - `sdk_api_keys` -- API keys for programmatic event ingestion
 - `integrations` -- connected API key providers (OpenAI, Anthropic, Stripe)
@@ -313,7 +313,7 @@ PostgreSQL with support for both standard `pg` driver and `@neondatabase/serverl
 - `tanso_customers` -- Tanso billing customer mapping
 - `referral_codes`, `referrals`, `referral_credits` -- referral program
 - `integration_requests` -- interest capture for future integrations
-- `password_reset_tokens` -- password reset flow
+- `password_reset_tokens` -- legacy, unused (Clerk handles password reset)
 
 See [DATABASE.md](./DATABASE.md) for full schema reference.
 

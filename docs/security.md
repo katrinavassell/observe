@@ -4,14 +4,13 @@ Technical reference for the Observe project's security architecture.
 
 ## Authentication
 
-- Email/password auth is handled by Supabase Auth. The server verifies Supabase JWTs on each request via `supabase.auth.getUser(token)` in `ensureVisitor` middleware.
-- No local password hashing — the legacy `accounts.password_hash` column stores the literal `'supabase-managed'` for rows created after the Supabase migration.
-- Password reset is handled by Supabase.
+- Authentication is handled by Clerk. The server verifies Clerk JWTs via `@clerk/backend` in the `ensureVisitor` middleware.
+- The legacy `accounts.password_hash` column is unused — Clerk manages all credential storage and password reset.
 - Demo mode allows unauthenticated exploration with sample data (no account required).
 
 ## Data Isolation
 
-- All database queries filter by `user_id` (visitor session ID). Each user only sees their own data — no cross-tenant access.
+- All database queries filter by `account_id` (organization). Each account only sees their own data — no cross-tenant access.
 - Team access: the `visitor_org_map` table maps visitors to organizations for shared data access.
 - Organization members can have `admin` or `viewer` role.
 - The `ensureVisitor` middleware creates a visitor ID if one is not already present in the session.
