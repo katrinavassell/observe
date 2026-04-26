@@ -301,7 +301,7 @@ export async function syncStripeDataForUser(
       customerId: sub.customer as string,
       priceId: firstPriceId,
       productName: priceToProductName.get(firstPriceId) || "subscription",
-      isActive: sub.status === "active",
+      isActive: ["active", "trialing", "past_due"].includes(sub.status),
       mrr: Math.round(aggregatedMrr * 100) / 100,
       pricingModel,
       pricingTiers: tieredPayload,

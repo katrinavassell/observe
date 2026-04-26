@@ -220,7 +220,7 @@ export function createStripeRoutes(
             customerId: sub.customer as string,
             priceId,
             productName: priceToProduct.get(priceId) || "subscription",
-            isActive: sub.status === "active",
+            isActive: ["active", "trialing", "past_due"].includes(sub.status),
             mrr,
           });
           syncedSubs++;
