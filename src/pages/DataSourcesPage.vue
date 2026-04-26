@@ -48,15 +48,14 @@ import {
   backfillTokens,
   getDataQuality,
 } from "@/lib/api";
-import type { SdkKey, DataQualityAdvisory } from "@/lib/api";
+import type { SdkKey, DataQualityAdvisory, StripeStatus } from "@/lib/api";
 import {
   getStripeStatus,
   syncStripeData,
   disconnectStripe,
   getOpenAIStatus,
   getAnthropicStatus,
-} from "@/api/client";
-import type { StripeStatus } from "@/api/client";
+} from "@/lib/api";
 
 const router = useRouter();
 const queryClient = useQueryClient();

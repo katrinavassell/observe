@@ -30,7 +30,7 @@ import {
   createProject,
   uploadFile,
   type ColumnValidation,
-} from "@/api/client";
+} from "@/lib/api";
 const router = useRouter();
 const queryClient = useQueryClient();
 

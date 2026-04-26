@@ -1,67 +1,67 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
-import { useMutation } from '@tanstack/vue-query'
-import { toast } from 'vue-sonner'
-import { X, Bell, Loader2 } from 'lucide-vue-next'
-import { Button, Input } from '@/components/ui'
-import { requestIntegration } from '@/api/client'
-import type { ComingSoonIntegration } from '@/api/client'
+import { ref, computed } from "vue";
+import { useMutation } from "@tanstack/vue-query";
+import { toast } from "vue-sonner";
+import { X, Bell, Loader2 } from "lucide-vue-next";
+import { Button, Input } from "@/components/ui";
+import { requestIntegration } from "@/lib/api";
+import type { ComingSoonIntegration } from "@/lib/api";
 
 const props = defineProps<{
-  integration: ComingSoonIntegration | null
-  open: boolean
-}>()
+  integration: ComingSoonIntegration | null;
+  open: boolean;
+}>();
 
 const emit = defineEmits<{
-  close: []
-}>()
+  close: [];
+}>();
 
-const email = ref('')
-const selectedUseCases = ref<string[]>([])
-const otherChecked = ref(false)
-const otherText = ref('')
+const email = ref("");
+const selectedUseCases = ref<string[]>([]);
+const otherChecked = ref(false);
+const otherText = ref("");
 
 // Reset form when modal opens with new integration
 function resetForm() {
-  email.value = ''
-  selectedUseCases.value = []
-  otherChecked.value = false
-  otherText.value = ''
+  email.value = "";
+  selectedUseCases.value = [];
+  otherChecked.value = false;
+  otherText.value = "";
 }
 
-const useCases = computed(() => props.integration?.use_cases || [])
+const useCases = computed(() => props.integration?.use_cases || []);
 
 function toggleUseCase(useCase: string) {
-  const index = selectedUseCases.value.indexOf(useCase)
+  const index = selectedUseCases.value.indexOf(useCase);
   if (index === -1) {
-    selectedUseCases.value.push(useCase)
+    selectedUseCases.value.push(useCase);
   } else {
-    selectedUseCases.value.splice(index, 1)
+    selectedUseCases.value.splice(index, 1);
   }
 }
 
 const requestMutation = useMutation({
   mutationFn: requestIntegration,
   onSuccess: () => {
-    toast.success('You\'re on the list!', {
+    toast.success("You're on the list!", {
       description: `We'll notify you when ${props.integration?.name} is available.`,
-    })
-    resetForm()
-    emit('close')
+    });
+    resetForm();
+    emit("close");
   },
   onError: (error) => {
-    toast.error('Failed to submit', {
-      description: error instanceof Error ? error.message : 'Please try again.',
-    })
+    toast.error("Failed to submit", {
+      description: error instanceof Error ? error.message : "Please try again.",
+    });
   },
-})
+});
 
 function handleSubmit() {
-  if (!email.value || !props.integration) return
+  if (!email.value || !props.integration) return;
 
-  const allUseCases = [...selectedUseCases.value]
+  const allUseCases = [...selectedUseCases.value];
   if (otherChecked.value && otherText.value.trim()) {
-    allUseCases.push(`Other: ${otherText.value.trim()}`)
+    allUseCases.push(`Other: ${otherText.value.trim()}`);
   }
 
   requestMutation.mutate({
@@ -70,12 +70,12 @@ function handleSubmit() {
     category: props.integration.category,
     use_cases: allUseCases.length > 0 ? allUseCases : undefined,
     other_description: otherChecked.value ? otherText.value : undefined,
-  })
+  });
 }
 
 function handleClose() {
-  resetForm()
-  emit('close')
+  resetForm();
+  emit("close");
 }
 </script>
 
@@ -103,13 +103,19 @@ function handleClose() {
         <div class="space-y-5">
           <!-- Use Cases -->
           <div v-if="useCases.length > 0" class="space-y-3">
-            <label class="text-sm font-medium">What would you use it for?</label>
+            <label class="text-sm font-medium"
+              >What would you use it for?</label
+            >
             <div class="space-y-2">
               <label
                 v-for="useCase in useCases"
                 :key="useCase"
                 class="flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors"
-                :class="selectedUseCases.includes(useCase) ? 'border-primary bg-primary/5' : 'hover:bg-muted/50'"
+                :class="
+                  selectedUseCases.includes(useCase)
+                    ? 'border-primary bg-primary/5'
+                    : 'hover:bg-muted/50'
+                "
               >
                 <input
                   type="checkbox"
@@ -123,7 +129,11 @@ function handleClose() {
               <!-- Other option -->
               <label
                 class="flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors"
-                :class="otherChecked ? 'border-primary bg-primary/5' : 'hover:bg-muted/50'"
+                :class="
+                  otherChecked
+                    ? 'border-primary bg-primary/5'
+                    : 'hover:bg-muted/50'
+                "
               >
                 <input
                   v-model="otherChecked"
@@ -147,11 +157,7 @@ function handleClose() {
           <!-- Email -->
           <div class="space-y-2">
             <label class="text-sm font-medium">Email</label>
-            <Input
-              v-model="email"
-              type="email"
-              placeholder="you@company.com"
-            />
+            <Input v-model="email" type="email" placeholder="you@company.com" />
           </div>
 
           <!-- Submit -->
@@ -161,12 +167,13 @@ function handleClose() {
               :disabled="!email || requestMutation.isPending.value"
               @click="handleSubmit"
             >
-              <Loader2 v-if="requestMutation.isPending.value" class="h-4 w-4 mr-2 animate-spin" />
+              <Loader2
+                v-if="requestMutation.isPending.value"
+                class="h-4 w-4 mr-2 animate-spin"
+              />
               Notify Me
             </Button>
-            <Button variant="outline" @click="handleClose">
-              Cancel
-            </Button>
+            <Button variant="outline" @click="handleClose"> Cancel </Button>
           </div>
         </div>
       </div>
