@@ -18,7 +18,7 @@ import {
   Zap,
 } from "lucide-vue-next";
 import { Button, Input } from "@/components/ui";
-import { connectOpenAI } from "@/api/client";
+import { connectOpenAI } from "@/lib/api";
 
 defineProps<{
   open: boolean;

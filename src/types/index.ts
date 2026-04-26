@@ -27,25 +27,17 @@ export type {
   UsageAnomaly,
   NegativeMarginCustomer,
   CohortData,
-} from '@/lib/pricing-analyzer'
+} from "@/lib/pricing-analyzer";
 
 export type {
-  // API response types
-  RevenueAnalytics,
-  RevenueMetrics,
-  TrendData,
-  Discrepancy,
-  Account,
+  CrmAccount,
   AccountDetail,
   AccountsResponse,
-  MatchCandidate,
-  MatchesResponse,
-  PricingIntelligence,
-  Integration,
-  DataStatus,
-  DataMode,
-} from '@/api/client'
+} from "@/lib/api/accounts";
 
+export type { Integration } from "@/lib/api/integrations";
+
+export type { DataStatus } from "@/lib/api/data";
 
 // =============================================================================
 // COMMON UTILITY TYPES
@@ -58,9 +50,9 @@ export type {
  */
 export interface FileReference {
   /** Display name of the file */
-  name: string
+  name: string;
   /** The actual File object (present only for unsaved files) */
-  file?: File
+  file?: File;
 }
 
 /**
@@ -68,11 +60,11 @@ export interface FileReference {
  */
 export interface AsyncState<T> {
   /** The data when loaded successfully */
-  data: T | null
+  data: T | null;
   /** Whether the operation is in progress */
-  isLoading: boolean
+  isLoading: boolean;
   /** Error message if the operation failed */
-  error: string | null
+  error: string | null;
 }
 
 /**
@@ -80,9 +72,9 @@ export interface AsyncState<T> {
  */
 export interface PaginationParams {
   /** Maximum number of items to return */
-  limit?: number
+  limit?: number;
   /** Number of items to skip */
-  offset?: number
+  offset?: number;
 }
 
 /**
@@ -90,26 +82,26 @@ export interface PaginationParams {
  */
 export interface PaginatedResponse<T> {
   /** The items in this page */
-  items: T[]
+  items: T[];
   /** Total number of items across all pages */
-  total: number
+  total: number;
   /** Whether there are more items after this page */
-  hasMore: boolean
+  hasMore: boolean;
 }
 
 /**
  * Sort direction for list queries.
  */
-export type SortDirection = 'asc' | 'desc'
+export type SortDirection = "asc" | "desc";
 
 /**
  * Date range for filtering.
  */
 export interface DateRange {
   /** Start date (ISO string) */
-  start: string
+  start: string;
   /** End date (ISO string) */
-  end: string
+  end: string;
 }
 
 // =============================================================================
@@ -119,18 +111,18 @@ export interface DateRange {
 /**
  * Toast notification severity levels.
  */
-export type ToastSeverity = 'success' | 'error' | 'warning' | 'info'
+export type ToastSeverity = "success" | "error" | "warning" | "info";
 
 /**
  * Common form field state.
  */
 export interface FormFieldState {
   /** Current field value */
-  value: string
+  value: string;
   /** Validation error message */
-  error: string | null
+  error: string | null;
   /** Whether the field has been touched/modified */
-  touched: boolean
+  touched: boolean;
 }
 
 /**
@@ -138,7 +130,7 @@ export interface FormFieldState {
  */
 export interface ModalState {
   /** Whether the modal is open */
-  isOpen: boolean
+  isOpen: boolean;
   /** Data passed to the modal */
-  data?: unknown
+  data?: unknown;
 }

@@ -7,3 +7,6 @@ export * from "./analytics";
 export * from "./infrastructure";
 export * from "./chat";
 export * from "./auth";
+export * from "./integrations";
+export * from "./onboarding";
+export * from "./accounts";

@@ -1,99 +1,110 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
-import { useQuery, useMutation } from '@tanstack/vue-query'
-import { toast } from 'vue-sonner'
-import { X, Plus, Loader2 } from 'lucide-vue-next'
-import { Button, Input } from '@/components/ui'
-import { requestIntegration, getRequestableIntegrations } from '@/api/client'
+import { ref, computed, watch } from "vue";
+import { useQuery, useMutation } from "@tanstack/vue-query";
+import { toast } from "vue-sonner";
+import { X, Plus, Loader2 } from "lucide-vue-next";
+import { Button, Input } from "@/components/ui";
+import { requestIntegration, getRequestableIntegrations } from "@/lib/api";
 
 const props = defineProps<{
-  open: boolean
-}>()
+  open: boolean;
+}>();
 
 const emit = defineEmits<{
-  close: []
-}>()
+  close: [];
+}>();
 
 // Fetch requestable integrations from API
 const { data: requestableData } = useQuery({
-  queryKey: ['requestable-integrations'],
+  queryKey: ["requestable-integrations"],
   queryFn: getRequestableIntegrations,
   enabled: computed(() => props.open),
-})
+});
 
-const integrations = computed(() => requestableData.value?.integrations || {
-  ai_llm: [],
-  analytics: [],
-  finance_ops: []
-})
+const integrations = computed(
+  () =>
+    requestableData.value?.integrations || {
+      ai_llm: [],
+      analytics: [],
+      finance_ops: [],
+    },
+);
 
-const email = ref('')
-const selectedIntegrations = ref<string[]>([])
-const otherText = ref('')
-const freeformNotes = ref('')
+const email = ref("");
+const selectedIntegrations = ref<string[]>([]);
+const otherText = ref("");
+const freeformNotes = ref("");
 
 function resetForm() {
-  email.value = ''
-  selectedIntegrations.value = []
-  otherText.value = ''
-  freeformNotes.value = ''
+  email.value = "";
+  selectedIntegrations.value = [];
+  otherText.value = "";
+  freeformNotes.value = "";
 }
 
-watch(() => props.open, (isOpen) => {
-  if (isOpen) {
-    resetForm()
-  }
-})
+watch(
+  () => props.open,
+  (isOpen) => {
+    if (isOpen) {
+      resetForm();
+    }
+  },
+);
 
 function toggleIntegration(provider: string) {
-  const index = selectedIntegrations.value.indexOf(provider)
+  const index = selectedIntegrations.value.indexOf(provider);
   if (index === -1) {
-    selectedIntegrations.value.push(provider)
+    selectedIntegrations.value.push(provider);
   } else {
-    selectedIntegrations.value.splice(index, 1)
+    selectedIntegrations.value.splice(index, 1);
   }
 }
 
 const requestMutation = useMutation({
   mutationFn: requestIntegration,
   onSuccess: () => {
-    toast.success('Request submitted!', {
-      description: 'We\'ll consider this for our roadmap.',
-    })
-    resetForm()
-    emit('close')
+    toast.success("Request submitted!", {
+      description: "We'll consider this for our roadmap.",
+    });
+    resetForm();
+    emit("close");
   },
   onError: (error) => {
-    toast.error('Failed to submit', {
-      description: error instanceof Error ? error.message : 'Please try again.',
-    })
+    toast.error("Failed to submit", {
+      description: error instanceof Error ? error.message : "Please try again.",
+    });
   },
-})
+});
 
 function handleSubmit() {
-  if (!email.value) return
+  if (!email.value) return;
 
   // Determine integration type - use first selected or "other"
-  const integrationType = selectedIntegrations.value[0] || (otherText.value ? 'other' : 'unknown')
+  const integrationType =
+    selectedIntegrations.value[0] || (otherText.value ? "other" : "unknown");
 
   requestMutation.mutate({
     email: email.value,
     integration_type: integrationType,
-    category: 'other',
-    use_cases: selectedIntegrations.value.length > 1 ? selectedIntegrations.value : undefined,
+    category: "other",
+    use_cases:
+      selectedIntegrations.value.length > 1
+        ? selectedIntegrations.value
+        : undefined,
     other_description: otherText.value || undefined,
     freeform_notes: freeformNotes.value || undefined,
-  })
+  });
 }
 
 function handleClose() {
-  resetForm()
-  emit('close')
+  resetForm();
+  emit("close");
 }
 
-const hasSelection = computed(() =>
-  selectedIntegrations.value.length > 0 || otherText.value.trim().length > 0
-)
+const hasSelection = computed(
+  () =>
+    selectedIntegrations.value.length > 0 || otherText.value.trim().length > 0,
+);
 </script>
 
 <template>
@@ -103,7 +114,9 @@ const hasSelection = computed(() =>
       class="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm"
       @click.self="handleClose"
     >
-      <div class="w-full max-w-lg max-h-[85vh] overflow-y-auto rounded-lg border bg-card p-6 shadow-lg">
+      <div
+        class="w-full max-w-lg max-h-[85vh] overflow-y-auto rounded-lg border bg-card p-6 shadow-lg"
+      >
         <!-- Header -->
         <div class="flex items-center justify-between mb-5">
           <div class="flex items-center gap-2">
@@ -118,13 +131,19 @@ const hasSelection = computed(() =>
         <div class="space-y-6">
           <!-- AI / LLM Providers -->
           <div v-if="integrations.ai_llm?.length" class="space-y-3">
-            <label class="text-sm font-medium text-muted-foreground">AI / LLM Providers</label>
+            <label class="text-sm font-medium text-muted-foreground"
+              >AI / LLM Providers</label
+            >
             <div class="grid grid-cols-2 gap-2">
               <label
                 v-for="item in integrations.ai_llm"
                 :key="item.provider"
                 class="flex items-center gap-2 p-3 rounded-lg border cursor-pointer transition-colors"
-                :class="selectedIntegrations.includes(item.provider) ? 'border-primary bg-primary/5' : 'hover:bg-muted/50'"
+                :class="
+                  selectedIntegrations.includes(item.provider)
+                    ? 'border-primary bg-primary/5'
+                    : 'hover:bg-muted/50'
+                "
               >
                 <input
                   type="checkbox"
@@ -139,13 +158,19 @@ const hasSelection = computed(() =>
 
           <!-- Analytics & Data -->
           <div v-if="integrations.analytics?.length" class="space-y-3">
-            <label class="text-sm font-medium text-muted-foreground">Analytics & Data</label>
+            <label class="text-sm font-medium text-muted-foreground"
+              >Analytics & Data</label
+            >
             <div class="grid grid-cols-2 gap-2">
               <label
                 v-for="item in integrations.analytics"
                 :key="item.provider"
                 class="flex items-center gap-2 p-3 rounded-lg border cursor-pointer transition-colors"
-                :class="selectedIntegrations.includes(item.provider) ? 'border-primary bg-primary/5' : 'hover:bg-muted/50'"
+                :class="
+                  selectedIntegrations.includes(item.provider)
+                    ? 'border-primary bg-primary/5'
+                    : 'hover:bg-muted/50'
+                "
               >
                 <input
                   type="checkbox"
@@ -160,13 +185,19 @@ const hasSelection = computed(() =>
 
           <!-- Finance & Ops -->
           <div v-if="integrations.finance_ops?.length" class="space-y-3">
-            <label class="text-sm font-medium text-muted-foreground">Finance & Ops</label>
+            <label class="text-sm font-medium text-muted-foreground"
+              >Finance & Ops</label
+            >
             <div class="grid grid-cols-2 gap-2">
               <label
                 v-for="item in integrations.finance_ops"
                 :key="item.provider"
                 class="flex items-center gap-2 p-3 rounded-lg border cursor-pointer transition-colors"
-                :class="selectedIntegrations.includes(item.provider) ? 'border-primary bg-primary/5' : 'hover:bg-muted/50'"
+                :class="
+                  selectedIntegrations.includes(item.provider)
+                    ? 'border-primary bg-primary/5'
+                    : 'hover:bg-muted/50'
+                "
               >
                 <input
                   type="checkbox"
@@ -181,16 +212,17 @@ const hasSelection = computed(() =>
 
           <!-- Other -->
           <div class="space-y-2">
-            <label class="text-sm font-medium text-muted-foreground">Other</label>
-            <Input
-              v-model="otherText"
-              placeholder="Integration name..."
-            />
+            <label class="text-sm font-medium text-muted-foreground"
+              >Other</label
+            >
+            <Input v-model="otherText" placeholder="Integration name..." />
           </div>
 
           <!-- What are you trying to see? -->
           <div class="space-y-2">
-            <label class="text-sm font-medium">What are you trying to see?</label>
+            <label class="text-sm font-medium"
+              >What are you trying to see?</label
+            >
             <textarea
               v-model="freeformNotes"
               rows="3"
@@ -202,26 +234,25 @@ const hasSelection = computed(() =>
           <!-- Email -->
           <div class="space-y-2">
             <label class="text-sm font-medium">Email</label>
-            <Input
-              v-model="email"
-              type="email"
-              placeholder="you@company.com"
-            />
+            <Input v-model="email" type="email" placeholder="you@company.com" />
           </div>
 
           <!-- Submit -->
           <div class="flex gap-2 pt-2">
             <Button
               class="flex-1"
-              :disabled="!email || !hasSelection || requestMutation.isPending.value"
+              :disabled="
+                !email || !hasSelection || requestMutation.isPending.value
+              "
               @click="handleSubmit"
             >
-              <Loader2 v-if="requestMutation.isPending.value" class="h-4 w-4 mr-2 animate-spin" />
+              <Loader2
+                v-if="requestMutation.isPending.value"
+                class="h-4 w-4 mr-2 animate-spin"
+              />
               Submit
             </Button>
-            <Button variant="outline" @click="handleClose">
-              Cancel
-            </Button>
+            <Button variant="outline" @click="handleClose"> Cancel </Button>
           </div>
         </div>
       </div>

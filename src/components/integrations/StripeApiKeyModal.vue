@@ -9,7 +9,7 @@ import { ref, computed, watch } from "vue";
 import { toast } from "vue-sonner";
 import { X, Key, Loader2, ExternalLink, Eye, EyeOff } from "lucide-vue-next";
 import { Button, Input } from "@/components/ui";
-import { connectStripeWithApiKey } from "@/api/client";
+import { connectStripeWithApiKey } from "@/lib/api";
 
 defineProps<{
   open: boolean;
