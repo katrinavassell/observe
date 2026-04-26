@@ -138,16 +138,14 @@ src/
 │   ├── AnalyticsPage.vue        # Home: Total Revenue / Total Cost / Gross Margin KPIs, breakdown by feature/model/customer
 │   ├── EventsPage.vue           # Filterable event stream
 │   ├── ModelsPage.vue           # AI model cost breakdown
-│   ├── AlertsPage.vue           # 17 alert types (cost, margin, abuse, pricing, concentration) -- free for all users
+│   ├── AlertsPage.vue           # 14 alert types (8 aggregate + 6 per-customer: cost, margin, abuse, model, concentration) -- free for all users
 │   ├── DataSourcesPage.vue      # CSV upload, integrations
 │   ├── PlansPage.vue            # Subscription plans & billing
 │   ├── CheckoutSuccessPage.vue  # Post-checkout confirmation
 │   ├── CohortsPage.vue          # Cohort retention analysis
 │   ├── TracesPage.vue           # Distributed trace viewer
-│   ├── LoginPage.vue            # Login / signup (also used for /signup)
-│   ├── ForgotPasswordPage.vue   # Request password reset
-│   ├── ResetPasswordPage.vue    # Reset password with token
-│   ├── OnboardingPage.vue       # First-run onboarding flow
+│   ├── LoginPage.vue            # Login / signup via Clerk
+│   ├── OnboardingPage.vue       # First-run onboarding (redirects to /)
 │   ├── TeamSettingsPage.vue     # Team management, invites
 │   ├── JoinTeamPage.vue         # Accept team invite
 │   └── AdminPage.vue            # Admin dashboard (tansohq.com emails only)
@@ -303,9 +301,10 @@ PostgreSQL with support for both standard `pg` driver and `@neondatabase/serverl
 - `sdk_api_keys` -- API keys for programmatic event ingestion
 - `integrations` -- connected API key providers (OpenAI, Anthropic, Stripe)
 - `alert_rules` -- threshold-based cost alert definitions
-
-### Legacy Tables (kept for pricing analyzer)
-`plans`, `customers`, `subscriptions`, `usage_records`, `cost_records`, `user_data_status`
+- `stripe_customers` -- Stripe customer data, bridges app IDs to Stripe IDs
+- `customers` -- app-level customer records (from SDK events or Stripe sync)
+- `subscriptions` -- Stripe subscription data with MRR
+- `plans` -- pricing plans from Stripe
 
 ### Supporting Tables
 - `simulations`, `ai_insights` -- simulation and insight records
