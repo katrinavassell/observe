@@ -12,25 +12,7 @@ import { calculateCostFromTokens } from "../model-pricing.js";
 import { decryptApiKey, encryptApiKey } from "../stripe-client.js";
 import { checkAlerts } from "./alerts.js";
 import { enrichRevenue } from "../lib/enrich-revenue.js";
-
-async function resolveAccountIdForUser(
-  pool: Pool,
-  userId: string,
-): Promise<number | null> {
-  try {
-    const result = await pool.query(
-      `SELECT account_id FROM user_accounts
-        WHERE user_id = (SELECT id FROM users WHERE visitor_id = $1)
-          AND role = 'owner' LIMIT 1`,
-      [userId],
-    );
-    if (result.rows[0]) return result.rows[0].account_id;
-  } catch (err) {
-    console.error("gateway: account_id fallback lookup failed:", err);
-  }
-  console.warn("gateway: no account_id resolved for user", userId);
-  return null;
-}
+import { resolveAccountIdForUser } from "./data-helpers.js";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
