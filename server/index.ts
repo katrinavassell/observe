@@ -39,7 +39,7 @@ const app = express();
 
 const pool = new Pg.Pool({
   connectionString: process.env.DATABASE_URL,
-  max: 15,
+  max: parseInt(process.env.PG_POOL_MAX || "8", 10),
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 5000,
 });
@@ -884,7 +884,7 @@ async function _doDbInit() {
       `CREATE INDEX IF NOT EXISTS idx_observe_events_account_model ON observe_events(account_id, model, timestamp DESC) WHERE account_id IS NOT NULL`,
     );
     await pool.query(
-      `CREATE INDEX IF NOT EXISTS idx_observe_events_account_source ON observe_events(account_id, source) WHERE account_id IS NOT NULL`,
+      `CREATE INDEX IF NOT EXISTS idx_observe_events_account_source ON observe_events(account_id, source, timestamp DESC) WHERE account_id IS NOT NULL`,
     );
 
     // Inference metadata columns on observe_events
