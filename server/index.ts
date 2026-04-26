@@ -39,8 +39,8 @@ const app = express();
 
 const pool = new Pg.Pool({
   connectionString: process.env.DATABASE_URL,
-  max: 3,
-  idleTimeoutMillis: 10000,
+  max: 15,
+  idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 5000,
 });
 
@@ -855,10 +855,36 @@ async function _doDbInit() {
       `CREATE INDEX IF NOT EXISTS idx_cost_records_user_id ON cost_records(user_id)`,
     );
     await pool.query(
+      `CREATE INDEX IF NOT EXISTS idx_subscriptions_account ON subscriptions(account_id, customer_id) WHERE account_id IS NOT NULL`,
+    );
+    await pool.query(
+      `CREATE INDEX IF NOT EXISTS idx_plans_account ON plans(account_id) WHERE account_id IS NOT NULL`,
+    );
+    await pool.query(
+      `CREATE INDEX IF NOT EXISTS idx_cost_records_account ON cost_records(account_id, customer_id) WHERE account_id IS NOT NULL`,
+    );
+    await pool.query(
       `CREATE INDEX IF NOT EXISTS idx_observe_events_user_ts ON observe_events(user_id, timestamp DESC)`,
     );
     await pool.query(
       `CREATE INDEX IF NOT EXISTS idx_observe_events_user_feature ON observe_events(user_id, feature_key)`,
+    );
+
+    // account_id-leading indexes — all analytics/dashboard queries filter by account_id
+    await pool.query(
+      `CREATE INDEX IF NOT EXISTS idx_observe_events_account_ts ON observe_events(account_id, timestamp DESC) WHERE account_id IS NOT NULL`,
+    );
+    await pool.query(
+      `CREATE INDEX IF NOT EXISTS idx_observe_events_account_customer ON observe_events(account_id, customer_id, timestamp DESC) WHERE account_id IS NOT NULL`,
+    );
+    await pool.query(
+      `CREATE INDEX IF NOT EXISTS idx_observe_events_account_feature ON observe_events(account_id, feature_key) WHERE account_id IS NOT NULL`,
+    );
+    await pool.query(
+      `CREATE INDEX IF NOT EXISTS idx_observe_events_account_model ON observe_events(account_id, model, timestamp DESC) WHERE account_id IS NOT NULL`,
+    );
+    await pool.query(
+      `CREATE INDEX IF NOT EXISTS idx_observe_events_account_source ON observe_events(account_id, source) WHERE account_id IS NOT NULL`,
     );
 
     // Inference metadata columns on observe_events
