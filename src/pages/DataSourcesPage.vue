@@ -554,6 +554,7 @@ async function handleResetAccountData() {
   isResettingData.value = true;
   try {
     await clearData();
+    await refetchDataMode();
     await queryClient.invalidateQueries();
     toast.success("All account data has been reset");
   } catch (error) {

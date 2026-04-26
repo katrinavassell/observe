@@ -101,7 +101,7 @@ class ObserveCallback(BaseCallbackHandler):
             json={
                 "events": [{
                     "eventName": "llm.chain",
-                    "customerReferenceId": "cus_acme",
+                    "customerReferenceId": "acme-corp",
                     "featureKey": "langchain-pipeline",
                     "model": model,
                     "usageUnits": usage.get("total_tokens", 0),

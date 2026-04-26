@@ -10,63 +10,13 @@ import {
 } from "../stripe-client.js";
 import { calculateCostFromTokens } from "../model-pricing.js";
 import { runRevenueBackfill } from "./backfill.js";
-
-async function resolveAccountIdForUser(
-  pool: Pool,
-  userId: string,
-  accountId?: number,
-): Promise<number | null> {
-  if (accountId !== undefined) return accountId;
-  try {
-    const result = await pool.query(
-      `SELECT account_id FROM user_accounts
-        WHERE user_id = (SELECT id FROM users WHERE visitor_id = $1)
-          AND role = 'owner' LIMIT 1`,
-      [userId],
-    );
-    if (result.rows[0]) return result.rows[0].account_id;
-  } catch (err) {
-    console.error("integrations: account_id fallback lookup failed:", err);
-  }
-  console.warn("integrations: no account_id resolved for user", userId);
-  return null;
-}
+import { resolveAccountIdForUser, clearSampleData } from "./data-helpers.js";
 
 type TrackBillingUsageFn = (
   visitorId: string,
   featureKey: string,
   eventName: string,
 ) => void;
-
-// Clear sample/demo data when transitioning to real user data
-async function clearSampleData(
-  db: { query: (text: string, params: unknown[]) => Promise<unknown> },
-  pool: Pool,
-  userId: string,
-  accountId?: number,
-): Promise<void> {
-  const resolved = await resolveAccountIdForUser(pool, userId, accountId);
-  await db.query(
-    "DELETE FROM observe_events WHERE account_id = $1 AND source = 'sample'",
-    [resolved],
-  );
-  await db.query(
-    "DELETE FROM cost_records WHERE account_id = $1 AND cost_type = 'ai_inference' AND customer_id IS NULL",
-    [resolved],
-  );
-  await db.query(
-    "DELETE FROM subscriptions WHERE account_id = $1 AND subscription_id LIKE 'sub_%'",
-    [resolved],
-  );
-  await db.query(
-    "DELETE FROM customers WHERE account_id = $1 AND customer_id LIKE 'cus_%'",
-    [resolved],
-  );
-  await db.query(
-    "DELETE FROM plans WHERE account_id = $1 AND plan_id IN ('starter', 'pro', 'enterprise')",
-    [resolved],
-  );
-}
 
 /**
  * Sync Stripe data (customers, subscriptions, plans, revenue events) for a user.

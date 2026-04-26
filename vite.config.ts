@@ -10,15 +10,13 @@ export default defineConfig({
       "@": fileURLToPath(new URL("./src", import.meta.url)),
     },
   },
-  optimizeDeps: {
-    exclude: ["lucide-vue-next", "radix-vue"],
-  },
   build: {
     rollupOptions: {
       output: {
         manualChunks: {
           "radix-vue": ["radix-vue"],
           "lucide-icons": ["lucide-vue-next"],
+          chartjs: ["chart.js", "vue-chartjs"],
         },
       },
     },

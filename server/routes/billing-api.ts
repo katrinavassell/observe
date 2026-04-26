@@ -15,6 +15,7 @@ import {
 } from "../billing.js";
 import { calculateCostFromTokens } from "../model-pricing.js";
 import { syncStripeDataForUser } from "./integrations.js";
+import { resolveAccountIdForUser, clearSampleData } from "./data-helpers.js";
 
 type TrackBillingUsageFn = (
   visitorId: string,
@@ -22,56 +23,6 @@ type TrackBillingUsageFn = (
   eventName: string,
 ) => void;
 type ConvertReferralFn = (visitorId: string) => Promise<void>;
-
-async function resolveAccountIdForUser(
-  pool: Pool,
-  userId: string,
-  accountId?: number,
-): Promise<number | null> {
-  if (accountId !== undefined) return accountId;
-  try {
-    const result = await pool.query(
-      `SELECT account_id FROM user_accounts
-        WHERE user_id = (SELECT id FROM users WHERE visitor_id = $1)
-          AND role = 'owner' LIMIT 1`,
-      [userId],
-    );
-    if (result.rows[0]) return result.rows[0].account_id;
-  } catch (err) {
-    console.error("billing-api: account_id fallback lookup failed:", err);
-  }
-  console.warn("billing-api: no account_id resolved for user", userId);
-  return null;
-}
-
-async function clearSampleData(
-  db: { query: (text: string, params: unknown[]) => Promise<unknown> },
-  pool: Pool,
-  userId: string,
-  accountId?: number,
-): Promise<void> {
-  const resolved = await resolveAccountIdForUser(pool, userId, accountId);
-  await db.query(
-    "DELETE FROM observe_events WHERE account_id = $1 AND source = 'sample'",
-    [resolved],
-  );
-  await db.query(
-    "DELETE FROM cost_records WHERE account_id = $1 AND cost_type = 'ai_inference' AND customer_id IS NULL AND period_start IS NOT NULL",
-    [resolved],
-  );
-  await db.query(
-    "DELETE FROM subscriptions WHERE account_id = $1 AND subscription_id IN ('sub_001','sub_002','sub_003','sub_004','sub_005','sub_acme','sub_acme_addon','sub_tidewater','sub_neon','sub_neon_addon','sub_circle','sub_blaze','sub_quantum')",
-    [resolved],
-  );
-  await db.query(
-    "DELETE FROM customers WHERE account_id = $1 AND customer_id IN ('cus_001','cus_002','cus_003','cus_004','cus_005','acme_saas','tidewater_ai','neondata','circleops','blazeml','quantumhr')",
-    [resolved],
-  );
-  await db.query(
-    "DELETE FROM plans WHERE account_id = $1 AND plan_id IN ('starter', 'pro', 'enterprise')",
-    [resolved],
-  );
-}
 
 export function createBillingApiRoutes(
   pool: Pool,

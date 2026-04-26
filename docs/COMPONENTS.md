@@ -9,16 +9,14 @@ Vue components and composables in Observe.
 | `AnalyticsPage.vue` | `/` | Home page: revenue, costs, margin overview |
 | `EventsPage.vue` | `/events` | Filterable event stream |
 | `ModelsPage.vue` | `/models` | AI model cost breakdown |
-| `AlertsPage.vue` | `/alerts` | 8 curated alert types (cost, margin, abuse, pricing, concentration) — free for all users |
+| `AlertsPage.vue` | `/alerts` | 14 alert types (8 aggregate + 6 per-customer: cost, margin, abuse, model, concentration) — free for all users |
 | `DataSourcesPage.vue` | `/data-sources` | CSV upload, integrations, API keys |
 | `PlansPage.vue` | `/plans` | Subscription plans and billing management |
 | `CheckoutSuccessPage.vue` | `/checkout/success` | Post-checkout confirmation |
 | `CohortsPage.vue` | `/cohorts` | Cohort retention analysis |
 | `TracesPage.vue` | `/traces` | Distributed trace viewer |
-| `LoginPage.vue` | `/login`, `/signup` | Authentication (login and signup) |
-| `ForgotPasswordPage.vue` | `/forgot-password` | Request password reset |
-| `ResetPasswordPage.vue` | `/reset-password` | Reset password with token |
-| `OnboardingPage.vue` | `/onboarding` (redirects to `/data-sources`) | First-run onboarding flow |
+| `LoginPage.vue` | `/login`, `/signup` | Authentication via Clerk (login and signup) |
+| `OnboardingPage.vue` | `/onboarding` (redirects to `/`) | First-run onboarding flow |
 | `TeamSettingsPage.vue` | `/team` | Team management and member invites |
 | `JoinTeamPage.vue` | `/join/:token` | Accept a team invite link |
 | `AdminPage.vue` | `/admin` | Admin dashboard: user stats, usage, emails (tansohq.com only) |
