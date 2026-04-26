@@ -1,6 +1,6 @@
 import { request } from "./base";
 
-export interface Account {
+export interface CrmAccount {
   id: number;
   name: string;
   domain: string | null;
@@ -13,7 +13,7 @@ export interface Account {
   mrr: number | null;
 }
 
-export interface AccountDetail extends Account {
+export interface AccountDetail extends CrmAccount {
   website: string | null;
   email_domain: string | null;
   created_at: string | null;

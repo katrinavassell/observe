@@ -30,7 +30,7 @@ export type {
 } from "@/lib/pricing-analyzer";
 
 export type {
-  Account,
+  CrmAccount,
   AccountDetail,
   AccountsResponse,
 } from "@/lib/api/accounts";
