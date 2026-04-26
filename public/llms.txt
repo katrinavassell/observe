@@ -217,7 +217,7 @@ curl -X POST https://observe.tansohq.com/api/events/ingest \
     "events": [
       {
         "eventName": "chat",
-        "customerReferenceId": "cus_123",
+        "customerReferenceId": "acme-corp",
         "featureKey": "ai_chat",
         "model": "gpt-4o-mini",
         "modelProvider": "openai",
@@ -240,7 +240,7 @@ curl -X POST https://observe.tansohq.com/api/events/ingest \
     {
       // REQUIRED
       "eventName":           string,  // short label, e.g. "chat", "embed", "eval", "api_call"
-      "customerReferenceId": string,  // your end-user's ID (Stripe customer ID recommended)
+      "customerReferenceId": string,  // your end-user's stable ID (app-level slug, internal ID, etc.)
       "featureKey":          string,  // product feature powered by this call
 
       // STRONGLY RECOMMENDED — enables automatic cost computation from token counts
@@ -373,7 +373,7 @@ on the customers page — their margins would be meaningless without cost data. 
 intended flow is:
 
 1. **SDK event arrives** with a `customerReferenceId` → customer appears in Observe.
-2. **Stripe resolves the customer name** → if the `customerReferenceId` is a Stripe customer ID (`cus_...`), Observe looks up the name and email from Stripe automatically. Pass the Stripe customer ID in `meta.stripe_customer_id` as well to link to Stripe revenue data.
+2. **Stripe links via meta** → pass the Stripe customer ID in `meta.stripe_customer_id` to link this customer to Stripe revenue data. The `customerReferenceId` can be any stable app-level ID — Stripe matching uses the meta field, not the reference ID.
 3. **Stripe enriches revenue** → the event gets `revenue_amount` stamped at ingest.
 4. **Margins become real** — cost from the SDK event, revenue from Stripe data.
 

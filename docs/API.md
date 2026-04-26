@@ -94,7 +94,7 @@ Ingest events via SDK key authentication (Bearer token in Authorization header).
 {
   "events": [{
     "eventName": "inference",
-    "customerReferenceId": "cus_acme",
+    "customerReferenceId": "acme-corp",
     "featureKey": "chat",
     "costAmount": 0.003,
     "model": "gpt-4o-mini"
