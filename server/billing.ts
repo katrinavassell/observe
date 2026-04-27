@@ -24,6 +24,7 @@ export const OBSERVE_PLANS: Record<string, PlanConfig> = {
       ai_insights: { limit: 1000, reset: "monthly" },
       event_ingest: { limit: 10000, reset: "monthly" },
       cost_alerts: { limit: 3 },
+      organizations: { limit: 1 },
       csv_upload: { limit: null },
       stripe_connection: { limit: null },
       ai_provider_connection: { limit: null },
@@ -38,6 +39,7 @@ export const OBSERVE_PLANS: Record<string, PlanConfig> = {
       ai_insights: { limit: 10000, reset: "monthly" },
       event_ingest: { limit: 100000, reset: "monthly" },
       cost_alerts: { limit: null },
+      organizations: { limit: 1 },
       csv_upload: { limit: null },
       stripe_connection: { limit: null },
       ai_provider_connection: { limit: null },
@@ -52,6 +54,7 @@ export const OBSERVE_PLANS: Record<string, PlanConfig> = {
       ai_insights: { limit: null },
       event_ingest: { limit: 1000000, reset: "monthly" },
       cost_alerts: { limit: null },
+      organizations: { limit: 5 },
       csv_upload: { limit: null },
       stripe_connection: { limit: null },
       ai_provider_connection: { limit: null },
@@ -132,6 +135,13 @@ export async function checkFeatureAccess(
     const countResult = await pool.query(
       `SELECT COUNT(*) as count FROM alert_rules WHERE account_id = $1 AND enabled = true`,
       [resolvedAccountId],
+    );
+    used = parseInt(countResult.rows[0]?.count || "0", 10);
+  } else if (featureKey === "organizations") {
+    const countResult = await pool.query(
+      `SELECT COUNT(DISTINCT ua2.account_id) as count FROM user_accounts ua2
+       WHERE ua2.user_id = (SELECT id FROM users WHERE visitor_id = $1)`,
+      [visitorId],
     );
     used = parseInt(countResult.rows[0]?.count || "0", 10);
   } else if (featureKey === "team_members") {
