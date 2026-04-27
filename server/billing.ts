@@ -140,7 +140,8 @@ export async function checkFeatureAccess(
   } else if (featureKey === "organizations") {
     const countResult = await pool.query(
       `SELECT COUNT(DISTINCT ua2.account_id) as count FROM user_accounts ua2
-       WHERE ua2.user_id = (SELECT id FROM users WHERE visitor_id = $1)`,
+       WHERE ua2.user_id = (SELECT id FROM users WHERE visitor_id = $1)
+         AND ua2.role = 'owner'`,
       [visitorId],
     );
     used = parseInt(countResult.rows[0]?.count || "0", 10);
