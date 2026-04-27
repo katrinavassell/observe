@@ -46,6 +46,7 @@ interface UsageItem {
   pct: number;
   atLimit: boolean;
   upgradeTarget: string | null;
+  type: "meter" | "card";
 }
 
 const usageItems = computed<UsageItem[]>(() => {
@@ -66,6 +67,7 @@ const usageItems = computed<UsageItem[]>(() => {
       pct,
       atLimit: pct >= 80,
       upgradeTarget: plan === "free" ? "pro" : plan === "pro" ? "team" : null,
+      type: "meter",
     });
   }
 
@@ -82,6 +84,7 @@ const usageItems = computed<UsageItem[]>(() => {
       pct,
       atLimit: alerts.limit != null && (alerts.usage ?? 0) >= alerts.limit,
       upgradeTarget: plan === "free" ? "pro" : null,
+      type: "card",
     });
   }
 
@@ -98,6 +101,7 @@ const usageItems = computed<UsageItem[]>(() => {
       pct,
       atLimit: orgs.limit != null && (orgs.usage ?? 0) >= orgs.limit,
       upgradeTarget: plan !== "team" ? "team" : null,
+      type: "card",
     });
   }
 
@@ -367,119 +371,98 @@ const plans = [
 
     <!-- Usage section -->
     <div v-if="activeTab === 'usage' && isLoggedIn" class="max-w-5xl space-y-5">
-      <!-- Current plan summary -->
-      <Card>
-        <CardContent class="p-5 flex items-center justify-between">
-          <div class="flex items-center gap-3">
-            <div
-              class="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center"
-            >
-              <Zap class="h-5 w-5 text-primary" />
-            </div>
-            <div>
-              <p class="font-semibold text-sm">
-                {{
-                  currentPlan === "free"
-                    ? "Free"
-                    : currentPlan === "pro"
-                      ? "Pro"
-                      : "Team"
-                }}
-                Plan
-              </p>
-              <p class="text-xs text-muted-foreground">
-                {{
-                  currentPlan === "free"
-                    ? "Upgrade for more capacity"
-                    : "Active subscription"
-                }}
-              </p>
-            </div>
-          </div>
-          <Button
-            v-if="currentPlan !== 'free'"
-            variant="outline"
-            size="sm"
-            :disabled="portalMutation.isPending.value"
-            @click="portalMutation.mutate()"
-          >
-            Manage billing
-          </Button>
-          <Button v-else size="sm" @click="activeTab = 'plans'">
-            View plans
-            <ArrowRight class="h-3.5 w-3.5 ml-1" />
-          </Button>
-        </CardContent>
-      </Card>
-
-      <!-- Usage meters -->
-      <div class="space-y-3">
-        <template v-if="usageItems.length > 0">
-          <Card v-for="item in usageItems" :key="item.label">
-            <CardContent class="p-5">
-              <div class="flex items-start justify-between mb-3">
-                <div class="flex items-center gap-2.5">
-                  <component
-                    :is="item.icon"
-                    class="h-4 w-4 text-muted-foreground"
-                  />
-                  <span class="text-sm font-medium">{{ item.label }}</span>
-                </div>
-                <span class="tabular-nums text-sm text-muted-foreground">
-                  {{ item.used.toLocaleString() }}
-                  <template v-if="item.limit">
-                    / {{ item.limit.toLocaleString() }}
-                  </template>
-                  <template v-else>
-                    <span class="text-xs ml-1 text-emerald-600"
-                      >(unlimited)</span
-                    >
-                  </template>
-                </span>
-              </div>
-              <div
-                v-if="item.limit"
-                class="h-2 bg-muted rounded-full overflow-hidden"
-              >
-                <div
-                  class="h-full rounded-full transition-all"
-                  :class="
-                    item.pct >= 90
-                      ? 'bg-destructive'
-                      : item.pct >= 80
-                        ? 'bg-amber-500'
-                        : 'bg-primary'
-                  "
-                  :style="{ width: Math.max(item.pct, 2) + '%' }"
+      <!-- Metered usage (progress bars) -->
+      <template
+        v-for="item in usageItems.filter((i) => i.type === 'meter')"
+        :key="item.label"
+      >
+        <Card>
+          <CardContent class="p-5">
+            <div class="flex items-center justify-between mb-3">
+              <div class="flex items-center gap-2.5">
+                <component
+                  :is="item.icon"
+                  class="h-4 w-4 text-muted-foreground"
                 />
+                <span class="text-sm font-medium">{{ item.label }}</span>
               </div>
-              <div v-else class="flex items-center gap-1.5 mt-1">
-                <Check class="h-3.5 w-3.5 text-emerald-500" />
-                <span class="text-xs text-emerald-600"
-                  >No limit on your plan</span
+              <span class="tabular-nums text-sm text-muted-foreground">
+                {{ item.used.toLocaleString() }}
+                <template v-if="item.limit">
+                  / {{ item.limit.toLocaleString() }}</template
                 >
-              </div>
+                <template v-else> · Unlimited</template>
+              </span>
+            </div>
+            <div
+              v-if="item.limit"
+              class="h-2 bg-muted rounded-full overflow-hidden"
+            >
               <div
-                v-if="item.atLimit && item.upgradeTarget"
-                class="mt-3 flex items-center justify-between bg-muted/50 rounded-md px-3 py-2"
+                class="h-full rounded-full transition-all"
+                :class="
+                  item.pct >= 90
+                    ? 'bg-destructive'
+                    : item.pct >= 80
+                      ? 'bg-amber-500'
+                      : 'bg-primary'
+                "
+                :style="{ width: Math.max(item.pct, 2) + '%' }"
+              />
+            </div>
+            <div
+              v-if="item.atLimit && item.upgradeTarget"
+              class="mt-3 flex items-center justify-between bg-muted/50 rounded-md px-3 py-2"
+            >
+              <p class="text-xs text-muted-foreground">
+                {{ item.pct >= 100 ? "Limit reached" : "Approaching limit" }}
+              </p>
+              <button
+                class="text-xs font-medium text-primary hover:underline"
+                @click="activeTab = 'plans'"
               >
-                <p class="text-xs text-muted-foreground">
-                  {{ item.pct >= 100 ? "Limit reached" : "Approaching limit" }}
-                </p>
-                <button
-                  class="text-xs font-medium text-primary hover:underline"
-                  @click="activeTab = 'plans'"
+                Upgrade to {{ item.upgradeTarget === "pro" ? "Pro" : "Team" }} →
+              </button>
+            </div>
+          </CardContent>
+        </Card>
+      </template>
+
+      <!-- Feature limits (info cards, no progress bars) -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <Card
+          v-for="item in usageItems.filter((i) => i.type === 'card')"
+          :key="item.label"
+        >
+          <CardContent class="p-5">
+            <div class="flex items-center gap-2.5 mb-1">
+              <component
+                :is="item.icon"
+                class="h-4 w-4 text-muted-foreground"
+              />
+              <span class="text-sm font-medium">{{ item.label }}</span>
+            </div>
+            <div class="flex items-baseline justify-between">
+              <p class="text-2xl font-semibold tabular-nums">
+                {{ item.used }}
+                <span
+                  v-if="item.limit"
+                  class="text-sm font-normal text-muted-foreground"
+                  >/ {{ item.limit }}</span
                 >
-                  Upgrade to
-                  {{ item.upgradeTarget === "pro" ? "Pro" : "Team" }} →
-                </button>
-              </div>
-            </CardContent>
-          </Card>
-        </template>
-        <Card v-else>
-          <CardContent class="p-6 text-center">
-            <p class="text-sm text-muted-foreground">Loading usage data...</p>
+                <span v-else class="text-sm font-normal text-muted-foreground"
+                  >· Unlimited</span
+                >
+              </p>
+            </div>
+            <button
+              v-if="item.atLimit && item.upgradeTarget"
+              class="mt-2 text-xs font-medium text-primary hover:underline"
+              @click="activeTab = 'plans'"
+            >
+              Upgrade to {{ item.upgradeTarget === "pro" ? "Pro" : "Team" }} for
+              more →
+            </button>
           </CardContent>
         </Card>
       </div>
