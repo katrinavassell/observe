@@ -206,6 +206,20 @@ export async function syncStripeInvoices(): Promise<{
   return request("/stripe/sync-invoices", { method: "POST" });
 }
 
+export interface DailySummaryPoint {
+  day: string;
+  cost: number;
+  revenue: number;
+  event_count: number;
+}
+
+export async function getDailySummary(
+  days?: number,
+): Promise<{ data: DailySummaryPoint[] }> {
+  const params = days ? `?days=${days}` : "";
+  return request(`/analytics/daily-summary${params}`);
+}
+
 export interface PricingSuggestion {
   feature_key: string;
   suggested_price: number;

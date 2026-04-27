@@ -35,7 +35,9 @@ export function createFeaturesRoutes(pool: Pool, ensureVisitor: any) {
            COALESCE(SUM(usage_units), 0) as total_usage,
            COALESCE(AVG(cost_amount), 0) as avg_cost_per_event,
            COALESCE(AVG(revenue_amount), 0) as avg_revenue_per_event,
-           MAX(timestamp) as last_seen
+           MAX(timestamp) as last_seen,
+           mode() WITHIN GROUP (ORDER BY model) as top_model,
+           COUNT(DISTINCT model) as model_count
          FROM observe_events
          WHERE account_id = $1 AND feature_key IS NOT NULL
            AND (source IS NULL OR source != 'stripe')
@@ -60,6 +62,8 @@ export function createFeaturesRoutes(pool: Pool, ensureVisitor: any) {
             avg_revenue_per_event: parseFloat(row.avg_revenue_per_event) || 0,
             margin_pct: margin,
             last_seen: row.last_seen,
+            top_model: row.top_model ?? null,
+            model_count: parseInt(row.model_count) || 0,
           };
         });
 
