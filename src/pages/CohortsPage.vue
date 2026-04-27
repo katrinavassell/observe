@@ -631,7 +631,7 @@ const excludedCount = computed(() => {
     <!-- Page header -->
     <div class="flex items-start justify-between">
       <div>
-        <h1 class="text-2xl font-semibold tracking-tight">Cohorts</h1>
+        <h1 class="text-2xl font-semibold tracking-tight">Customers</h1>
         <p class="text-sm text-muted-foreground mt-1">
           Customer health and segmentation
         </p>
