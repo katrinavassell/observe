@@ -21,6 +21,9 @@ export interface MonthlyTrend {
   active_customers: number;
   active_features: number;
   models_used: number;
+  cost_change_pct: number | null;
+  revenue_change_pct: number | null;
+  event_count_change_pct: number | null;
 }
 
 export async function getMarginTrends(months?: number): Promise<{

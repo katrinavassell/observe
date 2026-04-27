@@ -10,9 +10,12 @@ import {
   getMrrMovements,
   getUsageLimits,
   getSourceBreakdown,
+  getMarginTrends,
+  getDailySummary,
 } from "@/lib/api";
 import type {} from "@/lib/api";
 import { AlertCircle, Plug, Info } from "lucide-vue-next";
+import DailyCostRevenueChart from "@/components/charts/DailyCostRevenueChart.vue";
 import {
   Badge,
   Card,
@@ -49,6 +52,41 @@ const { data: sourceBreakdown } = useQuery({
   queryKey: ["source-breakdown"],
   queryFn: getSourceBreakdown,
 });
+
+// Margin trends for period-over-period badges
+const { data: trendsData } = useQuery({
+  queryKey: ["margin-trends"],
+  queryFn: () => getMarginTrends(12),
+  enabled: computed(() => isLoggedIn.value),
+});
+
+const latestTrend = computed(() => {
+  const months = trendsData.value?.months;
+  if (!months?.length) return null;
+  return months[months.length - 1];
+});
+
+const priorTrend = computed(() => {
+  const months = trendsData.value?.months;
+  if (!months || months.length < 2) return null;
+  return months[months.length - 2];
+});
+
+const marginChangePp = computed(() => {
+  const curr = latestTrend.value?.margin_pct;
+  const prev = priorTrend.value?.margin_pct;
+  if (curr == null || prev == null) return null;
+  return Math.round((curr - prev) * 10) / 10;
+});
+
+// Daily summary for cost vs revenue chart
+const { data: dailyData } = useQuery({
+  queryKey: ["daily-summary"],
+  queryFn: () => getDailySummary(30),
+  enabled: computed(() => isLoggedIn.value),
+});
+
+const dailySeries = computed(() => dailyData.value?.data ?? []);
 
 const activeSources = computed(() => {
   if (!sourceBreakdown.value?.sources) return [];
@@ -349,6 +387,24 @@ function retry() {
           <div class="text-3xl font-semibold tabular-nums mt-1">
             {{ hasRevenue ? fmt(totalRevenue) : (customerData?.length ?? 0) }}
           </div>
+          <div
+            v-if="hasRevenue && latestTrend?.revenue_change_pct != null"
+            class="text-xs mt-1"
+            :class="
+              latestTrend.revenue_change_pct >= 0
+                ? 'text-emerald-500'
+                : 'text-destructive'
+            "
+          >
+            {{ latestTrend.revenue_change_pct >= 0 ? "+" : ""
+            }}{{ latestTrend.revenue_change_pct }}% vs prior period
+          </div>
+          <div
+            v-else-if="hasRevenue"
+            class="text-xs mt-1 text-muted-foreground"
+          >
+            No prior period
+          </div>
         </Card>
 
         <!-- Card 2: Total Cost (always) -->
@@ -370,6 +426,21 @@ function retry() {
           </div>
           <div class="text-3xl font-semibold tabular-nums mt-1">
             {{ fmt(totalCost) }}
+          </div>
+          <div
+            v-if="latestTrend?.cost_change_pct != null"
+            class="text-xs mt-1"
+            :class="
+              latestTrend.cost_change_pct <= 0
+                ? 'text-emerald-500'
+                : 'text-destructive'
+            "
+          >
+            {{ latestTrend.cost_change_pct >= 0 ? "+" : ""
+            }}{{ latestTrend.cost_change_pct }}% vs prior period
+          </div>
+          <div v-else class="text-xs mt-1 text-muted-foreground">
+            No prior period
           </div>
         </Card>
 
@@ -405,11 +476,33 @@ function retry() {
               }}%</span
             >
           </div>
+          <div
+            v-if="hasRevenue && marginChangePp != null"
+            class="text-xs mt-1"
+            :class="
+              marginChangePp >= 0 ? 'text-emerald-500' : 'text-destructive'
+            "
+          >
+            {{ marginChangePp >= 0 ? "+" : "" }}{{ marginChangePp }}% vs prior
+            period
+          </div>
+          <div
+            v-else-if="hasRevenue"
+            class="text-xs mt-1 text-muted-foreground"
+          >
+            No prior period
+          </div>
           <div v-else class="text-3xl font-semibold tabular-nums mt-1">
             {{ totalEvents.toLocaleString() }}
           </div>
         </Card>
       </div>
+
+      <!-- Daily Cost vs Revenue chart -->
+      <Card v-if="isLoggedIn && dailySeries.length > 0" class="p-6">
+        <h3 class="text-base font-semibold mb-4">Cost vs Revenue (Daily)</h3>
+        <DailyCostRevenueChart :data="dailySeries" />
+      </Card>
 
       <!-- Tab bar -->
       <div class="flex gap-1 border-b">
