@@ -543,7 +543,6 @@ function retry() {
                 <th class="text-right pb-2 font-medium">Cost</th>
                 <th class="text-right pb-2 font-medium">Revenue</th>
                 <th class="text-right pb-2 font-medium">Margin</th>
-                <th class="text-right pb-2 font-medium">Status</th>
               </tr>
             </thead>
             <tbody>
@@ -570,26 +569,6 @@ function retry() {
                   {{
                     c.margin_pct != null ? Math.round(c.margin_pct) + "%" : "--"
                   }}
-                </td>
-                <td class="py-2.5 text-right">
-                  <Badge
-                    v-if="c.margin_pct != null"
-                    :variant="
-                      c.margin_pct > 30
-                        ? 'default'
-                        : c.margin_pct >= 0
-                          ? 'warning'
-                          : 'destructive'
-                    "
-                  >
-                    {{
-                      c.margin_pct > 30
-                        ? "Healthy"
-                        : c.margin_pct >= 0
-                          ? "At Risk"
-                          : "Underwater"
-                    }}
-                  </Badge>
                 </td>
               </tr>
             </tbody>
