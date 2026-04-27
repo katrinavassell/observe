@@ -107,7 +107,6 @@ const plans = [
     features: [
       "100,000 events/month",
       "365-day data retention",
-      "10,000 AI insights/month",
       "Unlimited cost alerts",
       "Per-feature margin analysis",
       "All integrations included",
@@ -124,7 +123,6 @@ const plans = [
     features: [
       "1,000,000 events/month",
       "Unlimited data retention",
-      "Unlimited AI insights",
       "Unlimited cost alerts",
       "Multi-org management (coming soon)",
       "Priority support",
@@ -324,7 +322,7 @@ const plans = [
                         ? 'bg-warning'
                         : 'bg-primary'
                   "
-                  :style="{ width: item.pct + '%' }"
+                  :style="{ width: Math.max(item.pct, 2) + '%' }"
                 />
               </div>
               <div v-else class="h-2 bg-primary/20 rounded-full" />
