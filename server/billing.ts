@@ -294,7 +294,7 @@ export async function createCheckoutSession(
     process.env.APP_URL ??
     (process.env.VERCEL_URL
       ? `https://${process.env.VERCEL_URL}`
-      : "http://localhost:5004");
+      : "http://localhost:5001");
 
   const session = await stripe.checkout.sessions.create({
     customer: customerId,
@@ -334,7 +334,7 @@ export async function createPortalSession(
     process.env.APP_URL ??
     (process.env.VERCEL_URL
       ? `https://${process.env.VERCEL_URL}`
-      : "http://localhost:5004");
+      : "http://localhost:5001");
 
   const session = await stripe.billingPortal.sessions.create({
     customer: customerId,
