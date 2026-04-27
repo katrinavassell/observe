@@ -225,7 +225,7 @@ function isActive(path: string) {
         'fixed left-0 top-0 z-40 h-screen w-64 border-r bg-sidebar text-sidebar-foreground transition-transform duration-200 ease-in-out md:translate-x-0',
         sidebarOpen
           ? 'translate-x-0 visible'
-          : '-translate-x-full max-md:invisible',
+          : '-translate-x-full max-md:hidden',
       ]"
     >
       <div class="flex h-full flex-col">
