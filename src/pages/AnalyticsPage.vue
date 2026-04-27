@@ -527,7 +527,7 @@ function retry() {
       </div>
 
       <!-- Daily Cost vs Revenue chart -->
-      <Card v-if="isLoggedIn && dailySeries.length > 0" class="p-6">
+      <Card v-if="isLoggedIn && dailySeries.length >= 3" class="p-6">
         <h3 class="text-base font-semibold mb-4">Cost vs Revenue (Daily)</h3>
         <DailyCostRevenueChart :data="dailySeries" />
       </Card>

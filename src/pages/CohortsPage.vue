@@ -314,7 +314,6 @@ const DEFAULT_COLUMNS: TableColumn[] = [
   { id: "profit", label: "Profit", visible: false, align: "right" },
   { id: "active_days", label: "Active Days", visible: true, align: "right" },
   { id: "status", label: "Status", visible: false, align: "left" },
-  { id: "mrr", label: "Revenue", visible: false, align: "left" },
 ];
 
 const STORAGE_KEY = "observe:cohorts-columns";
@@ -1017,6 +1016,7 @@ const excludedCount = computed(() => {
                       <div class="flex flex-col gap-0.5">
                         <div class="flex items-center gap-1.5">
                           <span
+                            v-if="c.health_score != null && c.health_score > 0"
                             class="h-1.5 w-1.5 rounded-full shrink-0"
                             :class="
                               c.health_score >= 70
@@ -1033,20 +1033,6 @@ const excludedCount = computed(() => {
                             "
                             class="text-sm font-medium"
                             >{{ c.customer_name }}</span
-                          >
-                          <Badge
-                            v-if="c.cohort"
-                            :class="cohortMeta[c.cohort].color"
-                            >{{ cohortMeta[c.cohort].label }}</Badge
-                          >
-                          <Badge
-                            v-if="c.pricing_model"
-                            variant="outline"
-                            :class="pricingModelBadge[c.pricing_model]"
-                            >{{
-                              c.pricing_model.charAt(0).toUpperCase() +
-                              c.pricing_model.slice(1)
-                            }}</Badge
                           >
                         </div>
                         <code
@@ -1142,19 +1128,6 @@ const excludedCount = computed(() => {
                         class="bg-red-100 text-red-700 hover:bg-red-100"
                         >Underwater</Badge
                       >
-                    </td>
-
-                    <!-- MRR -->
-                    <td v-else-if="col.id === 'mrr'" class="p-3 text-right">
-                      <span v-if="c.mrr > 0" class="font-medium"
-                        >${{
-                          c.mrr.toLocaleString(undefined, {
-                            minimumFractionDigits: 0,
-                            maximumFractionDigits: 0,
-                          })
-                        }}</span
-                      >
-                      <span v-else class="text-muted-foreground">—</span>
                     </td>
                   </template>
                 </tr>
