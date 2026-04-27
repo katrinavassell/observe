@@ -311,9 +311,9 @@ const DEFAULT_COLUMNS: TableColumn[] = [
   { id: "revenue", label: "Revenue", visible: true, align: "right" },
   { id: "cost", label: "Cost", visible: true, align: "right" },
   { id: "margin", label: "Margin", visible: true, align: "right" },
-  { id: "profit", label: "Profit", visible: true, align: "right" },
+  { id: "profit", label: "Profit", visible: false, align: "right" },
   { id: "active_days", label: "Active Days", visible: true, align: "right" },
-  { id: "status", label: "Status", visible: true, align: "left" },
+  { id: "status", label: "Status", visible: false, align: "left" },
   { id: "mrr", label: "Revenue", visible: false, align: "left" },
 ];
 
@@ -1030,19 +1030,28 @@ const excludedCount = computed(() => {
                     </td>
 
                     <!-- Revenue -->
-                    <td v-else-if="col.id === 'revenue'" class="p-3 text-right">
+                    <td
+                      v-else-if="col.id === 'revenue'"
+                      class="p-3 text-right font-mono tabular-nums"
+                    >
                       {{
                         fmt(c.total_revenue > 0 ? c.total_revenue : c.mrr || 0)
                       }}
                     </td>
 
                     <!-- Cost -->
-                    <td v-else-if="col.id === 'cost'" class="p-3 text-right">
+                    <td
+                      v-else-if="col.id === 'cost'"
+                      class="p-3 text-right font-mono tabular-nums"
+                    >
                       {{ fmt(c.total_cost) }}
                     </td>
 
                     <!-- Margin -->
-                    <td v-else-if="col.id === 'margin'" class="p-3 text-right">
+                    <td
+                      v-else-if="col.id === 'margin'"
+                      class="p-3 text-right font-mono tabular-nums"
+                    >
                       {{ fmtPct(c.margin_pct) }}
                     </td>
 
