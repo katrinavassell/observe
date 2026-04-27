@@ -155,7 +155,12 @@ function marginBarWidth(pct: number | null): number {
                   variant="destructive"
                   class="text-xs"
                 >
-                  Negative Margin
+                  Losing
+                  {{
+                    formatCurrency(
+                      (f.total_cost ?? 0) - (f.total_revenue ?? 0),
+                    )
+                  }}/mo
                 </Badge>
                 <Badge
                   v-else-if="f.margin_pct !== null"
@@ -170,13 +175,13 @@ function marginBarWidth(pct: number | null): number {
             <div class="grid grid-cols-3 gap-3">
               <div>
                 <p class="text-xs text-muted-foreground">Cost</p>
-                <p class="text-lg font-semibold tabular-nums">
+                <p class="text-lg font-semibold font-mono tabular-nums">
                   {{ formatCurrency(f.total_cost) }}
                 </p>
               </div>
               <div>
                 <p class="text-xs text-muted-foreground">Revenue</p>
-                <p class="text-lg font-semibold tabular-nums">
+                <p class="text-lg font-semibold font-mono tabular-nums">
                   {{ formatCurrency(f.total_revenue) }}
                 </p>
               </div>
