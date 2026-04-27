@@ -19,6 +19,7 @@ import DailyCostRevenueChart from "@/components/charts/DailyCostRevenueChart.vue
 import {
   Badge,
   Card,
+  CardContent,
   Skeleton,
   Button,
   Tooltip,
@@ -222,6 +223,8 @@ const maxCustomerCost = computed(() => {
   if (!sortedCustomers.value.length) return 1;
   return Math.max(...sortedCustomers.value.map((c) => c.total_cost), 0.01);
 });
+
+const topCustomersByCost = computed(() => sortedCustomers.value.slice(0, 5));
 
 // Tabs — hide Agent / MRR when empty; Cost Type is gone (overlapped By Feature).
 const visibleTabs = computed(() => {
@@ -502,6 +505,71 @@ function retry() {
       <Card v-if="isLoggedIn && dailySeries.length > 0" class="p-6">
         <h3 class="text-base font-semibold mb-4">Cost vs Revenue (Daily)</h3>
         <DailyCostRevenueChart :data="dailySeries" />
+      </Card>
+
+      <!-- Top Customers by Cost -->
+      <Card v-if="isLoggedIn && topCustomersByCost.length > 0">
+        <CardContent class="pt-6">
+          <h3 class="text-base font-semibold mb-4">Top Customers by Cost</h3>
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="border-b text-xs text-muted-foreground">
+                <th class="text-left pb-2 font-medium">Customer</th>
+                <th class="text-right pb-2 font-medium">Cost</th>
+                <th class="text-right pb-2 font-medium">Revenue</th>
+                <th class="text-right pb-2 font-medium">Margin</th>
+                <th class="text-right pb-2 font-medium">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="c in topCustomersByCost"
+                :key="c.customer_id"
+                class="border-b last:border-0 hover:bg-muted/50 transition-colors"
+              >
+                <td class="py-2.5">
+                  <router-link
+                    :to="`/customers/${c.customer_id}`"
+                    class="text-sm font-medium hover:underline"
+                  >
+                    {{ c.customer_name || c.customer_id }}
+                  </router-link>
+                </td>
+                <td class="py-2.5 text-right font-mono tabular-nums">
+                  {{ fmt(c.total_cost) }}
+                </td>
+                <td class="py-2.5 text-right font-mono tabular-nums">
+                  {{ fmt(c.total_revenue || 0) }}
+                </td>
+                <td class="py-2.5 text-right font-mono tabular-nums">
+                  {{
+                    c.margin_pct != null ? Math.round(c.margin_pct) + "%" : "--"
+                  }}
+                </td>
+                <td class="py-2.5 text-right">
+                  <Badge
+                    v-if="c.margin_pct != null"
+                    :variant="
+                      c.margin_pct > 30
+                        ? 'default'
+                        : c.margin_pct >= 0
+                          ? 'warning'
+                          : 'destructive'
+                    "
+                  >
+                    {{
+                      c.margin_pct > 30
+                        ? "Healthy"
+                        : c.margin_pct >= 0
+                          ? "At Risk"
+                          : "Underwater"
+                    }}
+                  </Badge>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </CardContent>
       </Card>
 
       <!-- Tab bar -->
