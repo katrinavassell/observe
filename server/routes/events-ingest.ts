@@ -348,9 +348,11 @@ export function createEventsIngestRoutes(
         if (!ingestAccess.allowed) {
           return res.status(429).json({
             error:
-              "Monthly event limit reached. Need more? Check out Tanso at tansohq.com",
+              ingestAccess.reason ||
+              "Monthly event limit reached. Upgrade your plan to continue.",
             usage: ingestAccess.usage,
             limit: ingestAccess.limit,
+            upgrade_url: "/plans",
           });
         }
 

@@ -119,9 +119,9 @@ const chartOptions = computed(() => ({
     y: {
       beginAtZero: true,
       position: "left" as const,
-      title: { display: true, text: "Revenue", color: "rgb(99, 102, 241)" },
+      title: { display: true, text: "Revenue", color: "#999" },
       ticks: {
-        color: "rgb(99, 102, 241)",
+        color: "#999",
         callback: (value: number | string) => {
           const num = typeof value === "string" ? parseFloat(value) : value;
           if (num >= 1000) return `$${(num / 1000).toFixed(0)}K`;
@@ -132,10 +132,10 @@ const chartOptions = computed(() => ({
     y1: {
       beginAtZero: true,
       position: "right" as const,
-      title: { display: true, text: "Cost", color: "rgb(239, 68, 68)" },
+      title: { display: true, text: "Cost", color: "#999" },
       grid: { drawOnChartArea: false },
       ticks: {
-        color: "rgb(239, 68, 68)",
+        color: "#999",
         callback: (value: number | string) => {
           const num = typeof value === "string" ? parseFloat(value) : value;
           if (num >= 1000) return `$${(num / 1000).toFixed(0)}K`;

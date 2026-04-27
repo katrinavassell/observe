@@ -323,18 +323,28 @@ export function createAnalyticsReportRoutes(pool: Pool, ensureVisitor: any) {
         );
 
         const result = await pool.query(
-          `SELECT
-            DATE_TRUNC('month', timestamp) as month,
-            COALESCE(SUM(cost_amount), 0) as total_cost,
-            COALESCE(SUM(revenue_amount), 0) as total_revenue,
-            COUNT(*) as event_count,
-            COUNT(DISTINCT customer_id) as active_customers,
-            COUNT(DISTINCT feature_key) as active_features,
-            COUNT(DISTINCT model) as models_used
-          FROM observe_events
-          WHERE account_id = $1 AND timestamp >= NOW() - MAKE_INTERVAL(months => $2)
-            AND (source IS NULL OR source != 'stripe')
-          GROUP BY month
+          `SELECT month, total_cost, total_revenue, event_count,
+            active_customers, active_features, models_used,
+            ROUND((total_cost - LAG(total_cost) OVER (ORDER BY month))
+              / NULLIF(LAG(total_cost) OVER (ORDER BY month), 0) * 100, 1) AS cost_change_pct,
+            ROUND((total_revenue - LAG(total_revenue) OVER (ORDER BY month))
+              / NULLIF(LAG(total_revenue) OVER (ORDER BY month), 0) * 100, 1) AS revenue_change_pct,
+            ROUND((event_count - LAG(event_count) OVER (ORDER BY month))::numeric
+              / NULLIF(LAG(event_count) OVER (ORDER BY month), 0) * 100, 1) AS event_count_change_pct
+          FROM (
+            SELECT
+              DATE_TRUNC('month', timestamp) as month,
+              COALESCE(SUM(cost_amount), 0) as total_cost,
+              COALESCE(SUM(revenue_amount), 0) as total_revenue,
+              COUNT(*) as event_count,
+              COUNT(DISTINCT customer_id) as active_customers,
+              COUNT(DISTINCT feature_key) as active_features,
+              COUNT(DISTINCT model) as models_used
+            FROM observe_events
+            WHERE account_id = $1 AND timestamp >= NOW() - MAKE_INTERVAL(months => $2)
+              AND (source IS NULL OR source != 'stripe')
+            GROUP BY month
+          ) sub
           ORDER BY month ASC`,
           [req.accountId, months],
         );
@@ -356,6 +366,16 @@ export function createAnalyticsReportRoutes(pool: Pool, ensureVisitor: any) {
             active_customers: parseInt(r.active_customers),
             active_features: parseInt(r.active_features),
             models_used: parseInt(r.models_used),
+            cost_change_pct:
+              r.cost_change_pct != null ? parseFloat(r.cost_change_pct) : null,
+            revenue_change_pct:
+              r.revenue_change_pct != null
+                ? parseFloat(r.revenue_change_pct)
+                : null,
+            event_count_change_pct:
+              r.event_count_change_pct != null
+                ? parseFloat(r.event_count_change_pct)
+                : null,
           };
         });
 
@@ -853,6 +873,47 @@ export function createAnalyticsReportRoutes(pool: Pool, ensureVisitor: any) {
           error,
         );
         res.status(500).json({ error: "Failed to find underwater customers" });
+      }
+    },
+  );
+
+  // GET /analytics/daily-summary — daily cost/revenue aggregation
+  router.get(
+    "/analytics/daily-summary",
+    ensureVisitor,
+    async (req: AuthRequest, res: Response) => {
+      try {
+        const days = Math.min(
+          Math.max(parseInt(String(req.query.days)) || 30, 1),
+          90,
+        );
+
+        const result = await pool.query(
+          `SELECT
+            DATE_TRUNC('day', timestamp) AS day,
+            COALESCE(SUM(cost_amount), 0) AS total_cost,
+            COALESCE(SUM(revenue_amount), 0) AS total_revenue,
+            COUNT(*) AS event_count
+          FROM observe_events
+          WHERE account_id = $1
+            AND timestamp >= NOW() - MAKE_INTERVAL(days => $2)
+            AND (source IS NULL OR source NOT IN ('sample', 'stripe'))
+          GROUP BY day
+          ORDER BY day ASC`,
+          [req.accountId, days],
+        );
+
+        const data = result.rows.map((r) => ({
+          day: r.day ? new Date(r.day).toISOString().slice(0, 10) : "unknown",
+          cost: parseFloat(r.total_cost) || 0,
+          revenue: parseFloat(r.total_revenue) || 0,
+          event_count: parseInt(r.event_count),
+        }));
+
+        res.json({ data });
+      } catch (error) {
+        console.error("GET /analytics/daily-summary error:", error);
+        res.status(500).json({ error: "Failed to get daily summary" });
       }
     },
   );

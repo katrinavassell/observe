@@ -126,7 +126,7 @@ const router = createRouter({
     },
     {
       path: "/checkout/success",
-      redirect: "/analytics",
+      redirect: "/plans",
     },
     {
       path: "/admin/pricing",
