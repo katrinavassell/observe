@@ -244,28 +244,27 @@ function isActive(path: string) {
               >
             </div>
           </div>
-          <div v-if="isLoggedIn" class="shrink-0 space-y-1">
-            <div class="org-switcher-minimal">
-              <OrganizationSwitcher
-                :appearance="{
-                  elements: {
-                    organizationSwitcherTrigger:
-                      'p-1.5 hover:bg-muted rounded-md',
-                    organizationSwitcherTriggerIcon:
-                      'h-4 w-4 text-muted-foreground',
-                  },
-                }"
-              />
-            </div>
-            <router-link
-              v-if="!canCreateOrg"
-              to="/plans"
-              class="block text-[10px] text-muted-foreground hover:text-foreground px-2 py-1 rounded hover:bg-muted transition-colors"
-            >
-              Upgrade to add organizations →
-            </router-link>
+          <div v-if="isLoggedIn" class="shrink-0 org-switcher-minimal">
+            <OrganizationSwitcher
+              :appearance="{
+                elements: {
+                  organizationSwitcherTrigger:
+                    'p-1.5 hover:bg-muted rounded-md',
+                  organizationSwitcherTriggerIcon:
+                    'h-4 w-4 text-muted-foreground',
+                },
+              }"
+            />
           </div>
         </div>
+
+        <router-link
+          v-if="isLoggedIn && !canCreateOrg"
+          to="/plans"
+          class="block text-[10px] text-muted-foreground hover:text-foreground mx-3 mt-1 mb-2 px-2 py-1.5 rounded border border-dashed border-muted-foreground/20 hover:border-muted-foreground/40 transition-colors text-center"
+        >
+          Upgrade to add organizations →
+        </router-link>
 
         <!-- Open source CTA + Sign in for anonymous users -->
         <div v-if="!isLoggedIn" class="px-3 pt-4 pb-1 space-y-2">
