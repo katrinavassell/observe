@@ -244,18 +244,21 @@ function isActive(path: string) {
               >
             </div>
           </div>
-          <div
-            v-if="isLoggedIn"
-            class="shrink-0 org-switcher-minimal"
-            :class="{ 'hide-create-org': !canCreateOrg }"
-          >
+          <div v-if="isLoggedIn" class="shrink-0 org-switcher-minimal">
             <OrganizationSwitcher
+              :hide-personal="true"
               :appearance="{
                 elements: {
                   organizationSwitcherTrigger:
                     'p-1.5 hover:bg-muted rounded-md',
                   organizationSwitcherTriggerIcon:
                     'h-4 w-4 text-muted-foreground',
+                  ...(canCreateOrg
+                    ? {}
+                    : {
+                        organizationSwitcherPopoverActionButton__createOrganization:
+                          'cl-hidden',
+                      }),
                 },
               }"
             />
@@ -527,11 +530,7 @@ function isActive(path: string) {
 .org-switcher-minimal .cl-organizationPreviewTextContainer {
   display: none !important;
 }
-.hide-create-org
-  .cl-organizationSwitcherPopoverActionButton__createOrganization,
-.hide-create-org [class*="actionButton"][class*="createOrganization"],
-.hide-create-org
-  button[class*="cl-organizationSwitcherPopoverActionButton"]:last-child {
+.cl-hidden {
   display: none !important;
 }
 </style>
