@@ -20,7 +20,7 @@ onMounted(async () => {
   for (let i = 0; i < 10; i++) {
     try {
       const status = await getBillingStatus();
-      if (status.plan === "growth") {
+      if (status.plan === "pro" || status.plan === "team") {
         planConfirmed.value = true;
         window.posthog?.capture("checkout_completed");
         break;
