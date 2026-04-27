@@ -258,14 +258,6 @@ function isActive(path: string) {
           </div>
         </div>
 
-        <router-link
-          v-if="isLoggedIn && !canCreateOrg"
-          to="/plans"
-          class="block text-[10px] text-muted-foreground hover:text-foreground mx-3 mt-1 mb-2 px-2 py-1.5 rounded border border-dashed border-muted-foreground/20 hover:border-muted-foreground/40 transition-colors text-center"
-        >
-          Upgrade to add organizations →
-        </router-link>
-
         <!-- Open source CTA + Sign in for anonymous users -->
         <div v-if="!isLoggedIn" class="px-3 pt-4 pb-1 space-y-2">
           <router-link
