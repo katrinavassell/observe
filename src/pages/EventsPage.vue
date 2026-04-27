@@ -741,7 +741,7 @@ function usageTooltip(event: ObserveEvent): string {
       <div class="overflow-x-auto">
         <table class="w-full text-sm text-left">
           <thead
-            class="border-b bg-muted/40 text-muted-foreground text-xs font-medium uppercase tracking-wider"
+            class="border-b bg-muted/50 text-muted-foreground text-xs font-medium uppercase tracking-wider"
           >
             <tr>
               <th class="w-6"></th>

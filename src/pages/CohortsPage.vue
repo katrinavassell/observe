@@ -973,8 +973,10 @@ const excludedCount = computed(() => {
       <Card class="overflow-hidden">
         <div class="overflow-x-auto">
           <table class="w-full text-sm">
-            <thead>
-              <tr class="border-b bg-muted/50">
+            <thead
+              class="bg-muted/50 text-muted-foreground text-xs font-medium uppercase tracking-wider"
+            >
+              <tr>
                 <th class="text-left p-3 font-medium w-6"></th>
                 <th
                   v-for="col in visibleColumns"
