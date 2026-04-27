@@ -288,7 +288,7 @@ function retry() {
     <div class="flex items-start justify-between">
       <div>
         <div class="flex items-center gap-2">
-          <h1 class="text-2xl font-semibold tracking-tight">Analytics</h1>
+          <h1 class="text-2xl font-semibold tracking-tight">Overview</h1>
           <Tooltip>
             <TooltipTrigger as-child>
               <Badge
@@ -313,7 +313,7 @@ function retry() {
         </div>
         <div class="flex items-center gap-2 mt-1">
           <p class="text-muted-foreground">
-            Revenue, cost, and margin by feature, model, and customer
+            Cost, revenue, and margin across all features and customers
           </p>
           <div v-if="activeSources.length" class="flex items-center gap-1">
             <SourceBadge
@@ -369,7 +369,7 @@ function retry() {
     <!-- Data loaded -->
     <template v-else>
       <!-- KPI cards -->
-      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <!-- Card 1: Revenue or Customers -->
         <Card class="p-6">
           <div
@@ -497,6 +497,31 @@ function retry() {
           </div>
           <div v-else class="text-3xl font-semibold tabular-nums mt-1">
             {{ totalEvents.toLocaleString() }}
+          </div>
+        </Card>
+
+        <!-- Card 4: Events Tracked -->
+        <Card class="p-6">
+          <div class="text-sm font-medium text-muted-foreground">
+            Events Tracked
+          </div>
+          <div class="text-3xl font-semibold tabular-nums mt-1">
+            {{ totalEvents.toLocaleString() }}
+          </div>
+          <div
+            v-if="latestTrend?.event_count_change_pct != null"
+            class="text-xs mt-1"
+            :class="
+              latestTrend.event_count_change_pct >= 0
+                ? 'text-emerald-500'
+                : 'text-destructive'
+            "
+          >
+            {{ latestTrend.event_count_change_pct >= 0 ? "+" : ""
+            }}{{ latestTrend.event_count_change_pct }}% vs prior period
+          </div>
+          <div v-else class="text-xs mt-1 text-muted-foreground">
+            No prior period
           </div>
         </Card>
       </div>

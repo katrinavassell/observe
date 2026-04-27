@@ -69,7 +69,7 @@ onMounted(() => {
 const navItems = computed(() => [
   {
     path: "/analytics",
-    label: "Analytics",
+    label: "Overview",
     icon: BarChart3,
     description: "Revenue, costs & margin overview",
   },
