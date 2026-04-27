@@ -310,6 +310,7 @@ export async function createCheckoutSession(
     customer: customerId,
     mode: "subscription",
     line_items: [{ price: priceId, quantity: 1 }],
+    allow_promotion_codes: true,
     success_url: `${baseUrl}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${baseUrl}/plans`,
     metadata: { visitor_id: visitorId },

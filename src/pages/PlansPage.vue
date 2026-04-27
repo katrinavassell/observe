@@ -166,8 +166,10 @@ const plans = [
         >
           Most popular
         </div>
-        <div v-else class="py-1.5 -mx-px -mt-px">&nbsp;</div>
-        <CardContent class="p-6 flex flex-col flex-1">
+        <CardContent
+          class="p-6 flex flex-col flex-1"
+          :class="currentPlan !== plan.key && !plan.popular ? 'pt-8' : ''"
+        >
           <div class="space-y-4 flex-1">
             <div>
               <h3 class="text-lg font-semibold">{{ plan.name }}</h3>
