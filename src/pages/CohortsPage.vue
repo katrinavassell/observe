@@ -540,21 +540,6 @@ const cohortMeta: Record<
   },
 };
 
-const pricingModelBadge: Record<string, string> = {
-  flat: "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300",
-  metered: "bg-blue-100 text-blue-700",
-  tiered: "bg-purple-100 text-purple-700",
-  hybrid: "bg-teal-100 text-teal-700",
-};
-
-const mrrMeta: Record<string, { label: string; color: string }> = {
-  new: { label: "New", color: "bg-blue-100 text-blue-700" },
-  expansion: { label: "Expansion", color: "bg-green-100 text-green-700" },
-  contraction: { label: "Contraction", color: "bg-yellow-100 text-yellow-700" },
-  churned: { label: "Churned", color: "bg-red-100 text-red-700" },
-  stable: { label: "Stable", color: "bg-gray-100 text-gray-600" },
-};
-
 const cohortLabels: CohortLabel[] = [
   "unprofitable",
   "rising_cost",
