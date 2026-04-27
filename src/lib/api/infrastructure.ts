@@ -107,8 +107,8 @@ export async function getBillingStatus(): Promise<BillingStatus> {
   return request("/billing/status");
 }
 
-export async function createCheckout(
-  plan: string = "growth",
+export async function startCheckout(
+  plan: string = "pro",
 ): Promise<{ url: string }> {
   return request("/billing/create-checkout", {
     method: "POST",
@@ -116,7 +116,7 @@ export async function createCheckout(
   });
 }
 
-export async function createPortalSession(): Promise<{ url: string }> {
+export async function openPortal(): Promise<{ url: string }> {
   return request("/billing/portal", { method: "POST" });
 }
 

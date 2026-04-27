@@ -23,7 +23,7 @@ export const OBSERVE_PLANS: Record<string, PlanConfig> = {
     features: {
       ai_insights: { limit: 1000, reset: "monthly" },
       event_ingest: { limit: 10000, reset: "monthly" },
-      cost_alerts: { limit: null },
+      cost_alerts: { limit: 3 },
       csv_upload: { limit: null },
       stripe_connection: { limit: null },
       ai_provider_connection: { limit: null },
@@ -31,12 +31,12 @@ export const OBSERVE_PLANS: Record<string, PlanConfig> = {
       data_retention_days: { limit: 90 },
     },
   },
-  growth: {
-    name: "Growth",
-    stripePriceId: process.env.STRIPE_GROWTH_PRICE_ID || "",
+  pro: {
+    name: "Pro",
+    stripePriceId: process.env.STRIPE_PRO_PRICE_ID || "",
     features: {
       ai_insights: { limit: 10000, reset: "monthly" },
-      event_ingest: { limit: 500000, reset: "monthly" },
+      event_ingest: { limit: 100000, reset: "monthly" },
       cost_alerts: { limit: null },
       csv_upload: { limit: null },
       stripe_connection: { limit: null },
@@ -45,12 +45,12 @@ export const OBSERVE_PLANS: Record<string, PlanConfig> = {
       data_retention_days: { limit: 365 },
     },
   },
-  pro: {
-    name: "Pro",
-    stripePriceId: process.env.STRIPE_PRO_PRICE_ID || "",
+  team: {
+    name: "Team",
+    stripePriceId: process.env.STRIPE_TEAM_PRICE_ID || "",
     features: {
       ai_insights: { limit: null },
-      event_ingest: { limit: null },
+      event_ingest: { limit: 1000000, reset: "monthly" },
       cost_alerts: { limit: null },
       csv_upload: { limit: null },
       stripe_connection: { limit: null },
@@ -60,6 +60,8 @@ export const OBSERVE_PLANS: Record<string, PlanConfig> = {
     },
   },
 };
+
+const SOFT_CAP_GRACE = 0.1;
 
 // =============================================================================
 // Feature access check
@@ -161,12 +163,16 @@ export async function checkFeatureAccess(
     effectiveLimit += bonusCredits;
   }
 
+  const hardLimit = Math.ceil(effectiveLimit * (1 + SOFT_CAP_GRACE));
   const remaining = Math.max(0, effectiveLimit - used);
+  const overSoftCap = used >= effectiveLimit;
+  const overHardCap = used >= hardLimit;
   return {
-    allowed: used < effectiveLimit,
-    reason:
-      used >= effectiveLimit
-        ? `You've used ${used}/${effectiveLimit} ${featureKey} this month. Need more? Check out Tanso at tansohq.com`
+    allowed: !overHardCap,
+    reason: overHardCap
+      ? `You've exceeded your ${featureKey} limit (${used}/${effectiveLimit}). Upgrade your plan to continue.`
+      : overSoftCap
+        ? `You're over your ${featureKey} limit (${used}/${effectiveLimit}). Upgrade soon to avoid disruption.`
         : undefined,
     usage: used,
     limit: effectiveLimit,
@@ -242,7 +248,7 @@ export async function trackUsage(
 export async function createCheckoutSession(
   pool: Pool,
   visitorId: string,
-  plan: string = "growth",
+  plan: string = "pro",
 ): Promise<{ url: string }> {
   const stripe = await getUncachableStripeClient();
   const planConfig = OBSERVE_PLANS[plan];
@@ -285,9 +291,10 @@ export async function createCheckoutSession(
   }
 
   const baseUrl =
-    process.env.APP_URL || process.env.VERCEL_URL
+    process.env.APP_URL ??
+    (process.env.VERCEL_URL
       ? `https://${process.env.VERCEL_URL}`
-      : "http://localhost:5004";
+      : "http://localhost:5004");
 
   const session = await stripe.checkout.sessions.create({
     customer: customerId,
@@ -324,9 +331,10 @@ export async function createPortalSession(
   }
 
   const baseUrl =
-    process.env.APP_URL || process.env.VERCEL_URL
+    process.env.APP_URL ??
+    (process.env.VERCEL_URL
       ? `https://${process.env.VERCEL_URL}`
-      : "http://localhost:5004";
+      : "http://localhost:5004");
 
   const session = await stripe.billingPortal.sessions.create({
     customer: customerId,
@@ -340,6 +348,13 @@ export async function createPortalSession(
 // Stripe Webhook handler
 // =============================================================================
 
+function resolvePlanFromPriceId(priceId: string): string {
+  for (const [key, plan] of Object.entries(OBSERVE_PLANS)) {
+    if (plan.stripePriceId && plan.stripePriceId === priceId) return key;
+  }
+  return "pro";
+}
+
 export async function handleWebhook(
   pool: Pool,
   event: { type: string; data: { object: Record<string, unknown> } },
@@ -352,16 +367,22 @@ export async function handleWebhook(
         ? (session.metadata as Record<string, string>).visitor_id
         : null;
 
+      const lineItems = (session as Record<string, unknown>).line_items as
+        | { data?: Array<{ price?: { id?: string } }> }
+        | undefined;
+      const priceId = lineItems?.data?.[0]?.price?.id ?? "";
+      const plan = resolvePlanFromPriceId(priceId);
+
       if (visitorId) {
         const result = await pool.query(
-          `UPDATE accounts SET stripe_plan = 'growth', stripe_customer_id = $1
+          `UPDATE accounts SET stripe_plan = $1, stripe_customer_id = $2
             WHERE id = (
               SELECT account_id FROM user_accounts
-               WHERE user_id = (SELECT id FROM users WHERE visitor_id = $2)
+               WHERE user_id = (SELECT id FROM users WHERE visitor_id = $3)
                  AND role = 'owner' LIMIT 1
             )
             RETURNING id`,
-          [customerId, visitorId],
+          [plan, customerId, visitorId],
         );
         if (result.rowCount === 0) {
           console.error(
@@ -370,8 +391,8 @@ export async function handleWebhook(
         }
       } else if (customerId) {
         const result = await pool.query(
-          `UPDATE accounts SET stripe_plan = 'growth' WHERE stripe_customer_id = $1 RETURNING id`,
-          [customerId],
+          `UPDATE accounts SET stripe_plan = $1 WHERE stripe_customer_id = $2 RETURNING id`,
+          [plan, customerId],
         );
         if (result.rowCount === 0) {
           console.error(
@@ -390,11 +411,16 @@ export async function handleWebhook(
       const sub = event.data.object;
       const customerId = sub.customer as string;
       const status = sub.status as string;
+      const items = (sub as Record<string, unknown>).items as
+        | { data?: Array<{ price?: { id?: string } }> }
+        | undefined;
+      const priceId = items?.data?.[0]?.price?.id ?? "";
+      const plan = resolvePlanFromPriceId(priceId);
 
       if (status === "active" || status === "trialing") {
         await pool.query(
-          `UPDATE accounts SET stripe_plan = 'growth' WHERE stripe_customer_id = $1`,
-          [customerId],
+          `UPDATE accounts SET stripe_plan = $1 WHERE stripe_customer_id = $2`,
+          [plan, customerId],
         );
       } else if (
         status === "canceled" ||
