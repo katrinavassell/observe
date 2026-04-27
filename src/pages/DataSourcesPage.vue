@@ -55,6 +55,7 @@ import {
   disconnectStripe,
   getOpenAIStatus,
   getAnthropicStatus,
+  getBillingStatus,
 } from "@/lib/api";
 
 const router = useRouter();
@@ -62,6 +63,15 @@ const queryClient = useQueryClient();
 const { isLoggedIn } = useAuth();
 
 const canEdit = computed(() => isLoggedIn.value);
+
+const { data: billing } = useQuery({
+  queryKey: ["billing-status"],
+  queryFn: getBillingStatus,
+  enabled: isLoggedIn,
+});
+const isPaidPlan = computed(
+  () => billing.value?.plan === "pro" || billing.value?.plan === "team",
+);
 
 // =============================================================================
 // DATA MODE
@@ -545,9 +555,10 @@ async function handleUsageFileCleared(): Promise<void> {
 const isResettingData = ref(false);
 
 async function handleResetAccountData() {
-  const confirmation = window.prompt(
-    'This will permanently delete ALL data for this account. Type "RESET" to confirm.',
-  );
+  const msg = isPaidPlan.value
+    ? 'You are on a paid plan. This will permanently delete ALL data but your subscription stays active. Type "RESET" to confirm.'
+    : 'This will permanently delete ALL data for this account. Type "RESET" to confirm.';
+  const confirmation = window.prompt(msg);
   if (confirmation !== "RESET") return;
 
   isResettingData.value = true;
@@ -1503,6 +1514,10 @@ fetch(<span class="text-amber-300">'{{ ingestUrl }}'</span>, {
               <strong>Your existing API key will stop working.</strong>
               After reset: update your app with the new API key, re-connect
               Stripe, and send events to start fresh.
+            </p>
+            <p v-if="isPaidPlan" class="text-xs text-destructive font-medium">
+              You're on a paid plan. Your subscription stays active after reset,
+              but your usage counter resets to zero.
             </p>
             <Button
               variant="destructive"
