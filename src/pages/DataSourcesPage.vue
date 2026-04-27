@@ -384,6 +384,8 @@ async function handleStripeSync() {
     const result = await syncStripeData();
     await loadStripeStatus();
     await refetchDataMode();
+    await queryClient.invalidateQueries({ queryKey: ["cohorts"] });
+    await queryClient.invalidateQueries({ queryKey: ["customer-pnl"] });
     const warnings = (result as { warnings?: string[] }).warnings;
     if (warnings?.length) {
       toast.warning(warnings[0]);
