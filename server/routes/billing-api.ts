@@ -12,6 +12,7 @@ import {
   grantBonusCredits,
   getBonusCredits,
   CREDIT_REWARDS,
+  checkFeatureAccess,
 } from "../billing.js";
 import { calculateCostFromTokens } from "../model-pricing.js";
 import { syncStripeDataForUser } from "./integrations.js";
@@ -187,13 +188,18 @@ export function createBillingApiRoutes(
           }
         > = {};
         for (const key of features) {
-          entitlements[key] = await checkFeatureAccess(
-            pool,
-            req.visitorId!,
-            key,
-            req.accountEmail,
-            req.accountId,
-          );
+          try {
+            entitlements[key] = await checkFeatureAccess(
+              pool,
+              req.visitorId!,
+              key,
+              req.accountEmail,
+              req.accountId,
+            );
+          } catch (err) {
+            console.error(`checkFeatureAccess failed for ${key}:`, err);
+            entitlements[key] = { allowed: true };
+          }
         }
         res.json(entitlements);
       } catch (error) {
@@ -295,7 +301,7 @@ export function createBillingApiRoutes(
     ensureVisitor,
     async (req: AuthRequest, res: Response) => {
       try {
-        const plan = req.body?.plan || "growth";
+        const plan = req.body?.plan || "pro";
         const { url } = await createCheckoutSession(pool, req.visitorId!, plan);
         res.json({ url });
       } catch (error) {

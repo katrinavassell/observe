@@ -358,11 +358,16 @@ export async function createPortalSession(
 // Stripe Webhook handler
 // =============================================================================
 
-function resolvePlanFromPriceId(priceId: string): string {
+function resolvePlanFromPriceId(priceId: string): string | null {
+  if (!priceId) {
+    console.error("resolvePlanFromPriceId: empty priceId");
+    return null;
+  }
   for (const [key, plan] of Object.entries(OBSERVE_PLANS)) {
     if (plan.stripePriceId && plan.stripePriceId === priceId) return key;
   }
-  return "free";
+  console.error(`resolvePlanFromPriceId: no plan matches priceId=${priceId}`);
+  return null;
 }
 
 export async function handleWebhook(
@@ -384,6 +389,13 @@ export async function handleWebhook(
       );
       const priceId = retrieved.line_items?.data?.[0]?.price?.id ?? "";
       const plan = resolvePlanFromPriceId(priceId);
+
+      if (!plan) {
+        console.error(
+          `checkout.session.completed: could not resolve plan from priceId=${priceId}, skipping plan update`,
+        );
+        break;
+      }
 
       if (visitorId) {
         const result = await pool.query(
@@ -430,6 +442,12 @@ export async function handleWebhook(
       const plan = resolvePlanFromPriceId(priceId);
 
       if (status === "active" || status === "trialing") {
+        if (!plan) {
+          console.error(
+            `subscription.updated: could not resolve plan from priceId=${priceId}, skipping`,
+          );
+          break;
+        }
         await pool.query(
           `UPDATE accounts SET stripe_plan = $1 WHERE stripe_customer_id = $2`,
           [plan, customerId],
