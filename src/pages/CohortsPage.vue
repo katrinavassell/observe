@@ -1016,17 +1016,6 @@ const excludedCount = computed(() => {
                       <div class="flex flex-col gap-0.5">
                         <div class="flex items-center gap-1.5">
                           <span
-                            v-if="c.health_score != null && c.health_score > 0"
-                            class="h-1.5 w-1.5 rounded-full shrink-0"
-                            :class="
-                              c.health_score >= 70
-                                ? 'bg-green-500'
-                                : c.health_score >= 40
-                                  ? 'bg-yellow-500'
-                                  : 'bg-red-500'
-                            "
-                          />
-                          <span
                             v-if="
                               c.customer_name &&
                               c.customer_name !== c.customer_id
