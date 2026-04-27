@@ -338,13 +338,13 @@ function retry() {
 
     <!-- Loading state -->
     <div v-else-if="isLoading">
-      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-        <Card v-for="i in 3" :key="i" class="p-6">
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+        <Card v-for="i in 4" :key="i" class="p-4">
           <Skeleton class="h-4 w-24 mb-2" />
           <Skeleton class="h-8 w-20" />
         </Card>
       </div>
-      <Card class="p-6">
+      <Card class="p-4">
         <Skeleton class="h-8 w-48 mb-4" />
         <Skeleton v-for="i in 5" :key="i" class="h-10 w-full mb-2" />
       </Card>
@@ -369,11 +369,11 @@ function retry() {
     <!-- Data loaded -->
     <template v-else>
       <!-- KPI cards -->
-      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <!-- Card 1: Revenue or Customers -->
-        <Card class="p-6">
+        <Card class="p-4">
           <div
-            class="flex items-center gap-1 text-sm font-medium text-muted-foreground"
+            class="flex items-center gap-1 text-xs text-muted-foreground uppercase tracking-wider"
           >
             {{ hasRevenue ? "Usage Revenue" : "Customers Tracked" }}
             <Tooltip v-if="hasRevenue">
@@ -387,7 +387,7 @@ function retry() {
               >
             </Tooltip>
           </div>
-          <div class="text-3xl font-semibold tabular-nums mt-1">
+          <div class="text-2xl font-semibold tabular-nums mt-1">
             {{ hasRevenue ? fmt(totalRevenue) : (customerData?.length ?? 0) }}
           </div>
           <div
@@ -411,9 +411,9 @@ function retry() {
         </Card>
 
         <!-- Card 2: Total Cost (always) -->
-        <Card class="p-6">
+        <Card class="p-4">
           <div
-            class="flex items-center gap-1 text-sm font-medium text-muted-foreground"
+            class="flex items-center gap-1 text-xs text-muted-foreground uppercase tracking-wider"
           >
             Total Cost
             <Tooltip>
@@ -427,7 +427,7 @@ function retry() {
               >
             </Tooltip>
           </div>
-          <div class="text-3xl font-semibold tabular-nums mt-1">
+          <div class="text-2xl font-semibold tabular-nums mt-1">
             {{ fmt(totalCost) }}
           </div>
           <div
@@ -448,9 +448,9 @@ function retry() {
         </Card>
 
         <!-- Card 3: Gross Margin or Events Tracked -->
-        <Card class="p-6">
+        <Card class="p-4">
           <div
-            class="flex items-center gap-1 text-sm font-medium text-muted-foreground"
+            class="flex items-center gap-1 text-xs text-muted-foreground uppercase tracking-wider"
           >
             {{ hasRevenue ? "Gross Margin" : "Events Tracked" }}
             <Tooltip v-if="hasRevenue">
@@ -464,7 +464,7 @@ function retry() {
           </div>
           <div v-if="hasRevenue" class="flex items-center gap-2 mt-1">
             <span
-              class="text-3xl font-semibold tabular-nums"
+              class="text-2xl font-semibold tabular-nums"
               :class="
                 grossMarginPct >= 70
                   ? 'text-green-600'
@@ -495,17 +495,17 @@ function retry() {
           >
             No prior period
           </div>
-          <div v-else class="text-3xl font-semibold tabular-nums mt-1">
+          <div v-else class="text-2xl font-semibold tabular-nums mt-1">
             {{ totalEvents.toLocaleString() }}
           </div>
         </Card>
 
         <!-- Card 4: Events Tracked -->
-        <Card class="p-6">
-          <div class="text-sm font-medium text-muted-foreground">
+        <Card class="p-4">
+          <div class="text-xs text-muted-foreground uppercase tracking-wider">
             Events Tracked
           </div>
-          <div class="text-3xl font-semibold tabular-nums mt-1">
+          <div class="text-2xl font-semibold tabular-nums mt-1">
             {{ totalEvents.toLocaleString() }}
           </div>
           <div
@@ -527,7 +527,7 @@ function retry() {
       </div>
 
       <!-- Daily Cost vs Revenue chart -->
-      <Card v-if="isLoggedIn && dailySeries.length >= 3" class="p-6">
+      <Card v-if="isLoggedIn && dailySeries.length >= 3" class="p-4">
         <h3 class="text-base font-semibold mb-4">Cost vs Revenue (Daily)</h3>
         <DailyCostRevenueChart :data="dailySeries" />
       </Card>
