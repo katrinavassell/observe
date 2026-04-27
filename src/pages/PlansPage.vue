@@ -85,6 +85,7 @@ const plans = [
     price: "Free",
     priceSuffix: "forever",
     description: "AI cost observability",
+    badge: null as string | null,
     features: [
       "10,000 events/month",
       "90-day data retention",
@@ -102,12 +103,15 @@ const plans = [
     priceSuffix: "/month",
     description: "For growing AI products",
     popular: true,
+    badge: null as string | null,
     features: [
       "100,000 events/month",
       "365-day data retention",
       "10,000 AI insights/month",
       "Unlimited cost alerts",
-      "Everything in Free",
+      "Per-feature margin analysis",
+      "All integrations included",
+      "Unlimited team members",
     ],
   },
   {
@@ -116,11 +120,14 @@ const plans = [
     price: "$99",
     priceSuffix: "/month",
     description: "For agencies & portfolios",
+    badge: null as string | null,
     features: [
       "1,000,000 events/month",
       "Unlimited data retention",
       "Unlimited AI insights",
+      "Unlimited cost alerts",
       "Multi-org management (coming soon)",
+      "Priority support",
       "Everything in Pro",
     ],
   },
@@ -141,7 +148,11 @@ const plans = [
         v-for="plan in plans"
         :key="plan.key"
         class="relative flex flex-col"
-        :class="plan.popular ? 'border-primary bg-primary/5' : ''"
+        :class="
+          plan.popular
+            ? 'border-2 border-primary shadow-lg ring-1 ring-primary/20'
+            : ''
+        "
       >
         <div
           v-if="currentPlan === plan.key"
@@ -151,10 +162,11 @@ const plans = [
         </div>
         <div
           v-else-if="plan.popular"
-          class="bg-muted text-muted-foreground text-center text-xs font-medium py-1.5 rounded-t-lg -mx-px -mt-px"
+          class="bg-primary text-primary-foreground text-center text-xs font-medium py-1.5 rounded-t-lg -mx-0.5 -mt-0.5"
         >
           Most popular
         </div>
+        <div v-else class="py-1.5 -mx-px -mt-px">&nbsp;</div>
         <CardContent class="p-6 flex flex-col flex-1">
           <div class="space-y-4 flex-1">
             <div>
