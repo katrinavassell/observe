@@ -107,6 +107,19 @@ export async function getBillingStatus(): Promise<BillingStatus> {
   return request("/billing/status");
 }
 
+export interface FeatureEntitlement {
+  allowed: boolean;
+  usage?: number;
+  limit?: number;
+  remaining?: number;
+}
+
+export async function getEntitlements(): Promise<
+  Record<string, FeatureEntitlement>
+> {
+  return request("/billing/entitlements");
+}
+
 export async function startCheckout(
   plan: string = "pro",
 ): Promise<{ url: string }> {

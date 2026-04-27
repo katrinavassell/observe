@@ -54,7 +54,7 @@ export const OBSERVE_PLANS: Record<string, PlanConfig> = {
       ai_insights: { limit: null },
       event_ingest: { limit: 1000000, reset: "monthly" },
       cost_alerts: { limit: null },
-      organizations: { limit: 5 },
+      organizations: { limit: null },
       csv_upload: { limit: null },
       stripe_connection: { limit: null },
       ai_provider_connection: { limit: null },

@@ -165,6 +165,44 @@ export function createBillingApiRoutes(
     },
   );
 
+  // GET /billing/entitlements — all feature limits and current usage
+  router.get(
+    "/billing/entitlements",
+    ensureVisitor,
+    async (req: AuthRequest, res: Response) => {
+      try {
+        const features = [
+          "event_ingest",
+          "cost_alerts",
+          "organizations",
+          "ai_insights",
+        ];
+        const entitlements: Record<
+          string,
+          {
+            allowed: boolean;
+            usage?: number;
+            limit?: number;
+            remaining?: number;
+          }
+        > = {};
+        for (const key of features) {
+          entitlements[key] = await checkFeatureAccess(
+            pool,
+            req.visitorId!,
+            key,
+            req.accountEmail,
+            req.accountId,
+          );
+        }
+        res.json(entitlements);
+      } catch (error) {
+        console.error("GET /billing/entitlements error:", error);
+        res.status(500).json({ error: "Failed to fetch entitlements" });
+      }
+    },
+  );
+
   // GET /credits — current bonus credits and reward info
   router.get(
     "/credits",

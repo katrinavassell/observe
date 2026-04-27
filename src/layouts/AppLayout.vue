@@ -2,7 +2,7 @@
 import { computed, onMounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import { useQuery } from "@tanstack/vue-query";
-import { getUsageLimits } from "@/lib/api";
+import { getUsageLimits, getEntitlements } from "@/lib/api";
 import {
   BarChart3,
   Plug,
@@ -47,6 +47,15 @@ watch(isLoggedIn, (loggedIn) => {
     resetDataMode();
   }
 });
+
+const { data: entitlements } = useQuery({
+  queryKey: ["entitlements"],
+  queryFn: getEntitlements,
+  enabled: isLoggedIn,
+});
+const canCreateOrg = computed(
+  () => entitlements.value?.organizations?.allowed !== false,
+);
 
 const feedbackOpen = ref(false);
 const mobileLandingEmail = ref("");
@@ -235,7 +244,11 @@ function isActive(path: string) {
               >
             </div>
           </div>
-          <div v-if="isLoggedIn" class="shrink-0 org-switcher-minimal">
+          <div
+            v-if="isLoggedIn"
+            class="shrink-0 org-switcher-minimal"
+            :class="{ 'hide-create-org': !canCreateOrg }"
+          >
             <OrganizationSwitcher
               :appearance="{
                 elements: {
@@ -512,6 +525,10 @@ function isActive(path: string) {
   display: none !important;
 }
 .org-switcher-minimal .cl-organizationPreviewTextContainer {
+  display: none !important;
+}
+.hide-create-org
+  .cl-organizationSwitcherPopoverActionButton__createOrganization {
   display: none !important;
 }
 </style>
