@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import { useRouter } from "vue-router";
 import { useQuery, useMutation } from "@tanstack/vue-query";
 import { Check, ArrowRight, Loader2 } from "lucide-vue-next";
@@ -51,8 +51,22 @@ const usageItems = computed(() => {
     });
   }
 
+  const alerts = usageLimits.value.cost_alerts?.usage;
+  if (alerts) {
+    items.push({
+      label: "Cost Alerts",
+      used: alerts.used,
+      limit: alerts.limit || null,
+      pct: alerts.limit
+        ? Math.min(100, Math.round((alerts.used / alerts.limit) * 100))
+        : 0,
+    });
+  }
+
   return items;
 });
+
+const activeTab = ref<"plans" | "usage">("plans");
 
 const checkoutMutation = useMutation({
   mutationFn: (plan: string) => startCheckout(plan),
@@ -135,13 +149,42 @@ const plans = [
 <template>
   <div class="space-y-6 pb-12">
     <div>
-      <h1 class="text-2xl font-semibold tracking-tight">Plans</h1>
+      <h1 class="text-2xl font-semibold tracking-tight">Plans & Usage</h1>
       <p class="text-muted-foreground">
         Start free. Upgrade when you need more capacity.
       </p>
     </div>
 
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl items-stretch">
+    <div class="flex gap-1 border-b max-w-5xl">
+      <button
+        class="px-4 py-2 text-sm font-medium border-b-2 transition-colors"
+        :class="
+          activeTab === 'plans'
+            ? 'border-primary text-foreground'
+            : 'border-transparent text-muted-foreground hover:text-foreground'
+        "
+        @click="activeTab = 'plans'"
+      >
+        Plans
+      </button>
+      <button
+        v-if="isLoggedIn"
+        class="px-4 py-2 text-sm font-medium border-b-2 transition-colors"
+        :class="
+          activeTab === 'usage'
+            ? 'border-primary text-foreground'
+            : 'border-transparent text-muted-foreground hover:text-foreground'
+        "
+        @click="activeTab = 'usage'"
+      >
+        Usage
+      </button>
+    </div>
+
+    <div
+      v-if="activeTab === 'plans'"
+      class="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl items-stretch"
+    >
       <Card
         v-for="plan in plans"
         :key="plan.key"
@@ -217,7 +260,7 @@ const plans = [
                   v-if="portalMutation.isPending.value"
                   class="h-4 w-4 mr-2 animate-spin"
                 />
-                Manage subscription
+                Manage billing
               </Button>
               <Button v-else variant="outline" class="w-full" disabled>
                 Current plan
@@ -249,7 +292,7 @@ const plans = [
     </div>
 
     <!-- Tanso Platform upsell -->
-    <Card class="max-w-5xl">
+    <Card v-if="activeTab === 'plans'" class="max-w-5xl">
       <CardContent
         class="p-6 flex flex-col md:flex-row md:items-center justify-between gap-6"
       >
@@ -285,7 +328,7 @@ const plans = [
     </Card>
 
     <!-- Usage section -->
-    <div v-if="isLoggedIn" class="max-w-5xl space-y-4">
+    <div v-if="activeTab === 'usage' && isLoggedIn" class="max-w-5xl space-y-4">
       <h2
         class="text-sm font-semibold text-muted-foreground uppercase tracking-wider"
       >
