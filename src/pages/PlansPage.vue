@@ -453,8 +453,11 @@ const plans = [
                   :style="{ width: Math.max(item.pct, 2) + '%' }"
                 />
               </div>
-              <div v-else class="h-2 bg-emerald-500/20 rounded-full">
-                <div class="h-full w-full bg-emerald-500/40 rounded-full" />
+              <div v-else class="flex items-center gap-1.5 mt-1">
+                <Check class="h-3.5 w-3.5 text-emerald-500" />
+                <span class="text-xs text-emerald-600"
+                  >No limit on your plan</span
+                >
               </div>
               <div
                 v-if="item.atLimit && item.upgradeTarget"
