@@ -241,11 +241,20 @@ const avgEventsPerDay = computed(() => {
   return Math.round((totalEvents / activeDays) * 10) / 10;
 });
 
+const totalEvents = computed(
+  () => detail.value?.by_feature.reduce((s, f) => s + f.event_count, 0) ?? 0,
+);
+
 const costPerEvent = computed(() => {
   if (!detail.value || detail.value.total_cost === 0) return null;
-  const events = detail.value.by_feature.reduce((s, f) => s + f.event_count, 0);
-  if (events === 0) return null;
-  return detail.value.total_cost / events;
+  if (totalEvents.value === 0) return null;
+  return detail.value.total_cost / totalEvents.value;
+});
+
+const revenuePerEvent = computed(() => {
+  if (!detail.value || detail.value.total_revenue === 0) return null;
+  if (totalEvents.value === 0) return null;
+  return detail.value.total_revenue / totalEvents.value;
 });
 
 const isFlat = computed(() => cohortCustomer.value?.pricing_model === "flat");
@@ -420,6 +429,25 @@ const isFlat = computed(() => cohortCustomer.value?.pricing_model === "flat");
             </div>
             <p class="text-xl font-semibold">
               {{ costPerEvent !== null ? fmt(costPerEvent) : "—" }}
+            </p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent class="p-4">
+            <div class="flex items-center gap-1 text-xs text-muted-foreground">
+              Revenue per Event
+              <Tooltip>
+                <TooltipTrigger as-child>
+                  <Info class="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                </TooltipTrigger>
+                <TooltipContent class="max-w-xs"
+                  >Total revenue divided by total events. Compare with Cost per
+                  Event for unit economics.</TooltipContent
+                >
+              </Tooltip>
+            </div>
+            <p class="text-xl font-semibold">
+              {{ revenuePerEvent !== null ? fmt(revenuePerEvent) : "—" }}
             </p>
           </CardContent>
         </Card>
@@ -762,6 +790,16 @@ const isFlat = computed(() => cohortCustomer.value?.pricing_model === "flat");
                 <th
                   class="px-3 py-2 font-medium text-muted-foreground text-right"
                 >
+                  Tokens
+                </th>
+                <th
+                  class="px-3 py-2 font-medium text-muted-foreground text-right"
+                >
+                  Latency
+                </th>
+                <th
+                  class="px-3 py-2 font-medium text-muted-foreground text-right"
+                >
                   Cost
                 </th>
               </tr>
@@ -787,6 +825,26 @@ const isFlat = computed(() => cohortCustomer.value?.pricing_model === "flat");
                   <span v-else class="text-muted-foreground">—</span>
                 </td>
                 <td class="px-3 py-2 text-xs">{{ e.model || "—" }}</td>
+                <td
+                  class="px-3 py-2 text-right font-mono text-xs text-muted-foreground"
+                >
+                  <template
+                    v-if="e.input_tokens != null || e.output_tokens != null"
+                  >
+                    {{ (e.input_tokens ?? 0).toLocaleString() }} /
+                    {{ (e.output_tokens ?? 0).toLocaleString() }}
+                  </template>
+                  <template v-else>—</template>
+                </td>
+                <td
+                  class="px-3 py-2 text-right font-mono text-xs text-muted-foreground"
+                >
+                  {{
+                    e.duration_ms != null
+                      ? `${(e.duration_ms / 1000).toFixed(1)}s`
+                      : "—"
+                  }}
+                </td>
                 <td class="px-3 py-2 text-right font-mono">
                   {{ e.cost_amount != null ? fmt(e.cost_amount) : "—" }}
                 </td>
