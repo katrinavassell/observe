@@ -1,13 +1,11 @@
 <script setup lang="ts">
-import { ref, computed, watch } from "vue";
+import { computed } from "vue";
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
 import { useRouter } from "vue-router";
 import {
   getEventsByFeature,
   getEventsByModel,
   getEventsByCustomer,
-  getEventsByAgent,
-  getMrrMovements,
   getUsageLimits,
   getSourceBreakdown,
   getMarginTrends,
@@ -27,7 +25,6 @@ import {
   TooltipContent,
 } from "@/components/ui";
 import SourceBadge from "@/components/shared/SourceBadge.vue";
-import MarginBadge from "@/components/shared/MarginBadge.vue";
 import { formatCurrency as fmt } from "@/lib/format";
 import { useAuth } from "@/composables/useAuth";
 import {
@@ -39,9 +36,6 @@ import {
 const router = useRouter();
 const queryClient = useQueryClient();
 const { isLoggedIn } = useAuth();
-
-type Tab = "feature" | "model" | "customer" | "agent" | "mrr";
-const activeTab = ref<Tab>("feature");
 
 const { data: _usageLimits } = useQuery({
   queryKey: ["usage-limits"],
@@ -141,30 +135,6 @@ const customerData = computed(() =>
   isLoggedIn.value ? realCustomerData.value : GUEST_EVENTS_BY_CUSTOMER,
 );
 
-const { data: agentData } = useQuery({
-  queryKey: ["events-by-agent"],
-  queryFn: getEventsByAgent,
-  enabled: computed(() => activeTab.value === "agent"),
-});
-
-const sortedAgents = computed(() => {
-  if (!agentData.value) return [];
-  return [...agentData.value].sort((a, b) => b.total_cost - a.total_cost);
-});
-
-const {
-  data: mrrData,
-  isLoading: mrrLoading,
-  isError: mrrError,
-} = useQuery({
-  queryKey: ["mrr-movements"],
-  queryFn: getMrrMovements,
-  enabled: computed(() => activeTab.value === "mrr"),
-});
-
-const mrrMovements = computed(() => mrrData.value?.movements ?? []);
-const mrrSummary = computed(() => mrrData.value?.summary ?? null);
-
 const isLoading = computed(
   () => featuresLoading.value || modelsLoading.value || customersLoading.value,
 );
@@ -197,66 +167,11 @@ const grossMarginPct = computed(() => {
   return ((totalRevenue.value - totalCost.value) / totalRevenue.value) * 100;
 });
 
-const sortedFeatures = computed(() => {
-  if (!featureData.value) return [];
-  return [...featureData.value].sort((a, b) => b.total_cost - a.total_cost);
-});
-const maxFeatureCost = computed(() => {
-  if (!sortedFeatures.value.length) return 1;
-  return Math.max(...sortedFeatures.value.map((f) => f.total_cost), 0.01);
-});
-
-const sortedModels = computed(() => {
-  if (!modelData.value) return [];
-  return [...modelData.value].sort((a, b) => b.total_cost - a.total_cost);
-});
-const maxModelCost = computed(() => {
-  if (!sortedModels.value.length) return 1;
-  return Math.max(...sortedModels.value.map((m) => m.total_cost), 0.01);
-});
-
-const sortedCustomers = computed(() => {
+const topCustomersByCost = computed(() => {
   if (!customerData.value) return [];
-  return [...customerData.value].sort((a, b) => b.total_cost - a.total_cost);
-});
-const maxCustomerCost = computed(() => {
-  if (!sortedCustomers.value.length) return 1;
-  return Math.max(...sortedCustomers.value.map((c) => c.total_cost), 0.01);
-});
-
-const topCustomersByCost = computed(() => sortedCustomers.value.slice(0, 5));
-
-// Tabs — hide Agent / MRR when empty; Cost Type is gone (overlapped By Feature).
-const visibleTabs = computed(() => {
-  const tabs: Array<{ key: Tab; label: string; count: number }> = [
-    { key: "feature", label: "By Feature", count: sortedFeatures.value.length },
-    { key: "model", label: "By Model", count: sortedModels.value.length },
-    {
-      key: "customer",
-      label: "By Customer",
-      count: sortedCustomers.value.length,
-    },
-  ];
-  if (sortedAgents.value.length > 0) {
-    tabs.push({
-      key: "agent",
-      label: "By Agent",
-      count: sortedAgents.value.length,
-    });
-  }
-  const movements = mrrMovements.value.filter(
-    (m) => m.category !== "stable",
-  ).length;
-  if (movements > 0) {
-    tabs.push({ key: "mrr", label: "MRR Movement", count: movements });
-  }
-  return tabs;
-});
-
-watch(visibleTabs, (tabs) => {
-  if (!tabs.some((t) => t.key === activeTab.value)) {
-    activeTab.value = "feature";
-  }
+  return [...customerData.value]
+    .sort((a, b) => b.total_cost - a.total_cost)
+    .slice(0, 5);
 });
 
 // Data quality for insights
@@ -575,360 +490,6 @@ function retry() {
           </table>
         </CardContent>
       </Card>
-
-      <!-- Tab bar -->
-      <div class="flex gap-1 border-b">
-        <button
-          v-for="tab in visibleTabs"
-          :key="tab.key"
-          class="px-4 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px"
-          :class="
-            activeTab === tab.key
-              ? 'border-foreground text-foreground'
-              : 'border-transparent text-muted-foreground hover:text-foreground'
-          "
-          @click="activeTab = tab.key"
-        >
-          {{ tab.label }}
-          <span class="ml-1.5 text-xs text-muted-foreground"
-            >({{ tab.count }})</span
-          >
-        </button>
-      </div>
-
-      <!-- Feature tab -->
-      <div v-if="activeTab === 'feature'" class="space-y-1">
-        <div
-          v-if="!sortedFeatures.length"
-          class="py-8 text-center text-sm text-muted-foreground"
-        >
-          No feature data yet
-        </div>
-        <div
-          v-if="sortedFeatures.length"
-          class="flex items-center gap-3 px-3 pb-1"
-        >
-          <span class="w-36 text-xs text-muted-foreground">Feature</span>
-          <div class="flex-1" />
-          <span class="w-20 text-right text-xs text-muted-foreground"
-            >Cost</span
-          >
-          <span class="w-28 text-right text-xs text-muted-foreground"
-            >Per event</span
-          >
-        </div>
-        <div
-          v-for="f in sortedFeatures"
-          :key="f.feature_key"
-          class="flex items-center gap-3 rounded-md px-3 py-2.5 hover:bg-muted/50 transition-colors"
-        >
-          <span class="w-36 text-sm font-medium truncate">{{
-            f.feature_key
-          }}</span>
-          <div class="flex-1 h-3 bg-muted rounded-full overflow-hidden">
-            <div
-              class="h-full rounded-full bg-foreground"
-              :style="{ width: `${(f.total_cost / maxFeatureCost) * 100}%` }"
-            />
-          </div>
-          <span class="w-20 text-right text-sm tabular-nums">{{
-            fmt(f.total_cost)
-          }}</span>
-          <span
-            class="w-28 text-right text-xs text-muted-foreground tabular-nums"
-          >
-            ({{
-              f.event_count ? fmt(f.total_cost / f.event_count) : "$0"
-            }}/event)
-          </span>
-        </div>
-      </div>
-
-      <!-- Model tab -->
-      <div v-if="activeTab === 'model'" class="space-y-1">
-        <div
-          v-if="!sortedModels.length"
-          class="py-8 text-center text-sm text-muted-foreground"
-        >
-          No model data yet
-        </div>
-        <div
-          v-if="sortedModels.length"
-          class="flex items-center gap-3 px-3 pb-1"
-        >
-          <span class="w-36 text-xs text-muted-foreground">Model</span>
-          <div class="flex-1" />
-          <span class="w-20 text-right text-xs text-muted-foreground"
-            >Cost</span
-          >
-          <span class="w-28 text-right text-xs text-muted-foreground"
-            >Per event</span
-          >
-        </div>
-        <div
-          v-for="m in sortedModels"
-          :key="m.model"
-          class="flex items-center gap-3 rounded-md px-3 py-2.5 hover:bg-muted/50 transition-colors cursor-pointer"
-          @click="router.push(`/events?model=${encodeURIComponent(m.model)}`)"
-        >
-          <div class="w-36 min-w-0">
-            <Tooltip>
-              <TooltipTrigger as-child>
-                <div class="text-sm font-medium truncate">
-                  {{ m.model }}
-                </div>
-              </TooltipTrigger>
-              <TooltipContent>{{ m.model }}</TooltipContent>
-            </Tooltip>
-            <div v-if="m.model_provider" class="text-xs text-muted-foreground">
-              {{ m.model_provider }}
-            </div>
-          </div>
-          <div class="flex-1 h-3 bg-muted rounded-full overflow-hidden">
-            <div
-              class="h-full bg-foreground rounded-full"
-              :style="{ width: `${(m.total_cost / maxModelCost) * 100}%` }"
-            />
-          </div>
-          <span class="w-20 text-right text-sm tabular-nums">{{
-            fmt(m.total_cost)
-          }}</span>
-        </div>
-      </div>
-
-      <!-- Customer tab -->
-      <div v-if="activeTab === 'customer'" class="space-y-1">
-        <div
-          v-if="!sortedCustomers.length"
-          class="py-8 text-center text-sm text-muted-foreground"
-        >
-          No customer data yet
-        </div>
-        <div
-          v-for="c in sortedCustomers"
-          :key="c.customer_id"
-          class="flex items-center gap-3 rounded-md px-3 py-2.5 hover:bg-muted/50 transition-colors"
-        >
-          <div class="w-36 min-w-0 flex flex-col gap-0.5">
-            <span
-              v-if="c.customer_name && c.customer_name !== c.customer_id"
-              class="text-sm font-medium truncate"
-              >{{ c.customer_name }}</span
-            >
-            <code
-              class="font-mono text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded truncate w-fit"
-              >{{ c.customer_id }}</code
-            >
-          </div>
-          <div class="flex-1 h-3 bg-muted rounded-full overflow-hidden">
-            <div
-              class="h-full rounded-full bg-foreground"
-              :style="{ width: `${(c.total_cost / maxCustomerCost) * 100}%` }"
-            />
-          </div>
-          <span class="w-20 text-right text-sm tabular-nums">{{
-            fmt(c.total_cost)
-          }}</span>
-        </div>
-      </div>
-
-      <!-- MRR Movement tab -->
-      <!-- By Agent tab -->
-      <div v-if="activeTab === 'agent'" class="space-y-1">
-        <div
-          class="flex items-center gap-3 text-xs text-muted-foreground px-3 py-2 border-b"
-        >
-          <span class="w-36">Agent</span>
-          <span class="flex-1"></span>
-          <span class="w-20 text-right">Cost</span>
-        </div>
-        <div
-          v-if="!sortedAgents.length"
-          class="py-8 text-center text-sm text-muted-foreground"
-        >
-          No agent data yet. Use
-          <code class="bg-muted px-1 rounded">Observe-Agent</code> header or
-          <code class="bg-muted px-1 rounded">Observe.agent()</code> to tag
-          calls.
-        </div>
-        <div
-          v-for="a in sortedAgents"
-          :key="a.agent_id"
-          class="flex items-center gap-3 rounded-md px-3 py-2.5 hover:bg-muted/50 transition-colors"
-        >
-          <span class="w-36 text-sm font-medium truncate">{{
-            a.agent_id
-          }}</span>
-          <div class="flex-1 h-3 bg-muted rounded-full overflow-hidden">
-            <div
-              class="h-full rounded-full bg-foreground"
-              :style="{
-                width: `${sortedAgents.length ? (a.total_cost / sortedAgents[0].total_cost) * 100 : 0}%`,
-              }"
-            />
-          </div>
-          <span class="w-20 text-right text-sm tabular-nums">{{
-            fmt(a.total_cost)
-          }}</span>
-        </div>
-      </div>
-
-      <div v-if="activeTab === 'mrr'">
-        <div
-          v-if="mrrLoading"
-          class="py-8 text-center text-sm text-muted-foreground"
-        >
-          Loading MRR data...
-        </div>
-        <div
-          v-else-if="mrrError"
-          class="py-8 text-center text-sm text-destructive"
-        >
-          Failed to load MRR movements
-        </div>
-        <template v-else-if="mrrSummary">
-          <!-- Summary cards -->
-          <div class="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-6">
-            <Card class="p-4">
-              <div class="text-xs font-medium text-muted-foreground">
-                New MRR
-              </div>
-              <div class="text-xl font-semibold tabular-nums mt-1 text-success">
-                +{{ fmt(mrrSummary.new_mrr) }}
-              </div>
-            </Card>
-            <Card class="p-4">
-              <div class="text-xs font-medium text-muted-foreground">
-                Expansion
-              </div>
-              <div class="text-xl font-semibold tabular-nums mt-1 text-success">
-                +{{ fmt(mrrSummary.expansion_mrr) }}
-              </div>
-            </Card>
-            <Card class="p-4">
-              <div class="text-xs font-medium text-muted-foreground">
-                Contraction
-              </div>
-              <div
-                class="text-xl font-semibold tabular-nums mt-1"
-                :class="
-                  mrrSummary.contraction_mrr > 0
-                    ? 'text-destructive'
-                    : 'text-muted-foreground'
-                "
-              >
-                -{{ fmt(mrrSummary.contraction_mrr) }}
-              </div>
-            </Card>
-            <Card class="p-4">
-              <div class="text-xs font-medium text-muted-foreground">
-                Churned
-              </div>
-              <div
-                class="text-xl font-semibold tabular-nums mt-1"
-                :class="
-                  mrrSummary.churned_mrr > 0
-                    ? 'text-destructive'
-                    : 'text-muted-foreground'
-                "
-              >
-                -{{ fmt(mrrSummary.churned_mrr) }}
-              </div>
-            </Card>
-            <Card class="p-4 border-foreground/20">
-              <div class="text-xs font-medium text-muted-foreground">
-                Net New MRR
-              </div>
-              <div
-                class="text-xl font-bold tabular-nums mt-1"
-                :class="
-                  mrrSummary.net_new_mrr >= 0
-                    ? 'text-success'
-                    : 'text-destructive'
-                "
-              >
-                {{
-                  mrrSummary.net_new_mrr >= 0
-                    ? "+" + fmt(mrrSummary.net_new_mrr)
-                    : "-" + fmt(Math.abs(mrrSummary.net_new_mrr))
-                }}
-              </div>
-            </Card>
-          </div>
-
-          <!-- Customer movement list -->
-          <div class="space-y-1">
-            <div v-if="!mrrMovements.length" class="py-12 text-center">
-              <p class="text-sm font-medium text-muted-foreground">
-                No MRR movement data yet
-              </p>
-              <p class="text-xs text-muted-foreground/70 mt-1 max-w-sm mx-auto">
-                MRR movement data requires multiple months of revenue data.
-                Import subscription history from Stripe or CSV to see new,
-                expansion, contraction, and churned MRR.
-              </p>
-            </div>
-            <div
-              v-for="m in mrrMovements"
-              :key="m.customer_id"
-              class="flex items-center gap-3 rounded-md px-3 py-2.5 hover:bg-muted/50 transition-colors"
-            >
-              <div class="w-36 min-w-0">
-                <div class="text-sm font-medium truncate">
-                  {{ m.customer_name }}
-                </div>
-                <div
-                  v-if="m.customer_name !== m.customer_id"
-                  class="text-xs text-muted-foreground truncate"
-                >
-                  {{ m.customer_id }}
-                </div>
-              </div>
-              <span
-                class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium shrink-0"
-                :class="{
-                  'bg-success/10 text-success': m.category === 'new',
-                  'bg-primary/10 text-primary': m.category === 'expansion',
-                  'bg-warning/10 text-warning': m.category === 'contraction',
-                  'bg-destructive/10 text-destructive':
-                    m.category === 'churned',
-                  'bg-muted text-muted-foreground': m.category === 'stable',
-                }"
-              >
-                {{ m.category }}
-              </span>
-              <div class="flex-1" />
-              <span
-                class="w-20 text-right text-xs text-muted-foreground tabular-nums"
-                >{{ fmt(m.prior_mrr) }}</span
-              >
-              <span class="text-xs text-muted-foreground">-></span>
-              <span class="w-20 text-right text-sm tabular-nums font-medium">{{
-                fmt(m.current_mrr)
-              }}</span>
-              <span
-                class="w-20 text-right text-sm tabular-nums font-medium"
-                :class="{
-                  'text-success': m.change > 0,
-                  'text-destructive': m.change < 0,
-                  'text-muted-foreground': m.change === 0,
-                }"
-              >
-                {{
-                  m.change > 0
-                    ? "+" + fmt(m.change)
-                    : m.change < 0
-                      ? "-" + fmt(Math.abs(m.change))
-                      : fmt(0)
-                }}
-              </span>
-            </div>
-          </div>
-        </template>
-        <div v-else class="py-8 text-center text-sm text-muted-foreground">
-          No MRR movement data
-        </div>
-      </div>
     </template>
   </div>
 </template>

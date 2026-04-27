@@ -562,6 +562,17 @@ const cohortLabels: CohortLabel[] = [
   "champion",
 ];
 
+function displayName(c: {
+  customer_name?: string;
+  customer_id: string;
+}): string {
+  if (c.customer_name && c.customer_name !== c.customer_id)
+    return c.customer_name;
+  return c.customer_id
+    .replace(/[_-]/g, " ")
+    .replace(/\b\w/g, (ch) => ch.toUpperCase());
+}
+
 function healthColor(score: number): string {
   if (score < 30) return "bg-red-500";
   if (score < 60) return "bg-yellow-500";
@@ -1016,17 +1027,13 @@ const excludedCount = computed(() => {
                     <!-- Customer -->
                     <td v-if="col.id === 'customer'" class="p-3">
                       <div class="flex flex-col gap-0.5">
-                        <div class="flex items-center gap-1.5">
-                          <span
-                            v-if="
-                              c.customer_name &&
-                              c.customer_name !== c.customer_id
-                            "
-                            class="text-sm font-medium"
-                            >{{ c.customer_name }}</span
-                          >
-                        </div>
+                        <span class="text-sm font-medium">{{
+                          displayName(c)
+                        }}</span>
                         <code
+                          v-if="
+                            c.customer_name && c.customer_name !== c.customer_id
+                          "
                           class="font-mono text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded w-fit"
                           >{{ c.customer_id }}</code
                         >
