@@ -336,7 +336,7 @@ const isFlat = computed(() => cohortCustomer.value?.pricing_model === "flat");
       </Card>
 
       <!-- KPI cards -->
-      <div class="grid grid-cols-2 sm:grid-cols-5 gap-4">
+      <div class="grid grid-cols-2 sm:grid-cols-3 gap-4">
         <Card>
           <CardContent class="p-4">
             <div class="flex items-center gap-1 text-xs text-muted-foreground">
@@ -521,7 +521,7 @@ const isFlat = computed(() => cohortCustomer.value?.pricing_model === "flat");
           <div class="rounded-lg border overflow-x-auto">
             <table class="w-full text-sm">
               <thead>
-                <tr class="border-b bg-muted/30 text-left">
+                <tr class="border-b bg-muted/40 text-left">
                   <th class="px-3 py-2 font-medium text-muted-foreground">
                     Feature
                   </th>
@@ -644,7 +644,7 @@ const isFlat = computed(() => cohortCustomer.value?.pricing_model === "flat");
           <div class="rounded-lg border overflow-x-auto">
             <table class="w-full text-sm">
               <thead>
-                <tr class="border-b bg-muted/30 text-left">
+                <tr class="border-b bg-muted/40 text-left">
                   <th class="px-3 py-2 font-medium text-muted-foreground">
                     Model
                   </th>
@@ -774,7 +774,7 @@ const isFlat = computed(() => cohortCustomer.value?.pricing_model === "flat");
         <div class="mt-3 rounded-lg border overflow-x-auto">
           <table class="w-full text-sm">
             <thead>
-              <tr class="border-b bg-muted/30 text-left">
+              <tr class="border-b bg-muted/40 text-left">
                 <th class="px-3 py-2 font-medium text-muted-foreground">
                   Time
                 </th>
@@ -864,7 +864,7 @@ const isFlat = computed(() => cohortCustomer.value?.pricing_model === "flat");
         <div class="mt-3 rounded-lg border overflow-x-auto">
           <table class="w-full text-sm">
             <thead>
-              <tr class="border-b bg-muted/30 text-left">
+              <tr class="border-b bg-muted/40 text-left">
                 <th class="px-3 py-2 font-medium text-muted-foreground">
                   Plan
                 </th>
