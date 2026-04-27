@@ -99,7 +99,7 @@ export async function getReferralStats(): Promise<ReferralStats> {
 }
 
 export interface BillingStatus {
-  plan: "free" | "growth";
+  plan: "free" | "pro" | "team";
   hasStripeCustomer: boolean;
 }
 

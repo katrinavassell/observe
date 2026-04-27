@@ -352,7 +352,7 @@ function resolvePlanFromPriceId(priceId: string): string {
   for (const [key, plan] of Object.entries(OBSERVE_PLANS)) {
     if (plan.stripePriceId && plan.stripePriceId === priceId) return key;
   }
-  return "pro";
+  return "free";
 }
 
 export async function handleWebhook(
@@ -367,10 +367,12 @@ export async function handleWebhook(
         ? (session.metadata as Record<string, string>).visitor_id
         : null;
 
-      const lineItems = (session as Record<string, unknown>).line_items as
-        | { data?: Array<{ price?: { id?: string } }> }
-        | undefined;
-      const priceId = lineItems?.data?.[0]?.price?.id ?? "";
+      const stripe = await getUncachableStripeClient();
+      const retrieved = await stripe.checkout.sessions.retrieve(
+        session.id as string,
+        { expand: ["line_items"] },
+      );
+      const priceId = retrieved.line_items?.data?.[0]?.price?.id ?? "";
       const plan = resolvePlanFromPriceId(priceId);
 
       if (visitorId) {
