@@ -744,7 +744,7 @@ const excludedCount = computed(() => {
     <!-- Main content -->
     <template v-else>
       <!-- KPI cards -->
-      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <Card class="p-4">
           <div
             class="flex items-center gap-1 text-xs text-muted-foreground uppercase tracking-wider"
@@ -800,6 +800,29 @@ const excludedCount = computed(() => {
           </div>
           <p class="text-2xl font-semibold mt-1">
             {{ fmt(totals?.cost ?? 0) }}
+          </p>
+        </Card>
+        <Card class="p-4">
+          <div
+            class="flex items-center gap-1 text-xs text-muted-foreground uppercase tracking-wider"
+          >
+            Avg Health
+            <Tooltip>
+              <TooltipTrigger as-child>
+                <Info class="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+              </TooltipTrigger>
+              <TooltipContent class="max-w-xs normal-case"
+                >Average health score across all customers
+                (0–100).</TooltipContent
+              >
+            </Tooltip>
+          </div>
+          <p class="text-2xl font-semibold mt-1">
+            {{
+              totals?.avg_health_score != null
+                ? Math.round(totals.avg_health_score)
+                : "—"
+            }}
           </p>
         </Card>
       </div>
@@ -994,12 +1017,27 @@ const excludedCount = computed(() => {
                       <div class="flex flex-col gap-0.5">
                         <div class="flex items-center gap-1.5">
                           <span
+                            class="h-1.5 w-1.5 rounded-full shrink-0"
+                            :class="
+                              c.health_score >= 70
+                                ? 'bg-green-500'
+                                : c.health_score >= 40
+                                  ? 'bg-yellow-500'
+                                  : 'bg-red-500'
+                            "
+                          />
+                          <span
                             v-if="
                               c.customer_name &&
                               c.customer_name !== c.customer_id
                             "
                             class="text-sm font-medium"
                             >{{ c.customer_name }}</span
+                          >
+                          <Badge
+                            v-if="c.cohort"
+                            :class="cohortMeta[c.cohort].color"
+                            >{{ cohortMeta[c.cohort].label }}</Badge
                           >
                           <Badge
                             v-if="c.pricing_model"
@@ -1051,6 +1089,15 @@ const excludedCount = computed(() => {
                     <td
                       v-else-if="col.id === 'margin'"
                       class="p-3 text-right font-mono tabular-nums"
+                      :class="
+                        c.margin_pct == null
+                          ? 'text-muted-foreground'
+                          : c.margin_pct > 30
+                            ? 'text-emerald-600'
+                            : c.margin_pct >= 0
+                              ? 'text-amber-600'
+                              : 'text-destructive'
+                      "
                     >
                       {{ fmtPct(c.margin_pct) }}
                     </td>
