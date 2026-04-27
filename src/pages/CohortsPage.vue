@@ -313,7 +313,8 @@ const DEFAULT_COLUMNS: TableColumn[] = [
   { id: "margin", label: "Margin", visible: true, align: "right" },
   { id: "profit", label: "Profit", visible: true, align: "right" },
   { id: "active_days", label: "Active Days", visible: true, align: "right" },
-  { id: "mrr", label: "MRR", visible: false, align: "left" },
+  { id: "status", label: "Status", visible: true, align: "left" },
+  { id: "mrr", label: "Revenue", visible: false, align: "left" },
 ];
 
 const STORAGE_KEY = "observe:cohorts-columns";
@@ -1066,6 +1067,25 @@ const excludedCount = computed(() => {
                       class="p-3 text-right"
                     >
                       {{ c.active_days_30d }}
+                    </td>
+
+                    <!-- Status -->
+                    <td v-else-if="col.id === 'status'" class="p-3">
+                      <Badge
+                        v-if="c.margin_pct > 30"
+                        class="bg-green-100 text-green-700 hover:bg-green-100"
+                        >Healthy</Badge
+                      >
+                      <Badge
+                        v-else-if="c.margin_pct >= 0"
+                        class="bg-yellow-100 text-yellow-700 hover:bg-yellow-100"
+                        >At Risk</Badge
+                      >
+                      <Badge
+                        v-else
+                        class="bg-red-100 text-red-700 hover:bg-red-100"
+                        >Underwater</Badge
+                      >
                     </td>
 
                     <!-- MRR -->
