@@ -7,9 +7,11 @@ import { Card, CardContent, Button } from "@/components/ui";
 import {
   getUsageLimits,
   getBillingStatus,
+  getEntitlements,
   startCheckout,
   openPortal,
 } from "@/lib/api";
+import { Zap, Bell, Building2 } from "lucide-vue-next";
 import { useAuth } from "@/composables/useAuth";
 import { toast } from "vue-sonner";
 
@@ -30,36 +32,72 @@ const { data: billing } = useQuery({
 
 const currentPlan = computed(() => billing.value?.plan || "free");
 
-const usageItems = computed(() => {
-  if (!usageLimits.value) return [];
-  const items: Array<{
-    label: string;
-    used: number;
-    limit: number | null;
-    pct: number;
-  }> = [];
+const { data: entitlements } = useQuery({
+  queryKey: ["entitlements"],
+  queryFn: getEntitlements,
+  enabled: isLoggedIn,
+});
 
-  const event = usageLimits.value.event_ingest?.usage;
+interface UsageItem {
+  label: string;
+  icon: typeof Zap;
+  used: number;
+  limit: number | null;
+  pct: number;
+  atLimit: boolean;
+  upgradeTarget: string | null;
+}
+
+const usageItems = computed<UsageItem[]>(() => {
+  if (!usageLimits.value && !entitlements.value) return [];
+  const items: UsageItem[] = [];
+  const plan = currentPlan.value;
+
+  const event = usageLimits.value?.event_ingest?.usage;
   if (event) {
+    const pct = event.limit
+      ? Math.min(100, Math.round((event.used / event.limit) * 100))
+      : 0;
     items.push({
-      label: "Events",
+      label: "Events this month",
+      icon: Zap,
       used: event.used,
       limit: event.limit || null,
-      pct: event.limit
-        ? Math.min(100, Math.round((event.used / event.limit) * 100))
-        : 0,
+      pct,
+      atLimit: pct >= 80,
+      upgradeTarget: plan === "free" ? "pro" : plan === "pro" ? "team" : null,
     });
   }
 
-  const alerts = usageLimits.value.cost_alerts?.usage;
+  const alerts = entitlements.value?.cost_alerts;
   if (alerts) {
+    const pct = alerts.limit
+      ? Math.min(100, Math.round(((alerts.usage ?? 0) / alerts.limit) * 100))
+      : 0;
     items.push({
-      label: "Cost Alerts",
-      used: alerts.used,
-      limit: alerts.limit || null,
-      pct: alerts.limit
-        ? Math.min(100, Math.round((alerts.used / alerts.limit) * 100))
-        : 0,
+      label: "Active cost alerts",
+      icon: Bell,
+      used: alerts.usage ?? 0,
+      limit: alerts.limit ?? null,
+      pct,
+      atLimit: alerts.limit != null && (alerts.usage ?? 0) >= alerts.limit,
+      upgradeTarget: plan === "free" ? "pro" : null,
+    });
+  }
+
+  const orgs = entitlements.value?.organizations;
+  if (orgs) {
+    const pct = orgs.limit
+      ? Math.min(100, Math.round(((orgs.usage ?? 0) / orgs.limit) * 100))
+      : 0;
+    items.push({
+      label: "Organizations",
+      icon: Building2,
+      used: orgs.usage ?? 0,
+      limit: orgs.limit ?? null,
+      pct,
+      atLimit: orgs.limit != null && (orgs.usage ?? 0) >= orgs.limit,
+      upgradeTarget: plan !== "team" ? "team" : null,
     });
   }
 
@@ -328,28 +366,75 @@ const plans = [
     </Card>
 
     <!-- Usage section -->
-    <div v-if="activeTab === 'usage' && isLoggedIn" class="max-w-5xl space-y-4">
-      <h2
-        class="text-sm font-semibold text-muted-foreground uppercase tracking-wider"
-      >
-        Usage this month
-      </h2>
+    <div v-if="activeTab === 'usage' && isLoggedIn" class="max-w-5xl space-y-5">
+      <!-- Current plan summary -->
       <Card>
-        <CardContent class="p-6 space-y-4">
-          <template v-if="usageItems.length > 0">
+        <CardContent class="p-5 flex items-center justify-between">
+          <div class="flex items-center gap-3">
             <div
-              v-for="item in usageItems"
-              :key="item.label"
-              class="space-y-1.5"
+              class="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center"
             >
-              <div class="flex items-center justify-between text-sm">
-                <span class="font-medium">{{ item.label }}</span>
-                <span class="tabular-nums text-muted-foreground">
+              <Zap class="h-5 w-5 text-primary" />
+            </div>
+            <div>
+              <p class="font-semibold text-sm">
+                {{
+                  currentPlan === "free"
+                    ? "Free"
+                    : currentPlan === "pro"
+                      ? "Pro"
+                      : "Team"
+                }}
+                Plan
+              </p>
+              <p class="text-xs text-muted-foreground">
+                {{
+                  currentPlan === "free"
+                    ? "Upgrade for more capacity"
+                    : "Active subscription"
+                }}
+              </p>
+            </div>
+          </div>
+          <Button
+            v-if="currentPlan !== 'free'"
+            variant="outline"
+            size="sm"
+            :disabled="portalMutation.isPending.value"
+            @click="portalMutation.mutate()"
+          >
+            Manage billing
+          </Button>
+          <Button v-else size="sm" @click="activeTab = 'plans'">
+            View plans
+            <ArrowRight class="h-3.5 w-3.5 ml-1" />
+          </Button>
+        </CardContent>
+      </Card>
+
+      <!-- Usage meters -->
+      <div class="space-y-3">
+        <template v-if="usageItems.length > 0">
+          <Card v-for="item in usageItems" :key="item.label">
+            <CardContent class="p-5">
+              <div class="flex items-start justify-between mb-3">
+                <div class="flex items-center gap-2.5">
+                  <component
+                    :is="item.icon"
+                    class="h-4 w-4 text-muted-foreground"
+                  />
+                  <span class="text-sm font-medium">{{ item.label }}</span>
+                </div>
+                <span class="tabular-nums text-sm text-muted-foreground">
                   {{ item.used.toLocaleString() }}
                   <template v-if="item.limit">
                     / {{ item.limit.toLocaleString() }}
                   </template>
-                  <template v-else> (unlimited) </template>
+                  <template v-else>
+                    <span class="text-xs ml-1 text-emerald-600"
+                      >(unlimited)</span
+                    >
+                  </template>
                 </span>
               </div>
               <div
@@ -362,24 +447,44 @@ const plans = [
                     item.pct >= 90
                       ? 'bg-destructive'
                       : item.pct >= 80
-                        ? 'bg-warning'
+                        ? 'bg-amber-500'
                         : 'bg-primary'
                   "
                   :style="{ width: Math.max(item.pct, 2) + '%' }"
                 />
               </div>
-              <div v-else class="h-2 bg-primary/20 rounded-full" />
-            </div>
-          </template>
-          <p v-else class="text-sm text-muted-foreground text-center py-2">
-            Usage data loading...
-          </p>
-          <p class="text-xs text-muted-foreground pt-1">
-            Limits reset on the 1st of each month. Self-host for unlimited
-            usage.
-          </p>
-        </CardContent>
-      </Card>
+              <div v-else class="h-2 bg-emerald-500/20 rounded-full">
+                <div class="h-full w-full bg-emerald-500/40 rounded-full" />
+              </div>
+              <div
+                v-if="item.atLimit && item.upgradeTarget"
+                class="mt-3 flex items-center justify-between bg-muted/50 rounded-md px-3 py-2"
+              >
+                <p class="text-xs text-muted-foreground">
+                  {{ item.pct >= 100 ? "Limit reached" : "Approaching limit" }}
+                </p>
+                <button
+                  class="text-xs font-medium text-primary hover:underline"
+                  @click="activeTab = 'plans'"
+                >
+                  Upgrade to
+                  {{ item.upgradeTarget === "pro" ? "Pro" : "Team" }} →
+                </button>
+              </div>
+            </CardContent>
+          </Card>
+        </template>
+        <Card v-else>
+          <CardContent class="p-6 text-center">
+            <p class="text-sm text-muted-foreground">Loading usage data...</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      <p class="text-xs text-muted-foreground">
+        Event limits reset on the 1st of each month. Self-host for unlimited
+        usage.
+      </p>
     </div>
 
     <!-- Not logged in -->
