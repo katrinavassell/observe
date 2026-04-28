@@ -318,7 +318,7 @@ function retry() {
             }}{{ latestTrend.revenue_change_pct }}% vs prior period
           </div>
           <div
-            v-else-if="hasRevenue"
+            v-else-if="hasRevenue && isLoggedIn"
             class="text-xs mt-1 text-muted-foreground"
           >
             No prior period
@@ -357,7 +357,10 @@ function retry() {
             {{ latestTrend.cost_change_pct >= 0 ? "+" : ""
             }}{{ latestTrend.cost_change_pct }}% vs prior period
           </div>
-          <div v-else class="text-xs mt-1 text-muted-foreground">
+          <div
+            v-else-if="isLoggedIn"
+            class="text-xs mt-1 text-muted-foreground"
+          >
             No prior period
           </div>
         </Card>
@@ -405,12 +408,15 @@ function retry() {
             period
           </div>
           <div
-            v-else-if="hasRevenue"
+            v-else-if="hasRevenue && isLoggedIn"
             class="text-xs mt-1 text-muted-foreground"
           >
             No prior period
           </div>
-          <div v-else class="text-2xl font-semibold tabular-nums mt-1">
+          <div
+            v-else-if="!hasRevenue"
+            class="text-2xl font-semibold tabular-nums mt-1"
+          >
             {{ totalEvents.toLocaleString() }}
           </div>
         </Card>
@@ -435,7 +441,10 @@ function retry() {
             {{ latestTrend.event_count_change_pct >= 0 ? "+" : ""
             }}{{ latestTrend.event_count_change_pct }}% vs prior period
           </div>
-          <div v-else class="text-xs mt-1 text-muted-foreground">
+          <div
+            v-else-if="isLoggedIn"
+            class="text-xs mt-1 text-muted-foreground"
+          >
             No prior period
           </div>
         </Card>
