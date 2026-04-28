@@ -108,7 +108,7 @@ const rules = ref<CohortRule[]>([
 const RULE_FIELDS = [
   { value: "margin_pct", label: "Margin %" },
   { value: "total_cost", label: "Total Cost" },
-  { value: "total_revenue", label: "Total Revenue" },
+  { value: "total_revenue", label: "Revenue" },
   { value: "active_days_30d", label: "Active Days (30d)" },
 ];
 
@@ -729,7 +729,7 @@ const excludedCount = computed(() => {
     <!-- Main content -->
     <template v-else>
       <!-- KPI cards -->
-      <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      <div class="grid grid-cols-2 sm:grid-cols-3 gap-4">
         <Card class="p-4">
           <div
             class="flex items-center gap-1 text-xs text-muted-foreground uppercase tracking-wider"
@@ -759,8 +759,8 @@ const excludedCount = computed(() => {
                 <Info class="h-3.5 w-3.5 text-muted-foreground cursor-help" />
               </TooltipTrigger>
               <TooltipContent class="max-w-xs normal-case"
-                >Subscription MRR plus usage revenue across all customers for
-                the selected period.</TooltipContent
+                >Subscription or usage revenue across all customers, whichever
+                is higher per customer.</TooltipContent
               >
             </Tooltip>
           </div>

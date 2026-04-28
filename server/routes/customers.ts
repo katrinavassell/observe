@@ -407,9 +407,7 @@ export function createCustomersRoutes(
         await client.query("ROLLBACK");
         console.error("Clear data error:", error);
         const detail = error instanceof Error ? error.message : String(error);
-        res
-          .status(500)
-          .json({ error: "Failed to clear data", detail, account_id: acct });
+        res.status(500).json({ error: "Failed to clear data" });
       } finally {
         client.release();
       }

@@ -23,8 +23,10 @@ export async function resolveStripeCustomerNames(
         customerStripeMap.set(row.customer_id, row.stripe_customer_id);
       }
     }
-  } catch {
-    // stripe_customers table may not exist yet
+  } catch (err: any) {
+    if (err?.code !== "42P01") {
+      console.error("stripe_customers name lookup failed:", err);
+    }
   }
 
   const unresolved = await pool.query(

@@ -50,7 +50,7 @@ export interface AccountDetail extends CrmAccount {
 }
 
 export interface AccountsResponse {
-  accounts: Account[];
+  accounts: CrmAccount[];
   total: number;
   has_more: boolean;
 }

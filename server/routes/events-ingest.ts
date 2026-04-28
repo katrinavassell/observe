@@ -450,8 +450,10 @@ export function createEventsIngestRoutes(
             for (const row of bridgeResult.rows) {
               appToStripe.set(row.customer_id, row.stripe_customer_id);
             }
-          } catch {
-            // stripe_customers table may not exist yet
+          } catch (err: any) {
+            if (err?.code !== "42P01") {
+              console.error("stripe_customers lookup failed:", err);
+            }
           }
         }
         for (const evt of validEvents) {

@@ -198,7 +198,10 @@ export function createBillingApiRoutes(
             );
           } catch (err) {
             console.error(`checkFeatureAccess failed for ${key}:`, err);
-            entitlements[key] = { allowed: true };
+            entitlements[key] = {
+              allowed: false,
+              reason: "Unable to verify access",
+            };
           }
         }
         res.json(entitlements);

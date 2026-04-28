@@ -309,7 +309,11 @@ const displayName = computed(() => {
                 class="inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium"
                 :class="cohortBadgeClass(cohortCustomer.cohort)"
               >
-                {{ cohortCustomer.cohort }}
+                {{
+                  cohortCustomer.cohort
+                    .replace(/_/g, " ")
+                    .replace(/\b\w/g, (ch: string) => ch.toUpperCase())
+                }}
               </span>
             </div>
             <div class="flex items-center gap-3 text-sm text-muted-foreground">
