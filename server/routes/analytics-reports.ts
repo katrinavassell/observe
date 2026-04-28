@@ -63,9 +63,7 @@ export function createAnalyticsReportRoutes(pool: Pool, ensureVisitor: any) {
           const marginPct =
             totalRevenue > 0
               ? Math.round(((totalRevenue - totalCost) / totalRevenue) * 100)
-              : totalCost > 0
-                ? -100
-                : null;
+              : null;
 
           return {
             customer_id: row.customer_id,
@@ -74,7 +72,9 @@ export function createAnalyticsReportRoutes(pool: Pool, ensureVisitor: any) {
             total_cost: totalCost,
             margin_pct: marginPct,
             event_count: parseInt(row.event_count),
-            unprofitable: marginPct !== null && marginPct < 0,
+            unprofitable:
+              (marginPct !== null && marginPct < 0) ||
+              (totalRevenue === 0 && totalCost > 0),
             top_cost_feature: topFeatureMap[row.customer_id] || null,
           };
         });
@@ -862,7 +862,7 @@ export function createAnalyticsReportRoutes(pool: Pool, ensureVisitor: any) {
                     parseFloat(r.total_revenue)) *
                     100,
                 )
-              : -100,
+              : null,
           event_count: parseInt(r.event_count),
         }));
 

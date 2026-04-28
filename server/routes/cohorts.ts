@@ -26,7 +26,7 @@ interface CustomerData {
   customer_name: string;
   total_revenue: number;
   total_cost: number;
-  margin_pct: number;
+  margin_pct: number | null;
   health_score: number;
   active_days_30d: number;
   cohort: string;
@@ -90,25 +90,26 @@ async function getCustomerDataForRules(
   return result.rows.map((r) => {
     const revenue = parseFloat(r.total_revenue) || 0;
     const cost = parseFloat(r.total_cost) || 0;
-    const margin_pct =
-      revenue > 0 ? ((revenue - cost) / revenue) * 100 : cost > 0 ? -100 : 0;
+    const margin_pct = revenue > 0 ? ((revenue - cost) / revenue) * 100 : null;
     const active_days = parseInt(r.active_days_30d) || 0;
-    // Simple health score: weighted margin + activity
     const health_score = Math.max(
       0,
-      Math.min(100, Math.round(margin_pct * 0.6 + active_days * 2)),
+      Math.min(100, Math.round((margin_pct ?? -100) * 0.6 + active_days * 2)),
     );
     let cohort: string | null = null;
-    if (margin_pct < 0) cohort = "unprofitable";
+    if (revenue === 0 && cost > 0) cohort = "unprofitable";
+    else if (margin_pct !== null && margin_pct < 0) cohort = "unprofitable";
     else if (active_days === 0) cohort = "inactive";
-    else if (margin_pct >= 50 && active_days >= 10) cohort = "champion";
+    else if (margin_pct !== null && margin_pct >= 50 && active_days >= 10)
+      cohort = "champion";
 
     return {
       customer_id: r.customer_id,
       customer_name: r.customer_name,
       total_revenue: revenue,
       total_cost: cost,
-      margin_pct: Math.round(margin_pct * 100) / 100,
+      margin_pct:
+        margin_pct !== null ? Math.round(margin_pct * 100) / 100 : null,
       health_score,
       active_days_30d: active_days,
       cohort,
@@ -392,9 +393,7 @@ export function createCohortsRoutes(pool: Pool, ensureVisitor: any) {
           const marginPct =
             totalRevenue > 0
               ? Math.round(((totalRevenue - totalCost) / totalRevenue) * 100)
-              : totalCost > 0
-                ? -100
-                : null;
+              : null;
 
           const adoptionDepth = Math.round(
             (featureCount / totalFeatures) * 100,
@@ -493,7 +492,10 @@ export function createCohortsRoutes(pool: Pool, ensureVisitor: any) {
 
           // Cohort label
           let cohort: CohortLabel | null = null;
-          if (healthScore < 25 && marginPct !== null && marginPct < 0) {
+          if (
+            (marginPct !== null && marginPct < 0) ||
+            (totalRevenue === 0 && totalCost > 0)
+          ) {
             cohort = "unprofitable";
           } else if (
             costTrend === "up" &&
