@@ -203,7 +203,7 @@ export function createCohortsRoutes(pool: Pool, ensureVisitor: any) {
                ${showInternal ? "" : "AND (c.is_internal IS NOT TRUE OR c.is_internal IS NULL)"}
                ${oeTimeFilter}
              GROUP BY oe.customer_id, c.name, c.email, c.segment, c.is_internal
-             HAVING COUNT(oe.id) FILTER (WHERE oe.source IS NULL OR oe.source != 'stripe') > 0`,
+             HAVING COUNT(oe.id) > 0`,
             [accountId, ...periodParams],
           ),
           // 2. Total distinct features
