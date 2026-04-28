@@ -11,7 +11,6 @@ import {
   getMarginTrends,
   getDailySummary,
 } from "@/lib/api";
-import type {} from "@/lib/api";
 import { AlertCircle, Plug, Info } from "lucide-vue-next";
 import DailyCostRevenueChart from "@/components/charts/DailyCostRevenueChart.vue";
 import {
