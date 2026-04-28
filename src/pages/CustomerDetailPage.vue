@@ -32,7 +32,7 @@ import {
 } from "@/components/ui";
 import MarginBadge from "@/components/shared/MarginBadge.vue";
 import CustomerTrendChart from "@/components/charts/CustomerTrendChart.vue";
-import { formatCurrency as fmt } from "@/lib/format";
+import { formatCurrency as fmt, formatPct } from "@/lib/format";
 import { useAuth } from "@/composables/useAuth";
 
 const route = useRoute();
@@ -87,7 +87,7 @@ const { data: timeseries, isLoading: tsLoading } = useQuery({
 const { data: cohortsData } = useQuery({
   queryKey: ["cohorts"],
   queryFn: () => getCohorts(),
-  enabled: isLoggedIn,
+  enabled: () => isLoggedIn.value,
 });
 
 const { data: _healthData } = useQuery({
@@ -164,7 +164,7 @@ const signals = computed(() => {
     });
   }
 
-  // Inactive — skip if customer has an active subscription (low usage is normal for new/light users)
+  // Low usage — skip if customer has an active subscription (low usage is normal for new/light users)
   const hasActiveSub = detail.value?.subscriptions?.some((s) => s.is_active);
   if (cc.active_days_30d < 3 && !hasActiveSub) {
     const historical =
@@ -174,8 +174,8 @@ const signals = computed(() => {
     items.push({
       type: "warning",
       icon: Clock,
-      title: "Inactive",
-      description: `Only ${cc.active_days_30d} active day${cc.active_days_30d === 1 ? "" : "s"} in the last 30${historical}. No active subscription.`,
+      title: "Low usage",
+      description: `Only ${cc.active_days_30d} active day${cc.active_days_30d === 1 ? "" : "s"} in the last 30 days${historical}. No active subscription.`,
     });
   }
 
@@ -258,6 +258,15 @@ const revenuePerEvent = computed(() => {
 });
 
 const isFlat = computed(() => cohortCustomer.value?.pricing_model === "flat");
+
+const displayName = computed(() => {
+  if (!detail.value) return "";
+  const { name, customer_id } = detail.value.customer;
+  if (name && name !== customer_id) return name;
+  return customer_id
+    .replace(/[_-]/g, " ")
+    .replace(/\b\w/g, (ch) => ch.toUpperCase());
+});
 </script>
 
 <template>
@@ -283,7 +292,7 @@ const isFlat = computed(() => cohortCustomer.value?.pricing_model === "flat");
         </button>
         <ChevronRight class="h-3.5 w-3.5 text-muted-foreground/50" />
         <span class="text-foreground font-medium truncate max-w-[400px]">
-          {{ detail.customer.name }}
+          {{ displayName }}
         </span>
       </nav>
 
@@ -293,7 +302,7 @@ const isFlat = computed(() => cohortCustomer.value?.pricing_model === "flat");
           <div>
             <div class="flex items-center gap-2 flex-wrap">
               <h1 class="text-2xl font-semibold tracking-tight">
-                {{ detail.customer.name }}
+                {{ displayName }}
               </h1>
               <span
                 v-if="cohortCustomer?.cohort"
@@ -395,7 +404,7 @@ const isFlat = computed(() => cohortCustomer.value?.pricing_model === "flat");
               </Tooltip>
             </div>
             <p class="text-xl font-semibold">
-              {{ detail.margin_pct !== null ? `${detail.margin_pct}%` : "—" }}
+              {{ formatPct(detail.margin_pct) }}
             </p>
           </CardContent>
         </Card>
@@ -629,15 +638,17 @@ const isFlat = computed(() => cohortCustomer.value?.pricing_model === "flat");
                         customer level, not per feature.</TooltipContent
                       >
                     </Tooltip>
-                    <template v-else-if="f.total_revenue > 0">
+                    <template v-else>
                       {{
-                        Math.round(
-                          ((f.total_revenue - f.total_cost) / f.total_revenue) *
-                            100,
-                        ) + "%"
+                        formatPct(
+                          f.total_revenue > 0
+                            ? ((f.total_revenue - f.total_cost) /
+                                f.total_revenue) *
+                                100
+                            : null,
+                        )
                       }}
                     </template>
-                    <template v-else>—</template>
                   </td>
                 </tr>
               </tbody>
@@ -756,15 +767,17 @@ const isFlat = computed(() => cohortCustomer.value?.pricing_model === "flat");
                         customer level, not per model.</TooltipContent
                       >
                     </Tooltip>
-                    <template v-else-if="m.total_revenue > 0">
+                    <template v-else>
                       {{
-                        Math.round(
-                          ((m.total_revenue - m.total_cost) / m.total_revenue) *
-                            100,
-                        ) + "%"
+                        formatPct(
+                          m.total_revenue > 0
+                            ? ((m.total_revenue - m.total_cost) /
+                                m.total_revenue) *
+                                100
+                            : null,
+                        )
                       }}
                     </template>
-                    <template v-else>—</template>
                   </td>
                 </tr>
               </tbody>
@@ -895,7 +908,14 @@ const isFlat = computed(() => cohortCustomer.value?.pricing_model === "flat");
                 :key="i"
                 class="border-b last:border-0"
               >
-                <td class="px-3 py-2">{{ s.plan_name || s.plan_id }}</td>
+                <td class="px-3 py-2">
+                  {{
+                    s.plan_name ||
+                    (s.plan_id?.startsWith("price_")
+                      ? "Subscription"
+                      : s.plan_id)
+                  }}
+                </td>
                 <td class="px-3 py-2 text-right font-mono">
                   {{ s.price_amount != null ? fmt(s.price_amount) : "—" }}
                 </td>

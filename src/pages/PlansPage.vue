@@ -407,7 +407,9 @@ const plans = [
                       ? 'bg-amber-500'
                       : 'bg-primary'
                 "
-                :style="{ width: Math.max(item.pct, 2) + '%' }"
+                :style="{
+                  width: item.pct > 0 ? Math.max(item.pct, 2) + '%' : '0%',
+                }"
               />
             </div>
             <div

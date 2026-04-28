@@ -109,7 +109,6 @@ const RULE_FIELDS = [
   { value: "margin_pct", label: "Margin %" },
   { value: "total_cost", label: "Total Cost" },
   { value: "total_revenue", label: "Total Revenue" },
-  { value: "health_score", label: "Health Score" },
   { value: "active_days_30d", label: "Active Days (30d)" },
 ];
 
@@ -307,7 +306,6 @@ interface TableColumn {
 
 const DEFAULT_COLUMNS: TableColumn[] = [
   { id: "customer", label: "Customer", visible: true, align: "left" },
-  { id: "health", label: "Health", visible: false, align: "left" },
   { id: "revenue", label: "Revenue", visible: true, align: "right" },
   { id: "cost", label: "Cost", visible: true, align: "right" },
   { id: "margin", label: "Margin", visible: true, align: "right" },
@@ -558,12 +556,6 @@ function displayName(c: {
     .replace(/\b\w/g, (ch) => ch.toUpperCase());
 }
 
-function healthColor(score: number): string {
-  if (score < 30) return "bg-red-500";
-  if (score < 60) return "bg-yellow-500";
-  return "bg-green-500";
-}
-
 function _severityBorder(severity: string): string {
   switch (severity) {
     case "critical":
@@ -607,7 +599,7 @@ const filteredCustomers = computed(() => {
       );
     });
   }
-  return [...list].sort((a, b) => a.health_score - b.health_score);
+  return list;
 });
 
 const excludedCount = computed(() => {
@@ -628,9 +620,7 @@ const excludedCount = computed(() => {
     <div class="flex items-start justify-between">
       <div>
         <h1 class="text-2xl font-semibold tracking-tight">Customers</h1>
-        <p class="text-sm text-muted-foreground mt-1">
-          Customer health and segmentation
-        </p>
+        <p class="text-sm text-muted-foreground mt-1">Customer segmentation</p>
       </div>
       <div class="flex items-center gap-3">
         <div class="relative">
@@ -795,29 +785,6 @@ const excludedCount = computed(() => {
           </div>
           <p class="text-2xl font-semibold mt-1">
             {{ fmt(totals?.cost ?? 0) }}
-          </p>
-        </Card>
-        <Card class="p-4">
-          <div
-            class="flex items-center gap-1 text-xs text-muted-foreground uppercase tracking-wider"
-          >
-            Avg Health
-            <Tooltip>
-              <TooltipTrigger as-child>
-                <Info class="h-3.5 w-3.5 text-muted-foreground cursor-help" />
-              </TooltipTrigger>
-              <TooltipContent class="max-w-xs normal-case"
-                >Average health score across all customers
-                (0–100).</TooltipContent
-              >
-            </Tooltip>
-          </div>
-          <p class="text-2xl font-semibold mt-1">
-            {{
-              totals?.avg_health_score != null
-                ? Math.round(totals.avg_health_score)
-                : "—"
-            }}
           </p>
         </Card>
       </div>
@@ -988,7 +955,11 @@ const excludedCount = computed(() => {
               <template v-for="c in filteredCustomers" :key="c.customer_id">
                 <tr
                   class="group border-b hover:bg-muted/30 transition-colors cursor-pointer"
-                  @click="$router.push(`/customers/${c.customer_id}`)"
+                  @click="
+                    $router.push(
+                      `/customers/${encodeURIComponent(c.customer_id)}`,
+                    )
+                  "
                 >
                   <td class="p-3">
                     <button
@@ -1011,29 +982,9 @@ const excludedCount = computed(() => {
                   <template v-for="col in visibleColumns" :key="col.id">
                     <!-- Customer -->
                     <td v-if="col.id === 'customer'" class="p-3">
-                      <div class="flex flex-col gap-0.5">
-                        <span class="text-sm font-medium">{{
-                          displayName(c)
-                        }}</span>
-                        <code
-                          v-if="
-                            c.customer_name && c.customer_name !== c.customer_id
-                          "
-                          class="font-mono text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded w-fit"
-                          >{{ c.customer_id }}</code
-                        >
-                      </div>
-                    </td>
-
-                    <!-- Health -->
-                    <td v-else-if="col.id === 'health'" class="p-3">
-                      <div class="flex items-center gap-2">
-                        <span
-                          class="h-2 w-2 rounded-full"
-                          :class="healthColor(c.health_score)"
-                        />
-                        <span>{{ c.health_score }}</span>
-                      </div>
+                      <span class="text-sm font-medium">{{
+                        displayName(c)
+                      }}</span>
                     </td>
 
                     <!-- Revenue -->

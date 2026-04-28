@@ -25,7 +25,7 @@ import {
   TooltipContent,
 } from "@/components/ui";
 import SourceBadge from "@/components/shared/SourceBadge.vue";
-import { formatCurrency as fmt } from "@/lib/format";
+import { formatCurrency as fmt, formatPct } from "@/lib/format";
 import { useAuth } from "@/composables/useAuth";
 import {
   GUEST_EVENTS_BY_FEATURE,
@@ -490,9 +490,7 @@ function retry() {
                   {{ fmt(c.total_revenue || 0) }}
                 </td>
                 <td class="py-2.5 text-right font-mono tabular-nums">
-                  {{
-                    c.margin_pct != null ? Math.round(c.margin_pct) + "%" : "--"
-                  }}
+                  {{ formatPct(c.margin_pct) }}
                 </td>
               </tr>
             </tbody>
