@@ -346,12 +346,21 @@ const isFlat = computed(() => cohortCustomer.value?.pricing_model === "flat");
                   <Info class="h-3.5 w-3.5 text-muted-foreground cursor-help" />
                 </TooltipTrigger>
                 <TooltipContent class="max-w-xs"
-                  >Subscription MRR plus metered usage revenue for this
-                  customer.</TooltipContent
+                  >Event-attributed revenue from metered usage across all
+                  features.</TooltipContent
                 >
               </Tooltip>
             </div>
             <p class="text-xl font-semibold">{{ fmt(detail.total_revenue) }}</p>
+            <p
+              v-if="
+                detail.subscription_mrr > 0 &&
+                detail.subscription_mrr !== detail.total_revenue
+              "
+              class="text-xs text-muted-foreground mt-0.5"
+            >
+              {{ fmt(detail.subscription_mrr) }}/mo subscription
+            </p>
           </CardContent>
         </Card>
         <Card>

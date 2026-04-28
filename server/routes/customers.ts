@@ -1036,9 +1036,7 @@ export function createCustomersRoutes(
               sum + (parseFloat(s.mrr_override ?? "0") || 0),
             0,
           );
-        const totalRevenue = hasPeriod
-          ? subscriptionMrr
-          : Math.max(eventRevenue, subscriptionMrr);
+        const totalRevenue = eventRevenue;
         const marginPct =
           totalRevenue > 0
             ? Math.round(((totalRevenue - totalCost) / totalRevenue) * 100)
@@ -1055,6 +1053,7 @@ export function createCustomersRoutes(
           subscriptions: subRes.rows,
           total_cost: totalCost,
           total_revenue: totalRevenue,
+          subscription_mrr: subscriptionMrr,
           margin_pct: marginPct,
           period_start: periodStart ?? null,
           period_end: periodEnd ?? null,

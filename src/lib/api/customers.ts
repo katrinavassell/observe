@@ -94,6 +94,7 @@ export interface CustomerDetail {
   }>;
   total_cost: number;
   total_revenue: number;
+  subscription_mrr: number;
   margin_pct: number | null;
   recent_events: ObserveEvent[];
   by_model: Array<{
