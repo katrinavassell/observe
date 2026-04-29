@@ -15,7 +15,7 @@ export function formatPct(val: number | string | null | undefined): string {
   if (val === null || val === undefined) return "—";
   const n = typeof val === "string" ? parseFloat(val) : val;
   if (isNaN(n)) return "—";
-  if (n > 0 && Math.round(n) >= 100) return "99%";
+  if (n > 0 && n < 100 && Math.round(n) >= 100) return "99%";
   if (n <= -999) return "< -999%";
   return `${n.toFixed(0)}%`;
 }

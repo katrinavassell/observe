@@ -229,13 +229,6 @@ function retry() {
           <p class="text-muted-foreground">
             Cost, revenue, and margin across all features and customers
           </p>
-          <div v-if="activeSources.length" class="flex items-center gap-1">
-            <SourceBadge
-              v-for="s in activeSources"
-              :key="s.source"
-              :source="s.source"
-            />
-          </div>
         </div>
       </div>
     </div>
