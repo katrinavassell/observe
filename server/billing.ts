@@ -307,6 +307,24 @@ export async function createCheckoutSession(
       ? `https://${process.env.VERCEL_URL}`
       : "http://localhost:5001");
 
+  const existingSubs = await stripe.subscriptions.list({
+    customer: customerId,
+    status: "active",
+    limit: 1,
+  });
+
+  if (existingSubs.data.length > 0) {
+    const sub = existingSubs.data[0];
+    const itemId = sub.items.data[0]?.id;
+    if (itemId) {
+      await stripe.subscriptions.update(sub.id, {
+        items: [{ id: itemId, price: priceId }],
+        proration_behavior: "create_prorations",
+      });
+      return { url: `${baseUrl}/plans` };
+    }
+  }
+
   const session = await stripe.checkout.sessions.create({
     customer: customerId,
     mode: "subscription",
