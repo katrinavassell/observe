@@ -238,7 +238,7 @@ const plans = [
         "
       >
         <div
-          v-if="currentPlan === plan.key"
+          v-if="isLoggedIn && currentPlan === plan.key"
           class="bg-primary text-primary-foreground text-center text-xs font-medium py-1.5 rounded-t-lg -mx-px -mt-px"
         >
           Your current plan
@@ -322,9 +322,9 @@ const plans = [
                 <ArrowRight class="h-4 w-4 ml-2" />
               </Button>
             </template>
-            <template v-else-if="!isLoggedIn && plan.key !== 'free'">
+            <template v-else-if="!isLoggedIn">
               <Button class="w-full" @click="router.push('/signup')">
-                Sign up to upgrade
+                {{ plan.key === "free" ? "Start free" : "Get started" }}
                 <ArrowRight class="h-4 w-4 ml-2" />
               </Button>
             </template>
