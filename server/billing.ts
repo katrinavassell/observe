@@ -314,19 +314,24 @@ export async function createCheckoutSession(
   });
 
   if (existingSubs.data.length > 0) {
-    const sub = existingSubs.data[0];
-    const itemId = sub.items.data[0]?.id;
-    if (itemId) {
-      await stripe.subscriptions.update(sub.id, {
-        items: [{ id: itemId, price: priceId }],
-        proration_behavior: "create_prorations",
-      });
-      await pool.query(
-        `UPDATE accounts SET stripe_plan = $1 WHERE stripe_customer_id = $2`,
-        [plan, customerId],
-      );
-      return { url: `${baseUrl}/plans` };
-    }
+    const session = await stripe.billingPortal.sessions.create({
+      customer: customerId,
+      return_url: `${baseUrl}/plans`,
+      flow_data: {
+        type: "subscription_update_confirm",
+        subscription_update_confirm: {
+          subscription: existingSubs.data[0].id,
+          items: [
+            {
+              id: existingSubs.data[0].items.data[0].id,
+              price: priceId,
+              quantity: 1,
+            },
+          ],
+        },
+      },
+    });
+    return { url: session.url };
   }
 
   const session = await stripe.checkout.sessions.create({
