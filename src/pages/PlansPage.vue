@@ -3,13 +3,14 @@ import { computed, ref } from "vue";
 import { useRouter } from "vue-router";
 import { useQuery, useMutation } from "@tanstack/vue-query";
 import { Check, ArrowRight, Loader2 } from "lucide-vue-next";
-import { Card, CardContent, Button, Skeleton } from "@/components/ui";
+import { Card, CardContent, Button, Skeleton, Badge } from "@/components/ui";
 import {
   getUsageLimits,
   getBillingStatus,
   getEntitlements,
   startCheckout,
   openPortal,
+  getCurrentAccountId,
 } from "@/lib/api";
 import { Zap, Bell, Building2 } from "lucide-vue-next";
 import { useAuth } from "@/composables/useAuth";
@@ -17,15 +18,16 @@ import { toast } from "vue-sonner";
 
 const router = useRouter();
 const { isLoggedIn } = useAuth();
+const accountId = getCurrentAccountId();
 
 const { data: usageLimits } = useQuery({
-  queryKey: ["usage-limits"],
+  queryKey: ["usage-limits", accountId],
   queryFn: getUsageLimits,
   enabled: isLoggedIn,
 });
 
 const { data: billing } = useQuery({
-  queryKey: ["billing-status"],
+  queryKey: ["billing-status", accountId],
   queryFn: getBillingStatus,
   enabled: isLoggedIn,
 });
@@ -35,7 +37,7 @@ const PLAN_RANK: Record<string, number> = { free: 0, pro: 1, team: 2 };
 const currentRank = computed(() => PLAN_RANK[currentPlan.value] ?? 0);
 
 const { data: entitlements } = useQuery({
-  queryKey: ["entitlements"],
+  queryKey: ["entitlements", accountId],
   queryFn: getEntitlements,
   enabled: isLoggedIn,
 });
@@ -143,11 +145,9 @@ const plans = [
     price: "Free",
     priceSuffix: "forever",
     description: "AI cost observability",
-    badge: null as string | null,
     features: [
       "10,000 events/month",
       "90-day data retention",
-      "SDK & proxy cost tracking",
       "Stripe, OpenAI & Anthropic integrations",
       "Per-feature margin analysis",
       "3 active cost alerts",
@@ -161,7 +161,6 @@ const plans = [
     priceSuffix: "/month",
     description: "For growing AI products",
     popular: true,
-    badge: null as string | null,
     features: [
       "100,000 events/month",
       "365-day data retention",
@@ -177,7 +176,6 @@ const plans = [
     price: "$99",
     priceSuffix: "/month",
     description: "For agencies & portfolios",
-    badge: null as string | null,
     features: [
       "1,000,000 events/month",
       "Unlimited data retention",
@@ -234,30 +232,34 @@ const plans = [
         :key="plan.key"
         class="relative flex flex-col"
         :class="
-          plan.popular
-            ? 'border-2 border-primary shadow-lg ring-1 ring-primary/20'
-            : ''
+          isLoggedIn && currentPlan === plan.key
+            ? 'border-primary/40 bg-primary/5'
+            : plan.popular && currentPlan !== 'team'
+              ? 'border-2 border-primary shadow-lg ring-1 ring-primary/20'
+              : ''
         "
       >
-        <div
-          v-if="isLoggedIn && currentPlan === plan.key"
-          class="bg-primary text-primary-foreground text-center text-xs font-medium py-1.5 rounded-t-lg -mx-px -mt-px"
-        >
-          Your current plan
-        </div>
-        <div
-          v-else-if="plan.popular"
-          class="bg-primary text-primary-foreground text-center text-xs font-medium py-1.5 rounded-t-lg -mx-0.5 -mt-0.5"
-        >
-          Most popular
-        </div>
-        <CardContent
-          class="p-6 flex flex-col flex-1"
-          :class="currentPlan !== plan.key && !plan.popular ? 'pt-8' : ''"
-        >
+        <CardContent class="p-6 flex flex-col flex-1">
           <div class="space-y-4 flex-1">
             <div>
-              <h3 class="text-lg font-semibold">{{ plan.name }}</h3>
+              <div class="flex items-center gap-2">
+                <h3 class="text-lg font-semibold">{{ plan.name }}</h3>
+                <Badge
+                  v-if="
+                    isLoggedIn &&
+                    currentPlan === plan.key &&
+                    plan.key !== 'team'
+                  "
+                  variant="secondary"
+                  class="text-[10px]"
+                  >Current</Badge
+                >
+                <Badge
+                  v-else-if="plan.popular && currentPlan !== 'team'"
+                  class="text-[10px] bg-primary text-primary-foreground"
+                  >Popular</Badge
+                >
+              </div>
               <p class="text-xs text-muted-foreground mt-1">
                 {{ plan.description }}
               </p>
@@ -296,8 +298,18 @@ const plans = [
               <Skeleton class="h-10 w-full rounded-md" />
             </template>
             <template v-else-if="currentPlan === plan.key">
-              <Button variant="outline" class="w-full" disabled>
-                Current plan
+              <Button
+                v-if="plan.key !== 'free'"
+                variant="outline"
+                class="w-full"
+                :disabled="portalMutation.isPending.value"
+                @click="portalMutation.mutate()"
+              >
+                <Loader2
+                  v-if="portalMutation.isPending.value"
+                  class="h-4 w-4 mr-2 animate-spin"
+                />
+                Manage billing
               </Button>
             </template>
             <template
@@ -325,19 +337,6 @@ const plans = [
           </div>
         </CardContent>
       </Card>
-    </div>
-
-    <div
-      v-if="activeTab === 'plans' && isLoggedIn && currentPlan !== 'free'"
-      class="max-w-5xl"
-    >
-      <button
-        class="text-sm text-muted-foreground hover:text-foreground transition-colors underline underline-offset-4"
-        :disabled="portalMutation.isPending.value"
-        @click="portalMutation.mutate()"
-      >
-        Manage billing, change plan, or cancel
-      </button>
     </div>
 
     <!-- Usage section -->
