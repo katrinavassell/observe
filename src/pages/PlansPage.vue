@@ -340,42 +340,6 @@ const plans = [
       </button>
     </div>
 
-    <!-- Tanso Platform upsell -->
-    <Card v-if="activeTab === 'plans'" class="max-w-5xl">
-      <CardContent
-        class="p-6 flex flex-col md:flex-row md:items-center justify-between gap-6"
-      >
-        <div class="flex-1">
-          <h3 class="font-semibold">Need more than observability?</h3>
-          <p class="text-sm text-muted-foreground mt-1">
-            Tanso is the full monetization platform — usage metering,
-            entitlements, subscription management, pricing experimentation, and
-            revenue recovery. Everything in Observe, plus everything you need to
-            bill.
-          </p>
-        </div>
-        <div class="flex gap-2 shrink-0 w-full md:w-auto">
-          <a
-            href="https://dashboard.tansohq.com/"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Button>
-              Explore Tanso
-              <ArrowRight class="h-4 w-4 ml-2" />
-            </Button>
-          </a>
-          <a
-            href="https://cal.com/katrina-laszlo/30-minute-meeting?duration=30"
-            target="_blank"
-            rel="noopener"
-          >
-            <Button variant="outline">Talk to us</Button>
-          </a>
-        </div>
-      </CardContent>
-    </Card>
-
     <!-- Usage section -->
     <div v-if="activeTab === 'usage' && isLoggedIn" class="max-w-5xl space-y-5">
       <!-- Metered usage (progress bars) -->
