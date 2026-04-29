@@ -185,6 +185,7 @@ export function createBillingApiRoutes(
             usage?: number;
             limit?: number;
             remaining?: number;
+            reason?: string;
           }
         > = {};
         for (const key of features) {
