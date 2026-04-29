@@ -219,7 +219,7 @@ function retry() {
                 {{ dataConfidence.label }} &middot; {{ totalEvents }} events
               </Badge>
             </TooltipTrigger>
-            <TooltipContent
+            <TooltipContent class="normal-case"
               >Data confidence: {{ dataConfidence.label }}. Send more events for
               higher accuracy.</TooltipContent
             >
@@ -287,7 +287,7 @@ function retry() {
               <TooltipTrigger as-child>
                 <Info class="h-3.5 w-3.5 text-muted-foreground cursor-help" />
               </TooltipTrigger>
-              <TooltipContent class="max-w-xs"
+              <TooltipContent class="max-w-xs normal-case"
                 >Sum of per-event usage revenue (metered + tiered) for the
                 selected period. Does not include flat subscription
                 MRR.</TooltipContent
@@ -327,7 +327,7 @@ function retry() {
               <TooltipTrigger as-child>
                 <Info class="h-3.5 w-3.5 text-muted-foreground cursor-help" />
               </TooltipTrigger>
-              <TooltipContent class="max-w-xs"
+              <TooltipContent class="max-w-xs normal-case"
                 >Sum of all tracked AI costs (LLM inference, embeddings, API
                 calls). Does not include infrastructure overhead unless
                 separately uploaded via CSV.</TooltipContent
@@ -367,7 +367,7 @@ function retry() {
               <TooltipTrigger as-child>
                 <Info class="h-3.5 w-3.5 text-muted-foreground cursor-help" />
               </TooltipTrigger>
-              <TooltipContent class="max-w-xs"
+              <TooltipContent class="max-w-xs normal-case"
                 >Revenue minus cost, divided by revenue.</TooltipContent
               >
             </Tooltip>
@@ -443,13 +443,13 @@ function retry() {
       </div>
 
       <!-- Daily Cost vs Revenue chart -->
-      <Card v-if="isLoggedIn && dailySeries.length >= 3" class="p-4">
+      <Card v-if="dailySeries.length >= 3" class="p-4">
         <h3 class="text-base font-semibold mb-4">Cost vs Revenue (Daily)</h3>
         <DailyCostRevenueChart :data="dailySeries" />
       </Card>
 
       <!-- Top Customers by Cost -->
-      <Card v-if="isLoggedIn && topCustomersByCost.length > 0">
+      <Card v-if="topCustomersByCost.length > 0">
         <CardContent class="pt-6">
           <h3 class="text-base font-semibold mb-4">Top Customers by Cost</h3>
           <table class="w-full text-sm">
