@@ -914,16 +914,13 @@ function usageTooltip(event: ObserveEvent): string {
                     </button>
                     <button
                       v-else-if="event.customer_id"
-                      class="hover:underline"
+                      class="text-sm hover:underline text-left"
                       @click.stop="
                         selectedCustomer = event.customer_id;
                         resetPage();
                       "
                     >
-                      <code
-                        class="font-mono text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded"
-                        >{{ event.customer_id }}</code
-                      >
+                      {{ event.customer_id }}
                     </button>
                     <span v-else class="text-muted-foreground text-sm">—</span>
                   </td>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
 import { useRouter } from "vue-router";
 import {
@@ -11,7 +11,15 @@ import {
   getMarginTrends,
   getDailySummary,
 } from "@/lib/api";
-import { AlertCircle, Plug, Info } from "lucide-vue-next";
+import {
+  AlertCircle,
+  Plug,
+  Info,
+  ArrowRight,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+} from "lucide-vue-next";
 import DailyCostRevenueChart from "@/components/charts/DailyCostRevenueChart.vue";
 import {
   Badge,
@@ -36,6 +44,17 @@ const router = useRouter();
 const queryClient = useQueryClient();
 const { isLoggedIn } = useAuth();
 
+// Date range picker
+type DateRange = { label: string; days: number | undefined };
+const DATE_RANGES: DateRange[] = [
+  { label: "Last 7 days", days: 7 },
+  { label: "Last 30 days", days: 30 },
+  { label: "Last 90 days", days: 90 },
+  { label: "All time", days: undefined },
+];
+const selectedRange = ref<DateRange>(DATE_RANGES[1]); // Default: Last 30 days
+const selectedDays = computed(() => selectedRange.value.days);
+
 const { data: _usageLimits } = useQuery({
   queryKey: ["usage-limits"],
   queryFn: getUsageLimits,
@@ -49,8 +68,11 @@ const { data: sourceBreakdown } = useQuery({
 
 // Margin trends for period-over-period badges
 const { data: trendsData } = useQuery({
-  queryKey: ["margin-trends"],
-  queryFn: () => getMarginTrends(12),
+  queryKey: computed(() => ["margin-trends", selectedDays.value]),
+  queryFn: () =>
+    getMarginTrends(
+      selectedDays.value ? Math.ceil(selectedDays.value / 30) : 12,
+    ),
   enabled: computed(() => isLoggedIn.value),
 });
 
@@ -75,8 +97,8 @@ const marginChangePp = computed(() => {
 
 // Daily summary for cost vs revenue chart
 const { data: dailyData } = useQuery({
-  queryKey: ["daily-summary"],
-  queryFn: () => getDailySummary(30),
+  queryKey: computed(() => ["daily-summary", selectedDays.value]),
+  queryFn: () => getDailySummary(selectedDays.value),
   enabled: computed(() => isLoggedIn.value),
 });
 
@@ -166,12 +188,37 @@ const grossMarginPct = computed(() => {
   return ((totalRevenue.value - totalCost.value) / totalRevenue.value) * 100;
 });
 
-const topCustomersByCost = computed(() => {
+type SortField = "total_cost" | "total_revenue" | "margin_pct";
+type SortDir = "asc" | "desc";
+const sortField = ref<SortField>("total_cost");
+const sortDir = ref<SortDir>("desc");
+
+function toggleSort(field: SortField) {
+  if (sortField.value === field) {
+    sortDir.value = sortDir.value === "desc" ? "asc" : "desc";
+  } else {
+    sortField.value = field;
+    sortDir.value = "desc";
+  }
+}
+
+const sortedCustomers = computed(() => {
   if (!customerData.value) return [];
+  const dir = sortDir.value === "desc" ? -1 : 1;
+  const field = sortField.value;
   return [...customerData.value]
-    .sort((a, b) => b.total_cost - a.total_cost)
+    .sort((a, b) => {
+      const av =
+        field === "total_revenue" ? a.total_revenue || 0 : (a[field] ?? 0);
+      const bv =
+        field === "total_revenue" ? b.total_revenue || 0 : (b[field] ?? 0);
+      return (av - bv) * dir;
+    })
     .slice(0, 5);
 });
+
+import { useMarginThresholds } from "@/composables/useMarginThresholds";
+const { getStatus } = useMarginThresholds();
 
 // Data quality for insights
 const totalEvents = computed(() => {
@@ -231,6 +278,19 @@ function retry() {
           </p>
         </div>
       </div>
+    </div>
+
+    <!-- Date range picker -->
+    <div class="flex gap-1">
+      <Button
+        v-for="range in DATE_RANGES"
+        :key="range.label"
+        size="sm"
+        :variant="selectedRange.label === range.label ? 'default' : 'outline'"
+        @click="selectedRange = range"
+      >
+        {{ range.label }}
+      </Button>
     </div>
 
     <!-- Error state -->
@@ -299,12 +359,7 @@ function retry() {
           </div>
           <div
             v-if="hasRevenue && latestTrend?.revenue_change_pct != null"
-            class="text-xs mt-1"
-            :class="
-              latestTrend.revenue_change_pct >= 0
-                ? 'text-emerald-500'
-                : 'text-destructive'
-            "
+            class="text-xs mt-1 text-muted-foreground"
           >
             {{ latestTrend.revenue_change_pct >= 0 ? "+" : ""
             }}{{ latestTrend.revenue_change_pct }}% vs prior period
@@ -339,12 +394,7 @@ function retry() {
           </div>
           <div
             v-if="latestTrend?.cost_change_pct != null"
-            class="text-xs mt-1"
-            :class="
-              latestTrend.cost_change_pct <= 0
-                ? 'text-emerald-500'
-                : 'text-destructive'
-            "
+            class="text-xs mt-1 text-muted-foreground"
           >
             {{ latestTrend.cost_change_pct >= 0 ? "+" : ""
             }}{{ latestTrend.cost_change_pct }}% vs prior period
@@ -362,7 +412,7 @@ function retry() {
           <div
             class="flex items-center gap-1 text-xs text-muted-foreground uppercase tracking-wider"
           >
-            {{ hasRevenue ? "Gross Margin" : "Events Tracked" }}
+            {{ hasRevenue ? "Gross Margin" : "Models Used" }}
             <Tooltip v-if="hasRevenue">
               <TooltipTrigger as-child>
                 <Info class="h-3.5 w-3.5 text-muted-foreground cursor-help" />
@@ -377,10 +427,10 @@ function retry() {
               class="text-2xl font-semibold tabular-nums"
               :class="
                 grossMarginPct >= 70
-                  ? 'text-green-600'
+                  ? 'text-success'
                   : grossMarginPct >= 30
-                    ? 'text-amber-600'
-                    : 'text-red-600'
+                    ? 'text-warning'
+                    : 'text-destructive'
               "
               >{{
                 grossMarginPct > 99 && grossMarginPct < 100
@@ -391,10 +441,7 @@ function retry() {
           </div>
           <div
             v-if="hasRevenue && marginChangePp != null"
-            class="text-xs mt-1"
-            :class="
-              marginChangePp >= 0 ? 'text-emerald-500' : 'text-destructive'
-            "
+            class="text-xs mt-1 text-muted-foreground"
           >
             {{ marginChangePp >= 0 ? "+" : "" }}{{ marginChangePp }}% vs prior
             period
@@ -409,7 +456,7 @@ function retry() {
             v-else-if="!hasRevenue"
             class="text-2xl font-semibold tabular-nums mt-1"
           >
-            {{ totalEvents.toLocaleString() }}
+            {{ modelData?.length ?? 0 }}
           </div>
         </Card>
 
@@ -423,12 +470,7 @@ function retry() {
           </div>
           <div
             v-if="latestTrend?.event_count_change_pct != null"
-            class="text-xs mt-1"
-            :class="
-              latestTrend.event_count_change_pct >= 0
-                ? 'text-emerald-500'
-                : 'text-destructive'
-            "
+            class="text-xs mt-1 text-muted-foreground"
           >
             {{ latestTrend.event_count_change_pct >= 0 ? "+" : ""
             }}{{ latestTrend.event_count_change_pct }}% vs prior period
@@ -444,26 +486,89 @@ function retry() {
 
       <!-- Daily Cost vs Revenue chart -->
       <Card v-if="dailySeries.length >= 3" class="p-4">
-        <h3 class="text-base font-semibold mb-4">Cost vs Revenue (Daily)</h3>
         <DailyCostRevenueChart :data="dailySeries" />
       </Card>
+      <Card v-else-if="isLoggedIn && dailySeries.length > 0" class="p-4">
+        <div
+          class="h-[250px] flex items-center justify-center text-muted-foreground text-sm"
+        >
+          Need at least 3 days of data to show the chart. You have
+          {{ dailySeries.length }} day{{ dailySeries.length === 1 ? "" : "s" }}
+          so far.
+        </div>
+      </Card>
 
-      <!-- Top Customers by Cost -->
-      <Card v-if="topCustomersByCost.length > 0">
-        <CardContent class="pt-6">
-          <h3 class="text-base font-semibold mb-4">Top Customers by Cost</h3>
+      <!-- Customers -->
+      <Card v-if="sortedCustomers.length > 0">
+        <CardContent class="p-5">
+          <h3 class="text-base font-semibold mb-4">Customers</h3>
           <table class="w-full text-sm">
             <thead>
               <tr class="border-b text-xs text-muted-foreground">
                 <th class="text-left pb-2 font-medium">Customer</th>
-                <th class="text-right pb-2 font-medium">Cost</th>
-                <th class="text-right pb-2 font-medium">Revenue</th>
-                <th class="text-right pb-2 font-medium">Margin</th>
+                <th class="text-right pb-2 font-medium">
+                  <button
+                    class="inline-flex items-center gap-1 hover:text-foreground transition-colors"
+                    @click="toggleSort('total_cost')"
+                  >
+                    Cost
+                    <ArrowUp
+                      v-if="sortField === 'total_cost' && sortDir === 'asc'"
+                      class="h-3 w-3"
+                    />
+                    <ArrowDown
+                      v-else-if="
+                        sortField === 'total_cost' && sortDir === 'desc'
+                      "
+                      class="h-3 w-3"
+                    />
+                    <ArrowUpDown v-else class="h-3 w-3 opacity-40" />
+                  </button>
+                </th>
+                <th class="text-right pb-2 font-medium">
+                  <button
+                    class="inline-flex items-center gap-1 hover:text-foreground transition-colors ml-auto"
+                    @click="toggleSort('total_revenue')"
+                  >
+                    Revenue
+                    <ArrowUp
+                      v-if="sortField === 'total_revenue' && sortDir === 'asc'"
+                      class="h-3 w-3"
+                    />
+                    <ArrowDown
+                      v-else-if="
+                        sortField === 'total_revenue' && sortDir === 'desc'
+                      "
+                      class="h-3 w-3"
+                    />
+                    <ArrowUpDown v-else class="h-3 w-3 opacity-40" />
+                  </button>
+                </th>
+                <th class="text-right pb-2 font-medium">
+                  <button
+                    class="inline-flex items-center gap-1 hover:text-foreground transition-colors ml-auto"
+                    @click="toggleSort('margin_pct')"
+                  >
+                    Margin
+                    <ArrowUp
+                      v-if="sortField === 'margin_pct' && sortDir === 'asc'"
+                      class="h-3 w-3"
+                    />
+                    <ArrowDown
+                      v-else-if="
+                        sortField === 'margin_pct' && sortDir === 'desc'
+                      "
+                      class="h-3 w-3"
+                    />
+                    <ArrowUpDown v-else class="h-3 w-3 opacity-40" />
+                  </button>
+                </th>
+                <th class="text-right pb-2 font-medium">Status</th>
               </tr>
             </thead>
             <tbody>
               <tr
-                v-for="c in topCustomersByCost"
+                v-for="c in sortedCustomers"
                 :key="c.customer_id"
                 class="border-b last:border-0 hover:bg-muted/50 transition-colors"
               >
@@ -484,9 +589,27 @@ function retry() {
                 <td class="py-2.5 text-right font-mono tabular-nums">
                   {{ formatPct(c.margin_pct) }}
                 </td>
+                <td class="py-2.5 text-right">
+                  <Badge
+                    :variant="
+                      getStatus(c.margin_pct, c.total_revenue > 0).variant
+                    "
+                  >
+                    {{ getStatus(c.margin_pct, c.total_revenue > 0).label }}
+                  </Badge>
+                </td>
               </tr>
             </tbody>
           </table>
+          <div class="pt-4 border-t mt-2">
+            <router-link
+              to="/customers"
+              class="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
+            >
+              View all customers
+              <ArrowRight class="h-3.5 w-3.5" />
+            </router-link>
+          </div>
         </CardContent>
       </Card>
     </template>
