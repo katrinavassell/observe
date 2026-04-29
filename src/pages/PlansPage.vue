@@ -3,7 +3,7 @@ import { computed, ref } from "vue";
 import { useRouter } from "vue-router";
 import { useQuery, useMutation } from "@tanstack/vue-query";
 import { Check, ArrowRight, Loader2 } from "lucide-vue-next";
-import { Card, CardContent, Button } from "@/components/ui";
+import { Card, CardContent, Button, Skeleton } from "@/components/ui";
 import {
   getUsageLimits,
   getBillingStatus,
@@ -290,7 +290,10 @@ const plans = [
           </div>
 
           <div class="pt-6 mt-auto">
-            <template v-if="currentPlan === plan.key">
+            <template v-if="isLoggedIn && !billing">
+              <Skeleton class="h-10 w-full rounded-md" />
+            </template>
+            <template v-else-if="currentPlan === plan.key">
               <Button
                 v-if="plan.key !== 'free'"
                 variant="outline"
