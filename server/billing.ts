@@ -321,6 +321,10 @@ export async function createCheckoutSession(
         items: [{ id: itemId, price: priceId }],
         proration_behavior: "create_prorations",
       });
+      await pool.query(
+        `UPDATE accounts SET stripe_plan = $1 WHERE stripe_customer_id = $2`,
+        [plan, customerId],
+      );
       return { url: `${baseUrl}/plans` };
     }
   }
