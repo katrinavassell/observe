@@ -31,6 +31,8 @@ const { data: billing } = useQuery({
 });
 
 const currentPlan = computed(() => billing.value?.plan || "free");
+const PLAN_RANK: Record<string, number> = { free: 0, pro: 1, team: 2 };
+const currentRank = computed(() => PLAN_RANK[currentPlan.value] ?? 0);
 
 const { data: entitlements } = useQuery({
   queryKey: ["entitlements"],
@@ -294,24 +296,13 @@ const plans = [
               <Skeleton class="h-10 w-full rounded-md" />
             </template>
             <template v-else-if="currentPlan === plan.key">
-              <Button
-                v-if="plan.key !== 'free'"
-                variant="outline"
-                class="w-full"
-                :disabled="portalMutation.isPending.value"
-                @click="portalMutation.mutate()"
-              >
-                <Loader2
-                  v-if="portalMutation.isPending.value"
-                  class="h-4 w-4 mr-2 animate-spin"
-                />
-                Manage billing
-              </Button>
-              <Button v-else variant="outline" class="w-full" disabled>
+              <Button variant="outline" class="w-full" disabled>
                 Current plan
               </Button>
             </template>
-            <template v-else-if="isLoggedIn && plan.key !== 'free'">
+            <template
+              v-else-if="isLoggedIn && (PLAN_RANK[plan.key] ?? 0) > currentRank"
+            >
               <Button
                 class="w-full"
                 :disabled="checkoutMutation.isPending.value"
@@ -334,6 +325,19 @@ const plans = [
           </div>
         </CardContent>
       </Card>
+    </div>
+
+    <div
+      v-if="activeTab === 'plans' && isLoggedIn && currentPlan !== 'free'"
+      class="max-w-5xl"
+    >
+      <button
+        class="text-sm text-muted-foreground hover:text-foreground transition-colors underline underline-offset-4"
+        :disabled="portalMutation.isPending.value"
+        @click="portalMutation.mutate()"
+      >
+        Manage billing, change plan, or cancel
+      </button>
     </div>
 
     <!-- Tanso Platform upsell -->

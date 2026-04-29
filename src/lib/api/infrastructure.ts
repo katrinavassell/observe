@@ -133,6 +133,20 @@ export async function openPortal(): Promise<{ url: string }> {
   return request("/billing/portal", { method: "POST" });
 }
 
+export async function getPendingChanges(): Promise<{
+  pending_downgrade: string | null;
+  pending_cancel: boolean;
+  effective_date: string | null;
+}> {
+  return request("/billing/pending-changes");
+}
+
+export async function cancelPendingDowngrade(): Promise<{
+  cancelled: boolean;
+}> {
+  return request("/billing/cancel-downgrade", { method: "POST" });
+}
+
 export interface CreditsInfo {
   bonus_credits: number;
   rewards: { feedback: number; invite_accepted: number };

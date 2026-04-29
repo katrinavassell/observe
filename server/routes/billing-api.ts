@@ -13,6 +13,8 @@ import {
   getBonusCredits,
   CREDIT_REWARDS,
   checkFeatureAccess,
+  cancelPendingDowngrade,
+  getPendingChanges,
 } from "../billing.js";
 import { calculateCostFromTokens } from "../model-pricing.js";
 import { syncStripeDataForUser } from "./integrations.js";
@@ -346,6 +348,36 @@ export function createBillingApiRoutes(
               ? error.message
               : "Failed to create portal session",
         });
+      }
+    },
+  );
+
+  // GET /billing/pending-changes — check for scheduled downgrade or cancel
+  router.get(
+    "/billing/pending-changes",
+    ensureVisitor,
+    async (req: AuthRequest, res: Response) => {
+      try {
+        const result = await getPendingChanges(pool, req.visitorId!);
+        res.json(result);
+      } catch (error) {
+        console.error("GET /billing/pending-changes error:", error);
+        res.status(500).json({ error: "Failed to check pending changes" });
+      }
+    },
+  );
+
+  // POST /billing/cancel-downgrade — undo a scheduled downgrade or cancel
+  router.post(
+    "/billing/cancel-downgrade",
+    ensureVisitor,
+    async (req: AuthRequest, res: Response) => {
+      try {
+        const result = await cancelPendingDowngrade(pool, req.visitorId!);
+        res.json(result);
+      } catch (error) {
+        console.error("POST /billing/cancel-downgrade error:", error);
+        res.status(500).json({ error: "Failed to cancel downgrade" });
       }
     },
   );

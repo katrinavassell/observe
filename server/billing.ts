@@ -267,7 +267,7 @@ export async function createCheckoutSession(
     throw new Error(`Unknown plan: ${plan}`);
   }
   const priceId = planConfig.stripePriceId;
-  if (!priceId) {
+  if (plan !== "free" && !priceId) {
     throw new Error(`Stripe price not configured for ${plan} plan`);
   }
 
@@ -314,16 +314,54 @@ export async function createCheckoutSession(
   });
 
   if (existingSubs.data.length > 0) {
+    const sub = existingSubs.data[0];
+
+    if (plan === "free") {
+      await stripe.subscriptions.update(sub.id, {
+        cancel_at_period_end: true,
+      });
+      return { url: `${baseUrl}/plans?downgrade=scheduled` };
+    }
+
+    const currentPriceId = sub.items.data[0]?.price?.id;
+    const currentPrice = currentPriceId
+      ? await stripe.prices.retrieve(currentPriceId)
+      : null;
+    const newPrice = await stripe.prices.retrieve(priceId!);
+    const isDowngrade =
+      currentPrice &&
+      (newPrice.unit_amount ?? 0) < (currentPrice.unit_amount ?? 0);
+
+    if (isDowngrade) {
+      const schedule = await stripe.subscriptionSchedules.create({
+        from_subscription: sub.id,
+      });
+      await stripe.subscriptionSchedules.update(schedule.id, {
+        phases: [
+          {
+            items: [{ price: currentPriceId!, quantity: 1 }],
+            start_date: schedule.phases[0].start_date,
+            end_date: schedule.phases[0].end_date,
+          },
+          {
+            items: [{ price: priceId, quantity: 1 }],
+            start_date: schedule.phases[0].end_date,
+          },
+        ],
+      });
+      return { url: `${baseUrl}/plans?downgrade=scheduled` };
+    }
+
     const session = await stripe.billingPortal.sessions.create({
       customer: customerId,
       return_url: `${baseUrl}/plans`,
       flow_data: {
         type: "subscription_update_confirm",
         subscription_update_confirm: {
-          subscription: existingSubs.data[0].id,
+          subscription: sub.id,
           items: [
             {
-              id: existingSubs.data[0].items.data[0].id,
+              id: sub.items.data[0].id,
               price: priceId,
               quantity: 1,
             },
@@ -381,6 +419,130 @@ export async function createPortalSession(
   });
 
   return { url: session.url };
+}
+
+// =============================================================================
+// Cancel pending downgrade / scheduled change
+// =============================================================================
+
+export async function cancelPendingDowngrade(
+  pool: Pool,
+  visitorId: string,
+): Promise<{ cancelled: boolean }> {
+  const stripe = await getUncachableStripeClient();
+
+  const accountResult = await pool.query(
+    `SELECT a.stripe_customer_id FROM accounts a
+     JOIN user_accounts ua ON ua.account_id = a.id
+     JOIN users u ON u.id = ua.user_id
+     WHERE u.visitor_id = $1 AND ua.role = 'owner' LIMIT 1`,
+    [visitorId],
+  );
+  const customerId = accountResult.rows[0]?.stripe_customer_id;
+  if (!customerId) return { cancelled: false };
+
+  const subs = await stripe.subscriptions.list({
+    customer: customerId,
+    status: "active",
+    limit: 1,
+  });
+  if (subs.data.length === 0) return { cancelled: false };
+
+  const sub = subs.data[0];
+
+  if (sub.cancel_at_period_end) {
+    await stripe.subscriptions.update(sub.id, {
+      cancel_at_period_end: false,
+    });
+    return { cancelled: true };
+  }
+
+  if (sub.schedule) {
+    const scheduleId =
+      typeof sub.schedule === "string" ? sub.schedule : sub.schedule.id;
+    await stripe.subscriptionSchedules.release(scheduleId);
+    return { cancelled: true };
+  }
+
+  return { cancelled: false };
+}
+
+// =============================================================================
+// Get pending subscription changes
+// =============================================================================
+
+export async function getPendingChanges(
+  pool: Pool,
+  visitorId: string,
+): Promise<{
+  pending_downgrade: string | null;
+  pending_cancel: boolean;
+  effective_date: string | null;
+}> {
+  const stripe = await getUncachableStripeClient();
+
+  const accountResult = await pool.query(
+    `SELECT a.stripe_customer_id FROM accounts a
+     JOIN user_accounts ua ON ua.account_id = a.id
+     JOIN users u ON u.id = ua.user_id
+     WHERE u.visitor_id = $1 AND ua.role = 'owner' LIMIT 1`,
+    [visitorId],
+  );
+  const customerId = accountResult.rows[0]?.stripe_customer_id;
+  if (!customerId)
+    return {
+      pending_downgrade: null,
+      pending_cancel: false,
+      effective_date: null,
+    };
+
+  const subs = await stripe.subscriptions.list({
+    customer: customerId,
+    status: "active",
+    limit: 1,
+  });
+  if (subs.data.length === 0)
+    return {
+      pending_downgrade: null,
+      pending_cancel: false,
+      effective_date: null,
+    };
+
+  const sub = subs.data[0];
+
+  if (sub.cancel_at_period_end) {
+    return {
+      pending_downgrade: null,
+      pending_cancel: true,
+      effective_date: new Date(sub.current_period_end * 1000).toISOString(),
+    };
+  }
+
+  if (sub.schedule) {
+    const scheduleId =
+      typeof sub.schedule === "string" ? sub.schedule : sub.schedule.id;
+    const schedule = await stripe.subscriptionSchedules.retrieve(scheduleId);
+    if (schedule.phases.length > 1) {
+      const nextPhase = schedule.phases[1];
+      const nextPriceId = nextPhase.items[0]?.price;
+      const nextPlan = nextPriceId
+        ? resolvePlanFromPriceId(
+            typeof nextPriceId === "string" ? nextPriceId : nextPriceId,
+          )
+        : null;
+      return {
+        pending_downgrade: nextPlan,
+        pending_cancel: false,
+        effective_date: new Date(nextPhase.start_date * 1000).toISOString(),
+      };
+    }
+  }
+
+  return {
+    pending_downgrade: null,
+    pending_cancel: false,
+    effective_date: null,
+  };
 }
 
 // =============================================================================
