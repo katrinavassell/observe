@@ -469,25 +469,33 @@ const filteredPricing = computed(() => {
       v-if="models && models.length > 0"
       class="grid grid-cols-2 sm:grid-cols-4 gap-4"
     >
-      <div class="rounded-lg border bg-card p-4">
-        <div class="text-xs text-muted-foreground mb-1">Models Tracked</div>
-        <div class="text-2xl font-semibold">{{ models.length }}</div>
-      </div>
-      <div class="rounded-lg border bg-card p-4">
-        <div class="text-xs text-muted-foreground mb-1">Model Cost</div>
-        <div class="text-2xl font-semibold">
+      <Card class="p-4">
+        <div class="text-xs text-muted-foreground uppercase tracking-wider">
+          Models Tracked
+        </div>
+        <div class="text-2xl font-semibold mt-1">{{ models.length }}</div>
+      </Card>
+      <Card class="p-4">
+        <div class="text-xs text-muted-foreground uppercase tracking-wider">
+          Model Cost
+        </div>
+        <div class="text-2xl font-semibold mt-1">
           {{ formatCurrency(models.reduce((s, m) => s + m.total_cost, 0)) }}
         </div>
-      </div>
-      <div class="rounded-lg border bg-card p-4">
-        <div class="text-xs text-muted-foreground mb-1">Total Events</div>
-        <div class="text-2xl font-semibold">
+      </Card>
+      <Card class="p-4">
+        <div class="text-xs text-muted-foreground uppercase tracking-wider">
+          Total Events
+        </div>
+        <div class="text-2xl font-semibold mt-1">
           {{ models.reduce((s, m) => s + m.event_count, 0).toLocaleString() }}
         </div>
-      </div>
-      <div class="rounded-lg border bg-card p-4">
-        <div class="text-xs text-muted-foreground mb-1">Avg Cost/Event</div>
-        <div class="text-2xl font-semibold">
+      </Card>
+      <Card class="p-4">
+        <div class="text-xs text-muted-foreground uppercase tracking-wider">
+          Avg Cost/Event
+        </div>
+        <div class="text-2xl font-semibold mt-1">
           {{
             formatCurrency(
               models.reduce((s, m) => s + m.event_count, 0) > 0
@@ -497,7 +505,7 @@ const filteredPricing = computed(() => {
             )
           }}
         </div>
-      </div>
+      </Card>
     </div>
 
     <!-- Cost by Provider Chart -->

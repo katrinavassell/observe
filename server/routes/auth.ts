@@ -28,6 +28,7 @@ export function createEnsureVisitor(pool: Pool) {
   ) {
     try {
       if (
+        process.env.NODE_ENV !== "production" &&
         process.env.TEST_AUTH_BYPASS === "1" &&
         req.headers["x-test-user-id"]
       ) {
@@ -91,7 +92,7 @@ export function createEnsureVisitor(pool: Pool) {
             undefined;
         } catch (err) {
           console.error("Clerk token verification failed:", err);
-          return next();
+          return res.status(401).json({ error: "Invalid or expired token" });
         }
 
         req.visitorId = clerkUserId;
@@ -183,7 +184,7 @@ export function createEnsureVisitor(pool: Pool) {
               [clerkUserId],
             );
             await pool.query(
-              "DELETE FROM plans WHERE user_id = $1 AND plan_id IN ('starter', 'pro', 'enterprise')",
+              "DELETE FROM plans WHERE user_id = $1 AND plan_id IN ('_sample_starter', '_sample_pro', '_sample_enterprise')",
               [clerkUserId],
             );
             await pool.query(
@@ -450,7 +451,7 @@ export function createAuthRoutes(
           [userId],
         );
         await pool.query(
-          "DELETE FROM plans WHERE user_id = $1 AND plan_id IN ('starter', 'pro', 'enterprise')",
+          "DELETE FROM plans WHERE user_id = $1 AND plan_id IN ('_sample_starter', '_sample_pro', '_sample_enterprise')",
           [userId],
         );
         await pool.query("DELETE FROM cost_records WHERE user_id = $1", [

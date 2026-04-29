@@ -2,30 +2,12 @@ import { Router, Request, Response } from "express";
 import type { Pool } from "pg";
 import crypto from "crypto";
 import { type AuthRequest } from "./auth.js";
-import { calculateCostFromTokens as calcCostFromDb } from "../model-pricing.js";
+import { calculateCostFromTokens } from "../model-pricing.js";
 import { checkAlerts } from "./alerts.js";
 import { enrichRevenue } from "../lib/enrich-revenue.js";
+import { resolveAccountIdForUser } from "./data-helpers.js";
 
 type GetAdminVisitorIdFn = () => Promise<string | null>;
-
-async function resolveAccountIdForUser(
-  pool: Pool,
-  userId: string,
-): Promise<number | null> {
-  try {
-    const result = await pool.query(
-      `SELECT account_id FROM user_accounts
-        WHERE user_id = (SELECT id FROM users WHERE visitor_id = $1)
-          AND role = 'owner' LIMIT 1`,
-      [userId],
-    );
-    if (result.rows[0]) return result.rows[0].account_id;
-  } catch (err) {
-    console.error("proxy: account_id fallback lookup failed:", err);
-  }
-  console.warn("proxy: no account_id resolved for user", userId);
-  return null;
-}
 
 function parseProxyHeaders(req: Request): {
   observeKey: string | undefined;
@@ -191,7 +173,7 @@ export function createProxyRoutes(
     inputTokens: number,
     outputTokens: number,
   ): Promise<number> {
-    return calcCostFromDb(pool, model, inputTokens, outputTokens);
+    return calculateCostFromTokens(pool, model, inputTokens, outputTokens);
   }
 
   async function resolveProxyUserId(
@@ -787,7 +769,7 @@ export function createProxyRoutes(
         const respModel = (data.model as string) || model;
         const inputTokens = usage.input_tokens || 0;
         const outputTokens = usage.output_tokens || 0;
-        const cost = await calcCostFromDb(
+        const cost = await calculateCostFromTokens(
           pool,
           respModel,
           inputTokens,

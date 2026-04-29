@@ -31,13 +31,16 @@ import {
   createInferenceRoutes,
   computeInferenceProfiles,
 } from "./routes/inference.js";
+import { createDataManagementRoutes } from "./routes/data-management.js";
+import { createDataUploadRoutes } from "./routes/data-uploads.js";
+import { createStripeRoutes } from "./routes/stripe-routes.js";
 
 const app = express();
 
 const pool = new Pg.Pool({
   connectionString: process.env.DATABASE_URL,
-  max: 3,
-  idleTimeoutMillis: 10000,
+  max: Math.max(1, parseInt(process.env.PG_POOL_MAX || "8", 10) || 8),
+  idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 5000,
 });
 
@@ -50,20 +53,12 @@ app.use((req, res, next) => {
   }
 });
 
-// Strip /api prefix so routes work in both dev (Vite proxy) and production (same origin)
-app.use((req, _res, next) => {
-  if (req.path.startsWith("/api/")) {
-    req.url = req.url.replace("/api", "");
-  }
-  next();
-});
-
 // Security headers
 app.use(helmet());
 
 // CORS — restrict to known origins
-const allowedOrigins = process.env.ALLOWED_ORIGINS
-  ? process.env.ALLOWED_ORIGINS.split(",")
+const allowedOrigins = process.env.ALLOWED_ORIGINS?.trim()
+  ? process.env.ALLOWED_ORIGINS.split(",").map((o) => o.trim())
   : ["http://localhost:5000", "http://localhost:5173"];
 app.use(
   cors({
@@ -72,7 +67,7 @@ app.use(
   }),
 );
 
-// Rate limiting
+// Rate limiting — must be mounted BEFORE the /api/ prefix strip
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 20, // 20 attempts per window
@@ -89,6 +84,14 @@ const apiLimiter = rateLimit({
 });
 app.use("/auth/", authLimiter);
 app.use("/api/", apiLimiter);
+
+// Strip /api prefix so routes work in both dev (Vite proxy) and production (same origin)
+app.use((req, _res, next) => {
+  if (req.path.startsWith("/api/")) {
+    req.url = req.url.replace("/api", "");
+  }
+  next();
+});
 
 // Ensure DB tables exist before anything else (critical for serverless cold starts)
 app.use(async (_req: Request, _res: Response, next: NextFunction) => {
@@ -218,6 +221,20 @@ app.use(createInferenceRoutes(pool, ensureVisitor));
 app.use(createA2ARoutes(pool, ensureVisitor));
 app.use(createCloudCostRoutes(pool, ensureVisitor));
 app.use(createBackfillRoutes(pool, ensureVisitor));
+app.use(createDataManagementRoutes(pool, ensureVisitor));
+app.use(
+  createDataUploadRoutes(pool, ensureVisitor, {
+    checkBillingFeatureAccess,
+    trackBillingUsage,
+    convertReferralIfPending,
+  }),
+);
+app.use(
+  createStripeRoutes(pool, ensureVisitor, {
+    trackBillingUsage,
+    convertReferralIfPending,
+  }),
+);
 
 // ─── Weekly digest (cloud-only, manual trigger for admin) ───────────────────
 import { runWeeklyDigest } from "./digest.js";
@@ -226,7 +243,10 @@ app.post("/admin/digest", ensureVisitor, async (req: any, res: any) => {
     process.env.ADMIN_EMAILS ||
     process.env.ADMIN_EMAIL ||
     ""
-  ).toLowerCase();
+  )
+    .split(",")
+    .map((e: string) => e.trim().toLowerCase())
+    .filter(Boolean);
   if (
     !req.accountEmail ||
     !adminEmails.includes(req.accountEmail.toLowerCase())
@@ -603,6 +623,9 @@ async function _doDbInit() {
     await pool.query(
       `ALTER TABLE customers ADD COLUMN IF NOT EXISTS stripe_customer_id TEXT`,
     );
+    await pool.query(
+      `ALTER TABLE customers ADD COLUMN IF NOT EXISTS is_excluded BOOLEAN DEFAULT false`,
+    );
     await pool
       .query(`ALTER TABLE customers ALTER COLUMN user_id DROP NOT NULL`)
       .catch(() => {});
@@ -835,10 +858,36 @@ async function _doDbInit() {
       `CREATE INDEX IF NOT EXISTS idx_cost_records_user_id ON cost_records(user_id)`,
     );
     await pool.query(
+      `CREATE INDEX IF NOT EXISTS idx_subscriptions_account ON subscriptions(account_id, customer_id) WHERE account_id IS NOT NULL`,
+    );
+    await pool.query(
+      `CREATE INDEX IF NOT EXISTS idx_plans_account ON plans(account_id) WHERE account_id IS NOT NULL`,
+    );
+    await pool.query(
+      `CREATE INDEX IF NOT EXISTS idx_cost_records_account ON cost_records(account_id, customer_id) WHERE account_id IS NOT NULL`,
+    );
+    await pool.query(
       `CREATE INDEX IF NOT EXISTS idx_observe_events_user_ts ON observe_events(user_id, timestamp DESC)`,
     );
     await pool.query(
       `CREATE INDEX IF NOT EXISTS idx_observe_events_user_feature ON observe_events(user_id, feature_key)`,
+    );
+
+    // account_id-leading indexes — all analytics/dashboard queries filter by account_id
+    await pool.query(
+      `CREATE INDEX IF NOT EXISTS idx_observe_events_account_ts ON observe_events(account_id, timestamp DESC) WHERE account_id IS NOT NULL`,
+    );
+    await pool.query(
+      `CREATE INDEX IF NOT EXISTS idx_observe_events_account_customer ON observe_events(account_id, customer_id, timestamp DESC) WHERE account_id IS NOT NULL`,
+    );
+    await pool.query(
+      `CREATE INDEX IF NOT EXISTS idx_observe_events_account_feature ON observe_events(account_id, feature_key) WHERE account_id IS NOT NULL`,
+    );
+    await pool.query(
+      `CREATE INDEX IF NOT EXISTS idx_observe_events_account_model ON observe_events(account_id, model, timestamp DESC) WHERE account_id IS NOT NULL`,
+    );
+    await pool.query(
+      `CREATE INDEX IF NOT EXISTS idx_observe_events_account_source ON observe_events(account_id, source, timestamp DESC) WHERE account_id IS NOT NULL`,
     );
 
     // Inference metadata columns on observe_events

@@ -32,7 +32,7 @@ import {
 } from "@/components/ui";
 import MarginBadge from "@/components/shared/MarginBadge.vue";
 import CustomerTrendChart from "@/components/charts/CustomerTrendChart.vue";
-import { formatCurrency as fmt } from "@/lib/format";
+import { formatCurrency as fmt, formatPct } from "@/lib/format";
 import { useAuth } from "@/composables/useAuth";
 
 const route = useRoute();
@@ -87,7 +87,7 @@ const { data: timeseries, isLoading: tsLoading } = useQuery({
 const { data: cohortsData } = useQuery({
   queryKey: ["cohorts"],
   queryFn: () => getCohorts(),
-  enabled: isLoggedIn,
+  enabled: () => isLoggedIn.value,
 });
 
 const { data: _healthData } = useQuery({
@@ -164,7 +164,7 @@ const signals = computed(() => {
     });
   }
 
-  // Inactive — skip if customer has an active subscription (low usage is normal for new/light users)
+  // Low usage — skip if customer has an active subscription (low usage is normal for new/light users)
   const hasActiveSub = detail.value?.subscriptions?.some((s) => s.is_active);
   if (cc.active_days_30d < 3 && !hasActiveSub) {
     const historical =
@@ -174,8 +174,8 @@ const signals = computed(() => {
     items.push({
       type: "warning",
       icon: Clock,
-      title: "Inactive",
-      description: `Only ${cc.active_days_30d} active day${cc.active_days_30d === 1 ? "" : "s"} in the last 30${historical}. No active subscription.`,
+      title: "Low usage",
+      description: `Only ${cc.active_days_30d} active day${cc.active_days_30d === 1 ? "" : "s"} in the last 30 days${historical}. No active subscription.`,
     });
   }
 
@@ -241,14 +241,32 @@ const avgEventsPerDay = computed(() => {
   return Math.round((totalEvents / activeDays) * 10) / 10;
 });
 
+const totalEvents = computed(
+  () => detail.value?.by_feature.reduce((s, f) => s + f.event_count, 0) ?? 0,
+);
+
 const costPerEvent = computed(() => {
   if (!detail.value || detail.value.total_cost === 0) return null;
-  const events = detail.value.by_feature.reduce((s, f) => s + f.event_count, 0);
-  if (events === 0) return null;
-  return detail.value.total_cost / events;
+  if (totalEvents.value === 0) return null;
+  return detail.value.total_cost / totalEvents.value;
+});
+
+const revenuePerEvent = computed(() => {
+  if (!detail.value || detail.value.total_revenue === 0) return null;
+  if (totalEvents.value === 0) return null;
+  return detail.value.total_revenue / totalEvents.value;
 });
 
 const isFlat = computed(() => cohortCustomer.value?.pricing_model === "flat");
+
+const displayName = computed(() => {
+  if (!detail.value) return "";
+  const { name, customer_id } = detail.value.customer;
+  if (name && name !== customer_id) return name;
+  return customer_id
+    .replace(/[_-]/g, " ")
+    .replace(/\b\w/g, (ch) => ch.toUpperCase());
+});
 </script>
 
 <template>
@@ -274,7 +292,7 @@ const isFlat = computed(() => cohortCustomer.value?.pricing_model === "flat");
         </button>
         <ChevronRight class="h-3.5 w-3.5 text-muted-foreground/50" />
         <span class="text-foreground font-medium truncate max-w-[400px]">
-          {{ detail.customer.name }}
+          {{ displayName }}
         </span>
       </nav>
 
@@ -284,14 +302,18 @@ const isFlat = computed(() => cohortCustomer.value?.pricing_model === "flat");
           <div>
             <div class="flex items-center gap-2 flex-wrap">
               <h1 class="text-2xl font-semibold tracking-tight">
-                {{ detail.customer.name }}
+                {{ displayName }}
               </h1>
               <span
                 v-if="cohortCustomer?.cohort"
                 class="inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium"
                 :class="cohortBadgeClass(cohortCustomer.cohort)"
               >
-                {{ cohortCustomer.cohort }}
+                {{
+                  cohortCustomer.cohort
+                    .replace(/_/g, " ")
+                    .replace(/\b\w/g, (ch: string) => ch.toUpperCase())
+                }}
               </span>
             </div>
             <div class="flex items-center gap-3 text-sm text-muted-foreground">
@@ -327,7 +349,7 @@ const isFlat = computed(() => cohortCustomer.value?.pricing_model === "flat");
       </Card>
 
       <!-- KPI cards -->
-      <div class="grid grid-cols-2 sm:grid-cols-5 gap-4">
+      <div class="grid grid-cols-2 sm:grid-cols-3 gap-4">
         <Card>
           <CardContent class="p-4">
             <div class="flex items-center gap-1 text-xs text-muted-foreground">
@@ -337,12 +359,21 @@ const isFlat = computed(() => cohortCustomer.value?.pricing_model === "flat");
                   <Info class="h-3.5 w-3.5 text-muted-foreground cursor-help" />
                 </TooltipTrigger>
                 <TooltipContent class="max-w-xs"
-                  >Subscription MRR plus metered usage revenue for this
-                  customer.</TooltipContent
+                  >Event-attributed revenue from metered usage across all
+                  features.</TooltipContent
                 >
               </Tooltip>
             </div>
             <p class="text-xl font-semibold">{{ fmt(detail.total_revenue) }}</p>
+            <p
+              v-if="
+                detail.subscription_mrr > 0 &&
+                detail.subscription_mrr !== detail.total_revenue
+              "
+              class="text-xs text-muted-foreground mt-0.5"
+            >
+              {{ fmt(detail.subscription_mrr) }}/mo subscription
+            </p>
           </CardContent>
         </Card>
         <Card>
@@ -377,7 +408,7 @@ const isFlat = computed(() => cohortCustomer.value?.pricing_model === "flat");
               </Tooltip>
             </div>
             <p class="text-xl font-semibold">
-              {{ detail.margin_pct !== null ? `${detail.margin_pct}%` : "—" }}
+              {{ formatPct(detail.margin_pct) }}
             </p>
           </CardContent>
         </Card>
@@ -420,6 +451,25 @@ const isFlat = computed(() => cohortCustomer.value?.pricing_model === "flat");
             </div>
             <p class="text-xl font-semibold">
               {{ costPerEvent !== null ? fmt(costPerEvent) : "—" }}
+            </p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent class="p-4">
+            <div class="flex items-center gap-1 text-xs text-muted-foreground">
+              Revenue per Event
+              <Tooltip>
+                <TooltipTrigger as-child>
+                  <Info class="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                </TooltipTrigger>
+                <TooltipContent class="max-w-xs"
+                  >Total revenue divided by total events. Compare with Cost per
+                  Event for unit economics.</TooltipContent
+                >
+              </Tooltip>
+            </div>
+            <p class="text-xl font-semibold">
+              {{ revenuePerEvent !== null ? fmt(revenuePerEvent) : "—" }}
             </p>
           </CardContent>
         </Card>
@@ -493,7 +543,7 @@ const isFlat = computed(() => cohortCustomer.value?.pricing_model === "flat");
           <div class="rounded-lg border overflow-x-auto">
             <table class="w-full text-sm">
               <thead>
-                <tr class="border-b bg-muted/30 text-left">
+                <tr class="border-b bg-muted/40 text-left">
                   <th class="px-3 py-2 font-medium text-muted-foreground">
                     Feature
                   </th>
@@ -592,15 +642,17 @@ const isFlat = computed(() => cohortCustomer.value?.pricing_model === "flat");
                         customer level, not per feature.</TooltipContent
                       >
                     </Tooltip>
-                    <template v-else-if="f.total_revenue > 0">
+                    <template v-else>
                       {{
-                        Math.round(
-                          ((f.total_revenue - f.total_cost) / f.total_revenue) *
-                            100,
-                        ) + "%"
+                        formatPct(
+                          f.total_revenue > 0
+                            ? ((f.total_revenue - f.total_cost) /
+                                f.total_revenue) *
+                                100
+                            : null,
+                        )
                       }}
                     </template>
-                    <template v-else>—</template>
                   </td>
                 </tr>
               </tbody>
@@ -616,7 +668,7 @@ const isFlat = computed(() => cohortCustomer.value?.pricing_model === "flat");
           <div class="rounded-lg border overflow-x-auto">
             <table class="w-full text-sm">
               <thead>
-                <tr class="border-b bg-muted/30 text-left">
+                <tr class="border-b bg-muted/40 text-left">
                   <th class="px-3 py-2 font-medium text-muted-foreground">
                     Model
                   </th>
@@ -719,15 +771,17 @@ const isFlat = computed(() => cohortCustomer.value?.pricing_model === "flat");
                         customer level, not per model.</TooltipContent
                       >
                     </Tooltip>
-                    <template v-else-if="m.total_revenue > 0">
+                    <template v-else>
                       {{
-                        Math.round(
-                          ((m.total_revenue - m.total_cost) / m.total_revenue) *
-                            100,
-                        ) + "%"
+                        formatPct(
+                          m.total_revenue > 0
+                            ? ((m.total_revenue - m.total_cost) /
+                                m.total_revenue) *
+                                100
+                            : null,
+                        )
                       }}
                     </template>
-                    <template v-else>—</template>
                   </td>
                 </tr>
               </tbody>
@@ -746,7 +800,7 @@ const isFlat = computed(() => cohortCustomer.value?.pricing_model === "flat");
         <div class="mt-3 rounded-lg border overflow-x-auto">
           <table class="w-full text-sm">
             <thead>
-              <tr class="border-b bg-muted/30 text-left">
+              <tr class="border-b bg-muted/40 text-left">
                 <th class="px-3 py-2 font-medium text-muted-foreground">
                   Time
                 </th>
@@ -758,6 +812,16 @@ const isFlat = computed(() => cohortCustomer.value?.pricing_model === "flat");
                 </th>
                 <th class="px-3 py-2 font-medium text-muted-foreground">
                   Model
+                </th>
+                <th
+                  class="px-3 py-2 font-medium text-muted-foreground text-right"
+                >
+                  Tokens
+                </th>
+                <th
+                  class="px-3 py-2 font-medium text-muted-foreground text-right"
+                >
+                  Latency
                 </th>
                 <th
                   class="px-3 py-2 font-medium text-muted-foreground text-right"
@@ -787,6 +851,26 @@ const isFlat = computed(() => cohortCustomer.value?.pricing_model === "flat");
                   <span v-else class="text-muted-foreground">—</span>
                 </td>
                 <td class="px-3 py-2 text-xs">{{ e.model || "—" }}</td>
+                <td
+                  class="px-3 py-2 text-right font-mono text-xs text-muted-foreground"
+                >
+                  <template
+                    v-if="e.input_tokens != null || e.output_tokens != null"
+                  >
+                    {{ (e.input_tokens ?? 0).toLocaleString() }} /
+                    {{ (e.output_tokens ?? 0).toLocaleString() }}
+                  </template>
+                  <template v-else>—</template>
+                </td>
+                <td
+                  class="px-3 py-2 text-right font-mono text-xs text-muted-foreground"
+                >
+                  {{
+                    e.duration_ms != null
+                      ? `${(e.duration_ms / 1000).toFixed(1)}s`
+                      : "—"
+                  }}
+                </td>
                 <td class="px-3 py-2 text-right font-mono">
                   {{ e.cost_amount != null ? fmt(e.cost_amount) : "—" }}
                 </td>
@@ -806,7 +890,7 @@ const isFlat = computed(() => cohortCustomer.value?.pricing_model === "flat");
         <div class="mt-3 rounded-lg border overflow-x-auto">
           <table class="w-full text-sm">
             <thead>
-              <tr class="border-b bg-muted/30 text-left">
+              <tr class="border-b bg-muted/40 text-left">
                 <th class="px-3 py-2 font-medium text-muted-foreground">
                   Plan
                 </th>
@@ -828,7 +912,14 @@ const isFlat = computed(() => cohortCustomer.value?.pricing_model === "flat");
                 :key="i"
                 class="border-b last:border-0"
               >
-                <td class="px-3 py-2">{{ s.plan_name || s.plan_id }}</td>
+                <td class="px-3 py-2">
+                  {{
+                    s.plan_name ||
+                    (s.plan_id?.startsWith("price_")
+                      ? "Subscription"
+                      : s.plan_id)
+                  }}
+                </td>
                 <td class="px-3 py-2 text-right font-mono">
                   {{ s.price_amount != null ? fmt(s.price_amount) : "—" }}
                 </td>

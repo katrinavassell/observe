@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from "vue";
 import { useRouter } from "vue-router";
-import { useQueryClient } from "@tanstack/vue-query";
+import { useQuery, useQueryClient } from "@tanstack/vue-query";
 import { toast } from "vue-sonner";
 import {
   Key,
@@ -48,21 +48,30 @@ import {
   backfillTokens,
   getDataQuality,
 } from "@/lib/api";
-import type { SdkKey, DataQualityAdvisory } from "@/lib/api";
+import type { SdkKey, DataQualityAdvisory, StripeStatus } from "@/lib/api";
 import {
   getStripeStatus,
   syncStripeData,
   disconnectStripe,
   getOpenAIStatus,
   getAnthropicStatus,
-} from "@/api/client";
-import type { StripeStatus } from "@/api/client";
+  getBillingStatus,
+} from "@/lib/api";
 
 const router = useRouter();
 const queryClient = useQueryClient();
 const { isLoggedIn } = useAuth();
 
 const canEdit = computed(() => isLoggedIn.value);
+
+const { data: billing } = useQuery({
+  queryKey: ["billing-status"],
+  queryFn: getBillingStatus,
+  enabled: isLoggedIn,
+});
+const isPaidPlan = computed(
+  () => billing.value?.plan === "pro" || billing.value?.plan === "team",
+);
 
 // =============================================================================
 // DATA MODE
@@ -375,6 +384,8 @@ async function handleStripeSync() {
     const result = await syncStripeData();
     await loadStripeStatus();
     await refetchDataMode();
+    await queryClient.invalidateQueries({ queryKey: ["cohorts"] });
+    await queryClient.invalidateQueries({ queryKey: ["customer-pnl"] });
     const warnings = (result as { warnings?: string[] }).warnings;
     if (warnings?.length) {
       toast.warning(warnings[0]);
@@ -546,14 +557,16 @@ async function handleUsageFileCleared(): Promise<void> {
 const isResettingData = ref(false);
 
 async function handleResetAccountData() {
-  const confirmation = window.prompt(
-    'This will permanently delete ALL data for this account. Type "RESET" to confirm.',
-  );
+  const msg = isPaidPlan.value
+    ? 'You are on a paid plan. This will permanently delete ALL data but your subscription stays active. Type "RESET" to confirm.'
+    : 'This will permanently delete ALL data for this account. Type "RESET" to confirm.';
+  const confirmation = window.prompt(msg);
   if (confirmation !== "RESET") return;
 
   isResettingData.value = true;
   try {
     await clearData();
+    await refetchDataMode();
     await queryClient.invalidateQueries();
     toast.success("All account data has been reset");
   } catch (error) {
@@ -1503,6 +1516,10 @@ fetch(<span class="text-amber-300">'{{ ingestUrl }}'</span>, {
               <strong>Your existing API key will stop working.</strong>
               After reset: update your app with the new API key, re-connect
               Stripe, and send events to start fresh.
+            </p>
+            <p v-if="isPaidPlan" class="text-xs text-destructive font-medium">
+              You're on a paid plan. Your subscription stays active after reset,
+              but your usage counter resets to zero.
             </p>
             <Button
               variant="destructive"

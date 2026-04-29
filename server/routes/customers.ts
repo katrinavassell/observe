@@ -3,6 +3,7 @@ import type { Pool } from "pg";
 import { z } from "zod";
 import { type AuthRequest } from "./auth.js";
 import { checkAlerts } from "./alerts.js";
+import { clearSampleData } from "./data-helpers.js";
 
 type CheckBillingFeatureAccessFn = (
   visitorId: string,
@@ -35,32 +36,6 @@ function coerceEventRow(row: Record<string, unknown>) {
     usage_units:
       row.usage_units != null ? parseFloat(row.usage_units as string) : null,
   };
-}
-
-async function clearSampleData(
-  db: { query: (text: string, params: unknown[]) => Promise<unknown> },
-  accountId: number,
-): Promise<void> {
-  await db.query(
-    "DELETE FROM observe_events WHERE account_id = $1 AND source = 'sample'",
-    [accountId],
-  );
-  await db.query(
-    "DELETE FROM cost_records WHERE account_id = $1 AND cost_type = 'ai_inference' AND customer_id IS NULL AND period_start IS NOT NULL",
-    [accountId],
-  );
-  await db.query(
-    "DELETE FROM subscriptions WHERE account_id = $1 AND subscription_id IN ('sub_001','sub_002','sub_003','sub_004','sub_005','sub_acme','sub_acme_addon','sub_tidewater','sub_neon','sub_neon_addon','sub_circle','sub_blaze','sub_quantum')",
-    [accountId],
-  );
-  await db.query(
-    "DELETE FROM customers WHERE account_id = $1 AND customer_id IN ('cus_001','cus_002','cus_003','cus_004','cus_005','acme_saas','tidewater_ai','neondata','circleops','blazeml','quantumhr')",
-    [accountId],
-  );
-  await db.query(
-    "DELETE FROM plans WHERE account_id = $1 AND plan_id IN ('starter', 'pro', 'enterprise')",
-    [accountId],
-  );
 }
 
 const costRecordSchema = z.object({
@@ -432,9 +407,7 @@ export function createCustomersRoutes(
         await client.query("ROLLBACK");
         console.error("Clear data error:", error);
         const detail = error instanceof Error ? error.message : String(error);
-        res
-          .status(500)
-          .json({ error: "Failed to clear data", detail, account_id: acct });
+        res.status(500).json({ error: "Failed to clear data" });
       } finally {
         client.release();
       }
@@ -558,7 +531,7 @@ export function createCustomersRoutes(
           });
 
         await client.query("BEGIN");
-        await clearSampleData(client, req.accountId!);
+        await clearSampleData(client, pool, req.visitorId!, req.accountId!);
         await client.query("DELETE FROM cost_records WHERE account_id = $1", [
           req.accountId!,
         ]);
@@ -680,7 +653,7 @@ export function createCustomersRoutes(
           });
 
         await client.query("BEGIN");
-        await clearSampleData(client, req.accountId!);
+        await clearSampleData(client, pool, req.visitorId!, req.accountId!);
         await client.query("DELETE FROM usage_records WHERE account_id = $1", [
           req.accountId!,
         ]);
@@ -798,7 +771,7 @@ export function createCustomersRoutes(
         const { customers, plans, subscriptions } = parseResult.data;
 
         await client.query("BEGIN");
-        await clearSampleData(client, req.accountId!);
+        await clearSampleData(client, pool, req.visitorId!, req.accountId!);
         await client.query("DELETE FROM subscriptions WHERE account_id = $1", [
           req.accountId!,
         ]);
@@ -1013,7 +986,7 @@ export function createCustomersRoutes(
               [req.accountId!, id],
             ),
             pool.query(
-              `SELECT s.*, p.name as plan_name, p.price_amount FROM subscriptions s LEFT JOIN plans p ON s.account_id = p.account_id AND s.plan_id = p.plan_id WHERE s.account_id = $1 AND s.customer_id = $2`,
+              `SELECT s.*, p.name as plan_name, p.price_amount FROM subscriptions s LEFT JOIN plans p ON s.account_id = p.account_id AND s.plan_id = p.plan_id WHERE s.account_id = $1 AND (s.customer_id = $2 OR s.customer_id = (SELECT stripe_customer_id FROM customers WHERE account_id = $1 AND customer_id = $2))`,
               [req.accountId!, id],
             ),
             pool.query(
@@ -1061,9 +1034,7 @@ export function createCustomersRoutes(
               sum + (parseFloat(s.mrr_override ?? "0") || 0),
             0,
           );
-        const totalRevenue = hasPeriod
-          ? subscriptionMrr
-          : Math.max(eventRevenue, subscriptionMrr);
+        const totalRevenue = eventRevenue;
         const marginPct =
           totalRevenue > 0
             ? Math.round(((totalRevenue - totalCost) / totalRevenue) * 100)
@@ -1080,6 +1051,7 @@ export function createCustomersRoutes(
           subscriptions: subRes.rows,
           total_cost: totalCost,
           total_revenue: totalRevenue,
+          subscription_mrr: subscriptionMrr,
           margin_pct: marginPct,
           period_start: periodStart ?? null,
           period_end: periodEnd ?? null,

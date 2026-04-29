@@ -78,7 +78,7 @@ const sections = [
       },
       {
         q: "How is margin calculated?",
-        a: "Margin = (revenue - cost) / revenue * 100%. Shown per customer on the Customers page. If revenue is 0 but cost > 0, margin is -100% (unprofitable).",
+        a: "Margin = (revenue - cost) / revenue * 100%. Shown per customer on the Customers page. If revenue is 0, margin shows as '—' since there's no revenue to measure against. Extreme negative margins are capped at < -999% for readability.",
       },
       {
         q: "Why don't I see a customer until they have events?",
@@ -86,7 +86,7 @@ const sections = [
       },
       {
         q: "What are the cohort labels?",
-        a: "Four cohorts with clear thresholds: Unprofitable (margin below 0%), Rising Cost (cost trending up with margin under 30%), Inactive (fewer than 3 active days and low adoption), Champion (margin above 50% with strong engagement). Customers not matching any cohort have no label.",
+        a: "Four cohorts with clear thresholds: Unprofitable (negative margin or zero revenue with cost), Rising Cost (cost trending up with margin under 30%), Inactive (fewer than 3 active days and low adoption), Champion (margin above 50% with strong engagement). Customers not matching any cohort have no label.",
       },
     ],
   },

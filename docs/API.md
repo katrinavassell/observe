@@ -6,7 +6,7 @@ For detailed API docs on specific subsystems, see the [api/](./api/) directory.
 
 ## Authentication
 
-Account-based auth with email/password. Session cookies are used for all authenticated requests. Include `credentials: 'include'` in fetch calls (handled by `src/lib/api.ts`).
+Clerk-managed authentication. All authenticated requests include a Bearer token from Clerk's `getAuthToken()` and an `X-Account-Id` header for multi-account scoping. Anonymous/guest requests use a `X-Visitor-Id` header instead. See `src/lib/api/base.ts` for the client-side implementation.
 
 Rate limited: 20 auth attempts per 15 minutes.
 
@@ -14,48 +14,18 @@ Rate limited: 20 auth attempts per 15 minutes.
 
 ## Auth Endpoints
 
-### POST /auth/signup
-
-Create a new account.
-
-**Request Body:**
-```json
-{ "email": "user@example.com", "password": "...", "name": "Jane" }
-```
-
-### POST /auth/login
-
-Log in to an existing account.
-
-**Request Body:**
-```json
-{ "email": "user@example.com", "password": "..." }
-```
-
-### POST /auth/logout
-
-End the current session.
-
-### GET /auth/me
-
-Get the current authenticated account.
-
-### POST /auth/forgot-password
-
-Request a password reset email.
-
-### POST /auth/reset-password
-
-Reset password with a token.
-
 ### GET /session/init
 
-Initialize or resume a session. Returns the visitor ID.
+Initialize or resume a session. Returns the visitor ID for anonymous access.
 
 **Response:**
 ```json
 { "visitorId": "550e8400-e29b-41d4-a716-446655440000" }
 ```
+
+### GET /auth/me
+
+Get the current authenticated user and account details. Requires Clerk Bearer token.
 
 ---
 
@@ -124,7 +94,7 @@ Ingest events via SDK key authentication (Bearer token in Authorization header).
 {
   "events": [{
     "eventName": "inference",
-    "customerReferenceId": "cus_acme",
+    "customerReferenceId": "acme-corp",
     "featureKey": "chat",
     "costAmount": 0.003,
     "model": "gpt-4o-mini"

@@ -18,7 +18,7 @@ import {
   Zap,
 } from "lucide-vue-next";
 import { Button, Input } from "@/components/ui";
-import { connectAnthropic } from "@/api/client";
+import { connectAnthropic } from "@/lib/api";
 
 defineProps<{
   open: boolean;

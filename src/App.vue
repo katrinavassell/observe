@@ -63,9 +63,20 @@ watch(
   <Toaster position="top-center" richColors />
 
   <!-- Loading state while session initializes -->
-  <div v-if="isLoading" class="flex items-center justify-center min-h-screen">
+  <div
+    v-if="isLoading"
+    class="flex flex-col items-center justify-center min-h-screen gap-4"
+  >
+    <div class="flex items-center gap-2">
+      <div
+        class="flex h-8 w-8 items-center justify-center rounded-lg bg-zinc-900 text-white font-semibold text-sm"
+      >
+        O
+      </div>
+      <span class="text-base font-semibold text-zinc-900">Observe</span>
+    </div>
     <div
-      class="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"
+      class="animate-spin rounded-full h-6 w-6 border-b-2 border-gray-900"
     ></div>
   </div>
 

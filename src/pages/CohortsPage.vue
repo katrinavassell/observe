@@ -108,8 +108,7 @@ const rules = ref<CohortRule[]>([
 const RULE_FIELDS = [
   { value: "margin_pct", label: "Margin %" },
   { value: "total_cost", label: "Total Cost" },
-  { value: "total_revenue", label: "Total Revenue" },
-  { value: "health_score", label: "Health Score" },
+  { value: "total_revenue", label: "Revenue" },
   { value: "active_days_30d", label: "Active Days (30d)" },
 ];
 
@@ -307,13 +306,12 @@ interface TableColumn {
 
 const DEFAULT_COLUMNS: TableColumn[] = [
   { id: "customer", label: "Customer", visible: true, align: "left" },
-  { id: "health", label: "Health", visible: false, align: "left" },
   { id: "revenue", label: "Revenue", visible: true, align: "right" },
   { id: "cost", label: "Cost", visible: true, align: "right" },
   { id: "margin", label: "Margin", visible: true, align: "right" },
-  { id: "profit", label: "Profit", visible: true, align: "right" },
+  { id: "profit", label: "Profit", visible: false, align: "right" },
   { id: "active_days", label: "Active Days", visible: true, align: "right" },
-  { id: "mrr", label: "MRR", visible: false, align: "left" },
+  { id: "status", label: "Status", visible: false, align: "left" },
 ];
 
 const STORAGE_KEY = "observe:cohorts-columns";
@@ -540,21 +538,6 @@ const cohortMeta: Record<
   },
 };
 
-const pricingModelBadge: Record<string, string> = {
-  flat: "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300",
-  metered: "bg-blue-100 text-blue-700",
-  tiered: "bg-purple-100 text-purple-700",
-  hybrid: "bg-teal-100 text-teal-700",
-};
-
-const mrrMeta: Record<string, { label: string; color: string }> = {
-  new: { label: "New", color: "bg-blue-100 text-blue-700" },
-  expansion: { label: "Expansion", color: "bg-green-100 text-green-700" },
-  contraction: { label: "Contraction", color: "bg-yellow-100 text-yellow-700" },
-  churned: { label: "Churned", color: "bg-red-100 text-red-700" },
-  stable: { label: "Stable", color: "bg-gray-100 text-gray-600" },
-};
-
 const cohortLabels: CohortLabel[] = [
   "unprofitable",
   "rising_cost",
@@ -562,10 +545,15 @@ const cohortLabels: CohortLabel[] = [
   "champion",
 ];
 
-function healthColor(score: number): string {
-  if (score < 30) return "bg-red-500";
-  if (score < 60) return "bg-yellow-500";
-  return "bg-green-500";
+function displayName(c: {
+  customer_name?: string;
+  customer_id: string;
+}): string {
+  if (c.customer_name && c.customer_name !== c.customer_id)
+    return c.customer_name;
+  return c.customer_id
+    .replace(/[_-]/g, " ")
+    .replace(/\b\w/g, (ch) => ch.toUpperCase());
 }
 
 function _severityBorder(severity: string): string {
@@ -611,7 +599,7 @@ const filteredCustomers = computed(() => {
       );
     });
   }
-  return [...list].sort((a, b) => a.health_score - b.health_score);
+  return list;
 });
 
 const excludedCount = computed(() => {
@@ -631,10 +619,8 @@ const excludedCount = computed(() => {
     <!-- Page header -->
     <div class="flex items-start justify-between">
       <div>
-        <h1 class="text-2xl font-semibold tracking-tight">Cohorts</h1>
-        <p class="text-sm text-muted-foreground mt-1">
-          Customer health and segmentation
-        </p>
+        <h1 class="text-2xl font-semibold tracking-tight">Customers</h1>
+        <p class="text-sm text-muted-foreground mt-1">Customer segmentation</p>
       </div>
       <div class="flex items-center gap-3">
         <div class="relative">
@@ -743,7 +729,7 @@ const excludedCount = computed(() => {
     <!-- Main content -->
     <template v-else>
       <!-- KPI cards -->
-      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div class="grid grid-cols-2 sm:grid-cols-3 gap-4">
         <Card class="p-4">
           <div
             class="flex items-center gap-1 text-xs text-muted-foreground uppercase tracking-wider"
@@ -773,8 +759,8 @@ const excludedCount = computed(() => {
                 <Info class="h-3.5 w-3.5 text-muted-foreground cursor-help" />
               </TooltipTrigger>
               <TooltipContent class="max-w-xs normal-case"
-                >Subscription MRR plus usage revenue across all customers for
-                the selected period.</TooltipContent
+                >Subscription or usage revenue across all customers, whichever
+                is higher per customer.</TooltipContent
               >
             </Tooltip>
           </div>
@@ -950,8 +936,10 @@ const excludedCount = computed(() => {
       <Card class="overflow-hidden">
         <div class="overflow-x-auto">
           <table class="w-full text-sm">
-            <thead>
-              <tr class="border-b bg-muted/50">
+            <thead
+              class="bg-muted/50 text-muted-foreground text-xs font-medium uppercase tracking-wider"
+            >
+              <tr>
                 <th class="text-left p-3 font-medium w-6"></th>
                 <th
                   v-for="col in visibleColumns"
@@ -967,7 +955,11 @@ const excludedCount = computed(() => {
               <template v-for="c in filteredCustomers" :key="c.customer_id">
                 <tr
                   class="group border-b hover:bg-muted/30 transition-colors cursor-pointer"
-                  @click="$router.push(`/customers/${c.customer_id}`)"
+                  @click="
+                    $router.push(
+                      `/customers/${encodeURIComponent(c.customer_id)}`,
+                    )
+                  "
                 >
                   <td class="p-3">
                     <button
@@ -990,58 +982,43 @@ const excludedCount = computed(() => {
                   <template v-for="col in visibleColumns" :key="col.id">
                     <!-- Customer -->
                     <td v-if="col.id === 'customer'" class="p-3">
-                      <div class="flex flex-col gap-0.5">
-                        <div class="flex items-center gap-1.5">
-                          <span
-                            v-if="
-                              c.customer_name &&
-                              c.customer_name !== c.customer_id
-                            "
-                            class="text-sm font-medium"
-                            >{{ c.customer_name }}</span
-                          >
-                          <Badge
-                            v-if="c.pricing_model"
-                            variant="outline"
-                            :class="pricingModelBadge[c.pricing_model]"
-                            >{{
-                              c.pricing_model.charAt(0).toUpperCase() +
-                              c.pricing_model.slice(1)
-                            }}</Badge
-                          >
-                        </div>
-                        <code
-                          class="font-mono text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded w-fit"
-                          >{{ c.customer_id }}</code
-                        >
-                      </div>
-                    </td>
-
-                    <!-- Health -->
-                    <td v-else-if="col.id === 'health'" class="p-3">
-                      <div class="flex items-center gap-2">
-                        <span
-                          class="h-2 w-2 rounded-full"
-                          :class="healthColor(c.health_score)"
-                        />
-                        <span>{{ c.health_score }}</span>
-                      </div>
+                      <span class="text-sm font-medium">{{
+                        displayName(c)
+                      }}</span>
                     </td>
 
                     <!-- Revenue -->
-                    <td v-else-if="col.id === 'revenue'" class="p-3 text-right">
+                    <td
+                      v-else-if="col.id === 'revenue'"
+                      class="p-3 text-right font-mono tabular-nums"
+                    >
                       {{
                         fmt(c.total_revenue > 0 ? c.total_revenue : c.mrr || 0)
                       }}
                     </td>
 
                     <!-- Cost -->
-                    <td v-else-if="col.id === 'cost'" class="p-3 text-right">
+                    <td
+                      v-else-if="col.id === 'cost'"
+                      class="p-3 text-right font-mono tabular-nums"
+                    >
                       {{ fmt(c.total_cost) }}
                     </td>
 
                     <!-- Margin -->
-                    <td v-else-if="col.id === 'margin'" class="p-3 text-right">
+                    <td
+                      v-else-if="col.id === 'margin'"
+                      class="p-3 text-right font-mono tabular-nums"
+                      :class="
+                        c.margin_pct == null
+                          ? 'text-muted-foreground'
+                          : c.margin_pct > 30
+                            ? 'text-emerald-600'
+                            : c.margin_pct >= 0
+                              ? 'text-amber-600'
+                              : 'text-destructive'
+                      "
+                    >
                       {{ fmtPct(c.margin_pct) }}
                     </td>
 
@@ -1068,17 +1045,23 @@ const excludedCount = computed(() => {
                       {{ c.active_days_30d }}
                     </td>
 
-                    <!-- MRR -->
-                    <td v-else-if="col.id === 'mrr'" class="p-3 text-right">
-                      <span v-if="c.mrr > 0" class="font-medium"
-                        >${{
-                          c.mrr.toLocaleString(undefined, {
-                            minimumFractionDigits: 0,
-                            maximumFractionDigits: 0,
-                          })
-                        }}</span
+                    <!-- Status -->
+                    <td v-else-if="col.id === 'status'" class="p-3">
+                      <Badge
+                        v-if="c.margin_pct > 30"
+                        class="bg-green-100 text-green-700 hover:bg-green-100"
+                        >Healthy</Badge
                       >
-                      <span v-else class="text-muted-foreground">—</span>
+                      <Badge
+                        v-else-if="c.margin_pct >= 0"
+                        class="bg-yellow-100 text-yellow-700 hover:bg-yellow-100"
+                        >At Risk</Badge
+                      >
+                      <Badge
+                        v-else
+                        class="bg-red-100 text-red-700 hover:bg-red-100"
+                        >Underwater</Badge
+                      >
                     </td>
                   </template>
                 </tr>

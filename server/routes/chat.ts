@@ -4,27 +4,7 @@ import { readFileSync } from "fs";
 import { join } from "path";
 import { type AuthRequest } from "./auth.js";
 import { trackSelfLLM } from "../lib/track-self-llm.js";
-
-async function resolveAccountIdForUser(
-  pool: Pool,
-  userId: string,
-  accountId?: number,
-): Promise<number | null> {
-  if (accountId !== undefined) return accountId;
-  try {
-    const result = await pool.query(
-      `SELECT account_id FROM user_accounts
-        WHERE user_id = (SELECT id FROM users WHERE visitor_id = $1)
-          AND role = 'owner' LIMIT 1`,
-      [userId],
-    );
-    if (result.rows[0]) return result.rows[0].account_id;
-  } catch (err) {
-    console.error("chat: account_id fallback lookup failed:", err);
-  }
-  console.warn("chat: no account_id resolved for user", userId);
-  return null;
-}
+import { resolveAccountIdForUser } from "./data-helpers.js";
 
 // ── Agent loader ─────────────────────────────────────────────────────────
 // Agent personas live in `files/agents/*.md` which is gitignored — the

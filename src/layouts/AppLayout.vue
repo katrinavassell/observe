@@ -2,7 +2,7 @@
 import { computed, onMounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import { useQuery } from "@tanstack/vue-query";
-import { getUsageLimits } from "@/lib/api";
+import { getUsageLimits, getEntitlements } from "@/lib/api";
 import {
   BarChart3,
   Plug,
@@ -48,6 +48,15 @@ watch(isLoggedIn, (loggedIn) => {
   }
 });
 
+const { data: entitlements } = useQuery({
+  queryKey: ["entitlements"],
+  queryFn: getEntitlements,
+  enabled: isLoggedIn,
+});
+const canCreateOrg = computed(
+  () => entitlements.value?.organizations?.allowed !== false,
+);
+
 const feedbackOpen = ref(false);
 const mobileLandingEmail = ref("");
 
@@ -60,7 +69,7 @@ onMounted(() => {
 const navItems = computed(() => [
   {
     path: "/analytics",
-    label: "Analytics",
+    label: "Overview",
     icon: BarChart3,
     description: "Revenue, costs & margin overview",
   },
@@ -216,7 +225,7 @@ function isActive(path: string) {
         'fixed left-0 top-0 z-40 h-screen w-64 border-r bg-sidebar text-sidebar-foreground transition-transform duration-200 ease-in-out md:translate-x-0',
         sidebarOpen
           ? 'translate-x-0 visible'
-          : '-translate-x-full max-md:invisible',
+          : '-translate-x-full max-md:hidden',
       ]"
     >
       <div class="flex h-full flex-col">
@@ -237,12 +246,19 @@ function isActive(path: string) {
           </div>
           <div v-if="isLoggedIn" class="shrink-0 org-switcher-minimal">
             <OrganizationSwitcher
+              :hide-personal="true"
               :appearance="{
                 elements: {
                   organizationSwitcherTrigger:
                     'p-1.5 hover:bg-muted rounded-md',
                   organizationSwitcherTriggerIcon:
                     'h-4 w-4 text-muted-foreground',
+                  ...(canCreateOrg
+                    ? {}
+                    : {
+                        organizationSwitcherPopoverActionButton__createOrganization:
+                          'cl-hidden',
+                      }),
                 },
               }"
             />
@@ -512,6 +528,9 @@ function isActive(path: string) {
   display: none !important;
 }
 .org-switcher-minimal .cl-organizationPreviewTextContainer {
+  display: none !important;
+}
+.cl-hidden {
   display: none !important;
 }
 </style>

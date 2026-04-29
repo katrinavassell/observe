@@ -12,9 +12,11 @@ import {
   grantBonusCredits,
   getBonusCredits,
   CREDIT_REWARDS,
+  checkFeatureAccess,
 } from "../billing.js";
-import { calculateCostFromTokens as calcCostFromDb } from "../model-pricing.js";
+import { calculateCostFromTokens } from "../model-pricing.js";
 import { syncStripeDataForUser } from "./integrations.js";
+import { resolveAccountIdForUser, clearSampleData } from "./data-helpers.js";
 
 type TrackBillingUsageFn = (
   visitorId: string,
@@ -22,56 +24,6 @@ type TrackBillingUsageFn = (
   eventName: string,
 ) => void;
 type ConvertReferralFn = (visitorId: string) => Promise<void>;
-
-async function resolveAccountIdForUser(
-  pool: Pool,
-  userId: string,
-  accountId?: number,
-): Promise<number | null> {
-  if (accountId !== undefined) return accountId;
-  try {
-    const result = await pool.query(
-      `SELECT account_id FROM user_accounts
-        WHERE user_id = (SELECT id FROM users WHERE visitor_id = $1)
-          AND role = 'owner' LIMIT 1`,
-      [userId],
-    );
-    if (result.rows[0]) return result.rows[0].account_id;
-  } catch (err) {
-    console.error("billing-api: account_id fallback lookup failed:", err);
-  }
-  console.warn("billing-api: no account_id resolved for user", userId);
-  return null;
-}
-
-async function clearSampleData(
-  db: { query: (text: string, params: unknown[]) => Promise<unknown> },
-  pool: Pool,
-  userId: string,
-  accountId?: number,
-): Promise<void> {
-  const resolved = await resolveAccountIdForUser(pool, userId, accountId);
-  await db.query(
-    "DELETE FROM observe_events WHERE account_id = $1 AND source = 'sample'",
-    [resolved],
-  );
-  await db.query(
-    "DELETE FROM cost_records WHERE account_id = $1 AND cost_type = 'ai_inference' AND customer_id IS NULL AND period_start IS NOT NULL",
-    [resolved],
-  );
-  await db.query(
-    "DELETE FROM subscriptions WHERE account_id = $1 AND subscription_id IN ('sub_001','sub_002','sub_003','sub_004','sub_005','sub_acme','sub_acme_addon','sub_tidewater','sub_neon','sub_neon_addon','sub_circle','sub_blaze','sub_quantum')",
-    [resolved],
-  );
-  await db.query(
-    "DELETE FROM customers WHERE account_id = $1 AND customer_id IN ('cus_001','cus_002','cus_003','cus_004','cus_005','acme_saas','tidewater_ai','neondata','circleops','blazeml','quantumhr')",
-    [resolved],
-  );
-  await db.query(
-    "DELETE FROM plans WHERE account_id = $1 AND plan_id IN ('starter', 'pro', 'enterprise')",
-    [resolved],
-  );
-}
 
 export function createBillingApiRoutes(
   pool: Pool,
@@ -214,6 +166,52 @@ export function createBillingApiRoutes(
     },
   );
 
+  // GET /billing/entitlements — all feature limits and current usage
+  router.get(
+    "/billing/entitlements",
+    ensureVisitor,
+    async (req: AuthRequest, res: Response) => {
+      try {
+        const features = [
+          "event_ingest",
+          "cost_alerts",
+          "organizations",
+          "ai_insights",
+        ];
+        const entitlements: Record<
+          string,
+          {
+            allowed: boolean;
+            usage?: number;
+            limit?: number;
+            remaining?: number;
+          }
+        > = {};
+        for (const key of features) {
+          try {
+            entitlements[key] = await checkFeatureAccess(
+              pool,
+              req.visitorId!,
+              key,
+              req.accountEmail,
+              req.accountId,
+            );
+          } catch (err) {
+            console.error(`checkFeatureAccess failed for ${key}:`, err);
+            entitlements[key] = {
+              allowed: false,
+              reason: "Unable to verify access",
+            };
+          }
+        }
+        res.json(entitlements);
+      } catch (error) {
+        console.error("GET /billing/entitlements error:", error);
+        res.status(500).json({ error: "Failed to fetch entitlements" });
+      }
+    },
+  );
+
   // GET /credits — current bonus credits and reward info
   router.get(
     "/credits",
@@ -306,7 +304,7 @@ export function createBillingApiRoutes(
     ensureVisitor,
     async (req: AuthRequest, res: Response) => {
       try {
-        const plan = req.body?.plan || "growth";
+        const plan = req.body?.plan || "pro";
         const { url } = await createCheckoutSession(pool, req.visitorId!, plan);
         res.json({ url });
       } catch (error) {
@@ -916,7 +914,7 @@ export function createBillingApiRoutes(
                     const modelName = result.snapshot_id || "unknown";
                     const inputTokens = result.input_tokens || 0;
                     const outputTokens = result.output_tokens || 0;
-                    const cost = await calcCostFromDb(
+                    const cost = await calculateCostFromTokens(
                       pool,
                       modelName,
                       inputTokens,
@@ -1122,7 +1120,7 @@ export function createBillingApiRoutes(
                 const entryDate = entry.date
                   ? new Date(entry.date).toISOString()
                   : new Date().toISOString();
-                const cost = await calcCostFromDb(
+                const cost = await calculateCostFromTokens(
                   pool,
                   modelName,
                   inputTokens,

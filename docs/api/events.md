@@ -355,7 +355,7 @@ Accepts single events or batches for real-time SDK ingestion. Requires a valid S
   "events": [
     {
       "eventName": "api_call",
-      "customerReferenceId": "cus_001",
+      "customerReferenceId": "acme-corp",
       "featureKey": "api_requests",
       "timestamp": "2026-03-19T14:30:00Z",
       "costAmount": 0.002,

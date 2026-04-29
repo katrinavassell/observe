@@ -66,6 +66,7 @@ const chartData = computed(() => {
       pointRadius: 4,
       pointHoverRadius: 6,
       pointBackgroundColor: "rgb(99, 102, 241)",
+      yAxisID: "y",
     },
     {
       label: "Cost",
@@ -77,6 +78,7 @@ const chartData = computed(() => {
       pointRadius: 4,
       pointHoverRadius: 6,
       pointBackgroundColor: "rgb(239, 68, 68)",
+      yAxisID: "y1",
     },
   ];
 
@@ -116,12 +118,28 @@ const chartOptions = computed(() => ({
     },
     y: {
       beginAtZero: true,
+      position: "left" as const,
+      title: { display: true, text: "Revenue", color: "#999" },
       ticks: {
+        color: "#999",
         callback: (value: number | string) => {
           const num = typeof value === "string" ? parseFloat(value) : value;
-          if (num >= 1000) {
-            return `$${(num / 1000).toFixed(0)}K`;
-          }
+          if (num >= 1000) return `$${(num / 1000).toFixed(0)}K`;
+          return `$${num}`;
+        },
+      },
+    },
+    y1: {
+      beginAtZero: true,
+      position: "right" as const,
+      title: { display: true, text: "Cost", color: "#999" },
+      grid: { drawOnChartArea: false },
+      ticks: {
+        color: "#999",
+        callback: (value: number | string) => {
+          const num = typeof value === "string" ? parseFloat(value) : value;
+          if (num >= 1000) return `$${(num / 1000).toFixed(0)}K`;
+          if (num < 0.01 && num > 0) return `$${num.toFixed(4)}`;
           return `$${num}`;
         },
       },
