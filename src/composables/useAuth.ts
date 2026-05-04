@@ -27,26 +27,20 @@ export function useAuth() {
         try {
           for (let attempt = 0; attempt < 3; attempt++) {
             try {
-              const me = await api.getMe();
-              if (me.account) {
-                account.value = me.account;
-                break;
-              } else {
-                const result = await api.signupComplete(
-                  user.value?.fullName ?? undefined,
-                  user.value?.primaryEmailAddress?.emailAddress,
-                );
-                account.value = result.account;
-                if (result.sdkKey) {
-                  localStorage.setItem("observe:fresh_sdk_key", result.sdkKey);
-                }
-                if (result.clerkOrgId) {
-                  await clerk.value?.setActive({
-                    organization: result.clerkOrgId,
-                  });
-                }
-                break;
+              const result = await api.signupComplete(
+                user.value?.fullName ?? undefined,
+                user.value?.primaryEmailAddress?.emailAddress,
+              );
+              account.value = result.account;
+              if (result.sdkKey) {
+                localStorage.setItem("observe:fresh_sdk_key", result.sdkKey);
               }
+              if (result.clerkOrgId) {
+                await clerk.value?.setActive({
+                  organization: result.clerkOrgId,
+                });
+              }
+              break;
             } catch (err) {
               logger.error(
                 `Account setup failed (attempt ${attempt + 1}/3)`,

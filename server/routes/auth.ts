@@ -390,6 +390,25 @@ export function createAuthRoutes(
             [resolvedAccountId],
           );
           clerkOrgId = orgRow.rows[0]?.clerk_org_id ?? undefined;
+          if (!clerkOrgId) {
+            const trimmedName = name?.trim();
+            const orgName = trimmedName
+              ? `${trimmedName}'s Workspace`
+              : "My Workspace";
+            try {
+              const clerkOrg = await clerk.organizations.createOrganization({
+                name: orgName,
+                createdBy: userId,
+              });
+              clerkOrgId = clerkOrg.id;
+              await pool.query(
+                `UPDATE accounts SET clerk_org_id = $1 WHERE id = $2`,
+                [clerkOrgId, resolvedAccountId],
+              );
+            } catch (orgErr) {
+              console.error("Failed to backfill Clerk org:", orgErr);
+            }
+          }
         }
 
         if (isNewUser) {
