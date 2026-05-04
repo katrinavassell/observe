@@ -6,10 +6,12 @@
  * plus a table breakdown below.
  */
 
-import { computed } from 'vue'
-import { Chart } from 'vue-chartjs'
+import { computed } from "vue";
+import { Chart } from "vue-chartjs";
 import {
   Chart as ChartJS,
+  BarController,
+  LineController,
   CategoryScale,
   LinearScale,
   BarElement,
@@ -18,79 +20,98 @@ import {
   Title,
   Tooltip as ChartTooltip,
   Legend,
-} from 'chart.js'
-import { Card, CardContent, CardHeader, CardTitle, Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui'
-import { Info } from 'lucide-vue-next'
-import type { MonthlyMrrData } from './RevenueFlowChart.vue'
+} from "chart.js";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+} from "@/components/ui";
+import { Info } from "lucide-vue-next";
+import type { MonthlyMrrData } from "./RevenueFlowChart.vue";
 
-ChartJS.register(CategoryScale, LinearScale, BarElement, LineElement, PointElement, Title, ChartTooltip, Legend)
+ChartJS.register(
+  BarController,
+  LineController,
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  LineElement,
+  PointElement,
+  Title,
+  ChartTooltip,
+  Legend,
+);
 
 // =============================================================================
 // PROPS
 // =============================================================================
 
 const props = defineProps<{
-  data: MonthlyMrrData[]
-}>()
+  data: MonthlyMrrData[];
+}>();
 
 // =============================================================================
 // COMPUTED
 // =============================================================================
 
 const chartData = computed(() => {
-  const labels = props.data.map(d => d.monthLabel)
+  const labels = props.data.map((d) => d.monthLabel);
 
   return {
     labels,
     datasets: [
       {
-        type: 'bar' as const,
-        label: 'Revenue',
-        data: props.data.map(d => d.mrr),
-        backgroundColor: 'rgba(34, 197, 94, 0.7)',
-        borderColor: 'rgb(34, 197, 94)',
+        type: "bar" as const,
+        label: "Revenue",
+        data: props.data.map((d) => d.mrr),
+        backgroundColor: "rgba(34, 197, 94, 0.7)",
+        borderColor: "rgb(34, 197, 94)",
         borderWidth: 1,
         order: 2,
-        yAxisID: 'y',
+        yAxisID: "y",
       },
       {
-        type: 'bar' as const,
-        label: 'Costs',
-        data: props.data.map(d => d.costs || 0),
-        backgroundColor: 'rgba(239, 68, 68, 0.7)',
-        borderColor: 'rgb(239, 68, 68)',
+        type: "bar" as const,
+        label: "Costs",
+        data: props.data.map((d) => d.costs || 0),
+        backgroundColor: "rgba(239, 68, 68, 0.7)",
+        borderColor: "rgb(239, 68, 68)",
         borderWidth: 1,
         order: 2,
-        yAxisID: 'y',
+        yAxisID: "y",
       },
       {
-        type: 'line' as const,
-        label: 'Margin %',
-        data: props.data.map(d => d.margin || 0),
-        borderColor: 'rgb(59, 130, 246)',
-        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+        type: "line" as const,
+        label: "Margin %",
+        data: props.data.map((d) => d.margin || 0),
+        borderColor: "rgb(59, 130, 246)",
+        backgroundColor: "rgba(59, 130, 246, 0.1)",
         borderWidth: 2,
         pointRadius: 4,
-        pointBackgroundColor: 'rgb(59, 130, 246)',
+        pointBackgroundColor: "rgb(59, 130, 246)",
         tension: 0.3,
         fill: false,
         order: 1,
-        yAxisID: 'y1',
+        yAxisID: "y1",
       },
     ],
-  }
-})
+  };
+});
 
 const chartOptions = computed(() => ({
   responsive: true,
   maintainAspectRatio: false,
   interaction: {
-    mode: 'index' as const,
+    mode: "index" as const,
     intersect: false,
   },
   plugins: {
     legend: {
-      position: 'bottom' as const,
+      position: "bottom" as const,
       labels: {
         usePointStyle: true,
         padding: 20,
@@ -99,10 +120,10 @@ const chartOptions = computed(() => ({
     tooltip: {
       callbacks: {
         label: (context: any) => {
-          if (context.dataset.label === 'Margin %') {
-            return `${context.dataset.label}: ${context.raw}%`
+          if (context.dataset.label === "Margin %") {
+            return `${context.dataset.label}: ${context.raw}%`;
           }
-          return `${context.dataset.label}: $${context.raw.toLocaleString()}`
+          return `${context.dataset.label}: $${context.raw.toLocaleString()}`;
         },
       },
     },
@@ -114,21 +135,22 @@ const chartOptions = computed(() => ({
       },
     },
     y: {
-      type: 'linear' as const,
-      position: 'left' as const,
+      type: "linear" as const,
+      position: "left" as const,
       grid: {
-        color: 'rgba(0, 0, 0, 0.05)',
+        color: "rgba(0, 0, 0, 0.05)",
       },
       ticks: {
         callback: (value: number | string) => {
-          const numValue = typeof value === 'string' ? parseFloat(value) : value
-          return `$${numValue.toLocaleString()}`
+          const numValue =
+            typeof value === "string" ? parseFloat(value) : value;
+          return `$${numValue.toLocaleString()}`;
         },
       },
     },
     y1: {
-      type: 'linear' as const,
-      position: 'right' as const,
+      type: "linear" as const,
+      position: "right" as const,
       min: 0,
       max: 100,
       grid: {
@@ -139,31 +161,37 @@ const chartOptions = computed(() => ({
       },
     },
   },
-}))
+}));
 
 // Latest margin for status badge
 const latestMargin = computed(() => {
-  if (props.data.length === 0) return 0
-  return props.data[props.data.length - 1]?.margin || 0
-})
+  if (props.data.length === 0) return 0;
+  return props.data[props.data.length - 1]?.margin || 0;
+});
 
 const marginStatus = computed(() => {
-  if (latestMargin.value >= 70) return { label: 'Healthy', color: 'text-green-600', bg: 'bg-green-500/10' }
-  if (latestMargin.value >= 50) return { label: 'Moderate', color: 'text-yellow-600', bg: 'bg-yellow-500/10' }
-  return { label: 'At Risk', color: 'text-red-600', bg: 'bg-red-500/10' }
-})
+  if (latestMargin.value >= 70)
+    return { label: "Healthy", color: "text-green-600", bg: "bg-green-500/10" };
+  if (latestMargin.value >= 50)
+    return {
+      label: "Moderate",
+      color: "text-yellow-600",
+      bg: "bg-yellow-500/10",
+    };
+  return { label: "At Risk", color: "text-red-600", bg: "bg-red-500/10" };
+});
 
 // =============================================================================
 // HELPERS
 // =============================================================================
 
 function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
-  }).format(amount)
+  }).format(amount);
 }
 </script>
 
@@ -203,7 +231,9 @@ function formatCurrency(amount: number): string {
           <thead>
             <tr class="border-b text-muted-foreground">
               <th class="text-left py-2 font-medium">Month</th>
-              <th class="text-right py-2 font-medium text-green-600">Revenue</th>
+              <th class="text-right py-2 font-medium text-green-600">
+                Revenue
+              </th>
               <th class="text-right py-2 font-medium text-red-600">Costs</th>
               <th class="text-right py-2 font-medium text-blue-600">Margin</th>
             </tr>
@@ -223,7 +253,9 @@ function formatCurrency(amount: number): string {
               </td>
               <td
                 class="py-2 text-right tabular-nums"
-                :class="(month.margin || 0) >= 50 ? 'text-blue-600' : 'text-red-600'"
+                :class="
+                  (month.margin || 0) >= 50 ? 'text-blue-600' : 'text-red-600'
+                "
               >
                 {{ month.margin || 0 }}%
               </td>

@@ -4,6 +4,8 @@ import { Button } from "@/components/ui";
 import { Chart } from "vue-chartjs";
 import {
   Chart as ChartJS,
+  BarController,
+  LineController,
   CategoryScale,
   LinearScale,
   BarElement,
@@ -18,6 +20,8 @@ import {
 import { formatCurrency as fmt } from "@/lib/format";
 
 ChartJS.register(
+  BarController,
+  LineController,
   CategoryScale,
   LinearScale,
   BarElement,
