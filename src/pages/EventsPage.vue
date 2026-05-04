@@ -347,13 +347,6 @@ const eventUsage = computed(() => {
     };
   return usageLimits.value?.event_ingest?.usage ?? null;
 });
-const eventUsagePct = computed(() => {
-  if (!eventUsage.value || !eventUsage.value.limit) return 0;
-  return Math.min(
-    100,
-    Math.round((eventUsage.value.used / eventUsage.value.limit) * 100),
-  );
-});
 
 const uniqueModels = computed(() =>
   (modelAgg.value || []).map((m) => m.model).sort(),

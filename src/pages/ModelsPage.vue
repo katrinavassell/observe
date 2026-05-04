@@ -15,15 +15,7 @@ import {
   Search,
   X,
 } from "lucide-vue-next";
-import {
-  Skeleton,
-  Button,
-  Card,
-  CardContent,
-  Tooltip,
-  TooltipTrigger,
-  TooltipContent,
-} from "@/components/ui";
+import { Skeleton, Button, Card, CardContent } from "@/components/ui";
 import { formatCurrency } from "@/lib/format";
 import { useAuth } from "@/composables/useAuth";
 import { GUEST_MODELS } from "@/lib/guest-preview";

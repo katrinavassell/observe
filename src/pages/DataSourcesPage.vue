@@ -17,9 +17,6 @@ import {
   CheckCircle2,
   Radio,
   ArrowRight,
-  AlertTriangle,
-  ShieldCheck,
-  Info,
 } from "lucide-vue-next";
 import {
   Card,

@@ -5,7 +5,7 @@ import { getTraces, getTrace, type EventDetail } from "@/lib/api";
 import { useAuth } from "@/composables/useAuth";
 import { GUEST_TRACES, getGuestTraceDetail } from "@/lib/guest-preview";
 import { Activity, Plug, ChevronDown, ChevronRight } from "lucide-vue-next";
-import { Card, CardContent, Button, Skeleton, Badge } from "@/components/ui";
+import { Card, Button, Skeleton, Badge } from "@/components/ui";
 
 const { isLoggedIn } = useAuth();
 
