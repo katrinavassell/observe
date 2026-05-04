@@ -83,7 +83,7 @@ const highlights = [
           <div
             class="flex h-10 w-10 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground font-semibold"
           >
-            O
+            T
           </div>
           <span class="text-2xl font-semibold tracking-tight">Observe</span>
         </div>

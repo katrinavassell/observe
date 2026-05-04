@@ -207,7 +207,7 @@ function isActive(path: string) {
       <div
         class="flex h-8 w-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground font-semibold text-sm"
       >
-        O
+        T
       </div>
       <span class="text-base font-semibold">Observe</span>
     </div>
@@ -235,7 +235,7 @@ function isActive(path: string) {
             <div
               class="flex h-8 w-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground font-semibold text-sm shrink-0"
             >
-              O
+              T
             </div>
             <div class="flex flex-col min-w-0">
               <span class="text-base font-semibold leading-tight">Observe</span>
