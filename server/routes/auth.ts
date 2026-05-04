@@ -355,13 +355,13 @@ export function createAuthRoutes(
         );
         let resolvedAccountId: number | undefined =
           existingMembership.rows[0]?.account_id;
+        let clerkOrgId: string | undefined;
         if (resolvedAccountId === undefined) {
           const trimmedName = name?.trim();
           const orgName = trimmedName
             ? `${trimmedName}'s Workspace`
             : "My Workspace";
 
-          let clerkOrgId: string | undefined;
           try {
             const clerkOrg = await clerk.organizations.createOrganization({
               name: orgName,
@@ -384,6 +384,12 @@ export function createAuthRoutes(
              ON CONFLICT (user_id, account_id) DO NOTHING`,
             [userInternalId, resolvedAccountId],
           );
+        } else {
+          const orgRow = await pool.query(
+            `SELECT clerk_org_id FROM accounts WHERE id = $1`,
+            [resolvedAccountId],
+          );
+          clerkOrgId = orgRow.rows[0]?.clerk_org_id ?? undefined;
         }
 
         if (isNewUser) {
@@ -560,6 +566,7 @@ export function createAuthRoutes(
         res.json({
           account: { id: account.id, email: account.email, name: account.name },
           sdkKey,
+          clerkOrgId: clerkOrgId ?? null,
         });
       } catch (error: unknown) {
         console.error("Signup complete error:", error);

@@ -40,6 +40,11 @@ export function useAuth() {
                 if (result.sdkKey) {
                   localStorage.setItem("observe:fresh_sdk_key", result.sdkKey);
                 }
+                if (result.clerkOrgId) {
+                  await clerk.value?.setActive({
+                    organization: result.clerkOrgId,
+                  });
+                }
                 break;
               }
             } catch (err) {

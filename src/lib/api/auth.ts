@@ -18,7 +18,7 @@ export interface AccountMembership {
 export async function signupComplete(
   name?: string,
   email?: string,
-): Promise<{ account: Account; sdkKey?: string }> {
+): Promise<{ account: Account; sdkKey?: string; clerkOrgId?: string }> {
   return request("/auth/signup-complete", {
     method: "POST",
     body: JSON.stringify({ name, email }),
