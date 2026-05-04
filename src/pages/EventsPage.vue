@@ -8,7 +8,6 @@ import {
   getEventsByModel,
   getFeatures,
   getEventDetail,
-  getUsageLimits,
   type ObserveEvent,
   type EventDetail,
 } from "@/lib/api";
@@ -331,22 +330,6 @@ const { data: realModelAgg } = useQuery({
 const modelAgg = computed(() =>
   isLoggedIn.value ? realModelAgg.value : GUEST_EVENTS_BY_MODEL,
 );
-
-const { data: usageLimits } = useQuery({
-  queryKey: ["usage-limits"],
-  queryFn: getUsageLimits,
-  enabled: computed(() => isLoggedIn.value),
-});
-
-const eventUsage = computed(() => {
-  if (!isLoggedIn.value)
-    return {
-      used: GUEST_EVENTS.length,
-      limit: 10_000,
-      remaining: 10_000 - GUEST_EVENTS.length,
-    };
-  return usageLimits.value?.event_ingest?.usage ?? null;
-});
 
 const uniqueModels = computed(() =>
   (modelAgg.value || []).map((m) => m.model).sort(),

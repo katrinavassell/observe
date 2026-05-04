@@ -12,7 +12,7 @@ import { recordReferral } from "@/lib/api";
 
 const { isOnline } = useOnline();
 const { isLoaded, isSignedIn, getToken } = useClerkAuth();
-const { account } = useAuth();
+const { account, isInitialized } = useAuth();
 const isLoading = computed(
   () => !isLoaded.value || (isSignedIn.value && !account.value),
 );

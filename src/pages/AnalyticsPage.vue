@@ -7,7 +7,6 @@ import {
   getEventsByModel,
   getEventsByCustomer,
   getUsageLimits,
-  getSourceBreakdown,
   getMarginTrends,
   getDailySummary,
 } from "@/lib/api";
@@ -31,7 +30,6 @@ import {
   TooltipTrigger,
   TooltipContent,
 } from "@/components/ui";
-import SourceBadge from "@/components/shared/SourceBadge.vue";
 import { formatCurrency as fmt, formatPct } from "@/lib/format";
 import { useAuth } from "@/composables/useAuth";
 import {
@@ -58,12 +56,6 @@ const selectedDays = computed(() => selectedRange.value.days);
 const { data: _usageLimits } = useQuery({
   queryKey: ["usage-limits"],
   queryFn: getUsageLimits,
-});
-
-// Source breakdown for data attribution
-const { data: sourceBreakdown } = useQuery({
-  queryKey: ["source-breakdown"],
-  queryFn: getSourceBreakdown,
 });
 
 // Margin trends for period-over-period badges
@@ -103,13 +95,6 @@ const { data: dailyData } = useQuery({
 });
 
 const dailySeries = computed(() => dailyData.value?.data ?? []);
-
-const activeSources = computed(() => {
-  if (!sourceBreakdown.value?.sources) return [];
-  return sourceBreakdown.value.sources
-    .filter((s) => s.event_count > 0 && s.source !== "sample")
-    .sort((a, b) => b.event_count - a.event_count);
-});
 
 // Analytics data — logged-in users hit the API, guests get hardcoded
 // client-side preview (see src/lib/guest-preview.ts). Sample data
