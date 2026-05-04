@@ -49,7 +49,7 @@ async function onSelect(id: number) {
       <div
         class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground font-semibold text-sm"
       >
-        O
+        T
       </div>
       <div class="flex flex-col min-w-0 flex-1 text-left">
         <span class="text-sm font-semibold leading-tight truncate">{{

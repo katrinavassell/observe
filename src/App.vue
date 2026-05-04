@@ -71,7 +71,7 @@ watch(
       <div
         class="flex h-8 w-8 items-center justify-center rounded-lg bg-zinc-900 text-white font-semibold text-sm"
       >
-        O
+        T
       </div>
       <span class="text-base font-semibold text-zinc-900">Observe</span>
     </div>

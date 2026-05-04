@@ -88,6 +88,10 @@ const sections = [
         q: "What are the cohort labels?",
         a: "Four cohorts with clear thresholds: Unprofitable (negative margin or zero revenue with cost), Rising Cost (cost trending up with margin under 30%), Inactive (fewer than 3 active days and low adoption), Champion (margin above 50% with strong engagement). Customers not matching any cohort have no label.",
       },
+      {
+        q: "Can I create custom cohorts?",
+        a: "Yes. On the Customers page, click Create Cohort. Static cohorts let you pick customers manually. Dynamic cohorts use rules (margin %, total cost, revenue, active days) to auto-group customers that match your criteria.",
+      },
     ],
   },
   {
@@ -157,6 +161,42 @@ const sections = [
       {
         q: "How do I create a new organization?",
         a: "Click the dropdown in the top-left of the sidebar and select Create Organization. Useful if you manage multiple products or clients that need separate data.",
+      },
+    ],
+  },
+  {
+    id: "traces",
+    title: "Traces",
+    items: [
+      {
+        q: "What are traces?",
+        a: "Traces group multi-step agent runs into a single view. Each trace contains spans — individual LLM calls, embeddings, vector DB lookups, or other steps — with cost attribution per span.",
+      },
+      {
+        q: "How do I create a trace?",
+        a: "Pass a traceId field in your SDK events. All events sharing the same traceId are grouped into one trace. Use any unique string — a UUID or your own request ID.",
+      },
+      {
+        q: "What cost types show up in traces?",
+        a: "Spans are color-coded by costType: LLM, embedding, vector_db, compute, and api. Each span shows its individual cost, tokens, and duration in a waterfall timeline.",
+      },
+    ],
+  },
+  {
+    id: "plans",
+    title: "Plans & Billing",
+    items: [
+      {
+        q: "What plans are available?",
+        a: "Free (10,000 events/month, 90-day retention, 3 alerts), Pro at $29/month (100,000 events, 365-day retention, unlimited alerts), and Team at $99/month (1,000,000 events, unlimited retention, priority support).",
+      },
+      {
+        q: "How do I upgrade or downgrade?",
+        a: "Go to Plans & Usage in the sidebar. Upgrades go through Stripe Checkout with prorated billing. To downgrade or cancel, use the Manage Subscription button which opens the Stripe Billing Portal.",
+      },
+      {
+        q: "What happens when I hit my event limit?",
+        a: "Events beyond your monthly limit are rejected. You'll see usage warnings on the Plans page as you approach the cap. Upgrade anytime to increase your limit.",
       },
     ],
   },
