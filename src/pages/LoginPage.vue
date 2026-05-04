@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted, watch } from "vue";
-import { useRouter, useRoute } from "vue-router";
+import { computed, onMounted } from "vue";
+import { useRoute } from "vue-router";
 import { SignIn, SignUp, AuthenticateWithRedirectCallback } from "@clerk/vue";
 import {
   BarChart3,
@@ -9,21 +9,8 @@ import {
   Layers,
   Check,
 } from "lucide-vue-next";
-import { useAuth } from "@/composables/useAuth";
 
-const router = useRouter();
 const route = useRoute();
-const { isLoggedIn } = useAuth();
-
-watch(
-  isLoggedIn,
-  (loggedIn) => {
-    if (loggedIn) {
-      router.replace("/");
-    }
-  },
-  { immediate: true },
-);
 
 const isRegisterMode = computed(() => route.path.startsWith("/signup"));
 const isSsoCallback = computed(
