@@ -20,10 +20,6 @@
   },
   "crons": [
     {
-      "path": "/api/cron/weekly-digest",
-      "schedule": "0 14 * * 0"
-    },
-    {
       "path": "/api/cron/posthog-audit",
       "schedule": "0 12 * * *"
     },

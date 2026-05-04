@@ -10,6 +10,7 @@ export interface AuthRequest extends Request {
   visitorId?: string;
   accountId?: number;
   accountEmail?: string;
+  isNewUser?: boolean;
 }
 
 const sampleClearedUsers = new Set<string>();
@@ -103,6 +104,7 @@ export function createEnsureVisitor(pool: Pool) {
           [clerkUserId],
         );
         if (!accountResult.rows[0] && clerkEmail) {
+          req.isNewUser = true;
           try {
             const insertedUser = await pool.query(
               `INSERT INTO users (email, password_hash, name, visitor_id)
@@ -327,8 +329,8 @@ export function createAuthRoutes(
           [email, userId],
         );
         let result;
-        const isNewAccount = existing.rows.length === 0;
-        if (!isNewAccount) {
+        const isNewUser = req.isNewUser === true;
+        if (existing.rows.length > 0) {
           result = await pool.query(
             `UPDATE users SET email = $1, visitor_id = $2, name = COALESCE($3, name), password_hash = 'clerk-managed', updated_at = NOW()
              WHERE id = $4 RETURNING id, email, name`,
@@ -384,7 +386,7 @@ export function createAuthRoutes(
           );
         }
 
-        if (isNewAccount) {
+        if (isNewUser) {
           const adminEmailsForDogfood = [
             "tansoadmin@tansohq.com",
             "kat@tansohq.com",
@@ -505,7 +507,7 @@ export function createAuthRoutes(
         }
 
         const resendKey = process.env.RESEND_API_KEY;
-        if (isNewAccount && resendKey) {
+        if (isNewUser && resendKey) {
           const resendPost = (body: Record<string, unknown>) =>
             fetch("https://api.resend.com/emails", {
               method: "POST",
@@ -521,6 +523,10 @@ export function createAuthRoutes(
               }
             });
 
+          const followUpAt = new Date(
+            Date.now() + 2 * 24 * 60 * 60 * 1000,
+          ).toISOString();
+
           await Promise.allSettled([
             resendPost({
               from: "Observe <kat@tansohq.com>",
@@ -535,6 +541,17 @@ export function createAuthRoutes(
               html: `<p>Hey there!</p>
 <p>Just wanted to say thank you for signing up for Observe by Tanso! Would love to learn about what you're building and what brought you here.</p>
 <p>Feel free to reach out with any questions or feedback. Also down to hop on a quick call if that's easier: <a href="https://cal.com/katrina-laszlo/meeting">https://cal.com/katrina-laszlo/meeting</a></p>
+<p>Kat<br/>Co-founder, Tanso</p>`,
+            }),
+            resendPost({
+              from: "Kat from Observe <kat@tansohq.com>",
+              to: email,
+              subject: "How's setup going?",
+              scheduled_at: followUpAt,
+              html: `<p>Hey${name?.trim() ? ` ${name.trim()}` : ""}!</p>
+<p>Just checking in — have you had a chance to get your SDK key set up? If you're running into anything or have questions about connecting your data, I'm happy to help.</p>
+<p>Here's a quick link to the setup guide: <a href="https://observe.tansohq.com/data-sources">observe.tansohq.com/data-sources</a></p>
+<p>Or grab time with me directly: <a href="https://cal.com/katrina-laszlo/meeting">cal.com/katrina-laszlo/meeting</a></p>
 <p>Kat<br/>Co-founder, Tanso</p>`,
             }),
           ]);
