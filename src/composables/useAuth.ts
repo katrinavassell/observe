@@ -21,6 +21,8 @@ export function useAuth() {
     isSignedIn,
     async (signedIn, wasSignedIn) => {
       if (signedIn && !account.value) {
+        const path = window.location.pathname;
+        if (path.startsWith("/signup") || path.startsWith("/login")) return;
         if (setupInFlight) return;
         setupInFlight = true;
         isInitialized.value = false;
