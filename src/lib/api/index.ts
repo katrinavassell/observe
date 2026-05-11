@@ -10,3 +10,5 @@ export * from "./auth";
 export * from "./integrations";
 export * from "./onboarding";
 export * from "./accounts";
+export * from "./recommendations";
+export * from "./tanso-leads";
