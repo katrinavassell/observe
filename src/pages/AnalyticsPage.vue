@@ -357,72 +357,22 @@ function downloadCsv() {
         <DailyCostRevenueChart :data="dailySeries" />
       </Card>
 
-      <!-- Alerts + Recommendations bar -->
-      <div
-        v-if="
-          overview.active_alert_count > 0 ||
-          overview.pending_recommendation_count > 0
-        "
-        class="flex gap-3"
+      <!-- Recommendations link -->
+      <router-link
+        v-if="overview.pending_recommendation_count > 0"
+        to="/recommendations"
+        class="flex items-center gap-2 rounded-lg border border-amber-500/20 bg-amber-500/5 px-4 py-2.5 text-sm hover:bg-amber-500/10 transition-colors w-fit"
       >
-        <router-link
-          v-if="overview.active_alert_count > 0"
-          to="/alerts"
-          class="flex items-center gap-2 rounded-lg border border-red-500/20 bg-red-500/5 px-4 py-2.5 text-sm hover:bg-red-500/10 transition-colors"
+        <Lightbulb class="h-4 w-4 text-amber-500" />
+        <span class="font-medium">{{
+          overview.pending_recommendation_count
+        }}</span>
+        <span class="text-muted-foreground"
+          >recommendation{{
+            overview.pending_recommendation_count === 1 ? "" : "s"
+          }}</span
         >
-          <Bell class="h-4 w-4 text-red-500" />
-          <span class="font-medium">{{ overview.active_alert_count }}</span>
-          <span class="text-muted-foreground"
-            >alert{{ overview.active_alert_count === 1 ? "" : "s" }} fired
-            (24h)</span
-          >
-        </router-link>
-        <router-link
-          v-if="overview.pending_recommendation_count > 0"
-          to="/cohorts"
-          class="flex items-center gap-2 rounded-lg border border-amber-500/20 bg-amber-500/5 px-4 py-2.5 text-sm hover:bg-amber-500/10 transition-colors"
-        >
-          <Lightbulb class="h-4 w-4 text-amber-500" />
-          <span class="font-medium">{{
-            overview.pending_recommendation_count
-          }}</span>
-          <span class="text-muted-foreground"
-            >recommendation{{
-              overview.pending_recommendation_count === 1 ? "" : "s"
-            }}</span
-          >
-        </router-link>
-      </div>
-
-      <!-- Top recommendations -->
-      <Card v-if="overview.top_recommendations.length > 0">
-        <CardContent class="p-5">
-          <div class="flex items-center justify-between mb-3">
-            <h3 class="text-base font-semibold">Top Actions</h3>
-            <router-link
-              to="/cohorts"
-              class="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1"
-            >
-              View all <ArrowRight class="h-3 w-3" />
-            </router-link>
-          </div>
-          <div class="space-y-2">
-            <div
-              v-for="rec in overview.top_recommendations"
-              :key="rec.title"
-              class="flex items-start gap-3 rounded-md border p-3"
-            >
-              <Badge
-                :variant="severityBadge(rec.severity)"
-                class="mt-0.5 shrink-0"
-              >
-                {{ rec.severity }}
-              </Badge>
-              <span class="text-sm">{{ rec.title }}</span>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      </router-link>
 
       <!-- Feature table -->
       <Card v-if="sortedFeatures.length > 0">
