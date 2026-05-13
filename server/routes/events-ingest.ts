@@ -28,68 +28,6 @@ export function createEventsIngestRoutes(
   const router = Router();
   const { resolveKey } = createKeyHelpers(pool);
 
-  // POST /sdk-keys — Generate a new SDK API key
-  router.post(
-    "/sdk-keys",
-    ensureVisitor,
-    ensureScoped("events.write"),
-    async (req: AuthRequest, res: Response) => {
-      try {
-        if (!req.accountEmail) {
-          return res.status(401).json({ error: "Authentication required" });
-        }
-        const userId = req.visitorId!;
-        const rawName =
-          typeof req.body?.name === "string" ? req.body.name.trim() : "";
-        const name = rawName.length > 0 ? rawName.slice(0, 100) : "default";
-
-        const rawKey = "obs_" + crypto.randomBytes(24).toString("hex");
-        const keyHash = crypto
-          .createHash("sha256")
-          .update(rawKey)
-          .digest("hex");
-        const keyPrefix = rawKey.slice(0, 11);
-        const encryptedKey = encryptApiKey(rawKey);
-
-        // Auto-disambiguate the name if (user_id, name) already exists —
-        // avoids leaking DB error messages back to the caller.
-        if (!req.accountId) {
-          return res.status(400).json({ error: "No account resolved" });
-        }
-
-        let finalName = name;
-        for (let attempt = 0; attempt < 10; attempt++) {
-          const candidate = attempt === 0 ? name : `${name}-${attempt + 1}`;
-          const conflict = await pool.query(
-            "SELECT 1 FROM sdk_api_keys WHERE account_id = $1 AND name = $2 AND revoked_at IS NULL",
-            [req.accountId, candidate],
-          );
-          if (conflict.rows.length === 0) {
-            finalName = candidate;
-            break;
-          }
-        }
-
-        await pool.query(
-          "INSERT INTO sdk_api_keys (user_id, account_id, key_hash, key_prefix, encrypted_key, name) VALUES ($1, $2, $3, $4, $5, $6)",
-          [
-            userId,
-            req.accountId ?? null,
-            keyHash,
-            keyPrefix,
-            encryptedKey,
-            finalName,
-          ],
-        );
-
-        res.json({ key: rawKey, prefix: keyPrefix, name: finalName });
-      } catch (error) {
-        console.error("POST /sdk-keys error:", error);
-        res.status(500).json({ error: "Failed to create API key" });
-      }
-    },
-  );
-
   // GET /sdk-keys — List all active SDK API keys (never returns full key)
   router.get(
     "/sdk-keys",
