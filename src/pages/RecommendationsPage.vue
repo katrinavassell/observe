@@ -60,8 +60,8 @@ const recompute = useMutation({
 
 const tabs: { key: RecommendationStatus; label: string }[] = [
   { key: "pending", label: "Pending" },
-  { key: "applied", label: "Applied" },
-  { key: "dismissed", label: "Dismissed" },
+  { key: "applied", label: "Helpful" },
+  { key: "dismissed", label: "Not useful" },
 ];
 </script>
 

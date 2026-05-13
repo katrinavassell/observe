@@ -29,10 +29,6 @@ const props = defineProps<{
   featureKey?: string;
 }>();
 
-defineEmits<{
-  "talk-to-us": [rec: Recommendation];
-}>();
-
 const shouldFetch = computed(
   () => !props.recommendation && (!!props.customerKey || !!props.featureKey),
 );
@@ -49,16 +45,13 @@ const matchedRec = computed<Recommendation | null>(() => {
   const list = recommendations.value ?? [];
   if (props.customerKey) {
     return (
-      list.find(
-        (r) => recommendationCustomerKey(r) === props.customerKey,
-      ) ?? null
+      list.find((r) => recommendationCustomerKey(r) === props.customerKey) ??
+      null
     );
   }
   if (props.featureKey) {
     return (
-      list.find(
-        (r) => recommendationFeatureKey(r) === props.featureKey,
-      ) ?? null
+      list.find((r) => recommendationFeatureKey(r) === props.featureKey) ?? null
     );
   }
   return null;
@@ -66,8 +59,8 @@ const matchedRec = computed<Recommendation | null>(() => {
 
 const severityStyles: Record<RecommendationSeverity, string> = {
   critical: "border-l-destructive bg-destructive/5 dark:bg-destructive/10",
-  warning: "border-l-amber-500 bg-amber-50 dark:bg-amber-950/30",
-  info: "border-l-blue-500 bg-blue-50/60 dark:bg-blue-950/20",
+  warning: "border-l-amber-500 bg-amber-50/50 dark:bg-amber-950/20",
+  info: "border-l-border bg-muted/50 dark:bg-muted/30",
 };
 
 const severityIcon = computed(() => {
@@ -108,7 +101,10 @@ const severityBadgeVariant = computed<
           <h4 class="text-sm font-semibold leading-snug text-foreground">
             {{ matchedRec.title }}
           </h4>
-          <Badge :variant="severityBadgeVariant" class="shrink-0 text-[10px] uppercase tracking-wide">
+          <Badge
+            :variant="severityBadgeVariant"
+            class="shrink-0 text-[10px] uppercase tracking-wide"
+          >
             {{ matchedRec.severity }}
           </Badge>
         </div>
@@ -116,10 +112,7 @@ const severityBadgeVariant = computed<
           {{ matchedRec.description }}
         </p>
         <div class="mt-3">
-          <RecommendationActions
-            :recommendation="matchedRec"
-            @talk-to-us="$emit('talk-to-us', $event)"
-          />
+          <RecommendationActions :recommendation="matchedRec" />
         </div>
       </div>
     </div>
