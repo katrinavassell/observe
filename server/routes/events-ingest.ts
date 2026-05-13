@@ -215,17 +215,6 @@ export function createEventsIngestRoutes(
           return res.status(400).json({ error: "No account resolved" });
         }
 
-        const activeCount = await pool.query(
-          "SELECT COUNT(*)::int AS cnt FROM sdk_api_keys WHERE account_id = $1 AND revoked_at IS NULL",
-          [req.accountId],
-        );
-
-        if (activeCount.rows[0].cnt <= 1) {
-          return res.status(400).json({
-            error: "Cannot delete your only API key — rotate it instead",
-          });
-        }
-
         const result = await pool.query(
           "UPDATE sdk_api_keys SET revoked_at = NOW() WHERE id = $1 AND account_id = $2 AND revoked_at IS NULL",
           [keyId, req.accountId],
