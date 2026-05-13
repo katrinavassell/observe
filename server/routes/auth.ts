@@ -1040,7 +1040,7 @@ export function createAuthRoutes(
           ? new Date(
               Date.now() + Number(expires_in_seconds) * 1000,
             ).toISOString()
-          : new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+          : null;
         const keyBudgetCents =
           budget_cents != null ? Number(budget_cents) : null;
         const keyBudgetPeriod = budget_period || null;
