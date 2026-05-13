@@ -410,6 +410,17 @@ export const VALID_SCOPES = [
   "admin",
 ] as const;
 
+export const SIGNUP_ALLOWED_SCOPES = new Set([
+  "proxy.chat",
+  "usage.read",
+  "billing.read",
+  "events.read",
+  "events.write",
+  "customers.read",
+  "recommendations.read",
+  "models.read",
+]);
+
 export type Scope = (typeof VALID_SCOPES)[number];
 
 export function ensureScoped(requiredScope: Scope) {
@@ -927,13 +938,13 @@ export function createAuthRoutes(
         return res.status(400).json({ error: "Valid email is required" });
       }
       if (scopes && Array.isArray(scopes)) {
-        const invalid = scopes.filter(
-          (s: string) => !(VALID_SCOPES as readonly string[]).includes(s),
+        const disallowed = scopes.filter(
+          (s: string) => !SIGNUP_ALLOWED_SCOPES.has(s),
         );
-        if (invalid.length > 0) {
-          return res
-            .status(400)
-            .json({ error: `Invalid scopes: ${invalid.join(", ")}` });
+        if (disallowed.length > 0) {
+          return res.status(400).json({
+            error: `Scopes not allowed on signup: ${disallowed.join(", ")}. Use POST /sdk-keys with a Clerk session for elevated scopes.`,
+          });
         }
       }
       if (

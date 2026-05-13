@@ -2,7 +2,7 @@ import { Router, Request, Response } from "express";
 import type { Pool } from "pg";
 import crypto from "crypto";
 import rateLimit from "express-rate-limit";
-import { type AuthRequest, ensureScoped } from "./auth.js";
+import { type AuthRequest, ensureScoped, createKeyHelpers } from "./auth.js";
 import { encryptApiKey, decryptApiKey } from "../stripe-client.js";
 import { calculateCostFromTokens } from "../model-pricing.js";
 import { checkAlerts, checkCustomerAlerts } from "./alerts.js";
@@ -26,6 +26,7 @@ export function createEventsIngestRoutes(
   },
 ) {
   const router = Router();
+  const { resolveKey } = createKeyHelpers(pool);
 
   // POST /sdk-keys — Generate a new SDK API key
   router.post(
@@ -249,46 +250,32 @@ export function createEventsIngestRoutes(
       try {
         let userId: string | null = null;
 
-        // Auth: Bearer token first, then session fallback
         const authHeader = req.headers.authorization;
         if (authHeader && authHeader.startsWith("Bearer ")) {
           const token = authHeader.slice(7).trim();
           if (token) {
-            const keyHash = crypto
-              .createHash("sha256")
-              .update(token)
-              .digest("hex");
-            const keyResult = await pool.query(
-              "SELECT user_id, account_id FROM sdk_api_keys WHERE key_hash = $1 AND revoked_at IS NULL",
-              [keyHash],
-            );
-            if (keyResult.rows.length > 0) {
-              userId = keyResult.rows[0].user_id;
-              if (keyResult.rows[0].account_id != null) {
-                (req as AuthRequest).accountId = keyResult.rows[0].account_id;
-              }
-              // Update last_used_at
-              pool
-                .query(
-                  "UPDATE sdk_api_keys SET last_used_at = NOW() WHERE key_hash = $1",
-                  [keyHash],
-                )
-                .catch((err) =>
-                  console.error(
-                    "Failed to update sdk_api_keys last_used_at:",
-                    err,
-                  ),
-                );
-            } else {
-              // Bearer token provided but invalid — don't fall through to session
+            const key = await resolveKey(token);
+            if (!key) {
               return res.status(401).json({
-                error: "Invalid API key. Check your Bearer token.",
+                error: "Invalid or expired API key.",
               });
+            }
+            if (
+              key.scopes &&
+              !key.scopes.includes("events.write") &&
+              !key.scopes.includes("admin")
+            ) {
+              return res.status(403).json({
+                error: "This API key does not have the 'events.write' scope",
+              });
+            }
+            userId = key.user_id;
+            if (key.account_id != null) {
+              (req as AuthRequest).accountId = key.account_id;
             }
           }
         }
 
-        // Fallback to session-based auth (only when no Bearer token provided)
         if (!userId) {
           const authReq = req as AuthRequest;
           if (authReq.session?.visitorId) {
