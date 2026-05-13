@@ -565,6 +565,139 @@ For Path 2/3 (gateway), use the request headers instead: `Observe-Trace-Id`,
 
 ---
 
+## Agent Self-Serve API
+
+Agents can programmatically create accounts, get API keys, and manage their own
+access without a human in the loop. No auth required for signup — rate limited
+to 3 requests per hour per IP.
+
+### Sign up and get a key
+
+```bash
+curl -X POST https://observe.tansohq.com/api/signup \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "agent@yourapp.com",
+    "scopes": ["usage.read", "events.write", "proxy.chat"],
+    "budget_cents": 5000,
+    "budget_period": "month",
+    "expires_in_seconds": 86400
+  }'
+```
+
+Response: `{ "key": "obs_...", "scopes": [...], "expires_at": "...", "budget_cents": 5000, "budget_period": "month" }`
+
+| Field | Required | Default | Description |
+|-------|----------|---------|-------------|
+| `email` | Yes | — | Account email |
+| `scopes` | No | `["usage.read", "billing.read"]` | Scopes for this key |
+| `budget_cents` | No | null (unlimited) | Per-key LLM spend cap in cents |
+| `budget_period` | No | null (lifetime) | `"month"` or `"day"` — resets budget on period boundary |
+| `expires_in_seconds` | No | 86400 (24h) | Key auto-expires after this many seconds |
+
+Returns 409 if the email is already registered.
+
+### Check your key's capabilities
+
+```bash
+curl https://observe.tansohq.com/api/sdk-keys/me \
+  -H "Authorization: Bearer obs_..."
+```
+
+Response:
+```json
+{
+  "auth_type": "sdk_key",
+  "key_prefix": "obs_abc1234",
+  "name": "default",
+  "scopes": ["usage.read", "events.write", "proxy.chat"],
+  "budget_cents": 5000,
+  "budget_used_cents": 120,
+  "budget_remaining_cents": 4880,
+  "budget_period": "month",
+  "budget_reset_at": "2026-06-01T00:00:00.000Z",
+  "expires_at": "2026-05-14T18:00:00.000Z"
+}
+```
+
+### Check your plan and limits
+
+```bash
+curl https://observe.tansohq.com/api/plan \
+  -H "Authorization: Bearer obs_..."
+```
+
+Response:
+```json
+{
+  "plan": "free",
+  "name": "Free",
+  "features": {
+    "event_ingest": { "limit": 10000, "usage": 42, "remaining": 9958 },
+    "ai_insights": { "limit": 1000, "usage": 0, "remaining": 1000 },
+    "cost_alerts": { "limit": 3, "usage": 0, "remaining": 3 }
+  },
+  "upgradeUrl": "https://observe.tansohq.com/settings"
+}
+```
+
+### Available scopes
+
+| Scope | Grants access to |
+|-------|-----------------|
+| `proxy.chat` | LLM proxy and gateway endpoints |
+| `events.read` | Read events, traces, aggregations |
+| `events.write` | Ingest events, manage SDK keys |
+| `usage.read` | Read features, analytics, simulations |
+| `usage.write` | Modify feature definitions, run simulations |
+| `customers.read` | Read customers, subscriptions, cohorts |
+| `customers.write` | Modify customers, cohorts, upload data |
+| `billing.read` | Read plan, entitlements, cloud costs |
+| `billing.write` | Modify cloud cost integrations |
+| `alerts.read` | Read alert rules and history |
+| `alerts.write` | Create/modify/delete alert rules |
+| `recommendations.read` | Read and act on recommendations |
+| `models.read` | Read model pricing and stats |
+| `admin` | Full access to all endpoints |
+
+Keys with `null` scopes (e.g., keys created before capability keys) have
+unrestricted access — backwards compatible with existing integrations.
+
+### Budget enforcement
+
+Budget is tracked per key on LLM proxy/gateway calls only. Management API calls
+(reading analytics, managing alerts) are free and unmetered.
+
+When a key's `budget_used_cents` reaches `budget_cents`, proxy/gateway calls
+return 429:
+```json
+{ "error": { "message": "Budget exceeded for this API key", "type": "budget_error" } }
+```
+
+Budget resets automatically at `budget_reset_at` (lazy reset on next API call).
+Account plan limits are the ceiling — individual keys subdivide the budget.
+
+### Create additional scoped keys (humans only)
+
+Authenticated humans (Clerk JWT) can mint additional keys on their account with
+different scopes and budgets:
+
+```bash
+curl -X POST https://observe.tansohq.com/api/sdk-keys \
+  -H "Authorization: Bearer <clerk-jwt>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "sales-enrichment",
+    "scopes": ["proxy.chat", "customers.read"],
+    "budget_cents": 4000,
+    "budget_period": "month"
+  }'
+```
+
+SDK keys cannot create other keys — only Clerk-authenticated humans can.
+
+---
+
 ## Management API (same `obs_*` key)
 
 The same API key used for event ingestion also grants access to Observe's full
@@ -572,6 +705,7 @@ read/write management API. An agent can query analytics, manage alerts, and
 configure features without opening the dashboard.
 
 All endpoints accept `Authorization: Bearer obs_...` or the `Observe-Key` header.
+Scoped keys are restricted to endpoints matching their scopes (see scope table above).
 
 ### Analytics & querying
 
