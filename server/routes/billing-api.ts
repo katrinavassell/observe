@@ -1484,5 +1484,58 @@ export function createBillingApiRoutes(
     },
   );
 
+  router.get(
+    "/sdk-keys/me",
+    deps.ensureAuth || ensureVisitor,
+    async (req: AuthRequest, res: Response) => {
+      try {
+        if (!req.keyId) {
+          return res.json({
+            auth_type: "clerk",
+            scopes: null,
+            budget_cents: null,
+            budget_used_cents: 0,
+          });
+        }
+
+        const result = await pool.query(
+          `SELECT id, key_prefix, name, scopes, budget_cents, budget_used_cents,
+                  budget_period, budget_reset_at, expires_at, delegated_by,
+                  created_at, last_used_at
+           FROM sdk_api_keys WHERE id = $1`,
+          [req.keyId],
+        );
+        if (result.rows.length === 0) {
+          return res.status(404).json({ error: "Key not found" });
+        }
+
+        const row = result.rows[0];
+        const budgetRemaining =
+          row.budget_cents != null
+            ? Math.max(0, row.budget_cents - (row.budget_used_cents || 0))
+            : null;
+
+        res.json({
+          auth_type: "sdk_key",
+          key_prefix: row.key_prefix,
+          name: row.name,
+          scopes: row.scopes ?? null,
+          budget_cents: row.budget_cents ?? null,
+          budget_used_cents: row.budget_used_cents ?? 0,
+          budget_remaining_cents: budgetRemaining,
+          budget_period: row.budget_period ?? null,
+          budget_reset_at: row.budget_reset_at ?? null,
+          expires_at: row.expires_at ?? null,
+          delegated_by: row.delegated_by ?? null,
+          created_at: row.created_at,
+          last_used_at: row.last_used_at,
+        });
+      } catch (error) {
+        console.error("GET /sdk-keys/me error:", error);
+        res.status(500).json({ error: "Failed to fetch key info" });
+      }
+    },
+  );
+
   return router;
 }

@@ -100,7 +100,9 @@ export function createEventsIngestRoutes(
           return res.status(400).json({ error: "No account resolved" });
         }
         const result = await pool.query(
-          "SELECT id, key_prefix, encrypted_key, name, created_at, last_used_at FROM sdk_api_keys WHERE account_id = $1 AND revoked_at IS NULL ORDER BY created_at DESC",
+          `SELECT id, key_prefix, encrypted_key, name, created_at, last_used_at,
+                  scopes, budget_cents, budget_used_cents, budget_period, budget_reset_at, expires_at, delegated_by
+           FROM sdk_api_keys WHERE account_id = $1 AND revoked_at IS NULL ORDER BY created_at DESC`,
           [req.accountId],
         );
         const keys = result.rows.map((row) => {
@@ -122,6 +124,13 @@ export function createEventsIngestRoutes(
             name: row.name,
             created_at: row.created_at,
             last_used_at: row.last_used_at,
+            scopes: row.scopes ?? null,
+            budget_cents: row.budget_cents ?? null,
+            budget_used_cents: row.budget_used_cents ?? 0,
+            budget_period: row.budget_period ?? null,
+            budget_reset_at: row.budget_reset_at ?? null,
+            expires_at: row.expires_at ?? null,
+            delegated_by: row.delegated_by ?? null,
           };
         });
         res.json(keys);
