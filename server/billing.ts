@@ -99,7 +99,7 @@ export async function checkFeatureAccess(
   if (!featureConfig) {
     return {
       allowed: false,
-      reason: `${featureKey} is not available on the ${planConfig.name} plan. Need more capacity? Check out Tanso at tansohq.com`,
+      reason: `${featureKey} is not available on the ${planConfig.name} plan.${process.env.OBSERVE_EDITION === "cloud" ? " Need more capacity? Check out Tanso at tansohq.com" : " Upgrade your plan for more capacity."}`,
     };
   }
 

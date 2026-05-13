@@ -6,13 +6,11 @@ import { type AuthRequest } from "./auth.js";
 const ADMIN_EMAILS_LIST = (() => {
   const legacy = process.env.ADMIN_EMAIL
     ? [process.env.ADMIN_EMAIL.toLowerCase()]
-    : ["tansoadmin@tansohq.com"];
+    : [];
   const list = process.env.ADMIN_EMAILS
     ? process.env.ADMIN_EMAILS.split(",").map((e) => e.trim().toLowerCase())
     : [];
-  return Array.from(
-    new Set([...legacy, ...list, "kat@tansohq.com", "doug@tansohq.com"]),
-  );
+  return Array.from(new Set([...legacy, ...list]));
 })();
 
 function isAdminEmail(email?: string | null): boolean {
@@ -955,9 +953,7 @@ Return ONLY the JSON array, no markdown or explanation.`;
     ensureVisitor,
     async (req: AuthRequest, res: Response) => {
       try {
-        const adminEmail4 = (
-          process.env.ADMIN_EMAIL || "tansoadmin@tansohq.com"
-        ).toLowerCase();
+        const adminEmail4 = (process.env.ADMIN_EMAIL || "").toLowerCase();
         if (
           !req.accountEmail ||
           req.accountEmail.toLowerCase() !== adminEmail4

@@ -6,7 +6,7 @@ export default async function handler(
 ) {
   const apiUrl = process.env.VERCEL_URL
     ? `https://${process.env.VERCEL_URL}/api/pricing/models`
-    : "https://observe.tansohq.com/api/pricing/models";
+    : "http://localhost:3001/api/pricing/models";
 
   try {
     const response = await fetch(apiUrl);

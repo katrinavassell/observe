@@ -3,7 +3,7 @@
 **AI cost observability that connects cost to revenue to margin.**
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
-[![GitHub stars](https://img.shields.io/github/stars/katrinalaszlo/observe)](https://github.com/katrinalaszlo/observe)
+[![GitHub stars](https://img.shields.io/github/stars/tansohq/observe)](https://github.com/tansohq/observe)
 
 ![Observe Dashboard](docs/images/dashboard-screenshot.png)
 
@@ -47,7 +47,7 @@ If you're running an AI product and you're losing money on a subset of customers
 ### Docker (recommended)
 
 ```bash
-git clone https://github.com/katrinalaszlo/observe.git
+git clone https://github.com/tansohq/observe.git
 cd observe
 cp .env.example .env
 docker compose up
@@ -60,7 +60,7 @@ App: `http://localhost:3000`
 **Prerequisites:** Node.js 20+, PostgreSQL 16+ (or Supabase Postgres)
 
 ```bash
-git clone https://github.com/katrinalaszlo/observe.git
+git clone https://github.com/tansohq/observe.git
 cd observe
 npm install
 cp .env.example .env
@@ -304,8 +304,8 @@ npm run lint        # lint
 ## Community
 
 - [Discord](https://discord.gg/6GHcsaQTy7) — chat with the team and other users
-- [GitHub Issues](https://github.com/katrinalaszlo/observe/issues) — bug reports and feature requests
-- [GitHub Discussions](https://github.com/katrinalaszlo/observe/discussions) — questions, ideas, show & tell
+- [GitHub Issues](https://github.com/tansohq/observe/issues) — bug reports and feature requests
+- [GitHub Discussions](https://github.com/tansohq/observe/discussions) — questions, ideas, show & tell
 
 ---
 

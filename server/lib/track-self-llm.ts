@@ -1,5 +1,4 @@
-const OBSERVE_URL =
-  process.env.OBSERVE_BASE_URL || "https://observe.tansohq.com";
+const OBSERVE_URL = process.env.OBSERVE_BASE_URL || "http://localhost:3001";
 
 export function trackSelfLLM(params: {
   featureKey: string;

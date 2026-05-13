@@ -413,9 +413,6 @@ export function createAuthRoutes(
 
         if (isNewUser) {
           const adminEmailsForDogfood = [
-            "tansoadmin@tansohq.com",
-            "kat@tansohq.com",
-            "doug@tansohq.com",
             ...(process.env.ADMIN_EMAILS
               ? process.env.ADMIN_EMAILS.split(",").map((e) =>
                   e.trim().toLowerCase(),
@@ -552,33 +549,49 @@ export function createAuthRoutes(
             Date.now() + 2 * 24 * 60 * 60 * 1000,
           ).toISOString();
 
+          const isCloud = process.env.OBSERVE_EDITION === "cloud";
+          const fromEmail =
+            process.env.ALERT_FROM_EMAIL || "alerts@example.com";
+          const adminEmails = (process.env.ADMIN_EMAILS || "")
+            .split(",")
+            .filter(Boolean);
+          const appUrl = process.env.APP_URL || "http://localhost:3000";
+
           await Promise.allSettled([
-            resendPost({
-              from: "Observe <kat@tansohq.com>",
-              to: ["kat@tansohq.com", "doug@tansohq.com"],
-              subject: `New signup: ${email}`,
-              html: `<p><strong>New user signed up for Observe</strong></p><p>Email: ${email}</p><p>Name: ${name?.trim() || "(not provided)"}</p><p>Time: ${new Date().toISOString()}</p>`,
-            }),
-            resendPost({
-              from: "Kat from Observe <kat@tansohq.com>",
-              to: email,
-              subject: "Welcome to Observe",
-              html: `<p>Hey there!</p>
+            ...(adminEmails.length
+              ? [
+                  resendPost({
+                    from: `Observe <${fromEmail}>`,
+                    to: adminEmails,
+                    subject: `New signup: ${email}`,
+                    html: `<p><strong>New user signed up for Observe</strong></p><p>Email: ${email}</p><p>Name: ${name?.trim() || "(not provided)"}</p><p>Time: ${new Date().toISOString()}</p>`,
+                  }),
+                ]
+              : []),
+            ...(isCloud
+              ? [
+                  resendPost({
+                    from: "Kat from Observe <kat@tansohq.com>",
+                    to: email,
+                    subject: "Welcome to Observe",
+                    html: `<p>Hey there!</p>
 <p>Just wanted to say thank you for signing up for Observe by Tanso! Would love to learn about what you're building and what brought you here.</p>
 <p>Feel free to reach out with any questions or feedback. Also down to hop on a quick call if that's easier: <a href="https://cal.com/katrina-laszlo/meeting">https://cal.com/katrina-laszlo/meeting</a></p>
 <p>Kat<br/>Co-founder, Tanso</p>`,
-            }),
-            resendPost({
-              from: "Kat from Observe <kat@tansohq.com>",
-              to: email,
-              subject: "How's setup going?",
-              scheduled_at: followUpAt,
-              html: `<p>Hey${name?.trim() ? ` ${name.trim()}` : ""}!</p>
+                  }),
+                  resendPost({
+                    from: "Kat from Observe <kat@tansohq.com>",
+                    to: email,
+                    subject: "How's setup going?",
+                    scheduled_at: followUpAt,
+                    html: `<p>Hey${name?.trim() ? ` ${name.trim()}` : ""}!</p>
 <p>Just checking in — have you had a chance to get your SDK key set up? If you're running into anything or have questions about connecting your data, I'm happy to help.</p>
-<p>Here's a quick link to the setup guide: <a href="https://observe.tansohq.com/data-sources">observe.tansohq.com/data-sources</a></p>
+<p>Here's a quick link to the setup guide: <a href="${appUrl}/data-sources">${appUrl}/data-sources</a></p>
 <p>Or grab time with me directly: <a href="https://cal.com/katrina-laszlo/meeting">cal.com/katrina-laszlo/meeting</a></p>
 <p>Kat<br/>Co-founder, Tanso</p>`,
-            }),
+                  }),
+                ]
+              : []),
           ]);
         }
 

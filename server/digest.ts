@@ -158,7 +158,7 @@ async function sendDigestEmail(email: string, html: string): Promise<boolean> {
     return false;
   }
 
-  const fromEmail = process.env.ALERT_FROM_EMAIL || "kat@tansohq.com";
+  const fromEmail = process.env.ALERT_FROM_EMAIL || "alerts@example.com";
 
   try {
     const res = await fetch("https://api.resend.com/emails", {

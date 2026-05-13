@@ -76,7 +76,9 @@ function handleSeeMargins() {
 function handleDesignPartner() {
   toast.info("Design Partner Program", {
     description:
-      "We're looking for SaaS companies to help shape Observe. Email kat@tansohq.com to join.",
+      import.meta.env.VITE_OBSERVE_EDITION === "cloud"
+        ? "We're looking for SaaS companies to help shape Observe. Email kat@tansohq.com to join."
+        : "We're looking for SaaS companies to help shape Observe. Join our Discord to get involved.",
   });
 }
 </script>

@@ -67,7 +67,7 @@ const copiedLink = ref(false);
 
 const inviteLink = computed(() =>
   inviteToken.value
-    ? `https://observe.tansohq.com/join/${inviteToken.value}`
+    ? `${window.location.origin}/join/${inviteToken.value}`
     : "",
 );
 

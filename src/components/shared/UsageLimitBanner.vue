@@ -10,6 +10,8 @@ defineProps<{
   barColor: string;
   hasLimit: boolean;
 }>();
+
+const isCloud = import.meta.env.VITE_OBSERVE_EDITION === "cloud";
 </script>
 
 <template>
@@ -63,12 +65,20 @@ defineProps<{
     <div v-if="!allowed" class="mt-2 flex items-center justify-between">
       <span class="text-xs text-red-600 dark:text-red-400">Limit reached</span>
       <a
+        v-if="isCloud"
         href="https://tansohq.com"
         target="_blank"
         class="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
       >
         Need more? Try Tanso <ArrowUpRight class="h-3 w-3" />
       </a>
+      <RouterLink
+        v-else
+        to="/plans"
+        class="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+      >
+        Upgrade plan <ArrowUpRight class="h-3 w-3" />
+      </RouterLink>
     </div>
     <div
       v-else-if="usagePercent >= 70"
@@ -78,12 +88,20 @@ defineProps<{
         >Approaching limit</span
       >
       <a
+        v-if="isCloud"
         href="https://tansohq.com"
         target="_blank"
         class="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
       >
         Need more? Try Tanso <ArrowUpRight class="h-3 w-3" />
       </a>
+      <RouterLink
+        v-else
+        to="/plans"
+        class="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+      >
+        Upgrade plan <ArrowUpRight class="h-3 w-3" />
+      </RouterLink>
     </div>
   </div>
 </template>
