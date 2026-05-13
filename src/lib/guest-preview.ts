@@ -26,6 +26,7 @@ import type {
   CohortSummary,
   CohortTotals,
   EventDetail,
+  AnalyticsOverview,
 } from "@/lib/api";
 
 const ISO = (offsetMinutes: number) =>
@@ -1144,3 +1145,86 @@ export const GUEST_COHORT_TOTALS: CohortTotals = (() => {
     avg_health_score: avg_health,
   };
 })();
+
+export const GUEST_ANALYTICS_OVERVIEW: AnalyticsOverview = {
+  summary: {
+    total_cost: 187.32,
+    total_revenue: 892.5,
+    margin_pct: 79,
+    total_usage: 4218,
+    event_count: 4218,
+    customer_count: 15,
+  },
+  margin_trend: [
+    {
+      month: "2026-03",
+      cost: 142.1,
+      revenue: 680.0,
+      usage: 3100,
+      margin_pct: 79.1,
+      event_count: 3100,
+      customer_count: 12,
+    },
+    {
+      month: "2026-04",
+      cost: 187.32,
+      revenue: 892.5,
+      usage: 4218,
+      margin_pct: 79.0,
+      event_count: 4218,
+      customer_count: 15,
+    },
+  ],
+  feature_roi: GUEST_EVENTS_BY_FEATURE.map((f) => ({
+    feature_key: f.feature_key,
+    cost: f.total_cost,
+    revenue: f.total_revenue,
+    usage: f.total_usage,
+    margin_pct: f.margin_pct,
+    cost_per_unit: f.total_cost / f.event_count,
+    revenue_per_unit: f.total_revenue / f.event_count,
+    event_count: f.event_count,
+    customer_count: Math.ceil(f.event_count / 80),
+  })),
+  customer_pnl: GUEST_EVENTS_BY_CUSTOMER.map((c) => ({
+    customer_id: c.customer_id,
+    customer_name: c.customer_name || c.customer_id,
+    cost: c.total_cost,
+    revenue: c.total_revenue,
+    margin_pct: c.margin_pct,
+    event_count: c.event_count,
+    usage: c.event_count,
+  })),
+  provider_breakdown: [
+    {
+      provider: "openai",
+      model: "gpt-4o",
+      cost: 120.5,
+      event_count: 2800,
+      avg_cost_per_call: 0.043,
+    },
+    {
+      provider: "anthropic",
+      model: "claude-3.5-sonnet",
+      cost: 48.11,
+      event_count: 918,
+      avg_cost_per_call: 0.052,
+    },
+    {
+      provider: "openai",
+      model: "gpt-4o-mini",
+      cost: 18.71,
+      event_count: 500,
+      avg_cost_per_call: 0.037,
+    },
+  ],
+  active_alert_count: 2,
+  pending_recommendation_count: 1,
+  top_recommendations: [
+    {
+      type: "provider_diversification",
+      title: "All traffic goes through openai",
+      severity: "info",
+    },
+  ],
+};

@@ -1,15 +1,16 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed } from "vue";
 import { useQuery } from "@tanstack/vue-query";
 import { useRouter } from "vue-router";
 import {
   getAnalyticsOverview,
   getDailySummary,
   getCostToServe,
+  type AnalyticsOverview,
   type OverviewFeatureROI,
   type OverviewCustomerPnL,
-  type SpendType,
 } from "@/lib/api";
+import { GUEST_ANALYTICS_OVERVIEW } from "@/lib/guest-preview";
 import {
   AlertCircle,
   Plug,
@@ -31,29 +32,30 @@ const router = useRouter();
 const { isLoggedIn } = useAuth();
 const { getStatus } = useMarginThresholds();
 
-const spendType = ref<SpendType>("all");
-const isInternal = computed(() => spendType.value === "internal");
-
 const {
-  data: overview,
+  data: realOverview,
   isLoading,
   isError,
 } = useQuery({
-  queryKey: computed(() => ["analytics-overview", spendType.value]),
-  queryFn: () => getAnalyticsOverview(spendType.value),
+  queryKey: ["analytics-overview"],
+  queryFn: () => getAnalyticsOverview(),
   enabled: computed(() => isLoggedIn.value),
 });
 
+const overview = computed<AnalyticsOverview | undefined>(() =>
+  isLoggedIn.value ? realOverview.value : GUEST_ANALYTICS_OVERVIEW,
+);
+
 const { data: dailyData } = useQuery({
-  queryKey: computed(() => ["daily-summary", 30, spendType.value]),
-  queryFn: () => getDailySummary(30, spendType.value),
+  queryKey: computed(() => ["daily-summary", 30]),
+  queryFn: () => getDailySummary(30),
   enabled: computed(() => isLoggedIn.value),
 });
 
 const { data: costToServeData } = useQuery({
   queryKey: ["cost-to-serve"],
   queryFn: getCostToServe,
-  enabled: computed(() => isLoggedIn.value && !isInternal.value),
+  enabled: computed(() => isLoggedIn.value),
 });
 
 const dailySeries = computed(() => dailyData.value?.data ?? []);
@@ -229,33 +231,10 @@ function downloadCsv() {
       <div>
         <h1 class="text-2xl font-semibold tracking-tight">Overview</h1>
         <p class="text-muted-foreground text-sm mt-0.5">
-          {{
-            isInternal
-              ? "Internal AI spend breakdown"
-              : "For every dollar you spend, here's what value it produced"
-          }}
+          For every dollar you spend, here's what value it produced
         </p>
       </div>
       <div class="flex items-center gap-2">
-        <div class="flex rounded-lg border p-0.5 text-xs">
-          <button
-            v-for="opt in [
-              { value: 'all', label: 'All' },
-              { value: 'customer_facing', label: 'Customer-Facing' },
-              { value: 'internal', label: 'Internal' },
-            ] as const"
-            :key="opt.value"
-            class="px-3 py-1.5 rounded-md transition-colors"
-            :class="
-              spendType === opt.value
-                ? 'bg-foreground text-background font-medium'
-                : 'text-muted-foreground hover:text-foreground'
-            "
-            @click="spendType = opt.value"
-          >
-            {{ opt.label }}
-          </button>
-        </div>
         <Button v-if="hasData" size="sm" variant="outline" @click="downloadCsv">
           <Download class="h-3.5 w-3.5 mr-1.5" />
           Export CSV
@@ -305,14 +284,8 @@ function downloadCsv() {
     <!-- Dashboard -->
     <template v-else-if="overview">
       <!-- KPI cards -->
-      <div
-        :class="
-          isInternal
-            ? 'grid grid-cols-2 gap-4'
-            : 'grid grid-cols-2 sm:grid-cols-4 gap-4'
-        "
-      >
-        <Card v-if="!isInternal" class="p-4">
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <Card class="p-4">
           <div class="text-xs text-muted-foreground uppercase tracking-wider">
             Revenue
           </div>
@@ -332,7 +305,7 @@ function downloadCsv() {
 
         <Card class="p-4">
           <div class="text-xs text-muted-foreground uppercase tracking-wider">
-            {{ isInternal ? "Internal Spend" : "Total Cost" }}
+            Total Cost
           </div>
           <div class="text-2xl font-semibold tabular-nums mt-1">
             {{ fmt(overview.summary.total_cost) }}
@@ -348,14 +321,11 @@ function downloadCsv() {
           </div>
         </Card>
 
-        <Card v-if="!isInternal" class="p-4">
+        <Card class="p-4">
           <div class="text-xs text-muted-foreground uppercase tracking-wider">
             Gross Margin
           </div>
-          <div
-            class="text-2xl font-semibold tabular-nums mt-1"
-            :class="marginColor(overview.summary.margin_pct)"
-          >
+          <div class="text-2xl font-semibold tabular-nums mt-1">
             {{ formatPct(overview.summary.margin_pct) }}
           </div>
           <div
@@ -458,11 +428,7 @@ function downloadCsv() {
       <Card v-if="sortedFeatures.length > 0">
         <CardContent class="p-5">
           <div class="flex items-center justify-between mb-3">
-            <h3 class="text-base font-semibold">
-              {{
-                isInternal ? "Internal Tool Costs" : "Feature Unit Economics"
-              }}
-            </h3>
+            <h3 class="text-base font-semibold">Feature Unit Economics</h3>
             <router-link
               to="/features"
               class="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1"
@@ -474,23 +440,13 @@ function downloadCsv() {
             <table class="w-full text-sm">
               <thead>
                 <tr class="border-b text-xs text-muted-foreground">
-                  <th class="text-left pb-2 font-medium">
-                    {{ isInternal ? "Tool" : "Feature" }}
-                  </th>
+                  <th class="text-left pb-2 font-medium">Feature</th>
                   <th class="text-right pb-2 font-medium">Cost</th>
-                  <th v-if="!isInternal" class="text-right pb-2 font-medium">
-                    Revenue
-                  </th>
+                  <th class="text-right pb-2 font-medium">Revenue</th>
                   <th class="text-right pb-2 font-medium">Cost/Unit</th>
-                  <th v-if="!isInternal" class="text-right pb-2 font-medium">
-                    Rev/Unit
-                  </th>
-                  <th v-if="!isInternal" class="text-right pb-2 font-medium">
-                    Margin
-                  </th>
-                  <th class="text-right pb-2 font-medium">
-                    {{ isInternal ? "Events" : "Customers" }}
-                  </th>
+                  <th class="text-right pb-2 font-medium">Rev/Unit</th>
+                  <th class="text-right pb-2 font-medium">Margin</th>
+                  <th class="text-right pb-2 font-medium">Customers</th>
                 </tr>
               </thead>
               <tbody>
@@ -503,22 +459,16 @@ function downloadCsv() {
                   <td class="py-2.5 text-right font-mono tabular-nums">
                     {{ fmt(f.cost) }}
                   </td>
-                  <td
-                    v-if="!isInternal"
-                    class="py-2.5 text-right font-mono tabular-nums"
-                  >
+                  <td class="py-2.5 text-right font-mono tabular-nums">
                     {{ fmt(f.revenue) }}
                   </td>
                   <td class="py-2.5 text-right font-mono tabular-nums">
                     {{ fmt(f.cost_per_unit) }}
                   </td>
-                  <td
-                    v-if="!isInternal"
-                    class="py-2.5 text-right font-mono tabular-nums"
-                  >
+                  <td class="py-2.5 text-right font-mono tabular-nums">
                     {{ fmt(f.revenue_per_unit) }}
                   </td>
-                  <td v-if="!isInternal" class="py-2.5 text-right">
+                  <td class="py-2.5 text-right">
                     <span
                       :class="marginColor(f.margin_pct)"
                       class="font-mono tabular-nums"
@@ -527,11 +477,7 @@ function downloadCsv() {
                     </span>
                   </td>
                   <td class="py-2.5 text-right text-muted-foreground">
-                    {{
-                      isInternal
-                        ? f.event_count.toLocaleString()
-                        : f.customer_count
-                    }}
+                    {{ f.customer_count }}
                   </td>
                 </tr>
               </tbody>
@@ -540,8 +486,8 @@ function downloadCsv() {
         </CardContent>
       </Card>
 
-      <!-- Customer P&L (hidden in internal view) -->
-      <Card v-if="sortedCustomers.length > 0 && !isInternal">
+      <!-- Customer P&L -->
+      <Card v-if="sortedCustomers.length > 0">
         <CardContent class="p-5">
           <div class="flex items-center justify-between mb-3">
             <h3 class="text-base font-semibold">Customer P&L</h3>
@@ -604,7 +550,7 @@ function downloadCsv() {
       </Card>
 
       <!-- Cost-to-Serve (only when contracts exist) -->
-      <Card v-if="costToServeData?.customers?.length && !isInternal">
+      <Card v-if="costToServeData?.customers?.length">
         <CardContent class="p-5">
           <div class="flex items-center justify-between mb-3">
             <h3 class="text-base font-semibold">
