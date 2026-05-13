@@ -1,7 +1,7 @@
 import { Router, Request, Response } from "express";
 import type { Pool } from "pg";
 import crypto from "crypto";
-import { type AuthRequest } from "./auth.js";
+import { type AuthRequest, createKeyHelpers } from "./auth.js";
 import {
   getProvider,
   type ProviderRequest,
@@ -153,27 +153,13 @@ export function createGatewayRoutes(
 
   // ── Helpers ──────────────────────────────────────────────────────────────
 
+  const { resolveKey, checkBudget, incrementBudget } = createKeyHelpers(pool);
+
   async function resolveProxyUserId(
     observeKey: string,
   ): Promise<string | null> {
-    const keyHash = crypto
-      .createHash("sha256")
-      .update(observeKey)
-      .digest("hex");
-    const result = await pool.query(
-      "SELECT user_id FROM sdk_api_keys WHERE key_hash = $1 AND revoked_at IS NULL",
-      [keyHash],
-    );
-    if (result.rows.length === 0) return null;
-    pool
-      .query(
-        "UPDATE sdk_api_keys SET last_used_at = NOW() WHERE key_hash = $1",
-        [keyHash],
-      )
-      .catch((err) =>
-        console.error("Failed to update sdk_api_keys last_used_at:", err),
-      );
-    return result.rows[0].user_id;
+    const key = await resolveKey(observeKey);
+    return key?.user_id ?? null;
   }
 
   async function loadConfig(
@@ -679,8 +665,8 @@ export function createGatewayRoutes(
           });
         }
 
-        const userId = await resolveProxyUserId(observeKey);
-        if (!userId) {
+        const resolvedKey = await resolveKey(observeKey);
+        if (!resolvedKey) {
           return res.status(401).json({
             error: {
               message: "Invalid or revoked observe key",
@@ -688,6 +674,28 @@ export function createGatewayRoutes(
             },
           });
         }
+        if (
+          resolvedKey.scopes &&
+          !resolvedKey.scopes.includes("proxy.chat") &&
+          !resolvedKey.scopes.includes("admin")
+        ) {
+          return res.status(403).json({
+            error: {
+              message: "This API key does not have the 'proxy.chat' scope",
+              type: "scope_error",
+            },
+          });
+        }
+        const budgetCheck = await checkBudget(resolvedKey);
+        if (!budgetCheck.allowed) {
+          return res.status(429).json({
+            error: {
+              message: "Budget exceeded for this API key",
+              type: "budget_error",
+            },
+          });
+        }
+        const userId = resolvedKey.user_id;
 
         const configName =
           (req.headers["x-observe-config"] as string) || "default";
@@ -789,6 +797,11 @@ export function createGatewayRoutes(
               response.inputTokens,
               response.outputTokens,
             );
+            if (resolvedKey.budget_cents !== null && cost > 0) {
+              incrementBudget(resolvedKey.id, Math.round(cost * 100)).catch(
+                (err) => console.error("Budget increment failed:", err),
+              );
+            }
             logGatewayEvent(
               userId,
               response.model,
@@ -839,6 +852,11 @@ export function createGatewayRoutes(
             response.inputTokens,
             response.outputTokens,
           );
+          if (resolvedKey.budget_cents !== null && cost > 0) {
+            incrementBudget(resolvedKey.id, Math.round(cost * 100)).catch(
+              (err) => console.error("Budget increment failed:", err),
+            );
+          }
           logGatewayEvent(
             userId,
             response.model,

@@ -2,7 +2,7 @@ import { Router, Request, Response } from "express";
 import type { Pool } from "pg";
 import crypto from "crypto";
 import rateLimit from "express-rate-limit";
-import { type AuthRequest } from "./auth.js";
+import { type AuthRequest, ensureScoped, createKeyHelpers } from "./auth.js";
 import { encryptApiKey, decryptApiKey } from "../stripe-client.js";
 import { calculateCostFromTokens } from "../model-pricing.js";
 import { checkAlerts, checkCustomerAlerts } from "./alerts.js";
@@ -26,79 +26,22 @@ export function createEventsIngestRoutes(
   },
 ) {
   const router = Router();
-
-  // POST /sdk-keys — Generate a new SDK API key
-  router.post(
-    "/sdk-keys",
-    ensureVisitor,
-    async (req: AuthRequest, res: Response) => {
-      try {
-        if (!req.accountEmail) {
-          return res.status(401).json({ error: "Authentication required" });
-        }
-        const userId = req.visitorId!;
-        const rawName =
-          typeof req.body?.name === "string" ? req.body.name.trim() : "";
-        const name = rawName.length > 0 ? rawName.slice(0, 100) : "default";
-
-        const rawKey = "obs_" + crypto.randomBytes(24).toString("hex");
-        const keyHash = crypto
-          .createHash("sha256")
-          .update(rawKey)
-          .digest("hex");
-        const keyPrefix = rawKey.slice(0, 11);
-        const encryptedKey = encryptApiKey(rawKey);
-
-        // Auto-disambiguate the name if (user_id, name) already exists —
-        // avoids leaking DB error messages back to the caller.
-        if (!req.accountId) {
-          return res.status(400).json({ error: "No account resolved" });
-        }
-
-        let finalName = name;
-        for (let attempt = 0; attempt < 10; attempt++) {
-          const candidate = attempt === 0 ? name : `${name}-${attempt + 1}`;
-          const conflict = await pool.query(
-            "SELECT 1 FROM sdk_api_keys WHERE account_id = $1 AND name = $2 AND revoked_at IS NULL",
-            [req.accountId, candidate],
-          );
-          if (conflict.rows.length === 0) {
-            finalName = candidate;
-            break;
-          }
-        }
-
-        await pool.query(
-          "INSERT INTO sdk_api_keys (user_id, account_id, key_hash, key_prefix, encrypted_key, name) VALUES ($1, $2, $3, $4, $5, $6)",
-          [
-            userId,
-            req.accountId ?? null,
-            keyHash,
-            keyPrefix,
-            encryptedKey,
-            finalName,
-          ],
-        );
-
-        res.json({ key: rawKey, prefix: keyPrefix, name: finalName });
-      } catch (error) {
-        console.error("POST /sdk-keys error:", error);
-        res.status(500).json({ error: "Failed to create API key" });
-      }
-    },
-  );
+  const { resolveKey } = createKeyHelpers(pool);
 
   // GET /sdk-keys — List all active SDK API keys (never returns full key)
   router.get(
     "/sdk-keys",
     ensureVisitor,
+    ensureScoped("events.read"),
     async (req: AuthRequest, res: Response) => {
       try {
         if (!req.accountId) {
           return res.status(400).json({ error: "No account resolved" });
         }
         const result = await pool.query(
-          "SELECT id, key_prefix, encrypted_key, name, created_at, last_used_at FROM sdk_api_keys WHERE account_id = $1 AND revoked_at IS NULL ORDER BY created_at DESC",
+          `SELECT id, key_prefix, encrypted_key, name, created_at, last_used_at,
+                  scopes, budget_cents, budget_used_cents, budget_period, budget_reset_at, expires_at, delegated_by
+           FROM sdk_api_keys WHERE account_id = $1 AND revoked_at IS NULL ORDER BY created_at DESC`,
           [req.accountId],
         );
         const keys = result.rows.map((row) => {
@@ -120,6 +63,13 @@ export function createEventsIngestRoutes(
             name: row.name,
             created_at: row.created_at,
             last_used_at: row.last_used_at,
+            scopes: row.scopes ?? null,
+            budget_cents: row.budget_cents ?? null,
+            budget_used_cents: row.budget_used_cents ?? 0,
+            budget_period: row.budget_period ?? null,
+            budget_reset_at: row.budget_reset_at ?? null,
+            expires_at: row.expires_at ?? null,
+            delegated_by: row.delegated_by ?? null,
           };
         });
         res.json(keys);
@@ -134,6 +84,7 @@ export function createEventsIngestRoutes(
   router.post(
     "/sdk-keys/:id/reset",
     ensureVisitor,
+    ensureScoped("events.write"),
     async (req: AuthRequest, res: Response) => {
       try {
         const userId = req.visitorId!;
@@ -200,6 +151,7 @@ export function createEventsIngestRoutes(
   router.delete(
     "/sdk-keys/:id",
     ensureVisitor,
+    ensureScoped("events.write"),
     async (req: AuthRequest, res: Response) => {
       try {
         const keyId = parseInt(req.params.id, 10);
@@ -209,17 +161,6 @@ export function createEventsIngestRoutes(
 
         if (!req.accountId) {
           return res.status(400).json({ error: "No account resolved" });
-        }
-
-        const activeCount = await pool.query(
-          "SELECT COUNT(*)::int AS cnt FROM sdk_api_keys WHERE account_id = $1 AND revoked_at IS NULL",
-          [req.accountId],
-        );
-
-        if (activeCount.rows[0].cnt <= 1) {
-          return res.status(400).json({
-            error: "Cannot delete your only API key — rotate it instead",
-          });
         }
 
         const result = await pool.query(
@@ -247,46 +188,32 @@ export function createEventsIngestRoutes(
       try {
         let userId: string | null = null;
 
-        // Auth: Bearer token first, then session fallback
         const authHeader = req.headers.authorization;
         if (authHeader && authHeader.startsWith("Bearer ")) {
           const token = authHeader.slice(7).trim();
           if (token) {
-            const keyHash = crypto
-              .createHash("sha256")
-              .update(token)
-              .digest("hex");
-            const keyResult = await pool.query(
-              "SELECT user_id, account_id FROM sdk_api_keys WHERE key_hash = $1 AND revoked_at IS NULL",
-              [keyHash],
-            );
-            if (keyResult.rows.length > 0) {
-              userId = keyResult.rows[0].user_id;
-              if (keyResult.rows[0].account_id != null) {
-                (req as AuthRequest).accountId = keyResult.rows[0].account_id;
-              }
-              // Update last_used_at
-              pool
-                .query(
-                  "UPDATE sdk_api_keys SET last_used_at = NOW() WHERE key_hash = $1",
-                  [keyHash],
-                )
-                .catch((err) =>
-                  console.error(
-                    "Failed to update sdk_api_keys last_used_at:",
-                    err,
-                  ),
-                );
-            } else {
-              // Bearer token provided but invalid — don't fall through to session
+            const key = await resolveKey(token);
+            if (!key) {
               return res.status(401).json({
-                error: "Invalid API key. Check your Bearer token.",
+                error: "Invalid or expired API key.",
               });
+            }
+            if (
+              key.scopes &&
+              !key.scopes.includes("events.write") &&
+              !key.scopes.includes("admin")
+            ) {
+              return res.status(403).json({
+                error: "This API key does not have the 'events.write' scope",
+              });
+            }
+            userId = key.user_id;
+            if (key.account_id != null) {
+              (req as AuthRequest).accountId = key.account_id;
             }
           }
         }
 
-        // Fallback to session-based auth (only when no Bearer token provided)
         if (!userId) {
           const authReq = req as AuthRequest;
           if (authReq.session?.visitorId) {
@@ -898,6 +825,7 @@ export function createEventsIngestRoutes(
   router.post(
     "/events/test",
     ensureVisitor,
+    ensureScoped("events.write"),
     async (req: AuthRequest, res: Response) => {
       try {
         const userId = req.visitorId!;

@@ -1,6 +1,6 @@
 import { Router, Request, Response } from "express";
 import type { Pool } from "pg";
-import { type AuthRequest } from "./auth.js";
+import { type AuthRequest, ensureScoped } from "./auth.js";
 import { SOURCE_PRIORITY_CTE } from "./events-helpers.js";
 
 export function createEventsAggregationRoutes(pool: Pool, ensureVisitor: any) {
@@ -10,6 +10,7 @@ export function createEventsAggregationRoutes(pool: Pool, ensureVisitor: any) {
   router.get(
     "/events/by-feature",
     ensureVisitor,
+    ensureScoped("events.read"),
     async (req: AuthRequest, res: Response) => {
       try {
         const result = await pool.query(
@@ -52,6 +53,7 @@ export function createEventsAggregationRoutes(pool: Pool, ensureVisitor: any) {
   router.get(
     "/events/by-agent",
     ensureVisitor,
+    ensureScoped("events.read"),
     async (req: AuthRequest, res: Response) => {
       try {
         const result = await pool.query(
@@ -88,6 +90,7 @@ export function createEventsAggregationRoutes(pool: Pool, ensureVisitor: any) {
   router.get(
     "/events/by-customer",
     ensureVisitor,
+    ensureScoped("events.read"),
     async (req: AuthRequest, res: Response) => {
       try {
         const result = await pool.query(
@@ -130,6 +133,7 @@ export function createEventsAggregationRoutes(pool: Pool, ensureVisitor: any) {
   router.get(
     "/events/by-model",
     ensureVisitor,
+    ensureScoped("events.read"),
     async (req: AuthRequest, res: Response) => {
       try {
         const result = await pool.query(
@@ -173,6 +177,7 @@ export function createEventsAggregationRoutes(pool: Pool, ensureVisitor: any) {
   router.get(
     "/events/by-cost-type",
     ensureVisitor,
+    ensureScoped("events.read"),
     async (req: Request, res: Response) => {
       try {
         const authReq = req as AuthRequest;

@@ -1,5 +1,7 @@
 import { Router, Request, Response, NextFunction } from "express";
 import type { Pool } from "pg";
+import crypto from "crypto";
+import rateLimit from "express-rate-limit";
 import { verifyToken, createClerkClient } from "@clerk/backend";
 import { encryptApiKey } from "../stripe-client.js";
 
@@ -11,6 +13,10 @@ export interface AuthRequest extends Request {
   accountId?: number;
   accountEmail?: string;
   isNewUser?: boolean;
+  keyScopes?: string[] | null;
+  keyId?: number;
+  keyBudgetCents?: number | null;
+  keyBudgetUsedCents?: number;
 }
 
 const sampleClearedUsers = new Set<string>();
@@ -305,6 +311,223 @@ export function createEnsureVisitor(pool: Pool) {
     }
   };
 }
+
+export function createEnsureAuth(pool: Pool) {
+  const ensureVisitor = createEnsureVisitor(pool);
+
+  return async function ensureAuth(
+    req: AuthRequest,
+    res: Response,
+    next: NextFunction,
+  ) {
+    try {
+      const authHeader = req.headers.authorization;
+      const observeKey = req.headers["observe-key"] as string | undefined;
+      const legacyKey = req.headers["x-tanso-key"] as string | undefined;
+
+      const hasClerkToken =
+        authHeader?.startsWith("Bearer ") &&
+        !authHeader.slice(7).startsWith("obs_");
+      if (hasClerkToken) {
+        return ensureVisitor(req, res, next);
+      }
+
+      const apiKey =
+        observeKey ||
+        legacyKey ||
+        (authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : undefined);
+
+      if (apiKey) {
+        const keyHash = crypto
+          .createHash("sha256")
+          .update(apiKey)
+          .digest("hex");
+        const result = await pool.query(
+          `SELECT id, user_id, account_id, scopes, budget_cents, budget_used_cents,
+                  budget_period, budget_reset_at, expires_at
+           FROM sdk_api_keys WHERE key_hash = $1 AND revoked_at IS NULL`,
+          [keyHash],
+        );
+        if (result.rows.length > 0) {
+          const row = result.rows[0];
+
+          if (row.expires_at && new Date(row.expires_at) < new Date()) {
+            return res.status(401).json({ error: "API key has expired" });
+          }
+
+          req.visitorId = row.user_id;
+          req.accountId = row.account_id ?? undefined;
+          req.keyId = row.id;
+          req.keyScopes = row.scopes ?? null;
+          req.keyBudgetCents = row.budget_cents ?? null;
+          req.keyBudgetUsedCents = row.budget_used_cents ?? 0;
+
+          if (req.accountId) {
+            const acct = await pool.query(
+              "SELECT email FROM accounts WHERE id = $1",
+              [req.accountId],
+            );
+            req.accountEmail = acct.rows[0]?.email ?? "sdk-key@observe";
+          }
+          pool
+            .query(
+              "UPDATE sdk_api_keys SET last_used_at = NOW() WHERE key_hash = $1",
+              [keyHash],
+            )
+            .catch((err) =>
+              console.error("SDK key last_used_at update failed:", err),
+            );
+          return next();
+        }
+        return res.status(401).json({
+          error:
+            "Invalid API key. Check your Bearer token or Observe-Key header.",
+        });
+      }
+
+      return ensureVisitor(req, res, next);
+    } catch (error) {
+      console.error("Auth middleware error:", error);
+      res.status(500).json({ error: "Authentication error" });
+    }
+  };
+}
+
+export const VALID_SCOPES = [
+  "proxy.chat",
+  "usage.read",
+  "usage.write",
+  "billing.read",
+  "billing.write",
+  "customers.read",
+  "customers.write",
+  "events.read",
+  "events.write",
+  "recommendations.read",
+  "alerts.read",
+  "alerts.write",
+  "models.read",
+  "admin",
+] as const;
+
+export const SIGNUP_ALLOWED_SCOPES = new Set([
+  "proxy.chat",
+  "usage.read",
+  "billing.read",
+  "events.read",
+  "events.write",
+  "customers.read",
+  "recommendations.read",
+  "models.read",
+]);
+
+export type Scope = (typeof VALID_SCOPES)[number];
+
+export function ensureScoped(requiredScope: Scope) {
+  return (req: AuthRequest, res: Response, next: NextFunction) => {
+    if (req.keyScopes === undefined || req.keyScopes === null) {
+      return next();
+    }
+    if (
+      req.keyScopes.includes(requiredScope) ||
+      req.keyScopes.includes("admin")
+    ) {
+      return next();
+    }
+    return res.status(403).json({
+      error: `This API key does not have the '${requiredScope}' scope`,
+    });
+  };
+}
+
+export interface ResolvedKey {
+  id: number;
+  user_id: string;
+  account_id: number | null;
+  scopes: string[] | null;
+  budget_cents: number | null;
+  budget_used_cents: number;
+  budget_period: string | null;
+  budget_reset_at: Date | null;
+  expires_at: Date | null;
+}
+
+export function createKeyHelpers(pool: Pool) {
+  async function resolveKey(observeKey: string): Promise<ResolvedKey | null> {
+    const keyHash = crypto
+      .createHash("sha256")
+      .update(observeKey)
+      .digest("hex");
+    const result = await pool.query(
+      `SELECT id, user_id, account_id, scopes, budget_cents, budget_used_cents,
+              budget_period, budget_reset_at, expires_at
+       FROM sdk_api_keys WHERE key_hash = $1 AND revoked_at IS NULL`,
+      [keyHash],
+    );
+    if (result.rows.length === 0) return null;
+
+    const row = result.rows[0];
+    if (row.expires_at && new Date(row.expires_at) < new Date()) return null;
+
+    pool
+      .query(
+        "UPDATE sdk_api_keys SET last_used_at = NOW() WHERE key_hash = $1",
+        [keyHash],
+      )
+      .catch((err) =>
+        console.error("Failed to update sdk_api_keys last_used_at:", err),
+      );
+
+    return row;
+  }
+
+  async function checkBudget(
+    key: ResolvedKey,
+  ): Promise<{ allowed: boolean; remaining?: number }> {
+    if (key.budget_cents === null) return { allowed: true };
+
+    if (key.budget_period && key.budget_reset_at) {
+      const resetAt = new Date(key.budget_reset_at);
+      if (new Date() >= resetAt) {
+        const nextReset =
+          key.budget_period === "day"
+            ? new Date(resetAt.getTime() + 24 * 60 * 60 * 1000)
+            : new Date(
+                resetAt.getFullYear(),
+                resetAt.getMonth() + 1,
+                resetAt.getDate(),
+              );
+        await pool.query(
+          `UPDATE sdk_api_keys SET budget_used_cents = 0, budget_reset_at = $1 WHERE id = $2`,
+          [nextReset.toISOString(), key.id],
+        );
+        key.budget_used_cents = 0;
+        key.budget_reset_at = nextReset;
+      }
+    }
+
+    const remaining = key.budget_cents - key.budget_used_cents;
+    return { allowed: remaining > 0, remaining };
+  }
+
+  async function incrementBudget(keyId: number, costCents: number) {
+    if (costCents <= 0) return;
+    await pool.query(
+      `UPDATE sdk_api_keys SET budget_used_cents = COALESCE(budget_used_cents, 0) + $1 WHERE id = $2`,
+      [Math.round(costCents), keyId],
+    );
+  }
+
+  return { resolveKey, checkBudget, incrementBudget };
+}
+
+const signupLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 3,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many signup attempts, please try again later" },
+});
 
 export function createAuthRoutes(
   pool: Pool,
@@ -698,6 +921,295 @@ export function createAuthRoutes(
       } catch (err) {
         console.error("GET /me/accounts error:", err);
         res.status(500).json({ error: "Failed to load accounts" });
+      }
+    },
+  );
+
+  router.post("/signup", signupLimiter, async (req: Request, res: Response) => {
+    try {
+      const { email, scopes, budget_cents, budget_period, expires_in_seconds } =
+        req.body;
+      if (
+        !email ||
+        typeof email !== "string" ||
+        !email.includes("@") ||
+        email.length > 255
+      ) {
+        return res.status(400).json({ error: "Valid email is required" });
+      }
+      if (scopes && Array.isArray(scopes)) {
+        const disallowed = scopes.filter(
+          (s: string) => !SIGNUP_ALLOWED_SCOPES.has(s),
+        );
+        if (disallowed.length > 0) {
+          return res.status(400).json({
+            error: `Scopes not allowed on signup: ${disallowed.join(", ")}. Use POST /sdk-keys with a Clerk session for elevated scopes.`,
+          });
+        }
+      }
+      if (
+        budget_period &&
+        budget_period !== "month" &&
+        budget_period !== "day"
+      ) {
+        return res
+          .status(400)
+          .json({ error: "budget_period must be 'month' or 'day'" });
+      }
+      const normalizedEmail = email.trim().toLowerCase();
+
+      const existingUser = await pool.query(
+        "SELECT id FROM users WHERE LOWER(email) = $1 LIMIT 1",
+        [normalizedEmail],
+      );
+      if (existingUser.rows.length > 0) {
+        return res
+          .status(409)
+          .json({ error: "An account with this email already exists" });
+      }
+
+      let clerkUser;
+      try {
+        clerkUser = await clerk.users.createUser({
+          emailAddress: [normalizedEmail],
+          skipPasswordRequirement: true,
+        });
+      } catch (clerkErr: unknown) {
+        const msg =
+          clerkErr instanceof Error ? clerkErr.message : String(clerkErr);
+        if (
+          msg.includes("already exists") ||
+          msg.includes("taken") ||
+          msg.includes("unique")
+        ) {
+          return res
+            .status(409)
+            .json({ error: "An account with this email already exists" });
+        }
+        throw clerkErr;
+      }
+
+      const clerkUserId = clerkUser.id;
+
+      try {
+        const insertedUser = await pool.query(
+          `INSERT INTO users (email, password_hash, name, visitor_id)
+             VALUES ($1, 'clerk-managed', NULL, $2)
+             ON CONFLICT (email) DO NOTHING
+             RETURNING id`,
+          [normalizedEmail, clerkUserId],
+        );
+        if (insertedUser.rows.length === 0) {
+          await clerk.users
+            .deleteUser(clerkUserId)
+            .catch((e) =>
+              console.error("Clerk orphan cleanup failed:", clerkUserId, e),
+            );
+          return res
+            .status(409)
+            .json({ error: "An account with this email already exists" });
+        }
+        const userInternalId = insertedUser.rows[0].id as number;
+
+        const insertedAccount = await pool.query(
+          `INSERT INTO accounts (name, email, password_hash, visitor_id)
+             VALUES ('Personal Account', $1, 'clerk-managed', $2) RETURNING id`,
+          [normalizedEmail, clerkUserId],
+        );
+        const accountId = insertedAccount.rows[0].id as number;
+
+        await pool.query(
+          `INSERT INTO user_accounts (user_id, account_id, role, status, joined_at)
+             VALUES ($1, $2, 'owner', 'active', NOW())
+             ON CONFLICT (user_id, account_id) DO NOTHING`,
+          [userInternalId, accountId],
+        );
+
+        const rawKey = `obs_${crypto.randomBytes(24).toString("hex")}`;
+        const keyHash = crypto
+          .createHash("sha256")
+          .update(rawKey)
+          .digest("hex");
+        const keyPrefix = rawKey.slice(0, 11);
+
+        const keyScopes =
+          scopes && Array.isArray(scopes) && scopes.length > 0
+            ? scopes
+            : ["usage.read", "billing.read"];
+        const keyExpiry = expires_in_seconds
+          ? new Date(
+              Date.now() + Number(expires_in_seconds) * 1000,
+            ).toISOString()
+          : null;
+        const keyBudgetCents =
+          budget_cents != null ? Number(budget_cents) : null;
+        const keyBudgetPeriod = budget_period || null;
+        const keyBudgetResetAt =
+          keyBudgetPeriod === "month"
+            ? new Date(
+                new Date().getFullYear(),
+                new Date().getMonth() + 1,
+                1,
+              ).toISOString()
+            : keyBudgetPeriod === "day"
+              ? new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
+              : null;
+
+        await pool.query(
+          `INSERT INTO sdk_api_keys (user_id, account_id, key_hash, key_prefix, encrypted_key, name,
+             scopes, budget_cents, budget_period, budget_reset_at, expires_at)
+             VALUES ($1, $2, $3, $4, $5, 'default', $6, $7, $8, $9, $10)`,
+          [
+            clerkUserId,
+            accountId,
+            keyHash,
+            keyPrefix,
+            encryptApiKey(rawKey),
+            keyScopes,
+            keyBudgetCents,
+            keyBudgetPeriod,
+            keyBudgetResetAt,
+            keyExpiry,
+          ],
+        );
+
+        await pool.query(
+          "INSERT INTO user_data_status (user_id, account_id, data_mode) VALUES ($1, $2, 'none') ON CONFLICT DO NOTHING",
+          [clerkUserId, accountId],
+        );
+
+        res.status(201).json({
+          key: rawKey,
+          scopes: keyScopes,
+          expires_at: keyExpiry,
+          budget_cents: keyBudgetCents,
+          budget_period: keyBudgetPeriod,
+        });
+      } catch (dbErr) {
+        await clerk.users
+          .deleteUser(clerkUserId)
+          .catch((e) =>
+            console.error("Clerk orphan cleanup failed:", clerkUserId, e),
+          );
+        throw dbErr;
+      }
+    } catch (error) {
+      console.error("POST /signup error:", error);
+      res.status(500).json({ error: "Failed to create account" });
+    }
+  });
+
+  router.post(
+    "/sdk-keys",
+    ensureVisitor,
+    async (req: AuthRequest, res: Response) => {
+      try {
+        if (!req.visitorId || !req.accountId) {
+          return res.status(401).json({ error: "Authentication required" });
+        }
+        if (req.keyScopes !== undefined) {
+          return res
+            .status(403)
+            .json({ error: "SDK keys cannot create other keys" });
+        }
+
+        const {
+          name,
+          scopes,
+          budget_cents,
+          budget_period,
+          expires_in_seconds,
+        } = req.body;
+        if (!name || typeof name !== "string" || name.trim().length === 0) {
+          return res.status(400).json({ error: "name is required" });
+        }
+        if (scopes && Array.isArray(scopes)) {
+          const invalid = scopes.filter(
+            (s: string) => !(VALID_SCOPES as readonly string[]).includes(s),
+          );
+          if (invalid.length > 0) {
+            return res
+              .status(400)
+              .json({ error: `Invalid scopes: ${invalid.join(", ")}` });
+          }
+        }
+        if (
+          budget_period &&
+          budget_period !== "month" &&
+          budget_period !== "day"
+        ) {
+          return res
+            .status(400)
+            .json({ error: "budget_period must be 'month' or 'day'" });
+        }
+
+        const rawKey = `obs_${crypto.randomBytes(24).toString("hex")}`;
+        const keyHash = crypto
+          .createHash("sha256")
+          .update(rawKey)
+          .digest("hex");
+        const keyPrefix = rawKey.slice(0, 11);
+
+        const keyScopes =
+          scopes && Array.isArray(scopes) && scopes.length > 0 ? scopes : null;
+        const keyExpiry = expires_in_seconds
+          ? new Date(
+              Date.now() + Number(expires_in_seconds) * 1000,
+            ).toISOString()
+          : null;
+        const keyBudgetCents =
+          budget_cents != null ? Number(budget_cents) : null;
+        const keyBudgetPeriod = budget_period || null;
+        const keyBudgetResetAt =
+          keyBudgetPeriod === "month"
+            ? new Date(
+                new Date().getFullYear(),
+                new Date().getMonth() + 1,
+                1,
+              ).toISOString()
+            : keyBudgetPeriod === "day"
+              ? new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
+              : null;
+
+        const insertResult = await pool.query(
+          `INSERT INTO sdk_api_keys (user_id, account_id, key_hash, key_prefix, encrypted_key, name,
+             scopes, budget_cents, budget_period, budget_reset_at, expires_at, delegated_by)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+             ON CONFLICT (account_id, name) WHERE revoked_at IS NULL DO NOTHING
+             RETURNING id`,
+          [
+            req.visitorId,
+            req.accountId,
+            keyHash,
+            keyPrefix,
+            encryptApiKey(rawKey),
+            name.trim(),
+            keyScopes,
+            keyBudgetCents,
+            keyBudgetPeriod,
+            keyBudgetResetAt,
+            keyExpiry,
+            req.visitorId,
+          ],
+        );
+
+        if (insertResult.rows.length === 0) {
+          return res.status(409).json({
+            error: `An active key named '${name.trim()}' already exists`,
+          });
+        }
+
+        res.status(201).json({
+          key: rawKey,
+          name: name.trim(),
+          scopes: keyScopes,
+          expires_at: keyExpiry,
+          budget_cents: keyBudgetCents,
+          budget_period: keyBudgetPeriod,
+        });
+      } catch (error) {
+        console.error("POST /sdk-keys error:", error);
+        res.status(500).json({ error: "Failed to create API key" });
       }
     },
   );

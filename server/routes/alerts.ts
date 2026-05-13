@@ -1,7 +1,7 @@
 import { Router, Response } from "express";
 import type { Pool } from "pg";
 import { z } from "zod";
-import { type AuthRequest } from "./auth.js";
+import { type AuthRequest, ensureScoped } from "./auth.js";
 
 // Schema accepts the 4 global metrics exposed in the UI.
 // Legacy metrics (usage_velocity, customer_cost_share, etc.) still evaluate
@@ -593,6 +593,7 @@ export function createAlertRoutes(
   router.get(
     "/alerts",
     ensureVisitor,
+    ensureScoped("alerts.read"),
     async (req: AuthRequest, res: Response) => {
       try {
         if (!req.accountEmail) {
@@ -614,6 +615,7 @@ export function createAlertRoutes(
   router.post(
     "/alerts",
     ensureVisitor,
+    ensureScoped("alerts.write"),
     async (req: AuthRequest, res: Response) => {
       try {
         if (!req.accountEmail) {
@@ -672,6 +674,7 @@ export function createAlertRoutes(
   router.patch(
     "/alerts/:id",
     ensureVisitor,
+    ensureScoped("alerts.write"),
     async (req: AuthRequest, res: Response) => {
       try {
         if (!req.accountEmail) {
@@ -739,6 +742,7 @@ export function createAlertRoutes(
   router.delete(
     "/alerts/:id",
     ensureVisitor,
+    ensureScoped("alerts.write"),
     async (req: AuthRequest, res: Response) => {
       try {
         if (!req.accountEmail) {
@@ -763,6 +767,7 @@ export function createAlertRoutes(
   router.post(
     "/alerts/:id/test",
     ensureVisitor,
+    ensureScoped("alerts.write"),
     async (req: AuthRequest, res: Response) => {
       try {
         if (!req.accountEmail) {
@@ -822,6 +827,7 @@ export function createAlertRoutes(
   router.get(
     "/alerts/history",
     ensureVisitor,
+    ensureScoped("alerts.read"),
     async (req: AuthRequest, res: Response) => {
       try {
         const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
@@ -868,6 +874,7 @@ export function createAlertRoutes(
   router.get(
     "/alerts/history/count",
     ensureVisitor,
+    ensureScoped("alerts.read"),
     async (req: AuthRequest, res: Response) => {
       try {
         const { rows } = await pool.query(

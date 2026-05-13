@@ -13,6 +13,7 @@ import {
   getBonusCredits,
   CREDIT_REWARDS,
   checkFeatureAccess,
+  OBSERVE_PLANS,
   cancelPendingDowngrade,
   getPendingChanges,
 } from "../billing.js";
@@ -33,6 +34,7 @@ export function createBillingApiRoutes(
   deps: {
     trackBillingUsage: TrackBillingUsageFn;
     convertReferralIfPending: ConvertReferralFn;
+    ensureAuth?: any;
   },
 ) {
   const router = Router();
@@ -1420,6 +1422,117 @@ export function createBillingApiRoutes(
       } catch (error) {
         console.error("Integration request error:", error);
         res.status(500).json({ error: "Failed to save request" });
+      }
+    },
+  );
+
+  router.get(
+    "/plan",
+    deps.ensureAuth || ensureVisitor,
+    async (req: AuthRequest, res: Response) => {
+      try {
+        const visitorId = req.visitorId;
+        if (!visitorId) {
+          return res.status(401).json({ error: "Authentication required" });
+        }
+
+        const result = await pool.query(
+          `SELECT a.stripe_plan FROM accounts a
+           JOIN user_accounts ua ON ua.account_id = a.id
+           JOIN users u ON u.id = ua.user_id
+           WHERE u.visitor_id = $1 AND ua.role = 'owner' LIMIT 1`,
+          [visitorId],
+        );
+        const planKey = result.rows[0]?.stripe_plan || "free";
+        const planConfig = OBSERVE_PLANS[planKey] || OBSERVE_PLANS.free;
+
+        const entitlements: Record<
+          string,
+          { limit: number | null; usage?: number; remaining?: number }
+        > = {};
+        for (const [featureKey, featureCfg] of Object.entries(
+          planConfig.features,
+        )) {
+          const access = await checkFeatureAccess(
+            pool,
+            visitorId,
+            featureKey,
+            req.accountEmail,
+            req.accountId,
+          );
+          entitlements[featureKey] = {
+            limit: featureCfg.limit,
+            ...(access.usage !== undefined && { usage: access.usage }),
+            ...(access.remaining !== undefined && {
+              remaining: access.remaining,
+            }),
+          };
+        }
+
+        const appUrl = process.env.APP_URL || "http://localhost:5173";
+
+        res.json({
+          plan: planKey,
+          name: planConfig.name,
+          features: entitlements,
+          upgradeUrl: `${appUrl}/settings`,
+        });
+      } catch (error) {
+        console.error("GET /plan error:", error);
+        res.status(500).json({ error: "Failed to fetch plan info" });
+      }
+    },
+  );
+
+  router.get(
+    "/sdk-keys/me",
+    deps.ensureAuth || ensureVisitor,
+    async (req: AuthRequest, res: Response) => {
+      try {
+        if (!req.keyId) {
+          return res.json({
+            auth_type: "clerk",
+            scopes: null,
+            budget_cents: null,
+            budget_used_cents: 0,
+          });
+        }
+
+        const result = await pool.query(
+          `SELECT id, key_prefix, name, scopes, budget_cents, budget_used_cents,
+                  budget_period, budget_reset_at, expires_at, delegated_by,
+                  created_at, last_used_at
+           FROM sdk_api_keys WHERE id = $1`,
+          [req.keyId],
+        );
+        if (result.rows.length === 0) {
+          return res.status(404).json({ error: "Key not found" });
+        }
+
+        const row = result.rows[0];
+        const budgetRemaining =
+          row.budget_cents != null
+            ? Math.max(0, row.budget_cents - (row.budget_used_cents || 0))
+            : null;
+
+        res.json({
+          auth_type: "sdk_key",
+          key_prefix: row.key_prefix,
+          name: row.name,
+          scopes: row.scopes ?? null,
+          budget_cents: row.budget_cents ?? null,
+          budget_used_cents: row.budget_used_cents ?? 0,
+          budget_remaining_cents: budgetRemaining,
+          budget_period: row.budget_period ?? null,
+          budget_reset_at: row.budget_reset_at ?? null,
+          expires_at: row.expires_at ?? null,
+          delegated_by: row.delegated_by ?? null,
+          created_at: row.created_at,
+          last_used_at: row.last_used_at,
+        });
+      } catch (error) {
+        console.error("GET /sdk-keys/me error:", error);
+        res.status(500).json({ error: "Failed to fetch key info" });
       }
     },
   );

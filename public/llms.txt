@@ -565,6 +565,234 @@ For Path 2/3 (gateway), use the request headers instead: `Observe-Trace-Id`,
 
 ---
 
+## Agent Self-Serve API
+
+Agents can programmatically create accounts, get API keys, and manage their own
+access without a human in the loop. No auth required for signup — rate limited
+to 3 requests per hour per IP.
+
+### Sign up and get a key
+
+```bash
+curl -X POST https://observe.tansohq.com/api/signup \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "agent@yourapp.com",
+    "scopes": ["usage.read", "events.write", "proxy.chat"],
+    "budget_cents": 5000,
+    "budget_period": "month"
+  }'
+```
+
+Response: `{ "key": "obs_...", "scopes": [...], "expires_at": null, "budget_cents": 5000, "budget_period": "month" }`
+
+| Field | Required | Default | Description |
+|-------|----------|---------|-------------|
+| `email` | Yes | — | Account email |
+| `scopes` | No | `["usage.read", "billing.read"]` | Scopes for this key (see allowed list below) |
+| `budget_cents` | No | null (unlimited) | Per-key LLM spend cap in cents |
+| `budget_period` | No | null (lifetime) | `"month"` or `"day"` — resets budget on period boundary |
+| `expires_in_seconds` | No | null (never) | Key auto-expires after this many seconds. Omit for permanent keys. |
+
+Scopes allowed on signup: `proxy.chat`, `usage.read`, `billing.read`, `events.read`,
+`events.write`, `customers.read`, `recommendations.read`, `models.read`. For elevated
+scopes (`admin`, `*.write`, `alerts.*`), use `POST /sdk-keys` with a Clerk session.
+
+Returns 409 if the email is already registered.
+
+### Check your key's capabilities
+
+```bash
+curl https://observe.tansohq.com/api/sdk-keys/me \
+  -H "Authorization: Bearer obs_..."
+```
+
+Response:
+```json
+{
+  "auth_type": "sdk_key",
+  "key_prefix": "obs_abc1234",
+  "name": "default",
+  "scopes": ["usage.read", "events.write", "proxy.chat"],
+  "budget_cents": 5000,
+  "budget_used_cents": 120,
+  "budget_remaining_cents": 4880,
+  "budget_period": "month",
+  "budget_reset_at": "2026-06-01T00:00:00.000Z",
+  "expires_at": "2026-05-14T18:00:00.000Z"
+}
+```
+
+### Check your plan and limits
+
+```bash
+curl https://observe.tansohq.com/api/plan \
+  -H "Authorization: Bearer obs_..."
+```
+
+Response:
+```json
+{
+  "plan": "free",
+  "name": "Free",
+  "features": {
+    "event_ingest": { "limit": 10000, "usage": 42, "remaining": 9958 },
+    "ai_insights": { "limit": 1000, "usage": 0, "remaining": 1000 },
+    "cost_alerts": { "limit": 3, "usage": 0, "remaining": 3 }
+  },
+  "upgradeUrl": "https://observe.tansohq.com/settings"
+}
+```
+
+### Available scopes
+
+| Scope | Grants access to |
+|-------|-----------------|
+| `proxy.chat` | LLM proxy and gateway endpoints |
+| `events.read` | Read events, traces, aggregations |
+| `events.write` | Ingest events, manage SDK keys |
+| `usage.read` | Read features, analytics, simulations |
+| `usage.write` | Modify feature definitions, run simulations |
+| `customers.read` | Read customers, subscriptions, cohorts |
+| `customers.write` | Modify customers, cohorts, upload data |
+| `billing.read` | Read plan, entitlements, cloud costs |
+| `billing.write` | Modify cloud cost integrations |
+| `alerts.read` | Read alert rules and history |
+| `alerts.write` | Create/modify/delete alert rules |
+| `recommendations.read` | Read and act on recommendations |
+| `models.read` | Read model pricing and stats |
+| `admin` | Full access to all endpoints |
+
+Keys with `null` scopes (e.g., keys created before capability keys) have
+unrestricted access — backwards compatible with existing integrations.
+
+### Budget enforcement
+
+Budget is tracked per key on LLM proxy/gateway calls only. Management API calls
+(reading analytics, managing alerts) are free and unmetered.
+
+When a key's `budget_used_cents` reaches `budget_cents`, proxy/gateway calls
+return 429:
+```json
+{ "error": { "message": "Budget exceeded for this API key", "type": "budget_error" } }
+```
+
+Budget resets automatically at `budget_reset_at` (lazy reset on next API call).
+Account plan limits are the ceiling — individual keys subdivide the budget.
+
+### Create additional scoped keys (humans only)
+
+Authenticated humans (Clerk JWT) can mint additional keys on their account with
+different scopes and budgets:
+
+```bash
+curl -X POST https://observe.tansohq.com/api/sdk-keys \
+  -H "Authorization: Bearer <clerk-jwt>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "sales-enrichment",
+    "scopes": ["proxy.chat", "customers.read"],
+    "budget_cents": 4000,
+    "budget_period": "month"
+  }'
+```
+
+SDK keys cannot create other keys — only Clerk-authenticated humans can.
+
+---
+
+## Management API (same `obs_*` key)
+
+The same API key used for event ingestion also grants access to Observe's full
+read/write management API. An agent can query analytics, manage alerts, and
+configure features without opening the dashboard.
+
+All endpoints accept `Authorization: Bearer obs_...` or the `Observe-Key` header.
+Scoped keys are restricted to endpoints matching their scopes (see scope table above).
+
+### Analytics & querying
+
+| Method | Endpoint | What it returns |
+|--------|----------|----------------|
+| GET | `/api/events` | Paginated event list (filterable by feature, model, customer, date) |
+| GET | `/api/events/:id` | Single event detail |
+| GET | `/api/events/by-feature` | Cost/revenue/usage aggregated by feature |
+| GET | `/api/events/by-model` | Cost/usage aggregated by model |
+| GET | `/api/events/by-customer` | Cost/usage aggregated by customer |
+| GET | `/api/events/by-agent` | Cost/usage aggregated by agent |
+| GET | `/api/events/by-cost-type` | Cost/usage aggregated by cost type |
+| GET | `/api/events/traces` | Paginated trace list |
+| GET | `/api/events/trace/:traceId` | Full trace with spans |
+| GET | `/api/features` | All features with cost/revenue/margin stats |
+| GET | `/api/features/:key` | Feature detail (events, customers, models, timeseries) |
+| GET | `/api/models` | All models with cost stats |
+| GET | `/api/customers` | All customers with cost/margin data |
+| GET | `/api/customers/:id` | Customer detail with events, margins, models |
+| GET | `/api/analytics/overview` | Dashboard KPIs (revenue, cost, margin) |
+| GET | `/api/analytics/trends` | Cost/usage trends over time |
+| GET | `/api/analytics/daily-summary` | Daily cost/usage summary |
+| GET | `/api/cohorts` | Customer cohorts with health scores |
+| POST | `/a2a/query` | Structured cost queries (cost_query, usage_summary, margin_analysis, trace_query) |
+
+### Alert management
+
+| Method | Endpoint | What it does |
+|--------|----------|-------------|
+| GET | `/api/alerts` | List all alert rules |
+| POST | `/api/alerts` | Create an alert rule |
+| PATCH | `/api/alerts/:id` | Update an alert rule |
+| DELETE | `/api/alerts/:id` | Delete an alert rule |
+| POST | `/api/alerts/:id/test` | Send a test alert |
+| GET | `/api/alerts/history` | Alert firing history |
+
+Alert creation example:
+
+```bash
+curl -X POST https://observe.tansohq.com/api/alerts \
+  -H "Authorization: Bearer $OBSERVE_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Daily cost spike",
+    "metric": "daily_cost",
+    "operator": "gt",
+    "threshold": 100,
+    "email": "alerts@yourcompany.com",
+    "cooldown_minutes": 60
+  }'
+```
+
+Supported metrics: `daily_cost`, `margin_percent`, `customer_margin`,
+`customer_concentration`.
+
+### Feature configuration
+
+| Method | Endpoint | What it does |
+|--------|----------|-------------|
+| GET | `/api/feature-definitions` | List feature definitions |
+| POST | `/api/feature-definitions` | Create a feature definition |
+| PATCH | `/api/feature-definitions/:id` | Update a feature definition |
+| DELETE | `/api/feature-definitions/:id` | Delete a feature definition |
+| GET | `/api/feature-pricing` | List feature pricing rules |
+| POST | `/api/feature-pricing` | Create a pricing rule (revenue_per_unit) |
+| DELETE | `/api/feature-pricing/:featureKey` | Delete a pricing rule |
+
+### Recommendations
+
+| Method | Endpoint | What it does |
+|--------|----------|-------------|
+| GET | `/api/recommendations` | List optimization recommendations |
+| POST | `/api/recommendations/compute` | Trigger recommendation engine |
+| POST | `/api/recommendations/:id/apply` | Accept a recommendation |
+| POST | `/api/recommendations/:id/dismiss` | Dismiss a recommendation |
+
+### Agent discovery
+
+| Method | Endpoint | What it returns |
+|--------|----------|----------------|
+| GET | `/.well-known/agent.json` | Agent card with all capabilities and endpoints |
+
+---
+
 ## What NOT to do
 
 - Do not install `@tanso/observe`. The correct package is `@tansohq/observe`.

@@ -1,6 +1,6 @@
 import { Router, Response } from "express";
 import type { Pool } from "pg";
-import { type AuthRequest } from "./auth.js";
+import { type AuthRequest, ensureScoped } from "./auth.js";
 import { encryptApiKey, decryptApiKey } from "../stripe-client.js";
 
 export function createCloudCostRoutes(pool: Pool, ensureVisitor: any) {
@@ -10,6 +10,7 @@ export function createCloudCostRoutes(pool: Pool, ensureVisitor: any) {
   router.post(
     "/cloud-costs/connect",
     ensureVisitor,
+    ensureScoped("billing.write"),
     async (req: AuthRequest, res: Response) => {
       try {
         const visitorId = req.visitorId!;
@@ -76,6 +77,7 @@ export function createCloudCostRoutes(pool: Pool, ensureVisitor: any) {
   router.post(
     "/cloud-costs/sync/:provider",
     ensureVisitor,
+    ensureScoped("billing.write"),
     async (req: AuthRequest, res: Response) => {
       try {
         const { provider } = req.params;
@@ -182,6 +184,7 @@ export function createCloudCostRoutes(pool: Pool, ensureVisitor: any) {
   router.get(
     "/cloud-costs/status",
     ensureVisitor,
+    ensureScoped("billing.read"),
     async (req: AuthRequest, res: Response) => {
       try {
         const result = await pool.query(
@@ -214,6 +217,7 @@ export function createCloudCostRoutes(pool: Pool, ensureVisitor: any) {
   router.delete(
     "/cloud-costs/disconnect/:provider",
     ensureVisitor,
+    ensureScoped("billing.write"),
     async (req: AuthRequest, res: Response) => {
       try {
         const { provider } = req.params;

@@ -7,7 +7,13 @@ import {
   type Recommendation,
   type RecommendationStatus,
 } from "@/lib/api/recommendations";
-import { Lightbulb, RefreshCw, CheckCircle2 } from "lucide-vue-next";
+import {
+  Lightbulb,
+  RefreshCw,
+  CheckCircle2,
+  ChevronDown,
+  ChevronRight,
+} from "lucide-vue-next";
 import { Card, Button, Badge, Skeleton } from "@/components/ui";
 import MarginRecommendation from "@/components/dashboard/MarginRecommendation.vue";
 import { useMutation, useQueryClient } from "@tanstack/vue-query";
@@ -56,6 +62,49 @@ const recompute = useMutation({
     toast.success(`Recomputed: ${res.count} pending recommendations`);
   },
   onError: () => toast.error("Failed to recompute recommendations"),
+});
+
+const typeLabels: Record<string, string> = {
+  customer_margin: "Negative margins",
+  model_swap: "Model swaps",
+  provider_concentration: "Provider concentration",
+  feature_underpricing: "Underpriced features",
+  revenue_leakage: "Revenue leakage",
+  churn_risk: "Churn risk",
+  expansion_signal: "Expansion opportunities",
+  cost_anomaly: "Cost anomalies",
+  margin_risk: "Margin degradation",
+  expansion_risk: "Inactive paying customers",
+};
+
+interface RecGroup {
+  type: string;
+  label: string;
+  recs: Recommendation[];
+}
+
+const expandedGroups = ref<Set<string>>(new Set());
+
+function toggleGroup(type: string) {
+  const s = new Set(expandedGroups.value);
+  if (s.has(type)) s.delete(type);
+  else s.add(type);
+  expandedGroups.value = s;
+}
+
+const groupedList = computed<RecGroup[]>(() => {
+  const list = currentList.value;
+  const map = new Map<string, Recommendation[]>();
+  for (const rec of list) {
+    const group = map.get(rec.type) ?? [];
+    group.push(rec);
+    map.set(rec.type, group);
+  }
+  return Array.from(map.entries()).map(([type, recs]) => ({
+    type,
+    label: typeLabels[type] ?? type,
+    recs,
+  }));
 });
 
 const tabs: { key: RecommendationStatus; label: string }[] = [
@@ -206,9 +255,36 @@ const tabs: { key: RecommendationStatus; label: string }[] = [
       </div>
     </div>
 
-    <div v-else class="space-y-3">
-      <div v-for="rec in currentList" :key="rec.id">
-        <MarginRecommendation :recommendation="rec" />
+    <div v-else class="space-y-4">
+      <div v-for="group in groupedList" :key="group.type">
+        <template v-if="group.recs.length === 1">
+          <MarginRecommendation :recommendation="group.recs[0]" />
+        </template>
+        <template v-else>
+          <button
+            class="flex w-full items-center gap-2 rounded-md border px-4 py-3 text-left transition-colors hover:bg-muted/50"
+            @click="toggleGroup(group.type)"
+          >
+            <component
+              :is="expandedGroups.has(group.type) ? ChevronDown : ChevronRight"
+              class="h-4 w-4 shrink-0 text-muted-foreground"
+            />
+            <span class="text-sm font-medium">{{ group.label }}</span>
+            <Badge variant="secondary" class="ml-1.5">
+              {{ group.recs.length }}
+            </Badge>
+          </button>
+          <div
+            v-if="expandedGroups.has(group.type)"
+            class="mt-1 space-y-2 pl-6"
+          >
+            <MarginRecommendation
+              v-for="rec in group.recs"
+              :key="rec.id"
+              :recommendation="rec"
+            />
+          </div>
+        </template>
       </div>
     </div>
   </div>

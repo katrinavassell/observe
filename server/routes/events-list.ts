@@ -1,6 +1,6 @@
 import { Router, Request, Response } from "express";
 import type { Pool } from "pg";
-import { type AuthRequest } from "./auth.js";
+import { type AuthRequest, ensureScoped } from "./auth.js";
 import { coerceEventRow, attachSplitCosts } from "./events-helpers.js";
 
 export function createEventsListRoutes(pool: Pool, ensureVisitor: any) {
@@ -10,6 +10,7 @@ export function createEventsListRoutes(pool: Pool, ensureVisitor: any) {
   router.get(
     "/events",
     ensureVisitor,
+    ensureScoped("events.read"),
     async (req: AuthRequest, res: Response) => {
       try {
         const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
@@ -111,6 +112,7 @@ export function createEventsListRoutes(pool: Pool, ensureVisitor: any) {
   router.get(
     "/events/traces",
     ensureVisitor,
+    ensureScoped("events.read"),
     async (req: Request, res: Response) => {
       try {
         const authReq = req as AuthRequest;
@@ -161,6 +163,7 @@ export function createEventsListRoutes(pool: Pool, ensureVisitor: any) {
   router.get(
     "/events/trace/:traceId",
     ensureVisitor,
+    ensureScoped("events.read"),
     async (req: Request, res: Response) => {
       try {
         const authReq = req as AuthRequest;
@@ -198,6 +201,7 @@ export function createEventsListRoutes(pool: Pool, ensureVisitor: any) {
   router.get(
     "/events/:id",
     ensureVisitor,
+    ensureScoped("events.read"),
     async (req: AuthRequest, res: Response) => {
       try {
         const eventId = parseInt(req.params.id);

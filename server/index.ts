@@ -1,7 +1,11 @@
 import "dotenv/config";
 import express, { Request, Response, NextFunction } from "express";
 import Pg from "pg";
-import { createAuthRoutes, createEnsureVisitor } from "./routes/auth.js";
+import {
+  createAuthRoutes,
+  createEnsureVisitor,
+  createEnsureAuth,
+} from "./routes/auth.js";
 import { checkFeatureAccess } from "./billing.js";
 
 import { createConvertReferralIfPending } from "./routes/integrations.js";
@@ -117,6 +121,8 @@ app.get("/version", (_req, res) => res.json({ v: "2026-04-22-c" }));
 
 // Auth middleware — verifies Clerk JWT, sets req.visitorId
 const ensureVisitor = createEnsureVisitor(pool);
+// Dual auth — accepts Clerk JWT or SDK API key (obs_*) for agent access
+const ensureAuth = createEnsureAuth(pool);
 app.use(createAuthRoutes(pool, ensureVisitor));
 
 // ─── Admin visitor ID (shared by proxy dual-write + billing usage tracking) ──
@@ -168,7 +174,7 @@ const expensiveLimiter = rateLimit({
 
 // ─── Route modules ──────────────────────────────────────────────────────────
 app.use(
-  createCustomersRoutes(pool, ensureVisitor, {
+  createCustomersRoutes(pool, ensureAuth, {
     checkBillingFeatureAccess,
     trackBillingUsage,
     convertReferralIfPending,
@@ -178,10 +184,11 @@ app.use(
   createBillingApiRoutes(pool, ensureVisitor, {
     trackBillingUsage,
     convertReferralIfPending,
+    ensureAuth,
   }),
 );
 app.use(
-  createAlertRoutes(pool, ensureVisitor, {
+  createAlertRoutes(pool, ensureAuth, {
     checkTansoFeatureAccess: checkBillingFeatureAccess,
   }),
 );
@@ -191,20 +198,20 @@ app.use(
   }),
 );
 app.use(createGatewayRoutes(pool, ensureVisitor, { apiLimiter }));
-app.use(createRecommendationsRoutes(pool, ensureVisitor));
+app.use(createRecommendationsRoutes(pool, ensureAuth));
 app.use(
   createChatRoutes(pool, ensureVisitor, {
     checkBillingFeatureAccess,
   }),
 );
 app.use(
-  createEventsRoutes(pool, ensureVisitor, {
+  createEventsRoutes(pool, ensureAuth, {
     computeInferenceProfiles: (userId: string) =>
       computeInferenceProfiles(pool, userId),
     apiLimiter,
   }),
 );
-app.use(createFeaturesRoutes(pool, ensureVisitor));
+app.use(createFeaturesRoutes(pool, ensureAuth));
 app.use(
   createInsightsRoutes(pool, ensureVisitor, {
     checkBillingFeatureAccess,
@@ -212,14 +219,14 @@ app.use(
     expensiveLimiter,
   }),
 );
-app.use(createModelsApiRoutes(pool, ensureVisitor));
+app.use(createModelsApiRoutes(pool, ensureAuth));
 app.use(createTeamRoutes(pool, ensureVisitor));
-app.use(createAnalyticsRoutes(pool, ensureVisitor));
-app.use(createCohortsRoutes(pool, ensureVisitor));
-app.use(createFeatureDefinitionsRoutes(pool, ensureVisitor));
+app.use(createAnalyticsRoutes(pool, ensureAuth));
+app.use(createCohortsRoutes(pool, ensureAuth));
+app.use(createFeatureDefinitionsRoutes(pool, ensureAuth));
 app.use(createInferenceRoutes(pool, ensureVisitor));
-app.use(createA2ARoutes(pool, ensureVisitor));
-app.use(createCloudCostRoutes(pool, ensureVisitor));
+app.use(createA2ARoutes(pool, ensureAuth));
+app.use(createCloudCostRoutes(pool, ensureAuth));
 app.use(createBackfillRoutes(pool, ensureVisitor));
 app.use(createDataManagementRoutes(pool, ensureVisitor));
 app.use(
@@ -281,7 +288,7 @@ async function ensureDbInitialized() {
   }
   return dbInitPromise;
 }
-const SCHEMA_VERSION = 24;
+const SCHEMA_VERSION = 25;
 async function _doDbInit() {
   try {
     await pool.query("SELECT 1");
@@ -1118,6 +1125,17 @@ async function _doDbInit() {
     await pool.query(
       `ALTER TABLE sdk_api_keys ADD COLUMN IF NOT EXISTS encrypted_key TEXT`,
     );
+    // Capability keys: scopes, budgets, expiry, delegation
+    await pool.query(`DO $$ BEGIN
+      ALTER TABLE sdk_api_keys ADD COLUMN IF NOT EXISTS scopes TEXT[];
+      ALTER TABLE sdk_api_keys ADD COLUMN IF NOT EXISTS budget_cents INTEGER;
+      ALTER TABLE sdk_api_keys ADD COLUMN IF NOT EXISTS budget_used_cents INTEGER DEFAULT 0;
+      ALTER TABLE sdk_api_keys ADD COLUMN IF NOT EXISTS budget_period TEXT;
+      ALTER TABLE sdk_api_keys ADD COLUMN IF NOT EXISTS budget_reset_at TIMESTAMPTZ;
+      ALTER TABLE sdk_api_keys ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ;
+      ALTER TABLE sdk_api_keys ADD COLUMN IF NOT EXISTS delegated_by TEXT;
+    END $$`);
+
     // Race-protect SDK key auto-generation on /auth/signup-complete.
     // PARTIAL unique index — only active (non-revoked) keys must have a
     // unique (account_id, name). This lets /sdk-keys/:id/reset soft-delete

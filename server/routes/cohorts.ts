@@ -1,6 +1,6 @@
 import { Router, Response } from "express";
 import type { Pool } from "pg";
-import { type AuthRequest } from "./auth.js";
+import { type AuthRequest, ensureScoped } from "./auth.js";
 import { getAllPricing } from "../model-pricing.js";
 import { inferModelProvider } from "../lib/models.js";
 
@@ -124,6 +124,7 @@ export function createCohortsRoutes(pool: Pool, ensureVisitor: any) {
   router.get(
     "/cohorts",
     ensureVisitor,
+    ensureScoped("customers.read"),
     async (req: AuthRequest, res: Response) => {
       try {
         const userId = req.visitorId!;
@@ -644,6 +645,7 @@ export function createCohortsRoutes(pool: Pool, ensureVisitor: any) {
   router.post(
     "/cohorts/discover",
     ensureVisitor,
+    ensureScoped("customers.write"),
     async (req: AuthRequest, res: Response) => {
       try {
         const accountId = req.accountId!;
@@ -864,6 +866,7 @@ Return ONLY valid JSON array, no markdown.`,
   router.get(
     "/cohorts/:customerId/health-history",
     ensureVisitor,
+    ensureScoped("customers.read"),
     async (req: AuthRequest, res: Response) => {
       try {
         const customerId = req.params.customerId;
@@ -893,6 +896,7 @@ Return ONLY valid JSON array, no markdown.`,
   router.get(
     "/cohorts/custom",
     ensureVisitor,
+    ensureScoped("customers.read"),
     async (req: AuthRequest, res: Response) => {
       try {
         const result = await pool.query(
@@ -931,6 +935,7 @@ Return ONLY valid JSON array, no markdown.`,
   router.post(
     "/cohorts/custom",
     ensureVisitor,
+    ensureScoped("customers.write"),
     async (req: AuthRequest, res: Response) => {
       try {
         const { name, description, color, customer_ids, cohort_type, rules } =
@@ -988,6 +993,7 @@ Return ONLY valid JSON array, no markdown.`,
   router.get(
     "/cohorts/custom/:id",
     ensureVisitor,
+    ensureScoped("customers.read"),
     async (req: AuthRequest, res: Response) => {
       try {
         const cohortResult = await pool.query(
@@ -1037,6 +1043,7 @@ Return ONLY valid JSON array, no markdown.`,
   router.post(
     "/cohorts/custom/:id/members",
     ensureVisitor,
+    ensureScoped("customers.write"),
     async (req: AuthRequest, res: Response) => {
       try {
         const { customer_ids } = req.body;
@@ -1073,6 +1080,7 @@ Return ONLY valid JSON array, no markdown.`,
   router.delete(
     "/cohorts/custom/:id/members/:customerId",
     ensureVisitor,
+    ensureScoped("customers.write"),
     async (req: AuthRequest, res: Response) => {
       try {
         const check = await pool.query(
@@ -1099,6 +1107,7 @@ Return ONLY valid JSON array, no markdown.`,
   router.delete(
     "/cohorts/custom/:id",
     ensureVisitor,
+    ensureScoped("customers.write"),
     async (req: AuthRequest, res: Response) => {
       try {
         const result = await pool.query(

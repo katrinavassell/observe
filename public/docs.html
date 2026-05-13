@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Observe API Docs</title>
+<style>
+:root { --bg: #fff; --fg: #111; --muted: #666; --border: #e5e5e5; --code-bg: #f5f5f5; --accent: #2563eb; --accent-light: #eff6ff; }
+@media (prefers-color-scheme: dark) { :root { --bg: #111; --fg: #e5e5e5; --muted: #999; --border: #333; --code-bg: #1a1a1a; --accent: #60a5fa; --accent-light: #1e293b; } }
+* { box-sizing: border-box; margin: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--fg); line-height: 1.6; max-width: 720px; margin: 0 auto; padding: 2rem 1.5rem; }
+h1 { font-size: 1.75rem; margin-bottom: 0.25rem; }
+h2 { font-size: 1.25rem; margin-top: 2.5rem; margin-bottom: 0.75rem; padding-bottom: 0.25rem; border-bottom: 1px solid var(--border); }
+h3 { font-size: 1rem; margin-top: 1.5rem; margin-bottom: 0.5rem; }
+p, li { margin-bottom: 0.5rem; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code { font-family: "SF Mono", "Fira Code", monospace; font-size: 0.875em; background: var(--code-bg); padding: 0.15em 0.35em; border-radius: 3px; }
+pre { background: var(--code-bg); padding: 1rem; border-radius: 6px; overflow-x: auto; margin: 0.75rem 0; font-size: 0.8125rem; line-height: 1.5; }
+pre code { background: none; padding: 0; }
+table { width: 100%; border-collapse: collapse; margin: 0.75rem 0; font-size: 0.875rem; }
+th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--border); }
+th { font-weight: 600; }
+.subtitle { color: var(--muted); margin-bottom: 1.5rem; }
+.badge { display: inline-block; font-size: 0.75rem; font-weight: 600; padding: 0.15em 0.5em; border-radius: 3px; text-transform: uppercase; }
+.badge-get { background: #dcfce7; color: #166534; }
+.badge-post { background: #dbeafe; color: #1e40af; }
+.badge-delete { background: #fee2e2; color: #991b1b; }
+@media (prefers-color-scheme: dark) { .badge-get { background: #14532d; color: #86efac; } .badge-post { background: #1e3a5f; color: #93c5fd; } .badge-delete { background: #450a0a; color: #fca5a5; } }
+.toggle { display: flex; gap: 0; margin: 1.5rem 0; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.toggle button { flex: 1; padding: 0.5rem 1rem; border: none; background: var(--bg); color: var(--muted); cursor: pointer; font-size: 0.875rem; font-weight: 500; transition: all 0.15s; }
+.toggle button.active { background: var(--accent); color: #fff; }
+.toggle button:hover:not(.active) { background: var(--accent-light); }
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+.note { background: var(--accent-light); border-left: 3px solid var(--accent); padding: 0.75rem 1rem; border-radius: 0 4px 4px 0; margin: 0.75rem 0; font-size: 0.875rem; }
+</style>
+</head>
+<body>
+
+<h1>Observe API</h1>
+<p class="subtitle">Cost and usage observability for AI features. <a href="/llms.txt">llms.txt</a></p>
+
+<div class="toggle" id="mode-toggle">
+  <button class="active" data-mode="human">I'm a human</button>
+  <button data-mode="agent">I'm an agent</button>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- HUMAN TAB -->
+<!-- ═══════════════════════════════════════════════════════ -->
+<div class="tab-content active" id="tab-human">
+
+<h2>Quick start</h2>
+<ol>
+  <li><a href="/signup">Sign up</a> — free, no credit card.</li>
+  <li>Go to <a href="/data-sources">Data Sources</a> → copy your <code>obs_</code> API key.</li>
+  <li>Add one line after each LLM call in your code:</li>
+</ol>
+
+<pre><code>fetch('https://observe.tansohq.com/api/events/ingest', {
+  method: 'POST',
+  headers: {
+    'Authorization': `Bearer ${process.env.OBSERVE_API_KEY}`,
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({
+    events: [{
+      eventName: 'chat',
+      customerReferenceId: user.id,
+      featureKey: 'ai_chat',
+      model: 'gpt-4o-mini',
+      modelProvider: 'openai',
+      inputTokens: res.usage?.prompt_tokens,
+      outputTokens: res.usage?.completion_tokens,
+    }],
+  }),
+}).catch(console.error)</code></pre>
+
+<p>That's it. Observe auto-computes cost from model + tokens. Your LLM calls are
+unaffected — Observe is fire-and-forget, off the critical path.</p>
+
+<h2>Managing API keys</h2>
+<p>From the dashboard, go to <a href="/data-sources">Data Sources</a> to create, view,
+and revoke keys. Each key can have:</p>
+<ul>
+  <li><strong>Scopes</strong> — restrict which endpoints a key can access</li>
+  <li><strong>Budget</strong> — cap LLM proxy spend per key (monthly or daily)</li>
+  <li><strong>Expiry</strong> — auto-expire after a set time</li>
+</ul>
+<p>Use this to give different teams different keys: sales gets <code>proxy.chat</code> with
+a $40/month budget, analytics gets <code>usage.read</code> with no budget.</p>
+
+<h2>Connecting Stripe</h2>
+<p>Optional. Go to <a href="/data-sources">Data Sources</a> → Stripe → paste a restricted
+API key (read-only: Customers, Subscriptions, Products, Prices). Observe imports your
+customer and subscription data to calculate revenue and margins per feature.</p>
+
+<h2>Event schema</h2>
+<table>
+  <tr><th>Field</th><th>Required</th><th>Description</th></tr>
+  <tr><td><code>eventName</code></td><td>Yes</td><td>Short label: <code>chat</code>, <code>embed</code>, <code>api_call</code></td></tr>
+  <tr><td><code>customerReferenceId</code></td><td>Yes</td><td>Your end-user's stable ID</td></tr>
+  <tr><td><code>featureKey</code></td><td>Yes</td><td>Product feature: <code>ai_chat</code>, <code>summarize</code></td></tr>
+  <tr><td><code>model</code></td><td>Recommended</td><td>Model name for auto-cost: <code>gpt-4o-mini</code></td></tr>
+  <tr><td><code>modelProvider</code></td><td>Recommended</td><td><code>openai</code>, <code>anthropic</code>, <code>google</code>, etc.</td></tr>
+  <tr><td><code>inputTokens</code></td><td>Recommended</td><td>Prompt tokens</td></tr>
+  <tr><td><code>outputTokens</code></td><td>Recommended</td><td>Completion tokens</td></tr>
+  <tr><td><code>costAmount</code></td><td>No</td><td>Override auto-computed cost (USD)</td></tr>
+  <tr><td><code>revenueAmount</code></td><td>No</td><td>Override revenue attribution</td></tr>
+  <tr><td><code>durationMs</code></td><td>No</td><td>Call latency in milliseconds</td></tr>
+  <tr><td><code>idempotencyKey</code></td><td>No</td><td>Dedupe on retry (recommended)</td></tr>
+  <tr><td><code>traceId</code></td><td>No</td><td>Group multi-step agent flows</td></tr>
+  <tr><td><code>meta</code></td><td>No</td><td><code>{ stripe_customer_id: "cus_..." }</code> for revenue matching</td></tr>
+</table>
+
+<h2>Full reference</h2>
+<p>See <a href="/llms.txt">llms.txt</a> for the complete API reference including all
+management endpoints, gateway integration, SDK auto-wrap, tracing, and revenue
+attribution details.</p>
+
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- AGENT TAB -->
+<!-- ═══════════════════════════════════════════════════════ -->
+<div class="tab-content" id="tab-agent">
+
+<h2>Self-serve signup</h2>
+<p>Create an account and get an API key in one call. No auth required.
+Rate limited to 3/hr per IP.</p>
+
+<pre><code>curl -X POST https://observe.tansohq.com/api/signup \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "agent@yourapp.com",
+    "scopes": ["usage.read", "events.write", "proxy.chat"],
+    "budget_cents": 5000,
+    "budget_period": "month"
+  }'</code></pre>
+
+<p>Response: <code>{ "key": "obs_...", "scopes": [...], "budget_cents": 5000 }</code></p>
+
+<table>
+  <tr><th>Field</th><th>Default</th><th>Description</th></tr>
+  <tr><td><code>email</code></td><td>required</td><td>Account email</td></tr>
+  <tr><td><code>scopes</code></td><td><code>["usage.read", "billing.read"]</code></td><td>Key scopes (see table below)</td></tr>
+  <tr><td><code>budget_cents</code></td><td>null (unlimited)</td><td>Per-key LLM spend cap</td></tr>
+  <tr><td><code>budget_period</code></td><td>null (lifetime)</td><td><code>"month"</code> or <code>"day"</code></td></tr>
+  <tr><td><code>expires_in_seconds</code></td><td>null (never)</td><td>Auto-expire the key</td></tr>
+</table>
+
+<h2>Key introspection</h2>
+<pre><code>curl https://observe.tansohq.com/api/sdk-keys/me \
+  -H "Authorization: Bearer obs_..."</code></pre>
+
+<p>Returns your key's scopes, budget remaining, and expiry. Call this before
+expensive operations to check your budget.</p>
+
+<h2>Plan and limits</h2>
+<pre><code>curl https://observe.tansohq.com/api/plan \
+  -H "Authorization: Bearer obs_..."</code></pre>
+
+<p>Returns your account plan, per-feature limits, current usage, and remaining quota.</p>
+
+<h2>Ingest events</h2>
+<pre><code>curl -X POST https://observe.tansohq.com/api/events/ingest \
+  -H "Authorization: Bearer obs_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "events": [{
+      "eventName": "chat",
+      "customerReferenceId": "acme-corp",
+      "featureKey": "ai_chat",
+      "model": "gpt-4o-mini",
+      "modelProvider": "openai",
+      "inputTokens": 150,
+      "outputTokens": 80
+    }]
+  }'</code></pre>
+
+<p>Requires <code>events.write</code> scope. Batch up to 1000 events per request.
+Cost auto-computed from model + tokens.</p>
+
+<h2>Scopes</h2>
+<table>
+  <tr><th>Scope</th><th>Access</th><th>Signup?</th></tr>
+  <tr><td><code>proxy.chat</code></td><td>LLM proxy/gateway</td><td>Yes</td></tr>
+  <tr><td><code>usage.read</code></td><td>Features, analytics, simulations</td><td>Yes</td></tr>
+  <tr><td><code>events.read</code></td><td>Events, traces, aggregations</td><td>Yes</td></tr>
+  <tr><td><code>events.write</code></td><td>Ingest events, manage keys</td><td>Yes</td></tr>
+  <tr><td><code>customers.read</code></td><td>Customers, subscriptions, cohorts</td><td>Yes</td></tr>
+  <tr><td><code>billing.read</code></td><td>Plan, entitlements, cloud costs</td><td>Yes</td></tr>
+  <tr><td><code>recommendations.read</code></td><td>Optimization recommendations</td><td>Yes</td></tr>
+  <tr><td><code>models.read</code></td><td>Model pricing and stats</td><td>Yes</td></tr>
+  <tr><td><code>usage.write</code></td><td>Modify features, simulations</td><td>No</td></tr>
+  <tr><td><code>customers.write</code></td><td>Modify customers, upload data</td><td>No</td></tr>
+  <tr><td><code>billing.write</code></td><td>Cloud cost integrations</td><td>No</td></tr>
+  <tr><td><code>alerts.read</code></td><td>Alert rules and history</td><td>No</td></tr>
+  <tr><td><code>alerts.write</code></td><td>Create/modify alert rules</td><td>No</td></tr>
+  <tr><td><code>admin</code></td><td>Full access</td><td>No</td></tr>
+</table>
+
+<p class="note">Scopes marked "No" require a human to create the key via
+<code>POST /sdk-keys</code> with a Clerk session.</p>
+
+<h2>Management API</h2>
+
+<h3>Analytics</h3>
+<table>
+  <tr><td><span class="badge badge-get">GET</span></td><td><code>/api/analytics/overview</code></td><td>Dashboard KPIs</td></tr>
+  <tr><td><span class="badge badge-get">GET</span></td><td><code>/api/features</code></td><td>Features with cost/revenue stats</td></tr>
+  <tr><td><span class="badge badge-get">GET</span></td><td><code>/api/customers</code></td><td>Customers with margins</td></tr>
+  <tr><td><span class="badge badge-get">GET</span></td><td><code>/api/events</code></td><td>Paginated event list</td></tr>
+  <tr><td><span class="badge badge-get">GET</span></td><td><code>/api/models</code></td><td>Model cost stats</td></tr>
+</table>
+
+<h3>Alerts</h3>
+<table>
+  <tr><td><span class="badge badge-get">GET</span></td><td><code>/api/alerts</code></td><td>List alert rules</td></tr>
+  <tr><td><span class="badge badge-post">POST</span></td><td><code>/api/alerts</code></td><td>Create alert rule</td></tr>
+  <tr><td><span class="badge badge-delete">DEL</span></td><td><code>/api/alerts/:id</code></td><td>Delete alert rule</td></tr>
+</table>
+
+<h3>Recommendations</h3>
+<table>
+  <tr><td><span class="badge badge-get">GET</span></td><td><code>/api/recommendations</code></td><td>Optimization recommendations</td></tr>
+  <tr><td><span class="badge badge-post">POST</span></td><td><code>/api/recommendations/compute</code></td><td>Trigger recommendation engine</td></tr>
+</table>
+
+<h2>Full reference</h2>
+<p>See <a href="/llms.txt">llms.txt</a> for complete endpoint list, event schema,
+tracing, revenue attribution, and integration paths (direct ingest, gateway headers,
+SDK auto-wrap).</p>
+
+</div>
+
+<script>
+const toggle = document.getElementById('mode-toggle');
+toggle.addEventListener('click', (e) => {
+  if (e.target.tagName !== 'BUTTON') return;
+  toggle.querySelectorAll('button').forEach(b => b.classList.remove('active'));
+  e.target.classList.add('active');
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  document.getElementById('tab-' + e.target.dataset.mode).classList.add('active');
+});
+</script>
+
+</body>
+</html>

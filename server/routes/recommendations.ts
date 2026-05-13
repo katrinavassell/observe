@@ -1,6 +1,6 @@
 import { Router, Response } from "express";
 import type { Pool } from "pg";
-import { type AuthRequest } from "./auth.js";
+import { type AuthRequest, ensureScoped } from "./auth.js";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -539,6 +539,14 @@ export async function computeRecommendations(
 
   // 7. Expansion signal — customers with >50% usage growth MoM
   await runRule("expansion_signal", async () => {
+    // Clean up stale 0→N recs that were noise (not real expansion)
+    await pool.query(
+      `DELETE FROM recommendations
+       WHERE user_id = $1 AND type = 'expansion_signal' AND status = 'pending'
+         AND (context->>'prior_count')::int = 0`,
+      [userId],
+    );
+
     const expansionResult = await pool.query(
       `WITH recent AS (
         SELECT customer_id, COUNT(*) as recent_count
@@ -554,14 +562,14 @@ export async function computeRecommendations(
           AND customer_id IS NOT NULL AND customer_id != 'default' AND customer_id != 'unknown'
         GROUP BY customer_id
       )
-      SELECT r.customer_id, COALESCE(p.prior_count, 0) as prior_count, r.recent_count,
-        CASE WHEN COALESCE(p.prior_count, 0) > 0
-          THEN ROUND(((r.recent_count - COALESCE(p.prior_count, 0))::numeric / COALESCE(p.prior_count, 1)) * 100, 1)
-          ELSE 100 END as growth_pct
+      SELECT r.customer_id, p.prior_count, r.recent_count,
+        ROUND(((r.recent_count - p.prior_count)::numeric / p.prior_count) * 100, 1) as growth_pct
       FROM recent r
-      LEFT JOIN prior p ON r.customer_id = p.customer_id
+      INNER JOIN prior p ON r.customer_id = p.customer_id
       WHERE r.recent_count >= 20
-        AND r.recent_count > COALESCE(p.prior_count, 0) * 1.5`,
+        AND p.prior_count > 0
+        AND r.recent_count > p.prior_count * 1.5
+      ORDER BY r.recent_count DESC`,
       [accountId],
     );
 
@@ -839,6 +847,7 @@ export function createRecommendationsRoutes(pool: Pool, ensureVisitor: any) {
   router.get(
     "/recommendations",
     ensureVisitor,
+    ensureScoped("recommendations.read"),
     async (req: AuthRequest, res: Response) => {
       try {
         const status = (req.query.status as string) || "pending";
@@ -863,6 +872,7 @@ export function createRecommendationsRoutes(pool: Pool, ensureVisitor: any) {
   router.get(
     "/recommendations/count",
     ensureVisitor,
+    ensureScoped("recommendations.read"),
     async (req: AuthRequest, res: Response) => {
       try {
         const result = await pool.query(
@@ -881,6 +891,7 @@ export function createRecommendationsRoutes(pool: Pool, ensureVisitor: any) {
   router.post(
     "/recommendations/compute",
     ensureVisitor,
+    ensureScoped("recommendations.read"),
     async (req: AuthRequest, res: Response) => {
       try {
         await computeRecommendations(pool, req.visitorId!);
@@ -903,6 +914,7 @@ export function createRecommendationsRoutes(pool: Pool, ensureVisitor: any) {
   router.post(
     "/recommendations/:id/apply",
     ensureVisitor,
+    ensureScoped("recommendations.read"),
     async (req: AuthRequest, res: Response) => {
       try {
         const rec = await pool.query(
@@ -1031,6 +1043,7 @@ export function createRecommendationsRoutes(pool: Pool, ensureVisitor: any) {
   router.post(
     "/recommendations/:id/dismiss",
     ensureVisitor,
+    ensureScoped("recommendations.read"),
     async (req: AuthRequest, res: Response) => {
       try {
         const result = await pool.query(
