@@ -1,5 +1,6 @@
 import { Router, Request, Response, NextFunction } from "express";
 import type { Pool } from "pg";
+import crypto from "crypto";
 import { verifyToken, createClerkClient } from "@clerk/backend";
 import { encryptApiKey } from "../stripe-client.js";
 
@@ -299,6 +300,72 @@ export function createEnsureVisitor(pool: Pool) {
       }
 
       next();
+    } catch (error) {
+      console.error("Auth middleware error:", error);
+      res.status(500).json({ error: "Authentication error" });
+    }
+  };
+}
+
+export function createEnsureAuth(pool: Pool) {
+  const ensureVisitor = createEnsureVisitor(pool);
+
+  return async function ensureAuth(
+    req: AuthRequest,
+    res: Response,
+    next: NextFunction,
+  ) {
+    try {
+      const authHeader = req.headers.authorization;
+      const observeKey = req.headers["observe-key"] as string | undefined;
+      const legacyKey = req.headers["x-tanso-key"] as string | undefined;
+
+      const hasClerkToken =
+        authHeader?.startsWith("Bearer ") &&
+        !authHeader.slice(7).startsWith("obs_");
+      if (hasClerkToken) {
+        return ensureVisitor(req, res, next);
+      }
+
+      const apiKey =
+        observeKey ||
+        legacyKey ||
+        (authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : undefined);
+
+      if (apiKey) {
+        const keyHash = crypto
+          .createHash("sha256")
+          .update(apiKey)
+          .digest("hex");
+        const result = await pool.query(
+          "SELECT user_id, account_id FROM sdk_api_keys WHERE key_hash = $1 AND revoked_at IS NULL",
+          [keyHash],
+        );
+        if (result.rows.length > 0) {
+          req.visitorId = result.rows[0].user_id;
+          req.accountId = result.rows[0].account_id ?? undefined;
+          if (req.accountId) {
+            const acct = await pool.query(
+              "SELECT email FROM accounts WHERE id = $1",
+              [req.accountId],
+            );
+            req.accountEmail = acct.rows[0]?.email ?? "sdk-key@observe";
+          }
+          pool
+            .query(
+              "UPDATE sdk_api_keys SET last_used_at = NOW() WHERE key_hash = $1",
+              [keyHash],
+            )
+            .catch(() => {});
+          return next();
+        }
+        return res.status(401).json({
+          error:
+            "Invalid API key. Check your Bearer token or Observe-Key header.",
+        });
+      }
+
+      return ensureVisitor(req, res, next);
     } catch (error) {
       console.error("Auth middleware error:", error);
       res.status(500).json({ error: "Authentication error" });

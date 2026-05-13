@@ -1,45 +1,9 @@
-import { Router, Response, NextFunction } from "express";
+import { Router, Response } from "express";
 import type { Pool } from "pg";
-import crypto from "crypto";
 import { type AuthRequest } from "./auth.js";
 
-export function createA2ARoutes(pool: Pool, _ensureVisitor: any) {
+export function createA2ARoutes(pool: Pool, ensureAuth: any) {
   const router = Router();
-
-  // Auth middleware that accepts session cookie, Observe-Key header, or Bearer token
-  async function ensureA2AAuth(
-    req: AuthRequest,
-    res: Response,
-    next: NextFunction,
-  ) {
-    // Try session auth first
-    if (req.visitorId) return next();
-
-    // Try SDK key auth: Observe-Key (preferred) > x-tanso-key (legacy) > Bearer
-    const apiKey =
-      (req.headers["observe-key"] as string) ||
-      (req.headers["x-tanso-key"] as string) ||
-      (req.headers["authorization"] as string)?.replace("Bearer ", "");
-
-    if (!apiKey) {
-      return res.status(401).json({
-        error:
-          "Authentication required. Pass Observe-Key header or session cookie.",
-      });
-    }
-
-    const keyHash = crypto.createHash("sha256").update(apiKey).digest("hex");
-    const result = await pool.query(
-      "SELECT user_id, account_id FROM sdk_api_keys WHERE key_hash = $1 AND revoked_at IS NULL",
-      [keyHash],
-    );
-    if (result.rows.length === 0) {
-      return res.status(401).json({ error: "Invalid API key" });
-    }
-    req.visitorId = result.rows[0].user_id;
-    req.accountId = result.rows[0].account_id ?? undefined;
-    next();
-  }
 
   // GET /a2a/agent-card — A2A Agent Card for discovery
   // Also accessible at /.well-known/agent.json via Vercel rewrite
@@ -58,20 +22,36 @@ export function createA2ARoutes(pool: Pool, _ensureVisitor: any) {
         "agent_breakdown",
         "trace_query",
         "cost_type_filter",
+        "alert_management",
+        "customer_analytics",
+        "feature_analytics",
+        "recommendation_engine",
       ],
       authentication: {
         type: "bearer",
         header: "Observe-Key",
         description:
-          "SDK API key from the Data Sources page. Legacy alias: x-tanso-key.",
+          "SDK API key (obs_*) from Data Sources. Pass as Authorization: Bearer obs_... or Observe-Key header. Legacy: x-tanso-key.",
       },
       endpoints: {
         query: "/a2a/query",
+        ingest: "/api/events/ingest",
         events: "/api/events",
-        models: "/api/events/by-model",
-        features: "/api/events/by-feature",
-        agents: "/api/events/by-agent",
+        events_by_model: "/api/events/by-model",
+        events_by_feature: "/api/events/by-feature",
+        events_by_agent: "/api/events/by-agent",
+        events_by_customer: "/api/events/by-customer",
         traces: "/api/events/traces",
+        features: "/api/features",
+        models: "/api/models",
+        customers: "/api/customers",
+        alerts: "/api/alerts",
+        analytics_overview: "/api/analytics/overview",
+        analytics_trends: "/api/analytics/trends",
+        recommendations: "/api/recommendations",
+        cohorts: "/api/cohorts",
+        feature_definitions: "/api/feature-definitions",
+        feature_pricing: "/api/feature-pricing",
       },
     });
   });
@@ -79,7 +59,7 @@ export function createA2ARoutes(pool: Pool, _ensureVisitor: any) {
   // POST /a2a/query — Respond to cost queries from other agents
   router.post(
     "/a2a/query",
-    ensureA2AAuth,
+    ensureAuth,
     async (req: AuthRequest, res: Response) => {
       try {
         const { action, params } = req.body || {};

@@ -1,7 +1,11 @@
 import "dotenv/config";
 import express, { Request, Response, NextFunction } from "express";
 import Pg from "pg";
-import { createAuthRoutes, createEnsureVisitor } from "./routes/auth.js";
+import {
+  createAuthRoutes,
+  createEnsureVisitor,
+  createEnsureAuth,
+} from "./routes/auth.js";
 import { checkFeatureAccess } from "./billing.js";
 
 import { createConvertReferralIfPending } from "./routes/integrations.js";
@@ -117,6 +121,8 @@ app.get("/version", (_req, res) => res.json({ v: "2026-04-22-c" }));
 
 // Auth middleware — verifies Clerk JWT, sets req.visitorId
 const ensureVisitor = createEnsureVisitor(pool);
+// Dual auth — accepts Clerk JWT or SDK API key (obs_*) for agent access
+const ensureAuth = createEnsureAuth(pool);
 app.use(createAuthRoutes(pool, ensureVisitor));
 
 // ─── Admin visitor ID (shared by proxy dual-write + billing usage tracking) ──
@@ -168,7 +174,7 @@ const expensiveLimiter = rateLimit({
 
 // ─── Route modules ──────────────────────────────────────────────────────────
 app.use(
-  createCustomersRoutes(pool, ensureVisitor, {
+  createCustomersRoutes(pool, ensureAuth, {
     checkBillingFeatureAccess,
     trackBillingUsage,
     convertReferralIfPending,
@@ -181,7 +187,7 @@ app.use(
   }),
 );
 app.use(
-  createAlertRoutes(pool, ensureVisitor, {
+  createAlertRoutes(pool, ensureAuth, {
     checkTansoFeatureAccess: checkBillingFeatureAccess,
   }),
 );
@@ -191,20 +197,20 @@ app.use(
   }),
 );
 app.use(createGatewayRoutes(pool, ensureVisitor, { apiLimiter }));
-app.use(createRecommendationsRoutes(pool, ensureVisitor));
+app.use(createRecommendationsRoutes(pool, ensureAuth));
 app.use(
   createChatRoutes(pool, ensureVisitor, {
     checkBillingFeatureAccess,
   }),
 );
 app.use(
-  createEventsRoutes(pool, ensureVisitor, {
+  createEventsRoutes(pool, ensureAuth, {
     computeInferenceProfiles: (userId: string) =>
       computeInferenceProfiles(pool, userId),
     apiLimiter,
   }),
 );
-app.use(createFeaturesRoutes(pool, ensureVisitor));
+app.use(createFeaturesRoutes(pool, ensureAuth));
 app.use(
   createInsightsRoutes(pool, ensureVisitor, {
     checkBillingFeatureAccess,
@@ -212,14 +218,14 @@ app.use(
     expensiveLimiter,
   }),
 );
-app.use(createModelsApiRoutes(pool, ensureVisitor));
+app.use(createModelsApiRoutes(pool, ensureAuth));
 app.use(createTeamRoutes(pool, ensureVisitor));
-app.use(createAnalyticsRoutes(pool, ensureVisitor));
-app.use(createCohortsRoutes(pool, ensureVisitor));
-app.use(createFeatureDefinitionsRoutes(pool, ensureVisitor));
+app.use(createAnalyticsRoutes(pool, ensureAuth));
+app.use(createCohortsRoutes(pool, ensureAuth));
+app.use(createFeatureDefinitionsRoutes(pool, ensureAuth));
 app.use(createInferenceRoutes(pool, ensureVisitor));
-app.use(createA2ARoutes(pool, ensureVisitor));
-app.use(createCloudCostRoutes(pool, ensureVisitor));
+app.use(createA2ARoutes(pool, ensureAuth));
+app.use(createCloudCostRoutes(pool, ensureAuth));
 app.use(createBackfillRoutes(pool, ensureVisitor));
 app.use(createDataManagementRoutes(pool, ensureVisitor));
 app.use(

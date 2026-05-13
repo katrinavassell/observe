@@ -565,6 +565,97 @@ For Path 2/3 (gateway), use the request headers instead: `Observe-Trace-Id`,
 
 ---
 
+## Management API (same `obs_*` key)
+
+The same API key used for event ingestion also grants access to Observe's full
+read/write management API. An agent can query analytics, manage alerts, and
+configure features without opening the dashboard.
+
+All endpoints accept `Authorization: Bearer obs_...` or the `Observe-Key` header.
+
+### Analytics & querying
+
+| Method | Endpoint | What it returns |
+|--------|----------|----------------|
+| GET | `/api/events` | Paginated event list (filterable by feature, model, customer, date) |
+| GET | `/api/events/:id` | Single event detail |
+| GET | `/api/events/by-feature` | Cost/revenue/usage aggregated by feature |
+| GET | `/api/events/by-model` | Cost/usage aggregated by model |
+| GET | `/api/events/by-customer` | Cost/usage aggregated by customer |
+| GET | `/api/events/by-agent` | Cost/usage aggregated by agent |
+| GET | `/api/events/by-cost-type` | Cost/usage aggregated by cost type |
+| GET | `/api/events/traces` | Paginated trace list |
+| GET | `/api/events/trace/:traceId` | Full trace with spans |
+| GET | `/api/features` | All features with cost/revenue/margin stats |
+| GET | `/api/features/:key` | Feature detail (events, customers, models, timeseries) |
+| GET | `/api/models` | All models with cost stats |
+| GET | `/api/customers` | All customers with cost/margin data |
+| GET | `/api/customers/:id` | Customer detail with events, margins, models |
+| GET | `/api/analytics/overview` | Dashboard KPIs (revenue, cost, margin) |
+| GET | `/api/analytics/trends` | Cost/usage trends over time |
+| GET | `/api/analytics/daily-summary` | Daily cost/usage summary |
+| GET | `/api/cohorts` | Customer cohorts with health scores |
+| POST | `/a2a/query` | Structured cost queries (cost_query, usage_summary, margin_analysis, trace_query) |
+
+### Alert management
+
+| Method | Endpoint | What it does |
+|--------|----------|-------------|
+| GET | `/api/alerts` | List all alert rules |
+| POST | `/api/alerts` | Create an alert rule |
+| PATCH | `/api/alerts/:id` | Update an alert rule |
+| DELETE | `/api/alerts/:id` | Delete an alert rule |
+| POST | `/api/alerts/:id/test` | Send a test alert |
+| GET | `/api/alerts/history` | Alert firing history |
+
+Alert creation example:
+
+```bash
+curl -X POST https://observe.tansohq.com/api/alerts \
+  -H "Authorization: Bearer $OBSERVE_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Daily cost spike",
+    "metric": "daily_cost",
+    "operator": "gt",
+    "threshold": 100,
+    "email": "alerts@yourcompany.com",
+    "cooldown_minutes": 60
+  }'
+```
+
+Supported metrics: `daily_cost`, `margin_percent`, `customer_margin`,
+`customer_concentration`.
+
+### Feature configuration
+
+| Method | Endpoint | What it does |
+|--------|----------|-------------|
+| GET | `/api/feature-definitions` | List feature definitions |
+| POST | `/api/feature-definitions` | Create a feature definition |
+| PATCH | `/api/feature-definitions/:id` | Update a feature definition |
+| DELETE | `/api/feature-definitions/:id` | Delete a feature definition |
+| GET | `/api/feature-pricing` | List feature pricing rules |
+| POST | `/api/feature-pricing` | Create a pricing rule (revenue_per_unit) |
+| DELETE | `/api/feature-pricing/:featureKey` | Delete a pricing rule |
+
+### Recommendations
+
+| Method | Endpoint | What it does |
+|--------|----------|-------------|
+| GET | `/api/recommendations` | List optimization recommendations |
+| POST | `/api/recommendations/compute` | Trigger recommendation engine |
+| POST | `/api/recommendations/:id/apply` | Accept a recommendation |
+| POST | `/api/recommendations/:id/dismiss` | Dismiss a recommendation |
+
+### Agent discovery
+
+| Method | Endpoint | What it returns |
+|--------|----------|----------------|
+| GET | `/.well-known/agent.json` | Agent card with all capabilities and endpoints |
+
+---
+
 ## What NOT to do
 
 - Do not install `@tanso/observe`. The correct package is `@tansohq/observe`.
