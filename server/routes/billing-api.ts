@@ -13,6 +13,7 @@ import {
   getBonusCredits,
   CREDIT_REWARDS,
   checkFeatureAccess,
+  OBSERVE_PLANS,
   cancelPendingDowngrade,
   getPendingChanges,
 } from "../billing.js";
@@ -33,6 +34,7 @@ export function createBillingApiRoutes(
   deps: {
     trackBillingUsage: TrackBillingUsageFn;
     convertReferralIfPending: ConvertReferralFn;
+    ensureAuth?: any;
   },
 ) {
   const router = Router();
@@ -1420,6 +1422,64 @@ export function createBillingApiRoutes(
       } catch (error) {
         console.error("Integration request error:", error);
         res.status(500).json({ error: "Failed to save request" });
+      }
+    },
+  );
+
+  router.get(
+    "/plan",
+    deps.ensureAuth || ensureVisitor,
+    async (req: AuthRequest, res: Response) => {
+      try {
+        const visitorId = req.visitorId;
+        if (!visitorId) {
+          return res.status(401).json({ error: "Authentication required" });
+        }
+
+        const result = await pool.query(
+          `SELECT a.stripe_plan FROM accounts a
+           JOIN user_accounts ua ON ua.account_id = a.id
+           JOIN users u ON u.id = ua.user_id
+           WHERE u.visitor_id = $1 AND ua.role = 'owner' LIMIT 1`,
+          [visitorId],
+        );
+        const planKey = result.rows[0]?.stripe_plan || "free";
+        const planConfig = OBSERVE_PLANS[planKey] || OBSERVE_PLANS.free;
+
+        const entitlements: Record<
+          string,
+          { limit: number | null; usage?: number; remaining?: number }
+        > = {};
+        for (const [featureKey, featureCfg] of Object.entries(
+          planConfig.features,
+        )) {
+          const access = await checkFeatureAccess(
+            pool,
+            visitorId,
+            featureKey,
+            req.accountEmail,
+            req.accountId,
+          );
+          entitlements[featureKey] = {
+            limit: featureCfg.limit,
+            ...(access.usage !== undefined && { usage: access.usage }),
+            ...(access.remaining !== undefined && {
+              remaining: access.remaining,
+            }),
+          };
+        }
+
+        const appUrl = process.env.APP_URL || "http://localhost:5173";
+
+        res.json({
+          plan: planKey,
+          name: planConfig.name,
+          features: entitlements,
+          upgradeUrl: `${appUrl}/settings`,
+        });
+      } catch (error) {
+        console.error("GET /plan error:", error);
+        res.status(500).json({ error: "Failed to fetch plan info" });
       }
     },
   );

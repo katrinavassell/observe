@@ -184,6 +184,7 @@ app.use(
   createBillingApiRoutes(pool, ensureVisitor, {
     trackBillingUsage,
     convertReferralIfPending,
+    ensureAuth,
   }),
 );
 app.use(

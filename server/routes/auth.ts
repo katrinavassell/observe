@@ -1,6 +1,7 @@
 import { Router, Request, Response, NextFunction } from "express";
 import type { Pool } from "pg";
 import crypto from "crypto";
+import rateLimit from "express-rate-limit";
 import { verifyToken, createClerkClient } from "@clerk/backend";
 import { encryptApiKey } from "../stripe-client.js";
 
@@ -356,7 +357,9 @@ export function createEnsureAuth(pool: Pool) {
               "UPDATE sdk_api_keys SET last_used_at = NOW() WHERE key_hash = $1",
               [keyHash],
             )
-            .catch(() => {});
+            .catch((err) =>
+              console.error("SDK key last_used_at update failed:", err),
+            );
           return next();
         }
         return res.status(401).json({
@@ -372,6 +375,14 @@ export function createEnsureAuth(pool: Pool) {
     }
   };
 }
+
+const signupLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 3,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many signup attempts, please try again later" },
+});
 
 export function createAuthRoutes(
   pool: Pool,
@@ -768,6 +779,118 @@ export function createAuthRoutes(
       }
     },
   );
+
+  router.post("/signup", signupLimiter, async (req: Request, res: Response) => {
+    try {
+      const { email } = req.body;
+      if (
+        !email ||
+        typeof email !== "string" ||
+        !email.includes("@") ||
+        email.length > 255
+      ) {
+        return res.status(400).json({ error: "Valid email is required" });
+      }
+      const normalizedEmail = email.trim().toLowerCase();
+
+      const existingUser = await pool.query(
+        "SELECT id FROM users WHERE LOWER(email) = $1 LIMIT 1",
+        [normalizedEmail],
+      );
+      if (existingUser.rows.length > 0) {
+        return res
+          .status(409)
+          .json({ error: "An account with this email already exists" });
+      }
+
+      let clerkUser;
+      try {
+        clerkUser = await clerk.users.createUser({
+          emailAddress: [normalizedEmail],
+          skipPasswordRequirement: true,
+        });
+      } catch (clerkErr: unknown) {
+        const msg =
+          clerkErr instanceof Error ? clerkErr.message : String(clerkErr);
+        if (
+          msg.includes("already exists") ||
+          msg.includes("taken") ||
+          msg.includes("unique")
+        ) {
+          return res
+            .status(409)
+            .json({ error: "An account with this email already exists" });
+        }
+        throw clerkErr;
+      }
+
+      const clerkUserId = clerkUser.id;
+
+      try {
+        const insertedUser = await pool.query(
+          `INSERT INTO users (email, password_hash, name, visitor_id)
+             VALUES ($1, 'clerk-managed', NULL, $2)
+             ON CONFLICT (email) DO NOTHING
+             RETURNING id`,
+          [normalizedEmail, clerkUserId],
+        );
+        if (insertedUser.rows.length === 0) {
+          await clerk.users
+            .deleteUser(clerkUserId)
+            .catch((e) =>
+              console.error("Clerk orphan cleanup failed:", clerkUserId, e),
+            );
+          return res
+            .status(409)
+            .json({ error: "An account with this email already exists" });
+        }
+        const userInternalId = insertedUser.rows[0].id as number;
+
+        const insertedAccount = await pool.query(
+          `INSERT INTO accounts (name, email, password_hash, visitor_id)
+             VALUES ('Personal Account', $1, 'clerk-managed', $2) RETURNING id`,
+          [normalizedEmail, clerkUserId],
+        );
+        const accountId = insertedAccount.rows[0].id as number;
+
+        await pool.query(
+          `INSERT INTO user_accounts (user_id, account_id, role, status, joined_at)
+             VALUES ($1, $2, 'owner', 'active', NOW())
+             ON CONFLICT (user_id, account_id) DO NOTHING`,
+          [userInternalId, accountId],
+        );
+
+        const rawKey = `obs_${crypto.randomBytes(24).toString("hex")}`;
+        const keyHash = crypto
+          .createHash("sha256")
+          .update(rawKey)
+          .digest("hex");
+        const keyPrefix = rawKey.slice(0, 11);
+        await pool.query(
+          `INSERT INTO sdk_api_keys (user_id, account_id, key_hash, key_prefix, encrypted_key, name)
+             VALUES ($1, $2, $3, $4, $5, 'default')`,
+          [clerkUserId, accountId, keyHash, keyPrefix, encryptApiKey(rawKey)],
+        );
+
+        await pool.query(
+          "INSERT INTO user_data_status (user_id, account_id, data_mode) VALUES ($1, $2, 'none') ON CONFLICT DO NOTHING",
+          [clerkUserId, accountId],
+        );
+
+        res.status(201).json({ key: rawKey });
+      } catch (dbErr) {
+        await clerk.users
+          .deleteUser(clerkUserId)
+          .catch((e) =>
+            console.error("Clerk orphan cleanup failed:", clerkUserId, e),
+          );
+        throw dbErr;
+      }
+    } catch (error) {
+      console.error("POST /signup error:", error);
+      res.status(500).json({ error: "Failed to create account" });
+    }
+  });
 
   return router;
 }
