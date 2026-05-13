@@ -68,6 +68,11 @@ const router = createRouter({
       component: () => import("@/pages/AlertsPage.vue"),
     },
     {
+      path: "/recommendations",
+      name: "recommendations",
+      component: () => import("@/pages/RecommendationsPage.vue"),
+    },
+    {
       path: "/help",
       name: "help",
       component: () => import("@/pages/HelpPage.vue"),

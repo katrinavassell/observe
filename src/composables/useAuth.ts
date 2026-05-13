@@ -38,9 +38,18 @@ export function useAuth() {
                 localStorage.setItem("observe:fresh_sdk_key", result.sdkKey);
               }
               if (result.clerkOrgId) {
-                await clerk.value?.setActive({
-                  organization: result.clerkOrgId,
-                });
+                try {
+                  await clerk.value?.setActive({
+                    organization: result.clerkOrgId,
+                  });
+                } catch (orgErr) {
+                  logger.error("setActive org failed (stale org?)", orgErr);
+                  try {
+                    await clerk.value?.setActive({ organization: null });
+                  } catch {
+                    // last resort — session may already be personal-scoped
+                  }
+                }
               }
               break;
             } catch (err) {

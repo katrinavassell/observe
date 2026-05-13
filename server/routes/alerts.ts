@@ -136,7 +136,7 @@ async function sendAlertEmail(
         <div style="color: #666; font-size: 13px;">Current ${metricLabel.toLowerCase()}</div>
       </div>
       ${
-        TANSO_UPSELLS[rule.metric]
+        process.env.OBSERVE_EDITION === "cloud" && TANSO_UPSELLS[rule.metric]
           ? `
       <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 16px; margin-bottom: 16px;">
         <p style="font-size: 14px; font-weight: 600; color: #166534; margin: 0 0 8px 0;">${TANSO_UPSELLS[rule.metric]}</p>
@@ -157,7 +157,12 @@ async function sendAlertEmail(
         "Content-Type": "application/json",
         Authorization: `Bearer ${apiKey}`,
       },
-      body: JSON.stringify({ from: fromEmail, to, subject, html }),
+      body: JSON.stringify({
+        from: fromEmail,
+        to: to.includes(",") ? to.split(",").map((e) => e.trim()) : to,
+        subject,
+        html,
+      }),
     });
     if (!res.ok) {
       const err = await res.text();
@@ -374,14 +379,14 @@ async function sendCustomerAlertEmail(
       },
       body: JSON.stringify({
         from,
-        to: [to],
+        to: to.includes(",") ? to.split(",").map((e) => e.trim()) : [to],
         subject,
         html: `<h2>${rule.name}</h2>
           <p><strong>Customer:</strong> ${customerName} (${customerId})</p>
           <p><strong>Trigger:</strong> ${triggerLabel}</p>
           <p><strong>Current value:</strong> ${currentValue.toFixed(1)}</p>
           <p><strong>Threshold:</strong> ${rule.operator} ${rule.threshold}</p>
-          <p style="margin-top:16px"><a href="https://observe.tansohq.com/customers/${encodeURIComponent(customerId)}">View customer →</a></p>`,
+          <p style="margin-top:16px"><a href="${process.env.APP_URL || "http://localhost:3000"}/customers/${encodeURIComponent(customerId)}">View customer →</a></p>`,
       }),
     });
     return res.ok;
@@ -430,7 +435,7 @@ async function sendCustomerAlertWebhook(
               {
                 type: "button",
                 text: { type: "plain_text", text: "View Customer" },
-                url: `https://observe.tansohq.com/customers/${encodeURIComponent(customerId)}`,
+                url: `${process.env.APP_URL || "http://localhost:3000"}/customers/${encodeURIComponent(customerId)}`,
               },
             ],
           },

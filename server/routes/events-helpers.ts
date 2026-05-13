@@ -204,10 +204,14 @@ export async function sendUsageLimitEmail(
       ? "You're approaching your monthly event limit"
       : "Monthly event limit reached";
 
+  const isCloud = process.env.OBSERVE_EDITION === "cloud";
+  const upsell = isCloud
+    ? ` Check out <a href="https://tansohq.com">Tanso</a> for unlimited events and full monetization tools.`
+    : " Upgrade your plan for more capacity.";
   const body =
     threshold === 80
-      ? `<p>You've used ${used.toLocaleString()} of your ${limit.toLocaleString()} monthly events on Observe.</p><p>Need more capacity? Check out <a href="https://tansohq.com">Tanso</a> for unlimited events and full monetization tools.</p>`
-      : `<p>You've reached your ${limit.toLocaleString()} monthly event limit on Observe.</p><p>New events will be rejected until next month. Need more? Check out <a href="https://tansohq.com">Tanso</a> for unlimited events.</p>`;
+      ? `<p>You've used ${used.toLocaleString()} of your ${limit.toLocaleString()} monthly events on Observe.</p><p>Need more capacity?${upsell}</p>`
+      : `<p>You've reached your ${limit.toLocaleString()} monthly event limit on Observe.</p><p>New events will be rejected until next month.${upsell}</p>`;
 
   usageAlertsSent.add(key);
 
@@ -219,7 +223,7 @@ export async function sendUsageLimitEmail(
         Authorization: `Bearer ${resendKey}`,
       },
       body: JSON.stringify({
-        from: "Observe <kat@tansohq.com>",
+        from: `Observe <${process.env.ALERT_FROM_EMAIL || "alerts@example.com"}>`,
         to,
         subject: subj,
         html,
@@ -228,11 +232,15 @@ export async function sendUsageLimitEmail(
 
   Promise.allSettled([
     sendEmail(email, subject, body),
-    sendEmail(
-      ["kat@tansohq.com", "doug@tansohq.com"],
-      `[Internal] ${subject}: ${email}`,
-      `<p><strong>${email}</strong> hit ${threshold}% usage (${used.toLocaleString()} / ${limit.toLocaleString()} events).</p>`,
-    ),
+    ...(process.env.ADMIN_EMAILS
+      ? [
+          sendEmail(
+            process.env.ADMIN_EMAILS.split(",").filter(Boolean),
+            `[Internal] ${subject}: ${email}`,
+            `<p><strong>${email}</strong> hit ${threshold}% usage (${used.toLocaleString()} / ${limit.toLocaleString()} events).</p>`,
+          ),
+        ]
+      : []),
   ])
     .then(() =>
       console.warn("Usage alert sent:", { email, threshold, used, limit }),

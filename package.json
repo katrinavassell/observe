@@ -4,7 +4,7 @@
   "workspaces": [
     "packages/*"
   ],
-  "version": "0.0.0",
+  "version": "0.1.0",
   "type": "module",
   "scripts": {
     "dev": "concurrently \"lsof -ti:3001 | xargs kill -9 2>/dev/null; PORT=3001 npx tsx server/index.ts\" \"vite\"",

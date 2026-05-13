@@ -509,7 +509,7 @@ const displayName = computed(() => {
       </Card>
 
       <!-- Signals -->
-      <Card v-if="signals.length > 0">
+      <Card v-if="false && signals.length > 0">
         <CardContent class="p-6 space-y-3">
           <h2 class="font-semibold flex items-center gap-2">
             <Zap class="h-4 w-4 text-primary" />

@@ -376,6 +376,8 @@ export function createCustomersRoutes(
       const acct = req.accountId ?? null;
       const tables = [
         "alert_rules",
+        "alert_history",
+        "recommendations",
         "custom_cohorts",
         "feature_pricing",
         "feature_definitions",
@@ -512,7 +514,7 @@ export function createCustomersRoutes(
         return res.status(403).json({
           error:
             access.reason ||
-            "Upload limit reached. Need more? Check out Tanso at tansohq.com",
+            "Upload limit reached. Upgrade your plan for more capacity.",
         });
       const client = await pool.connect();
       try {
@@ -634,7 +636,7 @@ export function createCustomersRoutes(
         return res.status(403).json({
           error:
             access.reason ||
-            "Upload limit reached. Need more? Check out Tanso at tansohq.com",
+            "Upload limit reached. Upgrade your plan for more capacity.",
         });
       const client = await pool.connect();
       try {
@@ -758,7 +760,7 @@ export function createCustomersRoutes(
         return res.status(403).json({
           error:
             access.reason ||
-            "Upload limit reached. Need more? Check out Tanso at tansohq.com",
+            "Upload limit reached. Upgrade your plan for more capacity.",
         });
       const client = await pool.connect();
       try {

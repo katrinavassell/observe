@@ -48,7 +48,7 @@ export function createA2ARoutes(pool: Pool, _ensureVisitor: any) {
       name: "Observe Cost Tracker",
       description:
         "AI cost observability — query cost, usage, and margin data for LLM calls",
-      url: process.env.APP_URL || "https://observe.tansohq.com",
+      url: process.env.APP_URL || "http://localhost:3000",
       version: "1.0.0",
       capabilities: [
         "cost_query",

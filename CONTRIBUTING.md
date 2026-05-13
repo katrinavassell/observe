@@ -1,6 +1,4 @@
-# Contributing to Observe
-
-Thanks for your interest in contributing! This guide will help you get set up.
+# Contributing to observe
 
 ## Prerequisites
 
@@ -10,53 +8,58 @@ Thanks for your interest in contributing! This guide will help you get set up.
 ## Setup
 
 ```bash
-git clone https://github.com/tansohq/observe.git
+git clone https://github.com/katrinalaszlo/observe.git
 cd observe
 npm install
-cp .env.example .env
-# Edit .env with your DATABASE_URL and a SESSION_SECRET
-npm run dev
+cp .env.example .env    # fill in DATABASE_URL, CLERK_SECRET_KEY, SESSION_SECRET, INTEGRATION_ENCRYPTION_KEY
+npm run dev             # frontend :5173 | API :3001
 ```
 
-This starts the API server on `http://localhost:3001` and the frontend on `http://localhost:5173`.
-
-Alternatively, run everything with Docker:
+Or with Docker:
 
 ```bash
 docker compose up
 ```
 
-## Project Structure
+## Project structure
 
 ```
 src/                  Vue 3 frontend (Vite + TypeScript)
-  components/         UI components (charts, dashboard, integrations, onboarding, etc.)
-  composables/        Vue composables (auth, data mode, entitlements, teams)
-  layouts/            App layout with sidebar navigation
-  lib/                Shared utilities, API clients, analyzers
   pages/              Route-level page components
+  components/         UI components
+  lib/                API clients, utilities, formatters
+  layouts/            App layout with sidebar navigation
 server/               Express API backend
-  index.ts            Main server entry point (routes + inline handlers)
-  routes/             Route modules (auth, data, integrations, tanso, alerts)
-  stripe-client.ts    Stripe integration
-  tanso-client.ts     Tanso billing client
-  model-pricing.ts    AI model pricing data
+  index.ts            Entry point (routes, migrations, middleware)
+  routes/             Route modules
+  providers/          LLM provider adapters
+  lib/                Revenue enrichment, model pricing, encryption
+packages/sdk/         @tansohq/observe npm SDK
 docs/                 Documentation
-packages/sdk/         @tansohq/observe SDK
 ```
 
-## Development
+## Development commands
 
-- `npm run dev` -- Start frontend + backend concurrently
-- `npm run test` -- Run tests with Vitest
-- `npm run typecheck` -- Type-check with vue-tsc
-- `npm run lint` -- Lint with ESLint
+```bash
+npm run dev          # start frontend + backend
+npm run test         # run tests (Vitest)
+npm run typecheck    # type-check (vue-tsc)
+npm run lint         # lint (ESLint)
+npm run build        # production build
+```
 
 ## Submitting a PR
 
-1. Fork the repo and create a branch from `main`.
+1. Fork the repo, create a branch from `main`.
 2. Make your changes. Add tests if applicable.
-3. Run `npm run test` and `npm run typecheck` to verify.
-4. Open a pull request with a clear description of what changed and why.
+3. Run `npm run test && npm run typecheck` to verify.
+4. Open a PR with a clear title and description of what changed and why.
 
-Keep PRs focused -- one feature or fix per PR makes review easier.
+Keep PRs focused — one feature or fix per PR.
+
+## Code style
+
+- TypeScript throughout. No `any` unless unavoidable.
+- Vue 3 Composition API with `<script setup>`. No Options API.
+- Prefer readability over cleverness. Three similar lines > a premature abstraction.
+- No comments unless the "why" is non-obvious.

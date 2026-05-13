@@ -133,6 +133,8 @@ const COOLDOWN_OPTIONS = [
   { value: 1440, label: "1 day" },
 ];
 
+const isCloud = import.meta.env.VITE_OBSERVE_EDITION === "cloud";
+
 const TANSO_UPSELLS: Record<string, string> = {
   customer_margin: "Want to cap unprofitable customers automatically?",
   customer_concentration: "Want to set concentration risk limits?",
@@ -590,7 +592,9 @@ function relativeTime(dateStr: string) {
           <!-- Tanso upsell -->
           <div
             v-if="
-              selectedTrigger.metric && TANSO_UPSELLS[selectedTrigger.metric]
+              isCloud &&
+              selectedTrigger.metric &&
+              TANSO_UPSELLS[selectedTrigger.metric]
             "
             class="flex items-center justify-between rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3"
           >

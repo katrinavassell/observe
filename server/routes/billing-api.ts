@@ -283,8 +283,8 @@ export function createBillingApiRoutes(
               Authorization: `Bearer ${resendKey}`,
             },
             body: JSON.stringify({
-              from: "Observe <kat@tansohq.com>",
-              to: ["kat@tansohq.com", "doug@tansohq.com"],
+              from: `Observe <${process.env.ALERT_FROM_EMAIL || "alerts@example.com"}>`,
+              to: (process.env.ADMIN_EMAILS || "").split(",").filter(Boolean),
               subject: `Feedback from ${senderName}`,
               html: `<p><strong>From:</strong> ${senderName} (${sender})</p><p>${message.trim()}</p>`,
             }),

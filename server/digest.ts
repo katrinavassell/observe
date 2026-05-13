@@ -158,7 +158,7 @@ async function sendDigestEmail(email: string, html: string): Promise<boolean> {
     return false;
   }
 
-  const fromEmail = process.env.ALERT_FROM_EMAIL || "kat@tansohq.com";
+  const fromEmail = process.env.ALERT_FROM_EMAIL || "alerts@example.com";
 
   try {
     const res = await fetch("https://api.resend.com/emails", {
@@ -213,6 +213,13 @@ export async function runWeeklyDigest(pool: Pool): Promise<void> {
   let sent = 0;
   for (const row of accounts.rows) {
     try {
+      const optOut = await pool.query(
+        `SELECT 1 FROM alert_rules
+         WHERE user_id = $1 AND trigger_type = 'weekly_digest' AND enabled = false`,
+        [row.visitor_id],
+      );
+      if (optOut.rows.length > 0) continue;
+
       const data = await gatherDigestData(pool, row.visitor_id);
       if (!data || data.eventCount === 0) continue;
 

@@ -10,6 +10,7 @@ import {
   Cpu,
   Bell,
   Layers,
+  Lightbulb,
   Users,
   Eye,
   LogIn,
@@ -98,6 +99,12 @@ const navItems = computed(() => [
     description: "Customer health, profitability, and usage trends",
   },
   {
+    path: "/recommendations",
+    label: "Recommendations",
+    icon: Lightbulb,
+    description: "Margin fixes from the recommendation engine",
+  },
+  {
     path: "/alerts",
     label: "Alerts",
     icon: Bell,
@@ -120,11 +127,10 @@ const navItems = computed(() => [
 
 const orgProfileOpen = ref(false);
 
-const ADMIN_EMAILS = [
-  "dogfood@tansohq.com",
-  "kat@tansohq.com",
-  "doug@tansohq.com",
-];
+const ADMIN_EMAILS = (import.meta.env.VITE_ADMIN_EMAILS || "")
+  .split(",")
+  .filter(Boolean)
+  .map((e: string) => e.trim().toLowerCase());
 const isAdmin = computed(() => {
   const email = account.value?.email?.toLowerCase();
   return !!email && ADMIN_EMAILS.includes(email);

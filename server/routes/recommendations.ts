@@ -317,8 +317,8 @@ export async function computeRecommendations(
       );
       if (existing.rows.length === 0) {
         await pool.query(
-          `INSERT INTO recommendations (user_id, type, title, description, severity, action_type, action_payload, context)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+          `INSERT INTO recommendations (user_id, account_id, type, title, description, severity, action_type, action_payload, context)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
           [
             userId,
             accountId,
@@ -671,6 +671,157 @@ export async function computeRecommendations(
             confidence: recommendationConfidence(
               7,
               spikeRatio > 5 ? "critical" : "warning",
+            ),
+          }),
+        ],
+      );
+    }
+  });
+
+  // 9. Margin risk — customers whose cost/revenue ratio worsened >10pp in recent vs prior 30 days
+  await runRule("margin_risk", async () => {
+    const result = await pool.query(
+      `WITH recent AS (
+        SELECT customer_id,
+          COALESCE(SUM(cost_amount), 0) AS cost,
+          COALESCE(SUM(revenue_amount), 0) AS revenue
+        FROM observe_events
+        WHERE account_id = $1 AND timestamp > NOW() - INTERVAL '30 days'
+          AND customer_id IS NOT NULL AND customer_id NOT IN ('default', 'unknown')
+        GROUP BY customer_id
+        HAVING SUM(cost_amount) > 1
+      ),
+      prior AS (
+        SELECT customer_id,
+          COALESCE(SUM(cost_amount), 0) AS cost,
+          COALESCE(SUM(revenue_amount), 0) AS revenue
+        FROM observe_events
+        WHERE account_id = $1
+          AND timestamp BETWEEN NOW() - INTERVAL '60 days' AND NOW() - INTERVAL '30 days'
+          AND customer_id IS NOT NULL AND customer_id NOT IN ('default', 'unknown')
+        GROUP BY customer_id
+        HAVING SUM(cost_amount) > 1
+      )
+      SELECT r.customer_id,
+        r.cost AS recent_cost, r.revenue AS recent_revenue,
+        p.cost AS prior_cost, p.revenue AS prior_revenue
+      FROM recent r
+      JOIN prior p ON r.customer_id = p.customer_id
+      WHERE p.revenue > 0 AND r.revenue > 0`,
+      [accountId],
+    );
+
+    for (const row of result.rows) {
+      const recentMargin =
+        ((parseFloat(row.recent_revenue) - parseFloat(row.recent_cost)) /
+          parseFloat(row.recent_revenue)) *
+        100;
+      const priorMargin =
+        ((parseFloat(row.prior_revenue) - parseFloat(row.prior_cost)) /
+          parseFloat(row.prior_revenue)) *
+        100;
+      const delta = recentMargin - priorMargin;
+      if (delta >= -10) continue;
+
+      const existing = await pool.query(
+        `SELECT id FROM recommendations
+         WHERE user_id = $1 AND type = 'margin_risk'
+           AND status = 'pending'
+           AND context->>'customer_id' = $2`,
+        [userId, row.customer_id],
+      );
+      if (existing.rows.length > 0) continue;
+
+      await pool.query(
+        `INSERT INTO recommendations (user_id, account_id, type, title, description, severity, action_type, action_payload, context)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+        [
+          userId,
+          accountId,
+          "margin_risk",
+          `${row.customer_id} margin dropped ${Math.abs(Math.round(delta))}pp`,
+          `Margin fell from ${Math.round(priorMargin)}% to ${Math.round(recentMargin)}% over the last 30 days. Cost went from $${parseFloat(row.prior_cost).toFixed(2)} to $${parseFloat(row.recent_cost).toFixed(2)}. Investigate whether usage spiked or model costs increased.`,
+          recentMargin < 0 ? "critical" : "warning",
+          "view_customer",
+          JSON.stringify({ customer_id: row.customer_id }),
+          JSON.stringify({
+            customer_id: row.customer_id,
+            recent_margin: Math.round(recentMargin),
+            prior_margin: Math.round(priorMargin),
+            delta: Math.round(delta),
+            confidence: recommendationConfidence(
+              Math.min(parseInt(row.recent_cost), parseInt(row.prior_cost)),
+              recentMargin < 0 ? "critical" : "warning",
+            ),
+          }),
+        ],
+      );
+    }
+  });
+
+  // 10. Expansion risk — customers paying MRR but using < 20% of median usage
+  await runRule("expansion_risk", async () => {
+    const usageResult = await pool.query(
+      `SELECT customer_id, COUNT(*) AS event_count
+       FROM observe_events
+       WHERE account_id = $1 AND timestamp > NOW() - INTERVAL '30 days'
+         AND customer_id IS NOT NULL AND customer_id NOT IN ('default', 'unknown')
+       GROUP BY customer_id`,
+      [accountId],
+    );
+    if (usageResult.rows.length < 3) return;
+
+    const counts = usageResult.rows
+      .map((r) => parseInt(r.event_count))
+      .sort((a, b) => a - b);
+    const median = counts[Math.floor(counts.length / 2)];
+    if (median < 10) return;
+
+    const threshold = median * 0.2;
+
+    const payingCustomers = await pool.query(
+      `SELECT DISTINCT s.customer_id
+       FROM subscriptions s
+       WHERE s.account_id = $1 AND s.is_active = true AND COALESCE(s.mrr_override, 0) > 0`,
+      [accountId],
+    );
+    const payingSet = new Set(payingCustomers.rows.map((r) => r.customer_id));
+
+    for (const row of usageResult.rows) {
+      const count = parseInt(row.event_count);
+      if (count >= threshold) continue;
+      if (!payingSet.has(row.customer_id)) continue;
+
+      const existing = await pool.query(
+        `SELECT id FROM recommendations
+         WHERE user_id = $1 AND type = 'expansion_risk'
+           AND status = 'pending'
+           AND context->>'customer_id' = $2`,
+        [userId, row.customer_id],
+      );
+      if (existing.rows.length > 0) continue;
+
+      const usagePct = Math.round((count / median) * 100);
+      await pool.query(
+        `INSERT INTO recommendations (user_id, account_id, type, title, description, severity, action_type, action_payload, context)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+        [
+          userId,
+          accountId,
+          "expansion_risk",
+          `${row.customer_id} uses only ${usagePct}% of median — paying but inactive`,
+          `This customer is paying for a subscription but only made ${count} API calls in the last 30 days vs the median of ${median}. Low adoption signals churn risk or an upsell opportunity to drive engagement.`,
+          usagePct < 5 ? "critical" : "warning",
+          "view_customer",
+          JSON.stringify({ customer_id: row.customer_id }),
+          JSON.stringify({
+            customer_id: row.customer_id,
+            event_count: count,
+            median_usage: median,
+            usage_pct: usagePct,
+            confidence: recommendationConfidence(
+              count,
+              usagePct < 5 ? "critical" : "warning",
             ),
           }),
         ],

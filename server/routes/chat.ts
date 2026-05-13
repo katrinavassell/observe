@@ -512,7 +512,9 @@ Only include action blocks when the user explicitly asks you to do something. Fo
                 metric,
                 operator,
                 action.threshold || 100,
-                req.accountEmail || "noreply@observe.tansohq.com",
+                req.accountEmail ||
+                  process.env.ALERT_FROM_EMAIL ||
+                  "noreply@localhost",
               ],
             );
             return res.json({
