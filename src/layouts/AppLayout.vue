@@ -20,6 +20,7 @@ import {
   X,
   MessageSquare,
   HelpCircle,
+  BookOpen,
   Shield,
 } from "lucide-vue-next";
 import { OrganizationSwitcher, OrganizationProfile } from "@clerk/vue";
@@ -383,8 +384,15 @@ function isActive(path: string) {
               <TooltipContent>Sign out</TooltipContent>
             </Tooltip>
           </div>
-          <!-- Help + Feedback -->
+          <!-- Docs + Help + Feedback -->
           <div class="flex items-center gap-1 px-2 pt-1">
+            <a
+              href="/docs.html"
+              class="flex items-center gap-1.5 px-2 py-1 text-xs text-sidebar-foreground/40 hover:text-sidebar-foreground hover:bg-sidebar-accent/50 transition-all duration-150 rounded-md"
+            >
+              <BookOpen class="h-3 w-3" />
+              Docs
+            </a>
             <router-link
               to="/help"
               class="flex items-center gap-1.5 px-2 py-1 text-xs text-sidebar-foreground/40 hover:text-sidebar-foreground hover:bg-sidebar-accent/50 transition-all duration-150 rounded-md"

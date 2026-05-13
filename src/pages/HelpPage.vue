@@ -139,6 +139,33 @@ const sections = [
     ],
   },
   {
+    id: "api-keys",
+    title: "API Keys & Scopes",
+    items: [
+      {
+        q: "Can I have multiple API keys?",
+        a: "Yes. Each account can have unlimited keys. Go to Data Sources to create them, or use the API: POST /api/sdk-keys. Each key can have different scopes, budgets, and expiry.",
+      },
+      {
+        q: "What are scopes?",
+        a: "Scopes restrict what a key can access. For example, a key with only 'usage.read' can view analytics but can't ingest events or create alerts. Keys without scopes (created before this feature) have full access.",
+      },
+      {
+        q: "What are key budgets?",
+        a: "A per-key spending cap on LLM proxy/gateway calls. Set budget_cents and budget_period ('month' or 'day') when creating a key. When the budget is exhausted, proxy calls return 429. Management API calls are free and unmetered.",
+      },
+      {
+        q: "Can agents create their own accounts?",
+        a: "Yes. POST /api/signup with an email creates an account and returns an API key. No authentication required. Rate limited to 3/hr per IP. See the API docs for details.",
+        link: { url: "/docs.html", label: "API Docs" },
+      },
+      {
+        q: "How do I check my key's remaining budget?",
+        a: "GET /api/sdk-keys/me returns your key's scopes, budget_cents, budget_used_cents, budget_remaining_cents, and expiry.",
+      },
+    ],
+  },
+  {
     id: "team",
     title: "Team & Organizations",
     items: [
