@@ -1,6 +1,6 @@
 import { Router, Response } from "express";
 import type { Pool } from "pg";
-import { type AuthRequest } from "./auth.js";
+import { type AuthRequest, ensureScoped } from "./auth.js";
 
 export function createA2ARoutes(pool: Pool, ensureAuth: any) {
   const router = Router();
@@ -60,6 +60,7 @@ export function createA2ARoutes(pool: Pool, ensureAuth: any) {
   router.post(
     "/a2a/query",
     ensureAuth,
+    ensureScoped("admin"),
     async (req: AuthRequest, res: Response) => {
       try {
         const { action, params } = req.body || {};

@@ -1,7 +1,7 @@
 import { Router, Response } from "express";
 import type { Pool } from "pg";
 import { z } from "zod";
-import { type AuthRequest } from "./auth.js";
+import { type AuthRequest, ensureScoped } from "./auth.js";
 import { checkAlerts } from "./alerts.js";
 import { clearSampleData } from "./data-helpers.js";
 
@@ -104,6 +104,7 @@ export function createCustomersRoutes(
   router.get(
     "/data/status",
     ensureVisitor,
+    ensureScoped("customers.read"),
     async (req: AuthRequest, res: Response) => {
       try {
         const statusResult = await pool.query(
@@ -150,6 +151,7 @@ export function createCustomersRoutes(
   router.get(
     "/customers",
     ensureVisitor,
+    ensureScoped("customers.read"),
     async (req: AuthRequest, res: Response) => {
       try {
         const limit = Math.min(parseInt(req.query.limit as string) || 100, 500);
@@ -179,6 +181,7 @@ export function createCustomersRoutes(
   router.get(
     "/subscriptions",
     ensureVisitor,
+    ensureScoped("customers.read"),
     async (req: AuthRequest, res: Response) => {
       try {
         const limit = Math.min(parseInt(req.query.limit as string) || 100, 500);
@@ -209,6 +212,7 @@ export function createCustomersRoutes(
   router.get(
     "/plans",
     ensureVisitor,
+    ensureScoped("customers.read"),
     async (req: AuthRequest, res: Response) => {
       try {
         const limit = Math.min(parseInt(req.query.limit as string) || 100, 500);
@@ -228,6 +232,7 @@ export function createCustomersRoutes(
   router.get(
     "/usage",
     ensureVisitor,
+    ensureScoped("customers.read"),
     async (req: AuthRequest, res: Response) => {
       try {
         const limit = Math.min(parseInt(req.query.limit as string) || 100, 500);
@@ -258,6 +263,7 @@ export function createCustomersRoutes(
   router.get(
     "/costs",
     ensureVisitor,
+    ensureScoped("customers.read"),
     async (req: AuthRequest, res: Response) => {
       try {
         const limit = Math.min(parseInt(req.query.limit as string) || 100, 500);
@@ -288,6 +294,7 @@ export function createCustomersRoutes(
   router.get(
     "/data/analyzer",
     ensureVisitor,
+    ensureScoped("customers.read"),
     async (req: AuthRequest, res: Response) => {
       try {
         const analyzerLimit = 5000;
@@ -372,6 +379,7 @@ export function createCustomersRoutes(
   router.delete(
     "/data/clear",
     ensureVisitor,
+    ensureScoped("customers.write"),
     async (req: AuthRequest, res: Response) => {
       const acct = req.accountId ?? null;
       const tables = [
@@ -419,6 +427,7 @@ export function createCustomersRoutes(
   router.delete(
     "/data/clear/revenue",
     ensureVisitor,
+    ensureScoped("customers.write"),
     async (req: AuthRequest, res: Response) => {
       const client = await pool.connect();
       try {
@@ -451,6 +460,7 @@ export function createCustomersRoutes(
   router.delete(
     "/data/clear/costs",
     ensureVisitor,
+    ensureScoped("customers.write"),
     async (req: AuthRequest, res: Response) => {
       const client = await pool.connect();
       try {
@@ -477,6 +487,7 @@ export function createCustomersRoutes(
   router.delete(
     "/data/clear/usage",
     ensureVisitor,
+    ensureScoped("customers.write"),
     async (req: AuthRequest, res: Response) => {
       const client = await pool.connect();
       try {
@@ -503,6 +514,7 @@ export function createCustomersRoutes(
   router.post(
     "/data/upload/costs",
     ensureVisitor,
+    ensureScoped("customers.write"),
     async (req: AuthRequest, res: Response) => {
       const access = await deps.checkBillingFeatureAccess(
         req.visitorId!,
@@ -625,6 +637,7 @@ export function createCustomersRoutes(
   router.post(
     "/data/upload/usage",
     ensureVisitor,
+    ensureScoped("customers.write"),
     async (req: AuthRequest, res: Response) => {
       const access = await deps.checkBillingFeatureAccess(
         req.visitorId!,
@@ -749,6 +762,7 @@ export function createCustomersRoutes(
   router.post(
     "/data/upload/revenue",
     ensureVisitor,
+    ensureScoped("customers.write"),
     async (req: AuthRequest, res: Response) => {
       const access = await deps.checkBillingFeatureAccess(
         req.visitorId!,
@@ -892,6 +906,7 @@ export function createCustomersRoutes(
   router.get(
     "/metrics/summary",
     ensureVisitor,
+    ensureScoped("customers.read"),
     async (req: AuthRequest, res: Response) => {
       try {
         const customersResult = await pool.query(
@@ -927,6 +942,7 @@ export function createCustomersRoutes(
   router.get(
     "/metrics/source-breakdown",
     ensureVisitor,
+    ensureScoped("customers.read"),
     async (req: AuthRequest, res: Response) => {
       try {
         const result = await pool.query(
@@ -970,6 +986,7 @@ export function createCustomersRoutes(
   router.get(
     "/customers/:id",
     ensureVisitor,
+    ensureScoped("customers.read"),
     async (req: AuthRequest, res: Response) => {
       try {
         const { id } = req.params;
@@ -1112,6 +1129,7 @@ export function createCustomersRoutes(
   router.get(
     "/customers/:id/timeseries",
     ensureVisitor,
+    ensureScoped("customers.read"),
     async (req: AuthRequest, res: Response) => {
       try {
         const { id } = req.params;
@@ -1155,6 +1173,7 @@ export function createCustomersRoutes(
   router.patch(
     "/customers/:customerId/internal",
     ensureVisitor,
+    ensureScoped("customers.write"),
     async (req: AuthRequest, res: Response) => {
       try {
         const { customerId } = req.params;

@@ -1,6 +1,6 @@
 import { Router, Response } from "express";
 import type { Pool } from "pg";
-import { type AuthRequest } from "./auth.js";
+import { type AuthRequest, ensureScoped } from "./auth.js";
 
 export function createSimulationRoutes(pool: Pool, ensureVisitor: any) {
   const router = Router();
@@ -9,6 +9,7 @@ export function createSimulationRoutes(pool: Pool, ensureVisitor: any) {
   router.get(
     "/simulations/opportunities",
     ensureVisitor,
+    ensureScoped("usage.read"),
     async (req: AuthRequest, res: Response) => {
       try {
         const result = await pool.query(
@@ -77,6 +78,7 @@ export function createSimulationRoutes(pool: Pool, ensureVisitor: any) {
   router.post(
     "/simulations/suggest",
     ensureVisitor,
+    ensureScoped("usage.write"),
     async (req: AuthRequest, res: Response) => {
       try {
         const [featureRes, customerRes] = await Promise.all([
@@ -322,6 +324,7 @@ Return ONLY the JSON object, no markdown or explanation.`;
   router.get(
     "/simulations",
     ensureVisitor,
+    ensureScoped("usage.read"),
     async (req: AuthRequest, res: Response) => {
       try {
         const result = await pool.query(
@@ -347,6 +350,7 @@ Return ONLY the JSON object, no markdown or explanation.`;
   router.post(
     "/simulations",
     ensureVisitor,
+    ensureScoped("usage.write"),
     async (req: AuthRequest, res: Response) => {
       const visitorId = req.visitorId!;
 
@@ -388,6 +392,7 @@ Return ONLY the JSON object, no markdown or explanation.`;
   router.get(
     "/simulations/:id",
     ensureVisitor,
+    ensureScoped("usage.read"),
     async (req: AuthRequest, res: Response) => {
       try {
         const { id } = req.params;
@@ -416,6 +421,7 @@ Return ONLY the JSON object, no markdown or explanation.`;
   router.put(
     "/simulations/:id",
     ensureVisitor,
+    ensureScoped("usage.write"),
     async (req: AuthRequest, res: Response) => {
       const client = await pool.connect();
       try {
@@ -803,6 +809,7 @@ Return ONLY the JSON object, no markdown or explanation.`;
   router.delete(
     "/simulations/:id",
     ensureVisitor,
+    ensureScoped("usage.write"),
     async (req: AuthRequest, res: Response) => {
       try {
         const { id } = req.params;

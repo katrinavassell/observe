@@ -2,7 +2,7 @@ import { Router, Request, Response } from "express";
 import type { Pool } from "pg";
 import crypto from "crypto";
 import rateLimit from "express-rate-limit";
-import { type AuthRequest } from "./auth.js";
+import { type AuthRequest, ensureScoped } from "./auth.js";
 import { encryptApiKey, decryptApiKey } from "../stripe-client.js";
 import { calculateCostFromTokens } from "../model-pricing.js";
 import { checkAlerts, checkCustomerAlerts } from "./alerts.js";
@@ -31,6 +31,7 @@ export function createEventsIngestRoutes(
   router.post(
     "/sdk-keys",
     ensureVisitor,
+    ensureScoped("events.write"),
     async (req: AuthRequest, res: Response) => {
       try {
         if (!req.accountEmail) {
@@ -92,6 +93,7 @@ export function createEventsIngestRoutes(
   router.get(
     "/sdk-keys",
     ensureVisitor,
+    ensureScoped("events.read"),
     async (req: AuthRequest, res: Response) => {
       try {
         if (!req.accountId) {
@@ -134,6 +136,7 @@ export function createEventsIngestRoutes(
   router.post(
     "/sdk-keys/:id/reset",
     ensureVisitor,
+    ensureScoped("events.write"),
     async (req: AuthRequest, res: Response) => {
       try {
         const userId = req.visitorId!;
@@ -200,6 +203,7 @@ export function createEventsIngestRoutes(
   router.delete(
     "/sdk-keys/:id",
     ensureVisitor,
+    ensureScoped("events.write"),
     async (req: AuthRequest, res: Response) => {
       try {
         const keyId = parseInt(req.params.id, 10);
@@ -898,6 +902,7 @@ export function createEventsIngestRoutes(
   router.post(
     "/events/test",
     ensureVisitor,
+    ensureScoped("events.write"),
     async (req: AuthRequest, res: Response) => {
       try {
         const userId = req.visitorId!;

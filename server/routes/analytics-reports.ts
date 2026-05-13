@@ -1,6 +1,6 @@
 import { Router, Response } from "express";
 import type { Pool } from "pg";
-import { type AuthRequest } from "./auth.js";
+import { type AuthRequest, ensureScoped } from "./auth.js";
 import {
   getAllPricing,
   getModelPricing,
@@ -15,6 +15,7 @@ export function createAnalyticsReportRoutes(pool: Pool, ensureVisitor: any) {
   router.get(
     "/analytics/overview",
     ensureVisitor,
+    ensureScoped("usage.read"),
     async (req: AuthRequest, res: Response) => {
       try {
         const accountId = req.accountId;
@@ -239,6 +240,7 @@ export function createAnalyticsReportRoutes(pool: Pool, ensureVisitor: any) {
   router.get(
     "/analytics/feature-stickiness",
     ensureVisitor,
+    ensureScoped("usage.read"),
     async (req: AuthRequest, res: Response) => {
       try {
         const accountId = req.accountId;
@@ -324,6 +326,7 @@ export function createAnalyticsReportRoutes(pool: Pool, ensureVisitor: any) {
   router.get(
     "/analytics/customer-pnl",
     ensureVisitor,
+    ensureScoped("usage.read"),
     async (req: AuthRequest, res: Response) => {
       try {
         const result = await pool.query(
@@ -404,6 +407,7 @@ export function createAnalyticsReportRoutes(pool: Pool, ensureVisitor: any) {
   router.get(
     "/analytics/margin-alerts",
     ensureVisitor,
+    ensureScoped("usage.read"),
     async (req: AuthRequest, res: Response) => {
       try {
         const alerts: Array<{
@@ -565,6 +569,7 @@ export function createAnalyticsReportRoutes(pool: Pool, ensureVisitor: any) {
   router.get(
     "/analytics/revenue-confidence",
     ensureVisitor,
+    ensureScoped("usage.read"),
     async (req: AuthRequest, res: Response) => {
       try {
         const result = await pool.query(
@@ -624,6 +629,7 @@ export function createAnalyticsReportRoutes(pool: Pool, ensureVisitor: any) {
   router.get(
     "/analytics/trends",
     ensureVisitor,
+    ensureScoped("usage.read"),
     async (req: AuthRequest, res: Response) => {
       try {
         const months = Math.min(
@@ -700,6 +706,7 @@ export function createAnalyticsReportRoutes(pool: Pool, ensureVisitor: any) {
   router.get(
     "/analytics/retention",
     ensureVisitor,
+    ensureScoped("usage.read"),
     async (req: AuthRequest, res: Response) => {
       try {
         const [cohortResult, activeResult] = await Promise.all([
@@ -789,6 +796,7 @@ export function createAnalyticsReportRoutes(pool: Pool, ensureVisitor: any) {
   router.get(
     "/analytics/mrr-movements",
     ensureVisitor,
+    ensureScoped("usage.read"),
     async (req: AuthRequest, res: Response) => {
       try {
         const [currentResult, priorResult, customerResult] = await Promise.all([
@@ -922,6 +930,7 @@ export function createAnalyticsReportRoutes(pool: Pool, ensureVisitor: any) {
   router.get(
     "/analytics/cost-by-token-type",
     ensureVisitor,
+    ensureScoped("usage.read"),
     async (req: AuthRequest, res: Response) => {
       try {
         const days = Math.min(
@@ -996,6 +1005,7 @@ export function createAnalyticsReportRoutes(pool: Pool, ensureVisitor: any) {
   router.get(
     "/recommendations/model-swap",
     ensureVisitor,
+    ensureScoped("usage.read"),
     async (req: AuthRequest, res: Response) => {
       try {
         const days = parseInt(req.query.days as string) || 90;
@@ -1135,6 +1145,7 @@ export function createAnalyticsReportRoutes(pool: Pool, ensureVisitor: any) {
   router.get(
     "/recommendations/underwater-customers",
     ensureVisitor,
+    ensureScoped("usage.read"),
     async (req: AuthRequest, res: Response) => {
       try {
         const days = parseInt(req.query.days as string) || 90;
@@ -1190,6 +1201,7 @@ export function createAnalyticsReportRoutes(pool: Pool, ensureVisitor: any) {
   router.get(
     "/analytics/daily-summary",
     ensureVisitor,
+    ensureScoped("usage.read"),
     async (req: AuthRequest, res: Response) => {
       try {
         const days = Math.min(
@@ -1239,6 +1251,7 @@ export function createAnalyticsReportRoutes(pool: Pool, ensureVisitor: any) {
   router.post(
     "/analytics/suggest-pricing",
     ensureVisitor,
+    ensureScoped("usage.read"),
     async (req: AuthRequest, res: Response) => {
       try {
         const [featureResult, pricingResult, mrrResult] = await Promise.all([

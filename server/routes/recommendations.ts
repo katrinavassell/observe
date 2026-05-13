@@ -1,6 +1,6 @@
 import { Router, Response } from "express";
 import type { Pool } from "pg";
-import { type AuthRequest } from "./auth.js";
+import { type AuthRequest, ensureScoped } from "./auth.js";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -847,6 +847,7 @@ export function createRecommendationsRoutes(pool: Pool, ensureVisitor: any) {
   router.get(
     "/recommendations",
     ensureVisitor,
+    ensureScoped("recommendations.read"),
     async (req: AuthRequest, res: Response) => {
       try {
         const status = (req.query.status as string) || "pending";
@@ -871,6 +872,7 @@ export function createRecommendationsRoutes(pool: Pool, ensureVisitor: any) {
   router.get(
     "/recommendations/count",
     ensureVisitor,
+    ensureScoped("recommendations.read"),
     async (req: AuthRequest, res: Response) => {
       try {
         const result = await pool.query(
@@ -889,6 +891,7 @@ export function createRecommendationsRoutes(pool: Pool, ensureVisitor: any) {
   router.post(
     "/recommendations/compute",
     ensureVisitor,
+    ensureScoped("recommendations.read"),
     async (req: AuthRequest, res: Response) => {
       try {
         await computeRecommendations(pool, req.visitorId!);
@@ -911,6 +914,7 @@ export function createRecommendationsRoutes(pool: Pool, ensureVisitor: any) {
   router.post(
     "/recommendations/:id/apply",
     ensureVisitor,
+    ensureScoped("recommendations.read"),
     async (req: AuthRequest, res: Response) => {
       try {
         const rec = await pool.query(
@@ -1039,6 +1043,7 @@ export function createRecommendationsRoutes(pool: Pool, ensureVisitor: any) {
   router.post(
     "/recommendations/:id/dismiss",
     ensureVisitor,
+    ensureScoped("recommendations.read"),
     async (req: AuthRequest, res: Response) => {
       try {
         const result = await pool.query(

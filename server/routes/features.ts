@@ -1,6 +1,6 @@
 import { Router, Response } from "express";
 import type { Pool } from "pg";
-import { type AuthRequest } from "./auth.js";
+import { type AuthRequest, ensureScoped } from "./auth.js";
 
 function coerceEventRow(row: Record<string, unknown>) {
   return {
@@ -23,6 +23,7 @@ export function createFeaturesRoutes(pool: Pool, ensureVisitor: any) {
   router.get(
     "/features",
     ensureVisitor,
+    ensureScoped("usage.read"),
     async (req: AuthRequest, res: Response) => {
       try {
         const result = await pool.query(
@@ -79,6 +80,7 @@ export function createFeaturesRoutes(pool: Pool, ensureVisitor: any) {
   router.get(
     "/features/:key",
     ensureVisitor,
+    ensureScoped("usage.read"),
     async (req: AuthRequest, res: Response) => {
       try {
         const { key } = req.params;

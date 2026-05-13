@@ -1,6 +1,6 @@
 import { Router, Response } from "express";
 import type { Pool } from "pg";
-import { type AuthRequest } from "./auth.js";
+import { type AuthRequest, ensureScoped } from "./auth.js";
 import { getAllPricing } from "../model-pricing.js";
 
 const ADMIN_EMAILS = process.env.ADMIN_EMAILS
@@ -20,6 +20,7 @@ export function createModelsApiRoutes(pool: Pool, ensureVisitor: any) {
   router.get(
     "/admin/status",
     ensureVisitor,
+    ensureScoped("models.read"),
     async (req: AuthRequest, res: Response) => {
       res.json({ isAdmin: isAdminUser(req) });
     },
@@ -40,6 +41,7 @@ export function createModelsApiRoutes(pool: Pool, ensureVisitor: any) {
   router.get(
     "/models",
     ensureVisitor,
+    ensureScoped("models.read"),
     async (req: AuthRequest, res: Response) => {
       try {
         const result = await pool.query(

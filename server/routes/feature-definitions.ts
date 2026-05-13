@@ -1,6 +1,6 @@
 import { Router, Response } from "express";
 import type { Pool } from "pg";
-import { type AuthRequest } from "./auth.js";
+import { type AuthRequest, ensureScoped } from "./auth.js";
 
 const ALLOWED_KINDS = new Set(["cost", "value", "outcome"]);
 
@@ -21,6 +21,7 @@ export function createFeatureDefinitionsRoutes(pool: Pool, ensureVisitor: any) {
   router.get(
     "/feature-definitions",
     ensureVisitor,
+    ensureScoped("usage.read"),
     async (req: AuthRequest, res: Response) => {
       try {
         const result = await pool.query(
@@ -90,6 +91,7 @@ export function createFeatureDefinitionsRoutes(pool: Pool, ensureVisitor: any) {
   router.post(
     "/feature-definitions",
     ensureVisitor,
+    ensureScoped("usage.write"),
     async (req: AuthRequest, res: Response) => {
       const { name, feature_key, kind, description, code_location } =
         req.body ?? {};
@@ -153,6 +155,7 @@ export function createFeatureDefinitionsRoutes(pool: Pool, ensureVisitor: any) {
   router.patch(
     "/feature-definitions/:id",
     ensureVisitor,
+    ensureScoped("usage.write"),
     async (req: AuthRequest, res: Response) => {
       const id = parseInt(req.params.id, 10);
       if (!Number.isFinite(id)) {
@@ -206,6 +209,7 @@ export function createFeatureDefinitionsRoutes(pool: Pool, ensureVisitor: any) {
   router.delete(
     "/feature-definitions/:id",
     ensureVisitor,
+    ensureScoped("usage.write"),
     async (req: AuthRequest, res: Response) => {
       const id = parseInt(req.params.id, 10);
       if (!Number.isFinite(id)) {
