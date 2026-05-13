@@ -19,6 +19,10 @@ dist-ssr
 
 # Internal docs (not for public repo)
 files/
+BRANCH_NOTES.md
+AGENT_SIGNUP_PLAN.md
+*.db
+*.sqlite
 
 # Claude Code
 .claude/

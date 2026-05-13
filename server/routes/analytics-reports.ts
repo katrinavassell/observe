@@ -11,6 +11,315 @@ import { inferModelProvider } from "../lib/models.js";
 export function createAnalyticsReportRoutes(pool: Pool, ensureVisitor: any) {
   const router = Router();
 
+  // GET /analytics/overview — unified BI dashboard: cost vs value per unit
+  router.get(
+    "/analytics/overview",
+    ensureVisitor,
+    async (req: AuthRequest, res: Response) => {
+      try {
+        const accountId = req.accountId;
+        if (!accountId) return res.json({ summary: null });
+
+        const NOT_STRIPE = `AND (source IS NULL OR source != 'stripe')`;
+
+        const spendType = (req.query.spend_type as string) || "all";
+        const SPEND_FILTER =
+          spendType === "internal"
+            ? `AND EXISTS (SELECT 1 FROM customers c_sf WHERE c_sf.account_id = oe.account_id AND c_sf.customer_id = oe.customer_id AND c_sf.is_internal = true)`
+            : spendType === "customer_facing"
+              ? `AND NOT EXISTS (SELECT 1 FROM customers c_sf WHERE c_sf.account_id = oe.account_id AND c_sf.customer_id = oe.customer_id AND c_sf.is_internal = true)`
+              : "";
+
+        const [
+          summaryRes,
+          trendRes,
+          featureRes,
+          customerRes,
+          providerRes,
+          alertCountRes,
+          recCountRes,
+          topRecsRes,
+        ] = await Promise.all([
+          pool.query(
+            `SELECT
+              COALESCE(SUM(oe.cost_amount), 0) AS total_cost,
+              COALESCE(SUM(oe.revenue_amount), 0) AS total_revenue,
+              COALESCE(SUM(oe.usage_units), 0) AS total_usage,
+              COUNT(*) AS event_count,
+              COUNT(DISTINCT oe.customer_id) FILTER (WHERE oe.customer_id IS NOT NULL AND oe.customer_id != 'default' AND oe.customer_id != 'unknown') AS customer_count
+            FROM observe_events oe
+            WHERE oe.account_id = $1 ${NOT_STRIPE} ${SPEND_FILTER}`,
+            [accountId],
+          ),
+          pool.query(
+            `SELECT
+              DATE_TRUNC('month', oe.timestamp) AS month,
+              COALESCE(SUM(oe.cost_amount), 0) AS cost,
+              COALESCE(SUM(oe.revenue_amount), 0) AS revenue,
+              COALESCE(SUM(oe.usage_units), 0) AS usage,
+              COUNT(*) AS event_count,
+              COUNT(DISTINCT oe.customer_id) AS customer_count
+            FROM observe_events oe
+            WHERE oe.account_id = $1 ${NOT_STRIPE} ${SPEND_FILTER}
+            GROUP BY month ORDER BY month DESC LIMIT 6`,
+            [accountId],
+          ),
+          pool.query(
+            `SELECT
+              oe.feature_key,
+              COUNT(*) AS event_count,
+              COUNT(DISTINCT oe.customer_id) AS customer_count,
+              COALESCE(SUM(oe.cost_amount), 0) AS cost,
+              COALESCE(SUM(oe.revenue_amount), 0) AS revenue,
+              COALESCE(SUM(oe.usage_units), 0) AS usage
+            FROM observe_events oe
+            WHERE oe.account_id = $1 AND oe.feature_key IS NOT NULL ${NOT_STRIPE} ${SPEND_FILTER}
+            GROUP BY oe.feature_key ORDER BY cost DESC`,
+            [accountId],
+          ),
+          pool.query(
+            `SELECT
+              oe.customer_id,
+              COALESCE(c.name, oe.customer_id) AS customer_name,
+              COUNT(*) AS event_count,
+              COALESCE(SUM(oe.cost_amount), 0) AS cost,
+              COALESCE(SUM(oe.revenue_amount), 0) AS revenue,
+              COALESCE(SUM(oe.usage_units), 0) AS usage
+            FROM observe_events oe
+            LEFT JOIN customers c ON oe.account_id = c.account_id AND oe.customer_id = c.customer_id
+            WHERE oe.account_id = $1 AND oe.customer_id IS NOT NULL ${NOT_STRIPE} ${SPEND_FILTER}
+            GROUP BY oe.customer_id, c.name
+            ORDER BY cost DESC LIMIT 15`,
+            [accountId],
+          ),
+          pool.query(
+            `SELECT
+              oe.model_provider AS provider, oe.model,
+              COUNT(*) AS event_count,
+              COALESCE(SUM(oe.cost_amount), 0) AS cost,
+              COALESCE(SUM(oe.usage_units), 0) AS usage
+            FROM observe_events oe
+            WHERE oe.account_id = $1 AND oe.model IS NOT NULL ${NOT_STRIPE} ${SPEND_FILTER}
+            GROUP BY oe.model_provider, oe.model ORDER BY cost DESC`,
+            [accountId],
+          ),
+          pool.query(
+            `SELECT COUNT(*) AS count FROM alert_history
+            WHERE account_id = $1 AND fired_at >= NOW() - INTERVAL '24 hours'`,
+            [accountId],
+          ),
+          pool.query(
+            `SELECT COUNT(*) AS count FROM recommendations
+            WHERE account_id = $1 AND status = 'pending'`,
+            [accountId],
+          ),
+          pool.query(
+            `SELECT type, title, severity FROM recommendations
+            WHERE account_id = $1 AND status = 'pending'
+            ORDER BY CASE severity WHEN 'critical' THEN 0 WHEN 'warning' THEN 1 ELSE 2 END, created_at DESC
+            LIMIT 3`,
+            [accountId],
+          ),
+        ]);
+
+        const s = summaryRes.rows[0];
+        const totalCost = parseFloat(s.total_cost) || 0;
+        const totalRevenue = parseFloat(s.total_revenue) || 0;
+        const marginPct =
+          totalRevenue > 0
+            ? Math.round(((totalRevenue - totalCost) / totalRevenue) * 100)
+            : null;
+
+        const summary = {
+          total_cost: totalCost,
+          total_revenue: totalRevenue,
+          margin_pct: marginPct,
+          total_usage: parseFloat(s.total_usage) || 0,
+          event_count: parseInt(s.event_count),
+          customer_count: parseInt(s.customer_count),
+        };
+
+        const margin_trend = trendRes.rows
+          .reverse()
+          .map((r: Record<string, any>) => {
+            const cost = parseFloat(r.cost) || 0;
+            const revenue = parseFloat(r.revenue) || 0;
+            return {
+              month: r.month
+                ? new Date(r.month).toISOString().slice(0, 7)
+                : "unknown",
+              cost,
+              revenue,
+              usage: parseFloat(r.usage) || 0,
+              margin_pct:
+                revenue > 0
+                  ? Math.round(((revenue - cost) / revenue) * 100)
+                  : null,
+              event_count: parseInt(r.event_count),
+              customer_count: parseInt(r.customer_count),
+            };
+          });
+
+        const feature_roi = featureRes.rows.map((r: Record<string, any>) => {
+          const cost = parseFloat(r.cost) || 0;
+          const revenue = parseFloat(r.revenue) || 0;
+          const usage = parseFloat(r.usage) || 0;
+          const events = parseInt(r.event_count);
+          return {
+            feature_key: r.feature_key,
+            cost,
+            revenue,
+            usage,
+            margin_pct:
+              revenue > 0
+                ? Math.round(((revenue - cost) / revenue) * 100)
+                : null,
+            cost_per_unit:
+              usage > 0 ? cost / usage : cost / Math.max(events, 1),
+            revenue_per_unit:
+              usage > 0 ? revenue / usage : revenue / Math.max(events, 1),
+            event_count: events,
+            customer_count: parseInt(r.customer_count),
+          };
+        });
+
+        const customer_pnl = customerRes.rows.map((r: Record<string, any>) => {
+          const cost = parseFloat(r.cost) || 0;
+          const revenue = parseFloat(r.revenue) || 0;
+          return {
+            customer_id: r.customer_id,
+            customer_name: r.customer_name,
+            cost,
+            revenue,
+            margin_pct:
+              revenue > 0
+                ? Math.round(((revenue - cost) / revenue) * 100)
+                : null,
+            event_count: parseInt(r.event_count),
+            usage: parseFloat(r.usage) || 0,
+          };
+        });
+
+        const provider_breakdown = providerRes.rows.map(
+          (r: Record<string, any>) => {
+            const cost = parseFloat(r.cost) || 0;
+            const events = parseInt(r.event_count);
+            return {
+              provider: r.provider || "unknown",
+              model: r.model,
+              cost,
+              event_count: events,
+              avg_cost_per_call: events > 0 ? cost / events : 0,
+            };
+          },
+        );
+
+        res.json({
+          summary,
+          margin_trend,
+          feature_roi,
+          customer_pnl,
+          provider_breakdown,
+          active_alert_count: parseInt(alertCountRes.rows[0].count),
+          pending_recommendation_count: parseInt(recCountRes.rows[0].count),
+          top_recommendations: topRecsRes.rows,
+        });
+      } catch (error) {
+        console.error("GET /analytics/overview error:", error);
+        const msg =
+          error instanceof Error
+            ? error.message
+            : "Failed to get analytics overview";
+        res.status(500).json({ error: msg });
+      }
+    },
+  );
+
+  // GET /analytics/feature-stickiness — weekly retention per feature over 12 weeks
+  router.get(
+    "/analytics/feature-stickiness",
+    ensureVisitor,
+    async (req: AuthRequest, res: Response) => {
+      try {
+        const accountId = req.accountId;
+        if (!accountId) return res.json({ features: [] });
+
+        const result = await pool.query(
+          `WITH weekly AS (
+            SELECT
+              feature_key,
+              customer_id,
+              DATE_TRUNC('week', timestamp) AS week
+            FROM observe_events
+            WHERE account_id = $1
+              AND feature_key IS NOT NULL
+              AND customer_id IS NOT NULL
+              AND customer_id NOT IN ('default', 'unknown')
+              AND timestamp >= NOW() - INTERVAL '12 weeks'
+              AND (source IS NULL OR source != 'stripe')
+            GROUP BY feature_key, customer_id, DATE_TRUNC('week', timestamp)
+          ),
+          totals AS (
+            SELECT feature_key, COUNT(DISTINCT customer_id) AS total_customers
+            FROM weekly GROUP BY feature_key
+          )
+          SELECT
+            w.feature_key,
+            w.week,
+            COUNT(DISTINCT w.customer_id) AS active_customers,
+            t.total_customers
+          FROM weekly w
+          JOIN totals t ON w.feature_key = t.feature_key
+          GROUP BY w.feature_key, w.week, t.total_customers
+          ORDER BY w.feature_key, w.week ASC`,
+          [accountId],
+        );
+
+        const byFeature = new Map<
+          string,
+          {
+            total_customers: number;
+            weeks: Array<{
+              week: string;
+              active_customers: number;
+              retention_pct: number;
+            }>;
+          }
+        >();
+
+        for (const row of result.rows) {
+          const key = row.feature_key;
+          if (!byFeature.has(key)) {
+            byFeature.set(key, {
+              total_customers: parseInt(row.total_customers),
+              weeks: [],
+            });
+          }
+          const total = parseInt(row.total_customers);
+          const active = parseInt(row.active_customers);
+          byFeature.get(key)!.weeks.push({
+            week: new Date(row.week).toISOString().slice(0, 10),
+            active_customers: active,
+            retention_pct: total > 0 ? Math.round((active / total) * 100) : 0,
+          });
+        }
+
+        const features = Array.from(byFeature.entries()).map(
+          ([feature_key, data]) => ({
+            feature_key,
+            total_customers: data.total_customers,
+            weekly_retention: data.weeks,
+          }),
+        );
+
+        res.json({ features });
+      } catch (error) {
+        console.error("GET /analytics/feature-stickiness error:", error);
+        res.status(500).json({ error: "Failed to get feature stickiness" });
+      }
+    },
+  );
+
   // GET /analytics/customer-pnl — per-customer profit & loss, sorted by margin ascending (worst first)
   router.get(
     "/analytics/customer-pnl",
@@ -888,16 +1197,25 @@ export function createAnalyticsReportRoutes(pool: Pool, ensureVisitor: any) {
           90,
         );
 
+        const st = (req.query.spend_type as string) || "all";
+        const spendFilter =
+          st === "internal"
+            ? `AND EXISTS (SELECT 1 FROM customers c_sf WHERE c_sf.account_id = oe.account_id AND c_sf.customer_id = oe.customer_id AND c_sf.is_internal = true)`
+            : st === "customer_facing"
+              ? `AND NOT EXISTS (SELECT 1 FROM customers c_sf WHERE c_sf.account_id = oe.account_id AND c_sf.customer_id = oe.customer_id AND c_sf.is_internal = true)`
+              : "";
+
         const result = await pool.query(
           `SELECT
-            DATE_TRUNC('day', timestamp) AS day,
-            COALESCE(SUM(cost_amount), 0) AS total_cost,
-            COALESCE(SUM(revenue_amount), 0) AS total_revenue,
+            DATE_TRUNC('day', oe.timestamp) AS day,
+            COALESCE(SUM(oe.cost_amount), 0) AS total_cost,
+            COALESCE(SUM(oe.revenue_amount), 0) AS total_revenue,
             COUNT(*) AS event_count
-          FROM observe_events
-          WHERE account_id = $1
-            AND timestamp >= NOW() - MAKE_INTERVAL(days => $2)
-            AND (source IS NULL OR source NOT IN ('sample', 'stripe'))
+          FROM observe_events oe
+          WHERE oe.account_id = $1
+            AND oe.timestamp >= NOW() - MAKE_INTERVAL(days => $2)
+            AND (oe.source IS NULL OR oe.source NOT IN ('sample', 'stripe'))
+            ${spendFilter}
           GROUP BY day
           ORDER BY day ASC`,
           [req.accountId, days],

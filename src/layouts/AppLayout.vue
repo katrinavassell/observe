@@ -10,6 +10,7 @@ import {
   Cpu,
   Bell,
   Layers,
+  Lightbulb,
   Users,
   Eye,
   LogIn,
@@ -96,6 +97,12 @@ const navItems = computed(() => [
     label: "Customers",
     icon: Users,
     description: "Customer health, profitability, and usage trends",
+  },
+  {
+    path: "/recommendations",
+    label: "Recommendations",
+    icon: Lightbulb,
+    description: "Margin fixes from the recommendation engine",
   },
   {
     path: "/alerts",

@@ -236,7 +236,7 @@ app.use(
   }),
 );
 
-// ─── Weekly digest (cloud-only, manual trigger for admin) ───────────────────
+// ─── Weekly digest + activation nurture (cloud-only, manual trigger for admin)
 import { runWeeklyDigest } from "./digest.js";
 app.post("/admin/digest", ensureVisitor, async (req: any, res: any) => {
   const adminEmails = (
@@ -254,8 +254,9 @@ app.post("/admin/digest", ensureVisitor, async (req: any, res: any) => {
     return res.status(403).json({ error: "Admin only" });
   }
   try {
-    await runWeeklyDigest(pool);
-    res.json({ ok: true });
+    // Digest and activation disabled — code kept for future use
+    // await runWeeklyDigest(pool);
+    res.json({ ok: true, note: "digest disabled" });
   } catch (err) {
     console.error("Manual digest error:", err);
     res.status(500).json({ error: "Digest failed" });
@@ -280,7 +281,7 @@ async function ensureDbInitialized() {
   }
   return dbInitPromise;
 }
-const SCHEMA_VERSION = 22;
+const SCHEMA_VERSION = 24;
 async function _doDbInit() {
   try {
     await pool.query("SELECT 1");
@@ -1391,6 +1392,43 @@ async function _doDbInit() {
       .query(`ALTER TABLE accounts ALTER COLUMN password_hash DROP NOT NULL`)
       .catch(() => {});
     // ── end Stage 7 ────────────────────────────────────────────────────
+
+    // ── Stage 8: tanso_leads + activation_emails_sent ─────────────────
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS tanso_leads (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        email TEXT NOT NULL,
+        customer_name TEXT,
+        action_type TEXT,
+        action_payload JSONB,
+        recovered_dollars NUMERIC(12, 2),
+        recommendation_id BIGINT,
+        note TEXT,
+        source TEXT NOT NULL DEFAULT 'observe_recommendation_cta',
+        user_id TEXT,
+        account_id BIGINT,
+        scheduled_for TIMESTAMPTZ,
+        ae_notified_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+    await pool
+      .query(
+        `CREATE INDEX IF NOT EXISTS idx_tanso_leads_account_id ON tanso_leads (account_id) WHERE account_id IS NOT NULL`,
+      )
+      .catch(() => {});
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS activation_emails_sent (
+        id BIGSERIAL PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        email_type TEXT NOT NULL,
+        sent_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE (user_id, email_type)
+      )
+    `);
+    // ── end Stage 8 ────────────────────────────────────────────────────
 
     // Record schema version so future cold starts skip migrations
     await pool.query(

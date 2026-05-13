@@ -55,6 +55,7 @@ import {
 import { formatCurrency as fmt, formatPct as fmtPct } from "@/lib/format";
 import { toast } from "vue-sonner";
 import { useAuth } from "@/composables/useAuth";
+import MarginRecommendation from "@/components/dashboard/MarginRecommendation.vue";
 import {
   GUEST_CUSTOMERS,
   GUEST_COHORT_CUSTOMERS,
@@ -1104,6 +1105,18 @@ const excludedCount = computed(() => {
                           )
                         }}% savings)
                       </span>
+                    </div>
+                  </td>
+                </tr>
+                <tr
+                  v-if="
+                    isLoggedIn && c.margin_pct !== null && c.margin_pct < 30
+                  "
+                  class="border-0"
+                >
+                  <td :colspan="colCount" class="p-0">
+                    <div class="px-3 pb-2 empty:hidden" @click.stop>
+                      <MarginRecommendation :customer-key="c.customer_id" />
                     </div>
                   </td>
                 </tr>

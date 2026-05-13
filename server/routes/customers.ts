@@ -376,6 +376,8 @@ export function createCustomersRoutes(
       const acct = req.accountId ?? null;
       const tables = [
         "alert_rules",
+        "alert_history",
+        "recommendations",
         "custom_cohorts",
         "feature_pricing",
         "feature_definitions",

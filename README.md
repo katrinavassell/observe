@@ -1,127 +1,65 @@
-# Observe
+# observe
 
-**AI cost observability that connects cost to revenue to margin.**
+**See your LLM cost per customer and per feature. Drop-in for AI-native founder stacks.**
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
-[![GitHub stars](https://img.shields.io/github/stars/tansohq/observe)](https://github.com/tansohq/observe)
+[![CI](https://github.com/katrinalaszlo/observe/actions/workflows/ci.yml/badge.svg)](https://github.com/katrinalaszlo/observe/actions/workflows/ci.yml)
+[![npm](https://img.shields.io/npm/v/@tansohq/observe)](https://www.npmjs.com/package/@tansohq/observe)
 
-![Observe Dashboard](docs/images/dashboard-screenshot.png)
+![Dashboard](./assets/hero.png)
 
 ---
 
 ## Why this exists
 
-Helicone shows you what your AI calls cost. That's it. You still have to answer the questions that actually matter: which features are unprofitable? Which customers cost more to serve than they pay? What happens to margins if you raise prices on one plan?
-
-Observe closes that loop. It tracks AI cost at the feature and customer level, joins it with your revenue data, and gives you margin-by-feature breakdowns, per-customer profitability, and AI-powered insights to optimize pricing.
-
-If you're running an AI product and you're losing money on a subset of customers or features, Observe shows you exactly where and by how much.
+You know your total LLM bill. You don't know which customer is eating your margin or which feature costs 10x what it earns. Tools like LiteLLM, Helicone, Portkey, and Cloudflare AI Gateway track and cache LLM costs — but they don't connect cost to revenue. observe does. It attributes cost per customer and per feature, joins it with your Stripe revenue data, and shows you margin by customer, feature, and model. If you're running an AI product with paying customers, observe tells you exactly where you're losing money.
 
 ---
 
-## Features
+## Quick start
 
-| Feature | What it does |
-|---|---|
-| **OpenAI + Anthropic gateway** | Swap one URL, get automatic cost logging for all chat and embedding calls. Headers attach customer + feature attribution. |
-| **SDK event ingestion** | Send cost + revenue + usage events from your backend in a single HTTP call |
-| **Analytics dashboard** | Revenue, costs, and margin overview. Group by feature, model, customer, agent, or cost type. |
-| **Distributed traces** | Trace multi-step agent executions with span-level cost attribution |
-| **Cohort analysis** | Group customers by profitability, segment, or custom rules |
-| **Cost alerts** | 8 curated alert types (cost spikes, margin floors, unprofitable top customers, concentration risk, etc.) delivered via email |
-| **Ask Observe (AI side panel)** | Global ⌘K command palette — ask natural-language questions about your data, get answers and one-click actions (create alert, create cohort, route customer) |
-| **AI insights** | AI-generated recommendations about margin compression and pricing (5 free/month) |
-| **Free plan with limits** | Monthly event cap on free tier with usage meter |
-| **OpenAI/Anthropic integration** | Connect API keys to auto-pull usage data |
-| **Stripe billing** | Subscribe to plans, manage billing through Stripe checkout and webhooks |
-| **CSV upload** | Upload cost, usage, and revenue data without any API integration |
-| **Team collaboration** | Invite team members with admin/viewer roles |
-| **Guest preview** | Logged-out visitors see a pre-populated dashboard rendered entirely client-side — sample data never touches the database |
-| **Source badges** | See where each data point came from (Gateway, SDK, CSV, Stripe) |
-| **llms.txt install** | Point your AI agent at `observe.tansohq.com/llms.txt` + your API key and it'll wire up Observe in your repo |
-
----
-
-## Quickstart
-
-### Docker (recommended)
+### Docker (self-hosted)
 
 ```bash
-git clone https://github.com/tansohq/observe.git
+git clone https://github.com/katrinalaszlo/observe.git
 cd observe
-cp .env.example .env
-docker compose up
+cp .env.example .env    # fill in DATABASE_URL + CLERK_SECRET_KEY
+docker compose up       # app on http://localhost:3000
 ```
 
-App: `http://localhost:3000`
-
-### npm (local development)
-
-**Prerequisites:** Node.js 20+, PostgreSQL 16+ (or Supabase Postgres)
+### npm (local dev)
 
 ```bash
-git clone https://github.com/tansohq/observe.git
+git clone https://github.com/katrinalaszlo/observe.git
 cd observe
 npm install
-cp .env.example .env
+cp .env.example .env    # fill in required vars (see .env.example for list)
+npm run dev             # frontend :5173 | API :3001
 ```
 
-Required env vars:
+Database schema (40 tables) is created automatically on first start.
 
-```env
-DATABASE_URL=postgresql://user:password@localhost:5432/observe
-SESSION_SECRET=any-random-string-at-least-32-chars
-INTEGRATION_ENCRYPTION_KEY=any-random-string-at-least-16-chars   # openssl rand -hex 32
-VITE_SUPABASE_URL=https://xxx.supabase.co
-VITE_SUPABASE_ANON_KEY=...
-SUPABASE_URL=https://xxx.supabase.co
-SUPABASE_SERVICE_ROLE_KEY=...
-```
-
-```bash
-npm run dev
-```
-
-Frontend: `http://localhost:5000` | API: `http://localhost:3001`
-
-The database schema is created automatically on first start (observe_events + ~30 supporting tables).
-
----
-
-## Gateway setup (one line)
-
-Point your OpenAI or Anthropic client at the Observe gateway. Add one header. Every call is tracked automatically.
+### Point your OpenAI/Anthropic SDK at observe
 
 ```python
 from openai import OpenAI
 
 client = OpenAI(
-    api_key="sk-...",                                  # your real provider key
-    base_url="https://observe.tansohq.com/v1",          # or your self-hosted URL
-    default_headers={"Observe-Key": "obs_..."},        # your Observe key from Data Sources
-)
-
-# Cost, model, tokens, customer, feature — all tracked automatically.
-```
-
-You can also route to a self-hosted instance: swap `base_url` to `http://localhost:3001/v1`.
-
-<details>
-<summary>Per-customer + per-feature attribution (recommended)</summary>
-
-```python
-client = OpenAI(
     api_key="sk-...",
-    base_url="https://observe.tansohq.com/v1",
+    base_url="http://localhost:3001/v1",          # your observe instance
     default_headers={
-        "Observe-Key":      "obs_...",
-        "Observe-Customer": user.stripe_customer_id,  # cus_...
-        "Observe-Feature":  "ai_chat",                # your feature name
+        "Observe-Key":      "obs_...",            # from Data Sources page
+        "Observe-Customer": "cus_acme",           # your customer ID
+        "Observe-Feature":  "ai_chat",            # your feature name
     },
 )
-```
 
-</details>
+response = client.chat.completions.create(
+    model="gpt-4o",
+    messages=[{"role": "user", "content": "Hello"}],
+)
+# cost, tokens, model, customer, feature — all tracked automatically
+```
 
 <details>
 <summary>Anthropic</summary>
@@ -131,24 +69,19 @@ import anthropic
 
 client = anthropic.Anthropic(
     api_key="sk-ant-...",
-    base_url="https://observe.tansohq.com",
-    default_headers={"Observe-Key": "obs_..."},
+    base_url="http://localhost:3001",
+    default_headers={
+        "Observe-Key":      "obs_...",
+        "Observe-Customer": "cus_acme",
+        "Observe-Feature":  "document_qa",
+    },
 )
 ```
 
 </details>
 
-**Supported endpoints:**
-
-| Endpoint | Proxied to |
-|---|---|
-| `POST /v1/chat/completions` | OpenAI chat completions (streaming supported) |
-| `POST /v1/embeddings` | OpenAI embeddings |
-| `POST /v1/messages` | Anthropic messages |
-
----
-
-## SDK (zero headers, zero-latency wrap)
+<details>
+<summary>SDK wrapper (zero headers)</summary>
 
 ```bash
 npm install @tansohq/observe
@@ -158,154 +91,124 @@ npm install @tansohq/observe
 import { Observe } from '@tansohq/observe'
 import OpenAI from 'openai'
 
-// 1. Configure once at startup
 Observe.configure({ apiKey: process.env.OBSERVE_API_KEY! })
-
-// 2. Identify the current customer at request time
 Observe.identify({ customerId: user.id })
 
-// 3. Wrap the OpenAI client — all calls are auto-tracked
 const openai = Observe.wrap(new OpenAI())
-
-await openai.chat.completions.create({
-  model: 'gpt-4o',
-  messages: [{ role: 'user', content: 'Hello' }],
-})
+// all calls are auto-tracked with customer + feature attribution
 ```
 
-`Observe.wrap()` rewrites the client's `baseURL` to the Observe gateway and injects the tracking headers. Anthropic works the same way.
-
-Per-call feature override:
-
-```typescript
-await openai.chat.completions.create(
-  { model: 'gpt-4o', messages },
-  { headers: { 'Observe-Feature': 'summarize_email' } }
-)
-```
-
-### Install with your AI agent
-
-Observe exposes an [`llms.txt`](https://observe.tansohq.com/llms.txt) optimized for LLM consumption. Paste this into Cursor / Claude Code / Copilot and it'll wire up Observe in your repo automatically:
-
-```
-Install Observe by Tanso. Docs: https://observe.tansohq.com/llms.txt
-My API key: obs_...
-Wrap all OpenAI/Anthropic calls to report cost, customer, and feature.
-```
+</details>
 
 ---
 
-## HTTP event ingestion
+## What you get
 
-For providers without a gateway, or when you need to attach revenue data, send events directly.
+- **Per-customer cost attribution** — see which customers cost the most to serve, ranked by margin
+- **Per-feature cost attribution** — break down cost by feature (ai_chat, pdf_summary, search, etc.)
+- **Stripe revenue enrichment** — connect Stripe to allocate MRR across events and compute margin
+- **Margin analysis** — revenue minus cost by customer, feature, model, and time period
+- **Cost alerts** — 8 curated types: cost spikes, margin floor violations, concentration risk, unprofitable customers, model shift detection
+- **AI-generated insights** — margin compression recommendations via Anthropic
+- **Distributed tracing** — trace multi-step agent executions with span-level cost attribution
+- **CSV bulk import** — upload cost, usage, and revenue data without API integration
+- **Model pricing auto-refresh** — 100+ models with per-token pricing, refreshed hourly via OpenRouter
+- **OpenAI + Anthropic gateway** — drop-in proxy with streaming, caching, and automatic cost logging
+- **SDK event ingestion** — send events from your backend via HTTP or the `@tansohq/observe` npm package
 
-```bash
-curl -X POST https://observe.tansohq.com/api/events/ingest \
-  -H "Authorization: Bearer obs_..." \
-  -H "Content-Type: application/json" \
-  -d '{
-    "events": [{
-      "eventName":           "inference",
-      "customerReferenceId": "cus_acme",
-      "featureKey":          "pdf_summarization",
-      "costAmount":          0.0042,
-      "revenueAmount":       0.02,
-      "model":               "claude-3-5-sonnet"
-    }]
-  }'
-```
+---
 
-**Event fields:**
+## vs alternatives
 
-| Field | Required | Description |
-|---|---|---|
-| `eventName` | yes | e.g. `"inference"`, `"api_call"` |
-| `customerReferenceId` | yes | Your customer identifier |
-| `featureKey` | yes | Feature this event belongs to |
-| `costAmount` | no | Cost in USD |
-| `revenueAmount` | no | Revenue attributed to this event |
-| `usageUnits` | no | Unit count (tokens, requests, pages) |
-| `model` | no | Model name |
-| `properties` | no | Arbitrary metadata |
-| `idempotencyKey` | no | Deduplicate retries |
+Every tool in this space tracks LLM cost. observe is the only one that connects cost to revenue and shows margin.
 
-Batch limit: 1000 events per request. Invalid events are rejected individually — valid ones still accepted.
+|  | observe | LiteLLM | Helicone | Portkey | Cloudflare AI Gateway |
+|---|---|---|---|---|---|
+| Per-customer cost tagging | Yes | Yes | Yes | Yes | Yes |
+| Per-feature cost tagging | Yes | Yes | Yes | Yes | Yes |
+| Revenue + margin analysis | **Yes** | No | No | No | No |
+| Self-hosted | Yes | Yes | Yes | Gateway only | No |
+| Free / open-source | Apache 2.0 | MIT | Apache 2.0 | Gateway: Apache 2.0 | Free tier (not OSS) |
+| Drop-in proxy | Yes | Yes | Yes | Yes | Yes |
+
+Notes: Helicone was [acquired by Mintlify](https://www.helicone.ai/blog/joining-mintlify) in March 2026 and is in maintenance mode. Portkey's gateway is open source but analytics/dashboard features require their managed platform.
 
 ---
 
 ## Architecture
 
 ```
-Browser (Vue 3 SPA)
-        |
-        v
-Express API  (port 3001)
-  |-- /v1/*                  OpenAI + Anthropic gateway (streaming-capable)
-  |-- /events/ingest         SDK event ingestion (public, key-authenticated)
-  |-- /auth/*                Signup, login, password reset (Supabase-backed)
-  |-- /data/*                CSV upload, data management
-  |-- /integrations/*        OpenAI/Anthropic/Stripe/AWS/GCP connections
-  |-- /alerts/*              Cost alert rules
-  |-- /team/*                Team invites, roles
-  |-- /insights/*            AI-generated insights
-  |-- /analytics/*           Customer P&L, margin alerts, feature breakdown
-  |-- /models/*              Model pricing data
-  |-- /cohorts/*             Cohort analysis
-  |-- /sdk-keys/*            API key management
-  |-- /admin/*               Admin dashboard (restricted)
-        |
-        v
-PostgreSQL (observe_events + ~30 supporting tables)
+Your app
+  |
+  |  OPENAI_BASE_URL=http://observe:3001/v1
+  |  + Observe-Customer + Observe-Feature headers
+  v
+┌─────────────────────────────────────────────┐
+│  observe (Express 5, Node.js 20)            │
+│                                             │
+│  /v1/*          → OpenAI/Anthropic proxy    │
+│  /events/ingest → SDK event ingestion       │
+│  /analytics/*   → margin reports & exports  │
+│  /alerts/*      → cost alert rules          │
+│  /insights/*    → AI recommendations        │
+│  /customers/*   → customer profitability    │
+│  /stripe/*      → revenue enrichment        │
+│                                             │
+│  ┌───────────────────────────────────────┐  │
+│  │  PostgreSQL (observe_events table)    │  │
+│  │  cost + revenue + tokens + customer   │  │
+│  │  + feature + model + trace_id         │  │
+│  └───────────────────────────────────────┘  │
+└─────────────────────────────────────────────┘
+  |
+  v
+Vue 3 dashboard (Vite + Tailwind + shadcn-vue)
 ```
 
-All data — gateway, SDK, Stripe, CSV — lands in a single `observe_events` table with the same schema. Margin queries aggregate from this one table.
+All data — gateway, SDK, Stripe, CSV — lands in a single `observe_events` table. Margin queries aggregate from this one table.
 
-A `CHECK` constraint on `observe_events.source` rejects any row tagged `'sample'` at insert time, so the database cannot contain preview data. Guest preview is rendered entirely client-side from `src/lib/guest-preview.ts` — it never touches the server.
-
-| Layer | Technology |
+| Layer | Stack |
 |---|---|
-| Frontend | Vue 3, TypeScript, Vite, Tailwind CSS, shadcn-vue, radix-vue |
+| Frontend | Vue 3, TypeScript, Vite, Tailwind CSS, shadcn-vue |
 | Backend | Express 5, Node.js 20 |
-| Database | PostgreSQL 16 (Supabase or any standard pg) |
-| Auth | Supabase Auth (JWT Bearer) |
+| Database | PostgreSQL 16+ (Supabase, Neon, or any standard pg) |
+| Auth | Clerk |
 | Billing | Stripe |
+
+---
+
+## Roadmap
+
+### v0.1.0 (current)
+
+Gateway proxy, SDK ingestion, per-customer and per-feature attribution, Stripe revenue enrichment, margin analysis, cost alerts, AI insights, distributed tracing, CSV import, model pricing auto-refresh.
+
+### v0.2.0
+
+Multi-target routing with failover and load balancing. Cloud cost integration (AWS Cost Explorer, GCP Billing). ML-based cost inference from incomplete data.
+
+### v0.3.0
+
+Cost forecasting, budget alerts, spend limits per customer and per feature.
 
 ---
 
 ## Documentation
 
-Full docs are in the [`docs/`](docs/README.md) directory:
+Full docs in [`docs/`](docs/README.md):
 
-- [Quickstart](docs/quickstart.md) — get running in 60 seconds
-- [Configuration](docs/configuration.md) — environment variable reference
-- [Self-Hosting Guide](docs/self-hosting.md) — production deployment
-- [Security Model](docs/security.md) — authentication, data isolation, rate limiting
-- [Next.js Integration](docs/guides/nextjs.md) — SDK setup in Next.js apps
-- [LangChain Integration](docs/guides/langchain.md) — gateway mode with LangChain
-- [API Reference](docs/API.md) — all backend endpoints
-- [Architecture](docs/ARCHITECTURE.md) — system design and data flow
-- [Troubleshooting](docs/troubleshooting.md) — common issues and fixes
+- [Quickstart](docs/quickstart.md)
+- [Configuration](docs/configuration.md) — env var reference
+- [Self-Hosting](docs/self-hosting.md) — production deployment
+- [Security](docs/security.md) — auth, data isolation, rate limiting
+- [API Reference](docs/API.md)
+- [Architecture](docs/ARCHITECTURE.md)
 
 ---
 
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md).
-
-```bash
-npm run test        # run tests
-npm run typecheck   # type-check
-npm run lint        # lint
-```
-
----
-
-## Community
-
-- [Discord](https://discord.gg/6GHcsaQTy7) — chat with the team and other users
-- [GitHub Issues](https://github.com/tansohq/observe/issues) — bug reports and feature requests
-- [GitHub Discussions](https://github.com/tansohq/observe/discussions) — questions, ideas, show & tell
 
 ---
 

@@ -157,7 +157,12 @@ async function sendAlertEmail(
         "Content-Type": "application/json",
         Authorization: `Bearer ${apiKey}`,
       },
-      body: JSON.stringify({ from: fromEmail, to, subject, html }),
+      body: JSON.stringify({
+        from: fromEmail,
+        to: to.includes(",") ? to.split(",").map((e) => e.trim()) : to,
+        subject,
+        html,
+      }),
     });
     if (!res.ok) {
       const err = await res.text();
@@ -374,7 +379,7 @@ async function sendCustomerAlertEmail(
       },
       body: JSON.stringify({
         from,
-        to: [to],
+        to: to.includes(",") ? to.split(",").map((e) => e.trim()) : [to],
         subject,
         html: `<h2>${rule.name}</h2>
           <p><strong>Customer:</strong> ${customerName} (${customerId})</p>

@@ -1,5 +1,139 @@
 import { request } from "./base";
 
+// ── BI Overview ─────────────────────────────────────────────────────────────
+
+export interface OverviewSummary {
+  total_cost: number;
+  total_revenue: number;
+  margin_pct: number | null;
+  total_usage: number;
+  event_count: number;
+  customer_count: number;
+}
+
+export interface OverviewTrend {
+  month: string;
+  cost: number;
+  revenue: number;
+  usage: number;
+  margin_pct: number | null;
+  event_count: number;
+  customer_count: number;
+}
+
+export interface OverviewFeatureROI {
+  feature_key: string;
+  cost: number;
+  revenue: number;
+  usage: number;
+  margin_pct: number | null;
+  cost_per_unit: number;
+  revenue_per_unit: number;
+  event_count: number;
+  customer_count: number;
+}
+
+export interface OverviewCustomerPnL {
+  customer_id: string;
+  customer_name: string;
+  cost: number;
+  revenue: number;
+  margin_pct: number | null;
+  event_count: number;
+  usage: number;
+}
+
+export interface OverviewProvider {
+  provider: string;
+  model: string;
+  cost: number;
+  event_count: number;
+  avg_cost_per_call: number;
+}
+
+export interface OverviewRecommendation {
+  type: string;
+  title: string;
+  severity: string;
+}
+
+export interface AnalyticsOverview {
+  summary: OverviewSummary;
+  margin_trend: OverviewTrend[];
+  feature_roi: OverviewFeatureROI[];
+  customer_pnl: OverviewCustomerPnL[];
+  provider_breakdown: OverviewProvider[];
+  active_alert_count: number;
+  pending_recommendation_count: number;
+  top_recommendations: OverviewRecommendation[];
+}
+
+export type SpendType = "all" | "customer_facing" | "internal";
+
+export async function getAnalyticsOverview(
+  spendType?: SpendType,
+): Promise<AnalyticsOverview> {
+  const params =
+    spendType && spendType !== "all" ? `?spend_type=${spendType}` : "";
+  return request(`/analytics/overview${params}`);
+}
+
+// ── Cost-to-Serve ───────────────────────────────────────────────────────────
+
+export interface CostToServeCustomer {
+  customer_id: string;
+  customer_name: string;
+  contract_value: number;
+  contract_type: string | null;
+  contract_start: string | null;
+  contract_end: string | null;
+  total_cost: number;
+  total_revenue: number;
+  cost_to_serve_pct: number | null;
+  event_count: number;
+}
+
+export async function getCostToServe(): Promise<{
+  customers: CostToServeCustomer[];
+}> {
+  return request("/analytics/cost-to-serve");
+}
+
+export async function uploadContracts(
+  contracts: Array<{
+    customer_id: string;
+    contract_value: number;
+    contract_type?: string;
+    contract_start?: string;
+    contract_end?: string;
+  }>,
+): Promise<{ updated: number; total: number }> {
+  return request("/customers/contracts/bulk", {
+    method: "POST",
+    body: JSON.stringify(contracts),
+  });
+}
+
+export interface FeatureStickinessWeek {
+  week: string;
+  active_customers: number;
+  retention_pct: number;
+}
+
+export interface FeatureStickiness {
+  feature_key: string;
+  total_customers: number;
+  weekly_retention: FeatureStickinessWeek[];
+}
+
+export async function getFeatureStickiness(): Promise<{
+  features: FeatureStickiness[];
+}> {
+  return request("/analytics/feature-stickiness");
+}
+
+// ── Retention ───────────────────────────────────────────────────────────────
+
 export interface RetentionCohort {
   cohort_month: string;
   size: number;
@@ -218,9 +352,13 @@ export interface DailySummaryPoint {
 
 export async function getDailySummary(
   days?: number,
+  spendType?: SpendType,
 ): Promise<{ data: DailySummaryPoint[] }> {
-  const params = days ? `?days=${days}` : "";
-  return request(`/analytics/daily-summary${params}`);
+  const p = new URLSearchParams();
+  if (days) p.set("days", String(days));
+  if (spendType && spendType !== "all") p.set("spend_type", spendType);
+  const qs = p.toString();
+  return request(`/analytics/daily-summary${qs ? `?${qs}` : ""}`);
 }
 
 export interface PricingSuggestion {

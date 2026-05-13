@@ -390,6 +390,45 @@ export function createAuthRoutes(
             [resolvedAccountId],
           );
           clerkOrgId = orgRow.rows[0]?.clerk_org_id ?? undefined;
+          if (clerkOrgId) {
+            try {
+              const org = await clerk.organizations.getOrganization({
+                organizationId: clerkOrgId,
+              });
+              const membership = org
+                ? await clerk.organizations.getOrganizationMembershipList({
+                    organizationId: clerkOrgId,
+                  })
+                : null;
+              const isMember = membership?.data?.some(
+                (m) => m.publicUserData?.userId === userId,
+              );
+              if (!isMember) {
+                try {
+                  await clerk.organizations.createOrganizationMembership({
+                    organizationId: clerkOrgId,
+                    userId,
+                    role: "org:admin",
+                  });
+                } catch {
+                  console.warn(
+                    "Could not add user to org, clearing stale org_id",
+                  );
+                  clerkOrgId = undefined;
+                }
+              }
+            } catch {
+              console.warn(
+                "Clerk org not found, clearing stale clerk_org_id:",
+                clerkOrgId,
+              );
+              await pool.query(
+                `UPDATE accounts SET clerk_org_id = NULL WHERE id = $1`,
+                [resolvedAccountId],
+              );
+              clerkOrgId = undefined;
+            }
+          }
           if (!clerkOrgId) {
             const trimmedName = name?.trim();
             const orgName = trimmedName

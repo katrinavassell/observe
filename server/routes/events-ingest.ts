@@ -557,13 +557,13 @@ export function createEventsIngestRoutes(
               evt.outputTokens,
             ));
 
-          // Revenue enrichment priority: explicit > feature_pricing > Stripe subscription > 0
-          // Within "Stripe subscription" we pick the derivation based on the
-          // sub's pricing_model so the revenue_source label tells the UI how
-          // precise the number is.
+          const isInternal = evt.customerReferenceId.startsWith("_internal");
+
           let revenue = 0;
           let revenueSource = "none";
-          if (evt.revenueAmount != null) {
+          if (isInternal) {
+            // Internal spend has no customer revenue
+          } else if (evt.revenueAmount != null) {
             revenue = evt.revenueAmount;
             revenueSource = "explicit";
           } else if (featurePricingMap.has(evt.featureKey)) {
@@ -725,17 +725,18 @@ export function createEventsIngestRoutes(
             const custValues: unknown[] = [];
             let custIdx = 1;
             for (const [cid] of customerMetaMap) {
+              const internal = cid.startsWith("_internal");
               custPlaceholders.push(
-                `($${custIdx}, $${custIdx + 1}, $${custIdx + 2})`,
+                `($${custIdx}, $${custIdx + 1}, $${custIdx + 2}, $${custIdx + 3})`,
               );
-              custValues.push(accountId, cid, cid);
-              custIdx += 3;
+              custValues.push(accountId, cid, cid, internal);
+              custIdx += 4;
             }
             pool
               .query(
-                `INSERT INTO customers (account_id, customer_id, name)
+                `INSERT INTO customers (account_id, customer_id, name, is_internal)
                  VALUES ${custPlaceholders.join(", ")}
-                 ON CONFLICT DO NOTHING`,
+                 ON CONFLICT (account_id, customer_id) DO UPDATE SET is_internal = EXCLUDED.is_internal OR customers.is_internal`,
                 custValues,
               )
               .catch((err) =>
