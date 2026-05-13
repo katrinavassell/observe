@@ -288,7 +288,7 @@ async function ensureDbInitialized() {
   }
   return dbInitPromise;
 }
-const SCHEMA_VERSION = 24;
+const SCHEMA_VERSION = 25;
 async function _doDbInit() {
   try {
     await pool.query("SELECT 1");
@@ -1125,6 +1125,17 @@ async function _doDbInit() {
     await pool.query(
       `ALTER TABLE sdk_api_keys ADD COLUMN IF NOT EXISTS encrypted_key TEXT`,
     );
+    // Capability keys: scopes, budgets, expiry, delegation
+    await pool.query(`DO $$ BEGIN
+      ALTER TABLE sdk_api_keys ADD COLUMN IF NOT EXISTS scopes TEXT[];
+      ALTER TABLE sdk_api_keys ADD COLUMN IF NOT EXISTS budget_cents INTEGER;
+      ALTER TABLE sdk_api_keys ADD COLUMN IF NOT EXISTS budget_used_cents INTEGER DEFAULT 0;
+      ALTER TABLE sdk_api_keys ADD COLUMN IF NOT EXISTS budget_period TEXT;
+      ALTER TABLE sdk_api_keys ADD COLUMN IF NOT EXISTS budget_reset_at TIMESTAMPTZ;
+      ALTER TABLE sdk_api_keys ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ;
+      ALTER TABLE sdk_api_keys ADD COLUMN IF NOT EXISTS delegated_by TEXT;
+    END $$`);
+
     // Race-protect SDK key auto-generation on /auth/signup-complete.
     // PARTIAL unique index — only active (non-revoked) keys must have a
     // unique (account_id, name). This lets /sdk-keys/:id/reset soft-delete

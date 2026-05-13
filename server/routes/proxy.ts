@@ -1,7 +1,11 @@
 import { Router, Request, Response } from "express";
 import type { Pool } from "pg";
 import crypto from "crypto";
-import { type AuthRequest } from "./auth.js";
+import {
+  type AuthRequest,
+  createKeyHelpers,
+  type ResolvedKey,
+} from "./auth.js";
 import { calculateCostFromTokens } from "../model-pricing.js";
 import { checkAlerts } from "./alerts.js";
 import { enrichRevenue } from "../lib/enrich-revenue.js";
@@ -176,27 +180,19 @@ export function createProxyRoutes(
     return calculateCostFromTokens(pool, model, inputTokens, outputTokens);
   }
 
+  const { resolveKey, checkBudget, incrementBudget } = createKeyHelpers(pool);
+
   async function resolveProxyUserId(
     observeKey: string,
   ): Promise<string | null> {
-    const keyHash = crypto
-      .createHash("sha256")
-      .update(observeKey)
-      .digest("hex");
-    const result = await pool.query(
-      "SELECT user_id FROM sdk_api_keys WHERE key_hash = $1 AND revoked_at IS NULL",
-      [keyHash],
-    );
-    if (result.rows.length === 0) return null;
-    pool
-      .query(
-        "UPDATE sdk_api_keys SET last_used_at = NOW() WHERE key_hash = $1",
-        [keyHash],
-      )
-      .catch((err) =>
-        console.error("Failed to update sdk_api_keys last_used_at:", err),
-      );
-    return result.rows[0].user_id;
+    const key = await resolveKey(observeKey);
+    return key?.user_id ?? null;
+  }
+
+  async function resolveProxyKey(
+    observeKey: string,
+  ): Promise<ResolvedKey | null> {
+    return resolveKey(observeKey);
   }
 
   async function logProxyEvent(
@@ -367,8 +363,8 @@ export function createProxyRoutes(
           },
         });
       }
-      const userId = await resolveProxyUserId(observeKey);
-      if (!userId) {
+      const resolvedKey = await resolveProxyKey(observeKey);
+      if (!resolvedKey) {
         return res.status(401).json({
           error: {
             message: "Invalid or revoked observe key",
@@ -376,6 +372,29 @@ export function createProxyRoutes(
           },
         });
       }
+      if (
+        resolvedKey.scopes &&
+        !resolvedKey.scopes.includes("proxy.chat") &&
+        !resolvedKey.scopes.includes("admin")
+      ) {
+        return res.status(403).json({
+          error: {
+            message: "This API key does not have the 'proxy.chat' scope",
+            type: "scope_error",
+          },
+        });
+      }
+      const budgetCheck = await checkBudget(resolvedKey);
+      if (!budgetCheck.allowed) {
+        return res.status(429).json({
+          error: {
+            message: "Budget exceeded for this API key",
+            type: "budget_error",
+            remaining_cents: 0,
+          },
+        });
+      }
+      const userId = resolvedKey.user_id;
       const featureKey = feat || "chat_completions";
       const model = req.body.model || "unknown";
       const { cacheEnabled, ttlSeconds } = parseCacheHeaders(req);
@@ -458,6 +477,11 @@ export function createProxyRoutes(
         const inputTokens = usage.prompt_tokens || 0;
         const outputTokens = usage.completion_tokens || 0;
         const cost = await calculateCost(respModel, inputTokens, outputTokens);
+        if (resolvedKey.budget_cents !== null && cost > 0) {
+          incrementBudget(resolvedKey.id, Math.round(cost * 100)).catch((err) =>
+            console.error("Budget increment failed:", err),
+          );
+        }
         logProxyEvent(
           userId,
           respModel,
@@ -533,8 +557,8 @@ export function createProxyRoutes(
           },
         });
       }
-      const userId = await resolveProxyUserId(observeKey);
-      if (!userId) {
+      const resolvedKey = await resolveProxyKey(observeKey);
+      if (!resolvedKey) {
         return res.status(401).json({
           error: {
             message: "Invalid or revoked observe key",
@@ -542,6 +566,28 @@ export function createProxyRoutes(
           },
         });
       }
+      if (
+        resolvedKey.scopes &&
+        !resolvedKey.scopes.includes("proxy.chat") &&
+        !resolvedKey.scopes.includes("admin")
+      ) {
+        return res.status(403).json({
+          error: {
+            message: "This API key does not have the 'proxy.chat' scope",
+            type: "scope_error",
+          },
+        });
+      }
+      const budgetCheck = await checkBudget(resolvedKey);
+      if (!budgetCheck.allowed) {
+        return res.status(429).json({
+          error: {
+            message: "Budget exceeded for this API key",
+            type: "budget_error",
+          },
+        });
+      }
+      const userId = resolvedKey.user_id;
       const featureKey = feat || "embeddings";
       const model = req.body.model || "unknown";
       const { cacheEnabled, ttlSeconds } = parseCacheHeaders(req);
@@ -609,6 +655,11 @@ export function createProxyRoutes(
         const respModel = (data.model as string) || model;
         const inputTokens = usage.prompt_tokens || usage.total_tokens || 0;
         const cost = await calculateCost(respModel, inputTokens, 0);
+        if (resolvedKey.budget_cents !== null && cost > 0) {
+          incrementBudget(resolvedKey.id, Math.round(cost * 100)).catch((err) =>
+            console.error("Budget increment failed:", err),
+          );
+        }
         logProxyEvent(
           userId,
           respModel,
@@ -683,8 +734,8 @@ export function createProxyRoutes(
           },
         });
       }
-      const userId = await resolveProxyUserId(observeKey);
-      if (!userId) {
+      const resolvedKey = await resolveProxyKey(observeKey);
+      if (!resolvedKey) {
         return res.status(401).json({
           error: {
             message: "Invalid or revoked observe key",
@@ -692,11 +743,32 @@ export function createProxyRoutes(
           },
         });
       }
+      if (
+        resolvedKey.scopes &&
+        !resolvedKey.scopes.includes("proxy.chat") &&
+        !resolvedKey.scopes.includes("admin")
+      ) {
+        return res.status(403).json({
+          error: {
+            message: "This API key does not have the 'proxy.chat' scope",
+            type: "scope_error",
+          },
+        });
+      }
+      const budgetCheck = await checkBudget(resolvedKey);
+      if (!budgetCheck.allowed) {
+        return res.status(429).json({
+          error: {
+            message: "Budget exceeded for this API key",
+            type: "budget_error",
+          },
+        });
+      }
+      const userId = resolvedKey.user_id;
       const featureKey = feat || "messages";
       const model = req.body.model || "unknown";
 
       const { cacheEnabled, ttlSeconds } = parseCacheHeaders(req);
-      // Anthropic defaults temperature to 1 when omitted — only cache explicit temperature: 0
       const isCacheable =
         cacheEnabled &&
         !req.body.stream &&
@@ -775,6 +847,11 @@ export function createProxyRoutes(
           inputTokens,
           outputTokens,
         );
+        if (resolvedKey.budget_cents !== null && cost > 0) {
+          incrementBudget(resolvedKey.id, Math.round(cost * 100)).catch((err) =>
+            console.error("Budget increment failed:", err),
+          );
+        }
         logProxyEvent(
           userId,
           respModel,
@@ -854,8 +931,8 @@ export function createProxyRoutes(
             },
           });
         }
-        const userId = await resolveProxyUserId(observeKey);
-        if (!userId) {
+        const resolvedKey = await resolveProxyKey(observeKey);
+        if (!resolvedKey) {
           return res.status(401).json({
             error: {
               message: "Invalid or revoked observe key",
@@ -863,6 +940,28 @@ export function createProxyRoutes(
             },
           });
         }
+        if (
+          resolvedKey.scopes &&
+          !resolvedKey.scopes.includes("proxy.chat") &&
+          !resolvedKey.scopes.includes("admin")
+        ) {
+          return res.status(403).json({
+            error: {
+              message: "This API key does not have the 'proxy.chat' scope",
+              type: "scope_error",
+            },
+          });
+        }
+        const budgetCheck = await checkBudget(resolvedKey);
+        if (!budgetCheck.allowed) {
+          return res.status(429).json({
+            error: {
+              message: "Budget exceeded for this API key",
+              type: "budget_error",
+            },
+          });
+        }
+        const userId = resolvedKey.user_id;
         const featureKey = feat || "generate_content";
         const model = req.body.model || "gemini-2.5-flash";
 
@@ -894,6 +993,11 @@ export function createProxyRoutes(
             inputTokens,
             outputTokens,
           );
+          if (resolvedKey.budget_cents !== null && cost > 0) {
+            incrementBudget(resolvedKey.id, Math.round(cost * 100)).catch(
+              (err) => console.error("Budget increment failed:", err),
+            );
+          }
           logProxyEvent(
             userId,
             respModel,
@@ -959,8 +1063,8 @@ export function createProxyRoutes(
           },
         });
       }
-      const userId = await resolveProxyUserId(observeKey);
-      if (!userId) {
+      const resolvedKey = await resolveProxyKey(observeKey);
+      if (!resolvedKey) {
         return res.status(401).json({
           error: {
             message: "Invalid or revoked observe key",
@@ -968,6 +1072,28 @@ export function createProxyRoutes(
           },
         });
       }
+      if (
+        resolvedKey.scopes &&
+        !resolvedKey.scopes.includes("proxy.chat") &&
+        !resolvedKey.scopes.includes("admin")
+      ) {
+        return res.status(403).json({
+          error: {
+            message: "This API key does not have the 'proxy.chat' scope",
+            type: "scope_error",
+          },
+        });
+      }
+      const budgetCheck = await checkBudget(resolvedKey);
+      if (!budgetCheck.allowed) {
+        return res.status(429).json({
+          error: {
+            message: "Budget exceeded for this API key",
+            type: "budget_error",
+          },
+        });
+      }
+      const userId = resolvedKey.user_id;
       const featureKey = feat || "cohere_chat";
       const model = req.body.model || "command-r-plus";
 
@@ -994,6 +1120,11 @@ export function createProxyRoutes(
         const inputTokens = usage.billed_input_tokens || 0;
         const outputTokens = usage.billed_output_tokens || 0;
         const cost = await calculateCost(respModel, inputTokens, outputTokens);
+        if (resolvedKey.budget_cents !== null && cost > 0) {
+          incrementBudget(resolvedKey.id, Math.round(cost * 100)).catch((err) =>
+            console.error("Budget increment failed:", err),
+          );
+        }
         logProxyEvent(
           userId,
           respModel,
@@ -1057,8 +1188,8 @@ export function createProxyRoutes(
             },
           });
         }
-        const userId = await resolveProxyUserId(observeKey);
-        if (!userId) {
+        const resolvedKey = await resolveProxyKey(observeKey);
+        if (!resolvedKey) {
           return res.status(401).json({
             error: {
               message: "Invalid or revoked observe key",
@@ -1066,6 +1197,28 @@ export function createProxyRoutes(
             },
           });
         }
+        if (
+          resolvedKey.scopes &&
+          !resolvedKey.scopes.includes("proxy.chat") &&
+          !resolvedKey.scopes.includes("admin")
+        ) {
+          return res.status(403).json({
+            error: {
+              message: "This API key does not have the 'proxy.chat' scope",
+              type: "scope_error",
+            },
+          });
+        }
+        const budgetCheck = await checkBudget(resolvedKey);
+        if (!budgetCheck.allowed) {
+          return res.status(429).json({
+            error: {
+              message: "Budget exceeded for this API key",
+              type: "budget_error",
+            },
+          });
+        }
+        const userId = resolvedKey.user_id;
         const featureKey = feat || "mistral_chat";
         const model = req.body.model || "mistral-large-latest";
 
@@ -1099,6 +1252,11 @@ export function createProxyRoutes(
             inputTokens,
             outputTokens,
           );
+          if (resolvedKey.budget_cents !== null && cost > 0) {
+            incrementBudget(resolvedKey.id, Math.round(cost * 100)).catch(
+              (err) => console.error("Budget increment failed:", err),
+            );
+          }
           logProxyEvent(
             userId,
             respModel,
