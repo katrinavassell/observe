@@ -8,6 +8,16 @@ import { encryptApiKey } from "../stripe-client.js";
 const clerkSecretKey = process.env.CLERK_SECRET_KEY || "";
 const clerk = createClerkClient({ secretKey: clerkSecretKey });
 
+const IMPERSONATION_ADMIN_EMAILS = (() => {
+  const legacy = process.env.ADMIN_EMAIL
+    ? [process.env.ADMIN_EMAIL.toLowerCase()]
+    : [];
+  const list = process.env.ADMIN_EMAILS
+    ? process.env.ADMIN_EMAILS.split(",").map((e) => e.trim().toLowerCase())
+    : [];
+  return new Set([...legacy, ...list]);
+})();
+
 export interface AuthRequest extends Request {
   visitorId?: string;
   accountId?: number;
@@ -17,6 +27,7 @@ export interface AuthRequest extends Request {
   keyId?: number;
   keyBudgetCents?: number | null;
   keyBudgetUsedCents?: number;
+  isImpersonating?: boolean;
 }
 
 const sampleClearedUsers = new Set<string>();
@@ -288,6 +299,37 @@ export function createEnsureVisitor(pool: Pool) {
             }
           } else {
             console.warn("ensureVisitor: no account resolved for", clerkUserId);
+          }
+        }
+      }
+
+      const xAccountId = req.headers["x-account-id"];
+      if (xAccountId && req.accountEmail && req.visitorId) {
+        const targetId = Number(xAccountId);
+        if (
+          Number.isFinite(targetId) &&
+          targetId > 0 &&
+          targetId !== req.accountId
+        ) {
+          if (IMPERSONATION_ADMIN_EMAILS.has(req.accountEmail.toLowerCase())) {
+            const targetExists = await pool.query(
+              "SELECT id FROM accounts WHERE id = $1",
+              [targetId],
+            );
+            if (targetExists.rows.length > 0) {
+              req.accountId = targetId;
+              req.isImpersonating = true;
+            }
+          } else {
+            const membership = await pool.query(
+              `SELECT ua.account_id FROM user_accounts ua
+               JOIN users u ON u.id = ua.user_id
+               WHERE u.visitor_id = $1 AND ua.account_id = $2 AND ua.status = 'active'`,
+              [req.visitorId, targetId],
+            );
+            if (membership.rows.length > 0) {
+              req.accountId = targetId;
+            }
           }
         }
       }

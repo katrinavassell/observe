@@ -806,6 +806,7 @@ Return ONLY the JSON array, no markdown or explanation.`;
           SELECT
             a.email,
             a.name,
+            ua.account_id,
             acc.stripe_plan,
             a.created_at,
             a.is_internal,

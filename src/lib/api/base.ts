@@ -1,6 +1,35 @@
 const API_BASE = "/api";
 
 const CURRENT_ACCOUNT_ID_KEY = "observe:current_account_id";
+const IMPERSONATION_KEY = "observe:impersonating";
+
+export function getImpersonation(): {
+  accountId: number;
+  label: string;
+} | null {
+  const raw = localStorage.getItem(IMPERSONATION_KEY);
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+export function startImpersonation(accountId: number, label: string): void {
+  localStorage.setItem(IMPERSONATION_KEY, JSON.stringify({ accountId, label }));
+  setCurrentAccountId(accountId);
+}
+
+export function stopImpersonation(ownAccountId?: number): void {
+  localStorage.removeItem(IMPERSONATION_KEY);
+  if (ownAccountId) {
+    setCurrentAccountId(ownAccountId);
+  } else {
+    localStorage.removeItem(CURRENT_ACCOUNT_ID_KEY);
+  }
+  window.dispatchEvent(new CustomEvent("observe:account-changed"));
+}
 
 function getAnonVisitorId(): string {
   let id = localStorage.getItem("observe_visitor_id");
