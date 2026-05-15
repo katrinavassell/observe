@@ -98,9 +98,17 @@ const severityBadgeVariant = computed<
       </div>
       <div class="min-w-0 flex-1">
         <div class="flex items-start justify-between gap-3">
-          <h4 class="text-sm font-semibold leading-snug text-foreground">
-            {{ matchedRec.title }}
-          </h4>
+          <div class="min-w-0">
+            <h4 class="text-sm font-semibold leading-snug text-foreground">
+              {{ matchedRec.customer_name || matchedRec.title }}
+            </h4>
+            <p
+              v-if="matchedRec.customer_name"
+              class="text-[11px] text-muted-foreground"
+            >
+              {{ matchedRec.title }}
+            </p>
+          </div>
           <Badge
             :variant="severityBadgeVariant"
             class="shrink-0 text-[10px] uppercase tracking-wide"

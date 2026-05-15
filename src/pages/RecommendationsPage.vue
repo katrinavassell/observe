@@ -81,15 +81,51 @@ interface RecGroup {
   type: string;
   label: string;
   recs: Recommendation[];
+  summary: string;
 }
 
 const expandedGroups = ref<Set<string>>(new Set());
+const showAllInGroup = ref<Set<string>>(new Set());
+const GROUP_PREVIEW_LIMIT = 5;
 
 function toggleGroup(type: string) {
   const s = new Set(expandedGroups.value);
   if (s.has(type)) s.delete(type);
   else s.add(type);
   expandedGroups.value = s;
+}
+
+function toggleShowAll(type: string) {
+  const s = new Set(showAllInGroup.value);
+  if (s.has(type)) s.delete(type);
+  else s.add(type);
+  showAllInGroup.value = s;
+}
+
+function recImpact(rec: Recommendation): number {
+  const ctx = rec.context ?? {};
+  if (typeof ctx.total_cost === "number") return ctx.total_cost;
+  if (typeof ctx.total_revenue === "number") return ctx.total_revenue;
+  if (typeof ctx.recent_count === "number") return ctx.recent_count;
+  if (typeof ctx.event_count === "number") return ctx.event_count;
+  if (typeof ctx.max_daily_cost === "number") return ctx.max_daily_cost;
+  return 0;
+}
+
+function recDisplayName(rec: Recommendation): string {
+  return (
+    rec.customer_name ??
+    ((rec.context as Record<string, unknown>)?.customer_id as string) ??
+    ""
+  );
+}
+
+function buildGroupSummary(recs: Recommendation[]): string {
+  const names = recs.map(recDisplayName).filter(Boolean).slice(0, 3);
+  if (names.length === 0) return "";
+  const rest = recs.length - names.length;
+  const preview = names.join(", ");
+  return rest > 0 ? `${preview} + ${rest} more` : preview;
 }
 
 const groupedList = computed<RecGroup[]>(() => {
@@ -100,11 +136,15 @@ const groupedList = computed<RecGroup[]>(() => {
     group.push(rec);
     map.set(rec.type, group);
   }
-  return Array.from(map.entries()).map(([type, recs]) => ({
-    type,
-    label: typeLabels[type] ?? type,
-    recs,
-  }));
+  return Array.from(map.entries()).map(([type, recs]) => {
+    const sorted = [...recs].sort((a, b) => recImpact(b) - recImpact(a));
+    return {
+      type,
+      label: typeLabels[type] ?? type,
+      recs: sorted,
+      summary: buildGroupSummary(sorted),
+    };
+  });
 });
 
 const tabs: { key: RecommendationStatus; label: string }[] = [
@@ -269,20 +309,42 @@ const tabs: { key: RecommendationStatus; label: string }[] = [
               :is="expandedGroups.has(group.type) ? ChevronDown : ChevronRight"
               class="h-4 w-4 shrink-0 text-muted-foreground"
             />
-            <span class="text-sm font-medium">{{ group.label }}</span>
-            <Badge variant="secondary" class="ml-1.5">
-              {{ group.recs.length }}
-            </Badge>
+            <div class="min-w-0 flex-1">
+              <div class="flex items-center gap-2">
+                <span class="text-sm font-medium">{{ group.label }}</span>
+                <Badge variant="secondary">
+                  {{ group.recs.length }}
+                </Badge>
+              </div>
+              <p
+                v-if="group.summary"
+                class="mt-0.5 truncate text-xs text-muted-foreground"
+              >
+                {{ group.summary }}
+              </p>
+            </div>
           </button>
           <div
             v-if="expandedGroups.has(group.type)"
             class="mt-1 space-y-2 pl-6"
           >
             <MarginRecommendation
-              v-for="rec in group.recs"
+              v-for="rec in showAllInGroup.has(group.type)
+                ? group.recs
+                : group.recs.slice(0, GROUP_PREVIEW_LIMIT)"
               :key="rec.id"
               :recommendation="rec"
             />
+            <button
+              v-if="
+                !showAllInGroup.has(group.type) &&
+                group.recs.length > GROUP_PREVIEW_LIMIT
+              "
+              class="w-full rounded-md border border-dashed px-4 py-2 text-xs text-muted-foreground transition-colors hover:bg-muted/50"
+              @click.stop="toggleShowAll(group.type)"
+            >
+              Show {{ group.recs.length - GROUP_PREVIEW_LIMIT }} more
+            </button>
           </div>
         </template>
       </div>
