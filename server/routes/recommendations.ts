@@ -852,10 +852,14 @@ export function createRecommendationsRoutes(pool: Pool, ensureVisitor: any) {
       try {
         const status = (req.query.status as string) || "pending";
         const result = await pool.query(
-          `SELECT * FROM recommendations
-           WHERE account_id = $1 AND status = $2
+          `SELECT r.*, c.name AS customer_name
+           FROM recommendations r
+           LEFT JOIN customers c
+             ON c.account_id = r.account_id
+             AND c.customer_id = (r.context->>'customer_id')
+           WHERE r.account_id = $1 AND r.status = $2
            ORDER BY
-             CASE severity WHEN 'critical' THEN 0 WHEN 'warning' THEN 1 WHEN 'info' THEN 2 ELSE 3 END,
+             CASE r.severity WHEN 'critical' THEN 0 WHEN 'warning' THEN 1 WHEN 'info' THEN 2 ELSE 3 END,
              created_at DESC
            LIMIT 50`,
           [req.accountId, status],
