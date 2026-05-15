@@ -34,10 +34,22 @@ import {
 
 import { useAuth } from "@/composables/useAuth";
 import { useDataMode } from "@/composables/useDataMode";
+import { getImpersonation, stopImpersonation } from "@/lib/api/base";
 
 const route = useRoute();
 const { account, isLoggedIn, logout } = useAuth();
 const { reset: resetDataMode } = useDataMode();
+
+const impersonation = ref(getImpersonation());
+window.addEventListener("observe:account-changed", () => {
+  impersonation.value = getImpersonation();
+});
+
+function exitImpersonation() {
+  stopImpersonation();
+  impersonation.value = null;
+  window.location.href = "/admin";
+}
 
 const isMobileLanding = computed(
   () => route.path === "/" || route.path === "/analytics",
@@ -388,6 +400,7 @@ function isActive(path: string) {
           <div class="flex items-center gap-1 px-2 pt-1">
             <a
               href="/docs.html"
+              target="_blank"
               class="flex items-center gap-1.5 px-2 py-1 text-xs text-sidebar-foreground/40 hover:text-sidebar-foreground hover:bg-sidebar-accent/50 transition-all duration-150 rounded-md"
             >
               <BookOpen class="h-3 w-3" />
@@ -415,6 +428,23 @@ function isActive(path: string) {
 
     <!-- Main Content -->
     <main class="flex-1 min-h-screen overflow-x-hidden pt-14 md:pt-0 md:ml-64">
+      <!-- Impersonation banner -->
+      <div
+        v-if="impersonation"
+        class="sticky top-0 z-30 flex items-center justify-between gap-3 bg-amber-500 text-amber-950 px-4 py-2 text-sm font-medium"
+      >
+        <span>
+          <Eye class="inline h-3.5 w-3.5 mr-1" />
+          Viewing as {{ impersonation.label }}
+        </span>
+        <button
+          class="rounded-md bg-amber-600 hover:bg-amber-700 text-white px-3 py-1 text-xs font-medium transition-colors"
+          @click="exitImpersonation"
+        >
+          Exit
+        </button>
+      </div>
+
       <!-- Mobile landing — only on home route for logged-out visitors -->
       <div
         v-if="!isLoggedIn && isMobileLanding"

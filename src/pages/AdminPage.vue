@@ -10,6 +10,7 @@ import {
   Settings2,
   Plus,
   X,
+  Eye,
 } from "lucide-vue-next";
 import {
   Card,
@@ -21,10 +22,15 @@ import {
 } from "@/components/ui";
 import { formatCurrency } from "@/lib/format";
 import { getAdminEmails, getAdminActivity } from "@/lib/api";
+import { startImpersonation } from "@/lib/api/base";
+import { useAuth } from "@/composables/useAuth";
+
+const { account: selfAccount } = useAuth();
 
 interface AdminUser {
   email: string;
   name: string;
+  account_id: number | null;
   stripe_plan: string;
   created_at: string;
   events_this_month: string;
@@ -141,6 +147,12 @@ const sortedUsers = computed(() => {
     (a, b) => Number(b.events_this_month) - Number(a.events_this_month),
   );
 });
+
+function viewAs(user: AdminUser) {
+  if (!user.account_id) return;
+  startImpersonation(user.account_id, user.email || user.name);
+  window.location.href = "/analytics";
+}
 
 const excludedCount = computed(() => {
   if (!data.value || excludePatterns.value.length === 0) return 0;
@@ -419,6 +431,7 @@ function emailStatusVariant(
                 <th class="px-4 py-3 font-medium text-right">Revenue</th>
                 <th class="px-4 py-3 font-medium text-right">Insights</th>
                 <th class="px-4 py-3 font-medium text-right">Joined</th>
+                <th class="px-4 py-3 font-medium text-center w-16"></th>
               </tr>
             </thead>
             <tbody class="divide-y">
@@ -458,6 +471,17 @@ function emailStatusVariant(
                 </td>
                 <td class="px-4 py-3 text-right text-muted-foreground">
                   {{ formatDate(user.created_at) }}
+                </td>
+                <td class="px-4 py-3 text-center">
+                  <button
+                    v-if="user.account_id && user.email !== selfAccount?.email"
+                    class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                    title="View as this account"
+                    @click="viewAs(user)"
+                  >
+                    <Eye class="h-3 w-3" />
+                    View
+                  </button>
                 </td>
               </tr>
             </tbody>
