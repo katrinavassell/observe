@@ -47,6 +47,44 @@ export function createBillingApiRoutes(
     message: { error: "Too many requests, please try again in a minute" },
   });
 
+  // GET /plans — public plan catalog (no auth required)
+  router.get("/plans", (_req: Request, res: Response) => {
+    const PRO_PRICE_CENTS = parseInt(
+      process.env.STRIPE_PRO_PRICE_CENTS || "2900",
+      10,
+    );
+    const TEAM_PRICE_CENTS = parseInt(
+      process.env.STRIPE_TEAM_PRICE_CENTS || "7900",
+      10,
+    );
+
+    const catalog = [
+      {
+        id: "free",
+        name: OBSERVE_PLANS.free.name,
+        price_cents: 0,
+        billing_interval: null,
+        features: OBSERVE_PLANS.free.features,
+      },
+      {
+        id: "pro",
+        name: OBSERVE_PLANS.pro.name,
+        price_cents: PRO_PRICE_CENTS,
+        billing_interval: "month",
+        features: OBSERVE_PLANS.pro.features,
+      },
+      {
+        id: "team",
+        name: OBSERVE_PLANS.team.name,
+        price_cents: TEAM_PRICE_CENTS,
+        billing_interval: "month",
+        features: OBSERVE_PLANS.team.features,
+      },
+    ];
+
+    res.json({ plans: catalog });
+  });
+
   // GET /feature-pricing — list all feature pricing rules
   router.get(
     "/feature-pricing",
@@ -217,6 +255,75 @@ export function createBillingApiRoutes(
     },
   );
 
+  // GET /usage — current-period usage vs limits
+  router.get(
+    "/usage",
+    ensureVisitor,
+    async (req: AuthRequest, res: Response) => {
+      try {
+        const visitorId = req.visitorId!;
+
+        // Look up plan
+        const planResult = await pool.query(
+          `SELECT a.stripe_plan FROM accounts a
+           JOIN user_accounts ua ON ua.account_id = a.id
+           JOIN users u ON u.id = ua.user_id
+           WHERE u.visitor_id = $1 AND ua.role = 'owner' LIMIT 1`,
+          [visitorId],
+        );
+        const planKey = planResult.rows[0]?.stripe_plan || "free";
+        const planConfig = OBSERVE_PLANS[planKey] || OBSERVE_PLANS.free;
+
+        // Check usage for each metered feature
+        const usageEntries: Record<
+          string,
+          { used: number; limit: number; reset?: string }
+        > = {};
+        let totalUsedPercent = 0;
+        let meteredCount = 0;
+
+        for (const [featureKey, featureCfg] of Object.entries(
+          planConfig.features,
+        )) {
+          if (featureCfg.limit === null) continue;
+          const access = await checkFeatureAccess(
+            pool,
+            visitorId,
+            featureKey,
+            req.accountEmail,
+            req.accountId,
+          );
+          const entry: { used: number; limit: number; reset?: string } = {
+            used: access.usage ?? 0,
+            limit: access.limit ?? featureCfg.limit,
+          };
+          if (featureCfg.reset) {
+            entry.reset = featureCfg.reset;
+          }
+          usageEntries[featureKey] = entry;
+          totalUsedPercent += (entry.used / entry.limit) * 100;
+          meteredCount++;
+        }
+
+        const now = new Date();
+        const period = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+
+        res.json({
+          period,
+          plan: planKey,
+          usage: usageEntries,
+          percent_used:
+            meteredCount > 0
+              ? Math.round((totalUsedPercent / meteredCount) * 10) / 10
+              : 0,
+        });
+      } catch (error) {
+        console.error("GET /usage error:", error);
+        res.status(500).json({ error: "Failed to fetch usage" });
+      }
+    },
+  );
+
   // GET /credits — current bonus credits and reward info
   router.get(
     "/credits",
@@ -381,6 +488,181 @@ export function createBillingApiRoutes(
         console.error("POST /billing/cancel-downgrade error:", error);
         res.status(500).json({ error: "Failed to cancel downgrade" });
       }
+    },
+  );
+
+  // POST /billing/change-plan — programmatic plan change (no browser redirect)
+  router.post(
+    "/billing/change-plan",
+    ensureVisitor,
+    expensiveLimiter,
+    async (req: AuthRequest, res: Response) => {
+      const { plan } = req.body || {};
+      if (!plan || (plan !== "pro" && plan !== "free")) {
+        res
+          .status(400)
+          .json({ error: "Invalid plan. Must be 'pro' or 'free'." });
+        return;
+      }
+
+      const stripe = await getUncachableStripeClient();
+
+      // Resolve Stripe customer
+      const accountResult = await pool.query(
+        `SELECT u.email, a.stripe_customer_id, a.stripe_plan
+           FROM users u
+           JOIN user_accounts ua ON ua.user_id = u.id
+           JOIN accounts a ON a.id = ua.account_id
+          WHERE u.visitor_id = $1 AND ua.role = 'owner' LIMIT 1`,
+        [req.visitorId],
+      );
+      const account = accountResult.rows[0];
+      if (!account) {
+        res.status(400).json({ error: "Account not found" });
+        return;
+      }
+
+      const currentPlan = account.stripe_plan || "free";
+      const customerId = account.stripe_customer_id;
+
+      // Already on target plan with no active sub to cancel
+      if (currentPlan === plan && plan === "free") {
+        res.json({
+          plan: "free",
+          status: "active",
+          effective_at: new Date().toISOString(),
+        });
+        return;
+      }
+
+      // Downgrade to free
+      if (plan === "free") {
+        if (!customerId) {
+          res.json({
+            plan: "free",
+            status: "active",
+            effective_at: new Date().toISOString(),
+          });
+          return;
+        }
+        const subs = await stripe.subscriptions.list({
+          customer: customerId,
+          status: "active",
+          limit: 1,
+        });
+        if (subs.data.length === 0) {
+          res.json({
+            plan: "free",
+            status: "active",
+            effective_at: new Date().toISOString(),
+          });
+          return;
+        }
+        const sub = subs.data[0];
+        await stripe.subscriptions.update(sub.id, {
+          cancel_at_period_end: true,
+        });
+        res.json({
+          plan: "free",
+          status: "scheduled",
+          effective_at: new Date(sub.current_period_end * 1000).toISOString(),
+        });
+        return;
+      }
+
+      // Upgrade to pro
+      const proPriceId = OBSERVE_PLANS.pro.stripePriceId;
+      if (!proPriceId) {
+        res
+          .status(500)
+          .json({ error: "Stripe price not configured for pro plan" });
+        return;
+      }
+
+      // No Stripe customer yet — must go through checkout to add payment method
+      if (!customerId) {
+        const { url } = await createCheckoutSession(
+          pool,
+          req.visitorId!,
+          "pro",
+        );
+        res
+          .status(402)
+          .json({ error: "No payment method on file", checkout_url: url });
+        return;
+      }
+
+      // Check for existing payment method
+      const customer = await stripe.customers.retrieve(customerId, {
+        expand: ["invoice_settings.default_payment_method"],
+      });
+      if (customer.deleted) {
+        const { url } = await createCheckoutSession(
+          pool,
+          req.visitorId!,
+          "pro",
+        );
+        res
+          .status(402)
+          .json({ error: "No payment method on file", checkout_url: url });
+        return;
+      }
+      const hasPaymentMethod = !!(customer as any).invoice_settings
+        ?.default_payment_method;
+      if (!hasPaymentMethod) {
+        const { url } = await createCheckoutSession(
+          pool,
+          req.visitorId!,
+          "pro",
+        );
+        res
+          .status(402)
+          .json({ error: "No payment method on file", checkout_url: url });
+        return;
+      }
+
+      // Check existing subscriptions
+      const subs = await stripe.subscriptions.list({
+        customer: customerId,
+        status: "active",
+        limit: 1,
+      });
+
+      let subscription;
+      if (subs.data.length > 0) {
+        const sub = subs.data[0];
+        const currentPriceId = sub.items.data[0]?.price?.id;
+        // Already on pro price — no-op
+        if (currentPriceId === proPriceId) {
+          res.json({
+            plan: "pro",
+            status: sub.status,
+            effective_at: new Date(
+              sub.current_period_start * 1000,
+            ).toISOString(),
+          });
+          return;
+        }
+        // Update existing subscription to pro price
+        subscription = await stripe.subscriptions.update(sub.id, {
+          items: [{ id: sub.items.data[0].id, price: proPriceId }],
+          proration_behavior: "create_prorations",
+        });
+      } else {
+        // Create new subscription
+        subscription = await stripe.subscriptions.create({
+          customer: customerId,
+          items: [{ price: proPriceId }],
+        });
+      }
+
+      res.json({
+        plan: "pro",
+        status: subscription.status,
+        effective_at: new Date(
+          subscription.current_period_start * 1000,
+        ).toISOString(),
+      });
     },
   );
 
