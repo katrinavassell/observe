@@ -497,7 +497,7 @@ export function createBillingApiRoutes(
     ensureVisitor,
     expensiveLimiter,
     async (req: AuthRequest, res: Response) => {
-      const { plan } = req.body || {};
+      const { plan, payment_method } = req.body || {};
       if (!plan || (plan !== "pro" && plan !== "free")) {
         res
           .status(400)
@@ -579,51 +579,60 @@ export function createBillingApiRoutes(
         return;
       }
 
-      // No Stripe customer yet — must go through checkout to add payment method
-      if (!customerId) {
-        const { url } = await createCheckoutSession(
-          pool,
-          req.visitorId!,
-          "pro",
+      // Ensure Stripe customer exists
+      let activeCustomerId = customerId;
+      if (!activeCustomerId) {
+        if (!payment_method) {
+          const { url } = await createCheckoutSession(
+            pool,
+            req.visitorId!,
+            "pro",
+          );
+          res
+            .status(402)
+            .json({ error: "No payment method on file", checkout_url: url });
+          return;
+        }
+        const newCustomer = await stripe.customers.create({
+          email: account.email,
+          payment_method: payment_method,
+          invoice_settings: { default_payment_method: payment_method },
+        });
+        activeCustomerId = newCustomer.id;
+        await pool.query(
+          "UPDATE accounts SET stripe_customer_id = $1 WHERE id = (SELECT account_id FROM user_accounts ua JOIN users u ON u.id = ua.user_id WHERE u.visitor_id = $2 AND ua.role = 'owner' LIMIT 1)",
+          [activeCustomerId, req.visitorId],
         );
-        res
-          .status(402)
-          .json({ error: "No payment method on file", checkout_url: url });
-        return;
-      }
-
-      // Check for existing payment method
-      const customer = await stripe.customers.retrieve(customerId, {
-        expand: ["invoice_settings.default_payment_method"],
-      });
-      if (customer.deleted) {
-        const { url } = await createCheckoutSession(
-          pool,
-          req.visitorId!,
-          "pro",
-        );
-        res
-          .status(402)
-          .json({ error: "No payment method on file", checkout_url: url });
-        return;
-      }
-      const hasPaymentMethod = !!(customer as any).invoice_settings
-        ?.default_payment_method;
-      if (!hasPaymentMethod) {
-        const { url } = await createCheckoutSession(
-          pool,
-          req.visitorId!,
-          "pro",
-        );
-        res
-          .status(402)
-          .json({ error: "No payment method on file", checkout_url: url });
-        return;
+      } else if (payment_method) {
+        await stripe.paymentMethods.attach(payment_method, {
+          customer: activeCustomerId,
+        });
+        await stripe.customers.update(activeCustomerId, {
+          invoice_settings: { default_payment_method: payment_method },
+        });
+      } else {
+        const customer = await stripe.customers.retrieve(activeCustomerId, {
+          expand: ["invoice_settings.default_payment_method"],
+        });
+        if (
+          customer.deleted ||
+          !(customer as any).invoice_settings?.default_payment_method
+        ) {
+          const { url } = await createCheckoutSession(
+            pool,
+            req.visitorId!,
+            "pro",
+          );
+          res
+            .status(402)
+            .json({ error: "No payment method on file", checkout_url: url });
+          return;
+        }
       }
 
       // Check existing subscriptions
       const subs = await stripe.subscriptions.list({
-        customer: customerId,
+        customer: activeCustomerId,
         status: "active",
         limit: 1,
       });
@@ -651,7 +660,7 @@ export function createBillingApiRoutes(
       } else {
         // Create new subscription
         subscription = await stripe.subscriptions.create({
-          customer: customerId,
+          customer: activeCustomerId,
           items: [{ price: proPriceId }],
         });
       }
