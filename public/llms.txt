@@ -680,6 +680,47 @@ return 429:
 Budget resets automatically at `budget_reset_at` (lazy reset on next API call).
 Account plan limits are the ceiling — individual keys subdivide the budget.
 
+### Browse plans (no auth required)
+
+```bash
+curl https://observe.tansohq.com/api/plans
+```
+
+Returns all available plans with pricing and feature limits. Public endpoint.
+
+### Check current usage
+
+```bash
+curl https://observe.tansohq.com/api/usage \
+  -H "Authorization: Bearer obs_..."
+```
+
+Response:
+```json
+{
+  "period": "2026-05",
+  "plan": "free",
+  "usage": {
+    "event_ingest": { "used": 4520, "limit": 10000, "reset": "monthly" },
+    "ai_insights": { "used": 12, "limit": 1000, "reset": "monthly" }
+  },
+  "percent_used": 45.2
+}
+```
+
+### Upgrade or downgrade plan programmatically
+
+```bash
+curl -X POST https://observe.tansohq.com/api/billing/change-plan \
+  -H "Authorization: Bearer obs_..." \
+  -H "Content-Type: application/json" \
+  -d '{ "plan": "pro" }'
+```
+
+If payment method is on file: upgrades immediately via Stripe.
+If no payment method: returns 402 with a `checkout_url` to complete in browser.
+Downgrade to free: cancels at period end.
+
 ### Create additional scoped keys (humans only)
 
 Authenticated humans (Clerk JWT) can mint additional keys on their account with

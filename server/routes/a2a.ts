@@ -35,6 +35,10 @@ export function createA2ARoutes(pool: Pool, ensureAuth: any) {
       },
       endpoints: {
         query: "/a2a/query",
+        signup: "/api/signup",
+        plans: "/api/plans",
+        usage: "/api/usage",
+        change_plan: "/api/billing/change-plan",
         ingest: "/api/events/ingest",
         events: "/api/events",
         events_by_model: "/api/events/by-model",
