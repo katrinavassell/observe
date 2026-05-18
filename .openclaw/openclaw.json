@@ -1,0 +1,25 @@
+{
+  "agents": {
+    "defaults": {
+      "model": "anthropic/claude-sonnet-4-6"
+    }
+  },
+  "channels": {
+    "slack": {
+      "enabled": true,
+      "socketMode": {},
+      "requireMention": false,
+      "dmPolicy": "allowlist",
+      "allowFrom": ["U095KFHNK53"],
+      "channels": {
+        "C0B4DV1D1V2": {
+          "enabled": true,
+          "requireMention": false
+        }
+      }
+    }
+  },
+  "commands": {
+    "ownerAllowFrom": ["slack:U095KFHNK53"]
+  }
+}
